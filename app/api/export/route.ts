@@ -14,7 +14,9 @@ export async function POST(req:NextRequest){
     zip.file("image_guide.txt",[`프로젝트: ${projectTitle||""}`,`유형: ${contentType||""}`,`템플릿: ${templateKey||"modern"}`,"",...(tasks||[]).map((t:any)=>`${String(t.order).padStart(2,"0")} ${t.title} - ${t.keyMessage}`)].join("\n"));
     zip.file("project.json",JSON.stringify({projectTitle,contentType,finalTitle,finalBody,templateKey,tasks},null,2));
     const buffer=await zip.generateAsync({type:"nodebuffer"});
-    return new NextResponse(buffer,{headers:{"Content-Type":"application/zip","Content-Disposition":"attachment; filename=\"content-maker-project.zip\""}});
+    const bytes=new Uint8Array(buffer.length);
+    bytes.set(buffer);
+    return new NextResponse(bytes.buffer,{headers:{"Content-Type":"application/zip","Content-Disposition":"attachment; filename=\"content-maker-project.zip\""}});
   }catch{
     return NextResponse.json({error:"ZIP 생성 실패"},{status:500});
   }
