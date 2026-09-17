@@ -60,6 +60,7 @@ function canvasUrl(width: number, height: number, draw: (ctx: CanvasRenderingCon
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas를 사용할 수 없습니다.");
+  ctx.textBaseline = "top";
   draw(ctx);
   return canvas.toDataURL("image/png");
 }
