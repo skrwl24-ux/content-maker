@@ -1,0 +1,336 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import styles from "./page.module.css";
+
+type Region = {
+  region_code: string;
+  sido_code: string;
+  sido_name: string;
+  region_name: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+};
+
+type Candidate = {
+  id: string;
+  name: string;
+  legalDong: string;
+  households: number | null;
+  status: "priority" | "candidate";
+  recent30Count: number;
+  previous30Count: number;
+  sixMonthCount: number;
+  daysSinceLastTrade: number | null;
+  representativeArea: string | null;
+  firstMedianPrice: number | null;
+  latestMedianPrice: number | null;
+  priceChangePct: number | null;
+  marketSignalCount: number;
+  badges: string[];
+  recommendedAngle: string;
+};
+
+type CandidateResponse = {
+  region: { code: string; name: string; sido?: string };
+  analysisDate: string | null;
+  lastSyncedAt: string | null;
+  totalComplexes: number;
+  candidateCount: number;
+  priorityCount: number;
+  candidates: Candidate[];
+  noData: boolean;
+  syncConfigured: boolean;
+};
+
+type Detail = {
+  complex: {
+    id: string;
+    name: string;
+    legal_dong: string | null;
+    households: number | null;
+    use_date: string | null;
+  };
+  representativeArea: string | null;
+  monthly: Array<{ month: string; tradeCount: number; medianPrice: number | null }>;
+  latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
+};
+
+const FILTERS = [
+  ["all", "전체"],
+  ["volume_increase", "🔥 거래량 증가"],
+  ["price_change", "📈 가격 변화"],
+  ["active_trading", "🏠 거래 활발"],
+  ["large_complex", "🏢 대단지"],
+] as const;
+
+const BADGES: Record<string, string> = {
+  volume_increase: "🔥 거래량 증가",
+  active_trading: "🏠 거래 활발",
+  price_change: "📈 가격 변화",
+  recent_trade: "🕒 최근 거래",
+  large_complex: "🏢 대단지",
+};
+
+function won(value: number | null) {
+  if (value == null) return "-";
+  const eok = value / 100000000;
+  if (eok >= 1) {
+    const fixed = eok >= 10 ? eok.toFixed(1) : eok.toFixed(2);
+    return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") + "억";
+  }
+  return Math.round(value / 10000).toLocaleString("ko-KR") + "만원";
+}
+
+function dateTime(value: string | null) {
+  if (!value) return "아직 없음";
+  const d = new Date(value);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
+export default function ApartmentDiscoverPage() {
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [regionCode, setRegionCode] = useState("41410");
+  const [filter, setFilter] = useState("all");
+  const [data, setData] = useState<CandidateResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/apartment/regions", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json) => {
+        setRegions(json.regions || []);
+        if (json.regions?.length && !json.regions.some((r: Region) => r.region_code === regionCode)) {
+          setRegionCode(json.regions[0].region_code);
+        }
+      })
+      .catch(() => setError("지역 목록을 불러오지 못했습니다."));
+  }, []);
+
+  async function loadCandidates(nextFilter = filter) {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(
+        "/api/apartment/candidates?regionCode=" + encodeURIComponent(regionCode) +
+          "&limit=10&filter=" + encodeURIComponent(nextFilter),
+        { cache: "no-store" }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "후보 조회 실패");
+      setData(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "후보 조회 실패");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (regionCode) loadCandidates(filter);
+  }, [regionCode, filter]);
+
+  async function openDetail(id: string) {
+    if (detailId === id) {
+      setDetailId(null);
+      setDetail(null);
+      return;
+    }
+    setDetailId(id);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await fetch("/api/apartment/complexes/" + id, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "상세 분석 실패");
+      setDetail(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "상세 분석 실패");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  const selectedRegion = useMemo(
+    () => regions.find((r) => r.region_code === regionCode),
+    [regions, regionCode]
+  );
+
+  return (
+    <main className={styles.page}>
+      <div className={styles.topbar}>
+        <a href="/apartment-bulk" className={styles.back}>← 이미지 제작 화면</a>
+        <span className={styles.modeBadge}>단지 콘텐츠 발굴기 V1</span>
+      </div>
+
+      <section className={styles.hero}>
+        <div>
+          <p className={styles.eyebrow}>집값쓱 DISCOVERY</p>
+          <h1>오늘 쓸 아파트를<br />데이터가 먼저 찾아줍니다.</h1>
+          <p>거래 증가 · 가격 변화 · 거래 활발 · 최근성 신호를 보고 후보만 추립니다.</p>
+        </div>
+        <div className={styles.heroSide}>
+          <span>지역 선택</span>
+          <select value={regionCode} onChange={(e) => setRegionCode(e.target.value)}>
+            {regions.length ? regions.map((r) => (
+              <option key={r.region_code} value={r.region_code}>
+                {r.sido_name} {r.region_name}
+              </option>
+            )) : <option value="41410">경기도 군포시</option>}
+          </select>
+          <button type="button" onClick={() => loadCandidates(filter)}>↻ 화면 새로고침</button>
+        </div>
+      </section>
+
+      <section className={styles.summary}>
+        <div><span>분석 단지</span><b>{data?.totalComplexes ?? "-"}</b></div>
+        <div><span>발행 후보</span><b>{data?.candidateCount ?? "-"}</b></div>
+        <div><span>우선 검토</span><b>{data?.priorityCount ?? "-"}</b></div>
+        <div><span>마지막 갱신</span><b className={styles.smallStat}>{dateTime(data?.lastSyncedAt || selectedRegion?.last_synced_at || null)}</b></div>
+      </section>
+
+      <div className={styles.filters}>
+        <div className={styles.filterButtons}>
+          {FILTERS.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={filter === key ? styles.activeFilter : ""}
+              onClick={() => setFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span>{data?.analysisDate ? data.analysisDate + " 분석 기준" : "분석 데이터 준비 전"}</span>
+      </div>
+
+      {error && <div className={styles.error}>{error}</div>}
+
+      {loading ? (
+        <section className={styles.empty}>
+          <div className={styles.spinner} />
+          <b>후보 단지를 불러오는 중…</b>
+        </section>
+      ) : data?.noData ? (
+        <section className={styles.empty}>
+          <div className={styles.emptyIcon}>🏢</div>
+          <h2>후보 발굴 화면과 DB는 준비됐습니다.</h2>
+          <p>
+            {data.syncConfigured
+              ? "공공데이터 연결은 준비되어 있습니다. 첫 지역 동기화가 완료되면 후보 10개가 여기에 표시됩니다."
+              : "실거래 자동수집을 시작하려면 Vercel에 공공데이터 키와 Supabase 서버키를 연결하면 됩니다."}
+          </p>
+          <div className={styles.setupBox}>
+            <b>현재 등록 지역</b>
+            <span>{selectedRegion ? selectedRegion.sido_name + " " + selectedRegion.region_name : "경기도 군포시"}</span>
+            <small>가짜 후보를 채우지 않고 실제 데이터가 들어온 뒤부터 노출합니다.</small>
+          </div>
+        </section>
+      ) : data && data.candidates.length === 0 ? (
+        <section className={styles.empty}>
+          <div className={styles.emptyIcon}>🔎</div>
+          <h2>이 조건에 맞는 후보가 없습니다.</h2>
+          <p>필터를 ‘전체’로 바꾸거나 다음 갱신 데이터를 확인해보세요.</p>
+        </section>
+      ) : (
+        <section className={styles.list}>
+          {data?.candidates.map((candidate) => (
+            <article key={candidate.id} className={candidate.status === "priority" ? styles.priorityCard : styles.card}>
+              <div className={styles.cardTop}>
+                <div>
+                  <div className={styles.statusLine}>
+                    <span className={candidate.status === "priority" ? styles.priority : styles.candidate}>
+                      {candidate.status === "priority" ? "우선 검토" : "발행 후보"}
+                    </span>
+                    <span>{candidate.legalDong}</span>
+                  </div>
+                  <h2>{candidate.name}</h2>
+                  <p>
+                    {candidate.households ? candidate.households.toLocaleString("ko-KR") + "세대" : "세대수 확인 중"}
+                    {" · "}
+                    {candidate.daysSinceLastTrade == null ? "최근 거래 없음" : "최근 거래 " + candidate.daysSinceLastTrade + "일 전"}
+                  </p>
+                </div>
+                <div className={styles.signalCount}>
+                  <b>{candidate.marketSignalCount}</b>
+                  <span>시장신호</span>
+                </div>
+              </div>
+
+              <div className={styles.badges}>
+                {candidate.badges.map((badge) => <span key={badge}>{BADGES[badge] || badge}</span>)}
+              </div>
+
+              <div className={styles.metrics}>
+                <div><span>최근 30일</span><b>{candidate.recent30Count}건</b></div>
+                <div><span>직전 30일</span><b>{candidate.previous30Count}건</b></div>
+                <div><span>최근 6개월</span><b>{candidate.sixMonthCount}건</b></div>
+                <div><span>{candidate.representativeArea || "대표면적"}</span><b>{won(candidate.latestMedianPrice)}</b></div>
+              </div>
+
+              <div className={styles.priceLine}>
+                <span>6개월 대표가격</span>
+                <b>{won(candidate.firstMedianPrice)} → {won(candidate.latestMedianPrice)}</b>
+                {candidate.priceChangePct != null && (
+                  <em className={candidate.priceChangePct >= 0 ? styles.up : styles.down}>
+                    {candidate.priceChangePct >= 0 ? "+" : ""}{candidate.priceChangePct.toFixed(1)}%
+                  </em>
+                )}
+              </div>
+
+              <div className={styles.angle}>
+                <span>추천 글 방향</span>
+                <b>“{candidate.recommendedAngle}”</b>
+              </div>
+
+              <div className={styles.actions}>
+                <button type="button" onClick={() => openDetail(candidate.id)}>
+                  {detailId === candidate.id ? "상세 닫기" : "분석 보기"}
+                </button>
+                <a href={"/apartment-bulk?complexId=" + candidate.id}>이 단지로 글 만들기 →</a>
+              </div>
+
+              {detailId === candidate.id && (
+                <div className={styles.detail}>
+                  {detailLoading ? <p>상세 데이터를 불러오는 중…</p> : detail ? (
+                    <>
+                      <div className={styles.detailHead}>
+                        <div><span>대표면적</span><b>{detail.representativeArea || "-"}</b></div>
+                        <div><span>최근 실거래</span><b>{detail.latestTrade ? won(detail.latestTrade.price) : "-"}</b></div>
+                        <div><span>최근 거래일</span><b>{detail.latestTrade?.date || "-"}</b></div>
+                      </div>
+                      <div className={styles.monthly}>
+                        {detail.monthly.slice(-6).map((m) => (
+                          <div key={m.month}>
+                            <span>{m.month.slice(5)}월</span>
+                            <b>{m.medianPrice == null ? "거래 없음" : won(m.medianPrice)}</b>
+                            <small>{m.tradeCount}건</small>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : <p>상세 데이터를 표시할 수 없습니다.</p>}
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
+
+      <section className={styles.ruleNote}>
+        <b>V1 후보 기준</b>
+        <p>최근 6개월 6건 이상 + 최근 거래 60일 이내를 기본자격으로 보고, 거래량 증가·거래 활발·가격 변화·최근 거래 중 최소 1개 시장신호가 있어야 후보로 표시합니다. 대단지는 보조신호로만 사용합니다.</p>
+      </section>
+    </main>
+  );
+}

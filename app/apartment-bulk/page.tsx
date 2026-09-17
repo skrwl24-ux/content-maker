@@ -430,7 +430,7 @@ export default function ApartmentBulkPage() {
           <h1>데이터와 지도만 바꾸면<br />고정 퀄리티 3장이 바로 완성됩니다.</h1>
           <p>썸네일 1254×1254 · 시세 요약 1600×900 · 입지 지도 1600×900</p>
         </div>
-        <div className={styles.heroChip}>템플릿 3종 고정</div>
+        <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
 
       <section className={styles.layout}>
