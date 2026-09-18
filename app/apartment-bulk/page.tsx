@@ -66,6 +66,15 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -511,6 +520,9 @@ export default function ApartmentBulkPage() {
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
   const [selectedComplexName, setSelectedComplexName] = useState("");
+  const [autoMapLoading, setAutoMapLoading] = useState(false);
+  const [autoMapMessage, setAutoMapMessage] = useState("");
+  const [autoMapGenerated, setAutoMapGenerated] = useState(false);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -530,7 +542,7 @@ export default function ApartmentBulkPage() {
         if (!res.ok) throw new Error(json.error || "단지 데이터를 불러오지 못했습니다.");
         return json as ComplexDetailResponse;
       })
-      .then((detail) => {
+      .then(async (detail) => {
         const firstMedian = detail.snapshot?.first_median_price == null ? null : Number(detail.snapshot.first_median_price);
         const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
@@ -550,6 +562,27 @@ export default function ApartmentBulkPage() {
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
         setOutputs(null);
+
+        setAutoMapLoading(true);
+        setAutoMapMessage("네이버 지도를 자동으로 만드는 중…");
+        setAutoMapGenerated(false);
+        try {
+          const mapRes = await fetch("/api/apartment/map?complexId=" + encodeURIComponent(complexId), { cache: "no-store" });
+          if (!mapRes.ok) {
+            const errorJson = await mapRes.json().catch(() => ({}));
+            throw new Error(errorJson.error || "지도 자동 생성 실패");
+          }
+          const mapBlob = await mapRes.blob();
+          setMapDataUrl(await blobToDataUrl(mapBlob));
+          setAptPoint(null);
+          setStationPoint(null);
+          setAutoMapGenerated(true);
+          setAutoMapMessage("단지 위치가 표시된 네이버 지도를 자동으로 불러왔습니다.");
+        } catch (e) {
+          setAutoMapMessage(e instanceof Error ? e.message : "지도 자동 생성에 실패했습니다. 직접 업로드할 수 있습니다.");
+        } finally {
+          setAutoMapLoading(false);
+        }
       })
       .catch(() => {})
       .finally(() => setSelectedComplexLoading(false));
@@ -573,6 +606,8 @@ export default function ApartmentBulkPage() {
     setMapDataUrl(await fileToDataUrl(file));
     setAptPoint(null);
     setStationPoint(null);
+    setAutoMapGenerated(false);
+    setAutoMapMessage("직접 올린 지도 이미지를 사용합니다.");
     setOutputs(null);
   }
 
@@ -660,6 +695,12 @@ export default function ApartmentBulkPage() {
           <Field label="썸네일 질문" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
+          {autoMapMessage && (
+            <div className={styles.autoLoad}>
+              {autoMapLoading ? "🗺️ " : autoMapGenerated ? "✅ " : "ℹ️ "}{autoMapMessage}
+            </div>
+          )}
+
           <div className={styles.uploadGrid}>
             <label className={styles.uploadBox}>
               <input type="file" accept="image/*" onChange={handlePhoto} />
@@ -671,8 +712,8 @@ export default function ApartmentBulkPage() {
             <label className={styles.uploadBox}>
               <input type="file" accept="image/*" onChange={handleMap} />
               <span className={styles.uploadIcon}>🗺️</span>
-              <b>{mapDataUrl ? "지도 캡처 교체" : "네이버 지도 캡처 업로드"}</b>
-              <small>원본 비율을 유지하고 네이버 로고·출처 영역을 지우지 않습니다.</small>
+              <b>{autoMapGenerated ? "네이버 지도 자동 생성 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
+              <small>{autoMapGenerated ? "단지 선택 시 주소를 좌표로 바꿔 위치 마커가 있는 지도를 자동 생성합니다." : "자동 생성이 안 되는 단지는 지도 이미지를 직접 올릴 수 있습니다."}</small>
             </label>
           </div>
 
@@ -695,7 +736,7 @@ export default function ApartmentBulkPage() {
           <button className={styles.generate} disabled={!ready || loading} onClick={generate}>
             {loading ? "3장 만드는 중…" : "이미지 3장 만들기"}
           </button>
-          {!mapDataUrl && <p className={styles.helper}>지도 캡처를 올리면 생성 버튼이 활성화됩니다.</p>}
+          {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 만들고, 실패한 경우에만 직접 업로드하면 됩니다."}</p>}
         </div>
 
         <aside className={styles.guideCard}>
