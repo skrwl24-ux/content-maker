@@ -537,6 +537,9 @@ export default function ApartmentBulkPage() {
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState("");
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
+  const [aiIllustrationLoading, setAiIllustrationLoading] = useState(false);
+  const [aiIllustrationMessage, setAiIllustrationMessage] = useState("");
+  const [photoSource, setPhotoSource] = useState<"ai" | "upload" | null>(null);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -572,28 +575,33 @@ export default function ApartmentBulkPage() {
     }
   }
 
-  async function selectPhoto(candidate: PhotoCandidate) {
-    setPhotoSearchMessage("선택한 사진을 불러오는 중…");
-    const tries = [
-      { url: candidate.imageUrl, token: candidate.imageToken },
-      { url: candidate.thumbnailUrl, token: candidate.thumbnailToken },
-    ];
-    for (const item of tries) {
-      try {
-        const params = new URLSearchParams({ url: item.url, token: item.token });
-        const res = await fetch("/api/apartment/photo-proxy?" + params.toString(), { cache: "no-store" });
-        if (!res.ok) continue;
-        const blob = await res.blob();
-        setComplexPhotoDataUrl(await blobToDataUrl(blob));
-        setSelectedPhotoUrl(candidate.imageUrl);
-        setPhotoSearchMessage("선택한 사진을 썸네일 배경으로 사용합니다.");
-        setOutputs(null);
-        return;
-      } catch {
-        // 원본이 막힌 경우 썸네일 주소로 한 번 더 시도합니다.
-      }
+  async function generateAiIllustration() {
+    if (!data.name.trim() || aiIllustrationLoading) return;
+    setAiIllustrationLoading(true);
+    setAiIllustrationMessage("실제 사진을 복제하지 않는 새 조감도풍 일러스트를 만드는 중…");
+    try {
+      const res = await fetch("/api/apartment/illustration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: data.name,
+          region: data.region,
+          households: data.households,
+          moveIn: data.moveIn,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "AI 조감도풍 생성 실패");
+      setComplexPhotoDataUrl(json.imageDataUrl || "");
+      setSelectedPhotoUrl("");
+      setPhotoSource("ai");
+      setAiIllustrationMessage(json.note || "AI 조감도풍 일러스트가 썸네일 배경에 적용됐습니다.");
+      setOutputs(null);
+    } catch (e) {
+      setAiIllustrationMessage(e instanceof Error ? e.message : "AI 조감도풍 이미지 생성에 실패했습니다.");
+    } finally {
+      setAiIllustrationLoading(false);
     }
-    setPhotoSearchMessage("이 사진은 원본을 불러올 수 없습니다. 다른 후보를 선택해 주세요.");
   }
 
   useEffect(() => {
@@ -664,6 +672,8 @@ export default function ApartmentBulkPage() {
     if (!file) return;
     setComplexPhotoDataUrl(await fileToDataUrl(file));
     setSelectedPhotoUrl("");
+    setPhotoSource("upload");
+    setAiIllustrationMessage("");
     setPhotoSearchMessage("직접 올린 사진을 썸네일 배경으로 사용합니다.");
     setOutputs(null);
   }
@@ -769,12 +779,38 @@ export default function ApartmentBulkPage() {
             </div>
           )}
 
+          {selectedComplexName && (
+            <section className={styles.photoSection}>
+              <div className={styles.photoHead}>
+                <div>
+                  <b>AI 조감도풍 썸네일 배경</b>
+                  <span>검색 사진을 변환하지 않고 단지명·지역 정보만으로 새 일러스트를 생성합니다.</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={aiIllustrationLoading || !data.name.trim()}
+                  onClick={() => void generateAiIllustration()}
+                >
+                  {aiIllustrationLoading ? "생성 중…" : photoSource === "ai" ? "다시 만들기" : "조감도풍 만들기"}
+                </button>
+              </div>
+              {aiIllustrationMessage && <div className={styles.aiMessage}>{aiIllustrationMessage}</div>}
+              {photoSource === "ai" && complexPhotoDataUrl && (
+                <div className={styles.aiPreview}>
+                  <img src={complexPhotoDataUrl} alt="AI 조감도풍 일러스트" />
+                  <span>AI 생성 삽화 · 실제 단지 배치와 다를 수 있음</span>
+                </div>
+              )}
+              <p className={styles.photoNotice}>이 이미지는 실제 단지 사진이나 정확한 배치도가 아니라 블로그 썸네일용 창작 일러스트입니다.</p>
+            </section>
+          )}
+
           {(selectedComplexName || photoCandidatesLoading || photoCandidates.length > 0) && (
             <section className={styles.photoSection}>
               <div className={styles.photoHead}>
                 <div>
-                  <b>단지 사진 후보</b>
-                  <span>{photoSearchMessage || "자동으로 찾은 사진 3장 중 하나를 선택하세요."}</span>
+                  <b>검색 사진 참고</b>
+                  <span>{photoSearchMessage || "자동 검색한 사진 3장은 외관 확인 참고용으로만 보여줍니다."}</span>
                 </div>
                 <button
                   type="button"
@@ -790,24 +826,19 @@ export default function ApartmentBulkPage() {
               {photoCandidates.length > 0 && (
                 <div className={styles.photoGrid}>
                   {photoCandidates.map((candidate, index) => (
-                    <button
-                      type="button"
-                      key={candidate.imageUrl + index}
-                      className={selectedPhotoUrl === candidate.imageUrl ? styles.photoCardActive : styles.photoCard}
-                      onClick={() => void selectPhoto(candidate)}
-                    >
+                    <div key={candidate.imageUrl + index} className={styles.photoCard}>
                       <img
                         src={candidate.thumbnailUrl}
-                        alt={candidate.title || `단지 사진 후보 ${index + 1}`}
+                        alt={candidate.title || `단지 참고 사진 ${index + 1}`}
                         loading="lazy"
                         referrerPolicy="no-referrer"
                       />
-                      <span>{selectedPhotoUrl === candidate.imageUrl ? "✓ 선택됨" : `후보 ${index + 1}`}</span>
-                    </button>
+                      <span>{`참고 ${index + 1}`}</span>
+                    </div>
                   ))}
                 </div>
               )}
-              <p className={styles.photoNotice}>검색 결과 사진은 출처와 이용 권리를 확인한 뒤 사용하세요. 마음에 드는 사진이 없으면 아래에서 직접 업로드할 수 있습니다.</p>
+              <p className={styles.photoNotice}>검색 이미지는 썸네일에 직접 적용하지 않습니다. 사용 권리가 있는 사진은 아래 직접 업로드 기능을 이용하세요.</p>
             </section>
           )}
 
