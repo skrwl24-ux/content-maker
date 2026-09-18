@@ -219,6 +219,90 @@ ${value(data.question, "요즘 얼마에 거래될까?")}
 }
 
 
+function makePriceImagePrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
+  const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
+  const monthly = monthlyStats.slice(-6);
+  const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const change = first?.medianPrice && last?.medianPrice
+    ? ((last.medianPrice - first.medianPrice) / first.medianPrice) * 100
+    : null;
+  const lines = monthly.length
+    ? monthly.map((item) =>
+        `- ${item.month}: 대표가격 ${item.medianPrice == null ? "거래 없음" : formatWon(item.medianPrice)} / 거래 ${item.tradeCount}건`
+      ).join("\n")
+    : "- 최근 6개월 데이터 없음";
+
+  return `네이버 블로그 본문용 아파트 시세 그래프 이미지를 만들어줘.
+
+[단지 정보]
+단지명: ${value(data.name)}
+지역: ${value(data.region)}
+대표 전용면적: ${value(data.area)}
+
+[최근 6개월 월별 실거래 데이터]
+${lines}
+
+[요약값]
+첫 유효 대표값: ${first ? formatWon(first.medianPrice) : "확인 필요"}
+최근 유효 대표값: ${last ? formatWon(last.medianPrice) : "확인 필요"}
+대표값 변화율: ${change == null ? "계산 불가" : (change >= 0 ? "+" : "") + change.toFixed(1) + "%"}
+
+[이미지 제작 기준]
+- 정확한 크기 1600×900px
+- 네이버 블로그 본문용 가로 이미지
+- 집값쓱 부동산 콘텐츠 스타일
+- 깔끔하고 신뢰감 있는 고급 정보형 디자인
+- 제목은 '최근 6개월 실거래 흐름'
+- 선그래프로 월별 대표가격 흐름을 보여줄 것
+- 거래가 있는 모든 월의 데이터 포인트 위에 가격 라벨을 반드시 표시할 것
+- 최신 월 가격 라벨은 다른 월보다 조금 더 크게 강조할 것
+- 각 월 아래에는 거래건수도 표시할 것
+- 거래가 없는 달은 임의의 가격을 만들지 말고 '거래 없음'으로 표시할 것
+- 오른쪽 요약 영역에 최근 대표값 / 첫 대표값 / 변화율을 정리할 것
+- 제공한 숫자를 임의로 수정하거나 새로운 가격을 만들어내지 말 것
+- 한글과 숫자 오탈자가 없도록 검수할 것
+- 불필요한 장식은 줄이고 모바일에서도 가격 숫자가 바로 읽히게 할 것
+
+이미지를 바로 생성해줘.`;
+}
+
+function makeLocationImagePrompt(data: ApartmentData) {
+  const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
+  return `네이버 블로그 본문용 아파트 입지 인포그래픽 이미지를 만들어줘.
+
+[단지 정보]
+단지명: ${value(data.name)}
+지역: ${value(data.region)}
+대표 전용면적: ${value(data.area)}
+가까운 주요 역: ${value(data.station)}
+입지 설명: ${value(data.locationLine)}
+
+[지도 참고 방식]
+- 이 요청과 함께 붙여넣은 네이버 지도 캡처를 '위치 관계 확인용 참고자료'로 사용해줘.
+- 지도 캡처가 첨부되어 있지 않다면 이미지를 임의로 만들지 말고 지도 캡처를 먼저 요청해줘.
+- 캡처에서 단지 위치, 주요 역, 도로와 주변 생활권의 상대적 위치를 파악해줘.
+- 네이버 지도의 지도 타일, 색상, 폰트, 아이콘, 로고, UI를 그대로 복제하지 말 것.
+- 원본 지도를 배경으로 그대로 재사용하지 말고 새로운 부동산 입지 인포그래픽으로 재구성할 것.
+- 정확한 축척 지도처럼 오해될 표현은 피하고 '입지 한눈에 보기' 정보 카드로 표현할 것.
+- 지도에서 확인되지 않는 학교·공원·상권·교통시설을 임의로 추가하지 말 것.
+
+[이미지 제작 기준]
+- 정확한 크기 1600×900px
+- 네이버 블로그 본문용 가로 이미지
+- 집값쓱 부동산 콘텐츠 스타일
+- 단지 위치를 가장 분명하게 강조
+- 주요 역은 두 번째로 강조
+- 필요한 도로·생활권 요소만 최소한으로 표시
+- 우측 또는 하단에 한 줄 입지 설명을 별도 정보 카드로 배치
+- 깔끔하고 신뢰감 있는 고급 부동산 인포그래픽
+- 한글 텍스트 오탈자 없이 제작
+
+지도 캡처의 위치 관계를 참고해서 새로운 입지 이미지를 바로 생성해줘.`;
+}
+
+
 function makeBodyPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], recommendedAngle: string) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
@@ -711,11 +795,16 @@ export default function ApartmentBulkPage() {
   const [outputs, setOutputs] = useState<Outputs | null>(null);
   const [loading, setLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [pricePromptCopied, setPricePromptCopied] = useState(false);
+  const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
+  const [mapCopyMessage, setMapCopyMessage] = useState("");
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data), [data]);
+  const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
+  const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
   const bodyPrompt = useMemo(() => makeBodyPrompt(data, monthlyStats, recommendedAngle), [data, monthlyStats, recommendedAngle]);
 
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
@@ -844,6 +933,65 @@ export default function ApartmentBulkPage() {
   function openThumbnailPromptInChatGPT() {
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(thumbnailPrompt);
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function copyPriceImagePrompt() {
+    try {
+      await navigator.clipboard.writeText(priceImagePrompt);
+      setPricePromptCopied(true);
+      window.setTimeout(() => setPricePromptCopied(false), 1800);
+    } catch {
+      setPricePromptCopied(false);
+    }
+  }
+
+  function openPriceImagePromptInChatGPT() {
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(priceImagePrompt);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function copyLocationImagePrompt() {
+    try {
+      await navigator.clipboard.writeText(locationImagePrompt);
+      setLocationPromptCopied(true);
+      window.setTimeout(() => setLocationPromptCopied(false), 1800);
+    } catch {
+      setLocationPromptCopied(false);
+    }
+  }
+
+  async function copyMapCaptureToClipboard() {
+    if (!mapDataUrl) {
+      setMapCopyMessage("지도 준비가 먼저 필요합니다.");
+      return false;
+    }
+    try {
+      const [header, encoded] = mapDataUrl.split(",", 2);
+      const mime = header.match(/^data:([^;]+)/)?.[1] || "image/png";
+      if (mime !== "image/png") throw new Error("PNG 지도만 바로 복사할 수 있습니다.");
+      const binary = atob(encoded || "");
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "image/png" });
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("이 브라우저는 이미지 클립보드 복사를 지원하지 않습니다.");
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setMapCopyMessage("✅ 지도 캡처가 복사됐습니다. ChatGPT에서 Ctrl+V로 붙여넣으세요.");
+      return true;
+    } catch (error) {
+      setMapCopyMessage(error instanceof Error ? "ℹ️ " + error.message : "ℹ️ 지도 복사에 실패했습니다.");
+      return false;
+    }
+  }
+
+  function openLocationImagePromptInChatGPT() {
+    const chatWindow = window.open("about:blank", "_blank");
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(locationImagePrompt);
+    void copyMapCaptureToClipboard().finally(() => {
+      if (chatWindow) chatWindow.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
+    });
   }
 
   async function copyBodyPrompt() {
