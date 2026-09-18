@@ -227,11 +227,11 @@ export default function ApartmentDiscoverPage() {
           <h2>후보 발굴 화면과 DB는 준비됐습니다.</h2>
           <p>
             {data.syncConfigured
-              ? "공공데이터 연결은 준비되어 있습니다. 첫 지역 동기화가 완료되면 후보 10개가 여기에 표시됩니다."
+              ? "이 지역은 등록됐지만 아직 첫 데이터 동기화가 완료되지 않았습니다. 첫 동기화가 끝나면 분석 단지와 발행 후보가 자동으로 표시됩니다."
               : "실거래 자동수집을 시작하려면 Vercel에 공공데이터 키와 Supabase 서버키를 연결하면 됩니다."}
           </p>
           <div className={styles.setupBox}>
-            <b>현재 등록 지역</b>
+            <b>{data?.lastSyncedAt ? "현재 등록 지역" : "첫 동기화 대기 지역"}</b>
             <span>{selectedRegion ? selectedRegion.sido_name + " " + selectedRegion.region_name : "경기도 군포시"}</span>
             <small>가짜 후보를 채우지 않고 실제 데이터가 들어온 뒤부터 노출합니다.</small>
           </div>
