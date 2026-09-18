@@ -546,16 +546,28 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
     }
 
     points.forEach((p, index) => {
+      const isLatest = index === points.length - 1;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, index === points.length - 1 ? 11 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = index === points.length - 1 ? "#ef746e" : "#0f8b86";
+      ctx.arc(p.x, p.y, isLatest ? 11 : 8, 0, Math.PI * 2);
+      ctx.fillStyle = isLatest ? "#ef746e" : "#0f8b86";
       ctx.fill();
-      if (index === points.length - 1) {
-        ctx.font = `900 21px ${FONT}`;
-        ctx.fillStyle = "#132033";
-        ctx.textAlign = "center";
-        ctx.fillText(formatWon(p.item.medianPrice), p.x, p.y - 44);
-      }
+
+      const label = formatWon(p.item.medianPrice);
+      ctx.font = `${isLatest ? 900 : 800} ${isLatest ? 21 : 18}px ${FONT}`;
+      const labelWidth = ctx.measureText(label).width + (isLatest ? 26 : 22);
+      const labelHeight = isLatest ? 36 : 32;
+      const labelY = p.y - (isLatest ? 54 : 48);
+
+      roundRect(ctx, p.x - labelWidth / 2, labelY, labelWidth, labelHeight, labelHeight / 2);
+      ctx.fillStyle = isLatest ? "#fff0ee" : "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = isLatest ? "rgba(239,116,110,.34)" : "rgba(15,139,134,.22)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = isLatest ? "#d85f59" : "#28545a";
+      ctx.textAlign = "center";
+      ctx.fillText(label, p.x, labelY + (isLatest ? 7 : 6));
     });
     ctx.textAlign = "left";
 
