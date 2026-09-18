@@ -5,7 +5,7 @@ const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_FPIPh89R0_78FfWzagT7hw_PGWSNE21
 
 const KAPT_LIST_URL = "https://apis.data.go.kr/1613000/AptListService3/getSidoAptList3";
 const KAPT_BASIC_URL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4";
-const MOLIT_TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev";
+const MOLIT_TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade";
 
 type JsonRecord = Record<string, unknown>;
 
