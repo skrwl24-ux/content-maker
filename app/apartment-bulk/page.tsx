@@ -18,7 +18,7 @@ type ApartmentData = {
 };
 
 type Point = { x: number; y: number } | null;
-type OutputKey = "thumbnail" | "price" | "map";
+type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
 type PhotoCandidate = {
@@ -632,7 +632,6 @@ async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Po
 export default function ApartmentBulkPage() {
   const [data, setData] = useState<ApartmentData>(SAMPLE);
   const [mapDataUrl, setMapDataUrl] = useState("");
-  const [complexPhotoDataUrl, setComplexPhotoDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
   const [selectedComplexName, setSelectedComplexName] = useState("");
@@ -643,7 +642,6 @@ export default function ApartmentBulkPage() {
   const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
-  const [photoSource, setPhotoSource] = useState<"upload" | null>(null);
   const [recommendedAngle, setRecommendedAngle] = useState("");
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
@@ -715,8 +713,6 @@ export default function ApartmentBulkPage() {
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
         setRecommendedAngle(detail.snapshot?.recommended_angle || "");
-        setComplexPhotoDataUrl("");
-        setPhotoSource(null);
         setOutputs(null);
 
         void searchPhotoCandidates(detail.complex.name || "", region, 1);
@@ -781,15 +777,6 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  async function handlePhoto(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setComplexPhotoDataUrl(await fileToDataUrl(file));
-    setPhotoSource("upload");
-    setPhotoSearchMessage("직접 올린 사진을 썸네일 배경으로 사용합니다.");
-    setOutputs(null);
-  }
-
   async function handleMap(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -819,10 +806,9 @@ export default function ApartmentBulkPage() {
     if (!ready) return;
     setLoading(true);
     try {
-      const thumbnail = await makeThumbnail(data, complexPhotoDataUrl);
       const price = makePriceCard(data, monthlyStats);
       const map = await makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
-      setOutputs({ thumbnail, price, map });
+      setOutputs({ price, map });
       requestAnimationFrame(() => document.getElementById("outputs")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } finally {
       setLoading(false);
@@ -832,14 +818,13 @@ export default function ApartmentBulkPage() {
   async function downloadZip() {
     if (!outputs) return;
     const zip = new JSZip();
-    zip.file("00_thumbnail.png", dataUrlBase64(outputs.thumbnail), { base64: true });
     zip.file("01_price.png", dataUrlBase64(outputs.price), { base64: true });
     zip.file("02_location.png", dataUrlBase64(outputs.map), { base64: true });
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${(data.name || "apartment").replace(/\s+/g, "_")}_3images.zip`;
+    a.download = `${(data.name || "apartment").replace(/\s+/g, "_")}_body_images.zip`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -855,7 +840,7 @@ export default function ApartmentBulkPage() {
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT BULK MAKER</p>
           <h1>단지 데이터만 고르면<br />썸네일·본문 요청서와 분석 이미지가 준비됩니다.</h1>
-          <p>ChatGPT 썸네일 요청서 · 블로그 본문 요청서 · 시세 그래프 · 입지 지도</p>
+          <p>ChatGPT 썸네일 요청서 · 블로그 본문 요청서 · 시세 그래프 · 입지 지도 2장</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
@@ -968,13 +953,6 @@ export default function ApartmentBulkPage() {
 
           <div className={styles.uploadGrid}>
             <label className={styles.uploadBox}>
-              <input type="file" accept="image/*" onChange={handlePhoto} />
-              <span className={styles.uploadIcon}>🏙️</span>
-              <b>{complexPhotoDataUrl ? "단지 사진 직접 교체" : "단지 사진 직접 업로드 · 선택"}</b>
-              <small>사이트 썸네일을 따로 만들고 싶을 때 사용 권리가 있는 실제 단지 사진을 직접 올리세요. ChatGPT 요청에는 이 사진이 자동 첨부되지 않습니다.</small>
-            </label>
-
-            <label className={styles.uploadBox}>
               <input type="file" accept="image/*" onChange={handleMap} />
               <span className={styles.uploadIcon}>🗺️</span>
               <b>{autoMapGenerated ? "네이버 지도 자동 생성 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
@@ -999,28 +977,27 @@ export default function ApartmentBulkPage() {
           )}
 
           <button className={styles.generate} disabled={!ready || loading} onClick={generate}>
-            {loading ? "3장 만드는 중…" : "이미지 3장 만들기"}
+            {loading ? "본문 이미지 만드는 중…" : "본문 이미지 2장 만들기"}
           </button>
           {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 만들고, 실패한 경우에만 직접 업로드하면 됩니다."}</p>}
         </div>
 
         <aside className={styles.guideCard}>
-          <p className={styles.eyebrow}>FIXED TEMPLATE</p>
-          <h2>매번 디자인하지 않습니다.</h2>
-          <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>단지명 + 궁금증형 한 줄</small></div></div>
+          <p className={styles.eyebrow}>PUBLISH FLOW</p>
+          <h2>썸네일은 ChatGPT, 본문 이미지는 자동.</h2>
+          <div className={styles.templateItem}><span>01</span><div><b>ChatGPT 썸네일</b><small>요청서 자동 생성 → 새 채팅에서 제작</small></div></div>
           <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>최근 6개월 월별 중앙값 + 거래건수</small></div></div>
-          <div className={styles.templateItem}><span>03</span><div><b>지도 카드</b><small>원본 지도 + 최소 강조 + 입지 한 줄</small></div></div>
-          <div className={styles.note}><b>대량발행용 원칙</b><p>폰트·색상·여백·정렬은 고정하고, 데이터와 지도만 교체합니다.</p></div>
+          <div className={styles.templateItem}><span>03</span><div><b>입지 지도</b><small>네이버 지도 자동 생성 + 최소 강조</small></div></div>
+          <div className={styles.note}><b>대량발행용 원칙</b><p>썸네일 퀄리티는 ChatGPT에서 확보하고, 반복 데이터 이미지는 사이트에서 자동화합니다.</p></div>
         </aside>
       </section>
 
       {outputs && (
         <section id="outputs" className={styles.outputs}>
           <div className={styles.outputHead}>
-            <div><p className={styles.eyebrow}>OUTPUT</p><h2>3장 완성</h2><span>아래 이미지를 확인한 뒤 개별 PNG 또는 ZIP으로 저장하세요.</span></div>
-            <button onClick={downloadZip}>3장 전체 ZIP 다운로드</button>
+            <div><p className={styles.eyebrow}>OUTPUT</p><h2>본문 이미지 2장 완성</h2><span>썸네일은 위 ChatGPT 요청서로 만들고, 아래 2장은 블로그 본문에 사용하세요.</span></div>
+            <button onClick={downloadZip}>본문 이미지 2장 ZIP 다운로드</button>
           </div>
-          <OutputCard title="00 · 썸네일" size="1254×1254" src={outputs.thumbnail} filename="00_thumbnail.png" />
           <OutputCard title="01 · 시세 그래프 카드" size="1600×900" src={outputs.price} filename="01_price_graph.png" />
           <OutputCard title="02 · 입지 지도 카드" size="1600×900" src={outputs.map} filename="02_location.png" />
         </section>
