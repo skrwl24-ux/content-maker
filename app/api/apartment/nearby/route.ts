@@ -162,12 +162,14 @@ export async function GET(req: NextRequest) {
     for (const query of searchQueries) {
       const items = await localSearch(query, localHeaders);
       for (const item of items) {
-        const name = stripHtml(item.title || "");
+        const rawName = stripHtml(item.title || "");
         const category = stripHtml(item.category || "");
         const lng = normalizeCoord(item.mapx, "x");
         const lat = normalizeCoord(item.mapy, "y");
-        if (!name || lng == null || lat == null) continue;
-        if (!/(지하철|전철|철도)/.test(category) && !/역(?:\s|$)/.test(name)) continue;
+        if (!rawName || lng == null || lat == null) continue;
+        if (!/(지하철|전철|철도)/.test(category) && !/역(?:\s|$)/.test(rawName)) continue;
+        const stationMatch = rawName.match(/^(.+?역)(?:\s|$)/);
+        const name = stationMatch?.[1] || rawName;
         const distance = distanceMeters(point, { lat, lng });
         if (distance > 6000) continue;
         all.push({
@@ -197,13 +199,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const livingArea = dong ? `${dong} 생활권` : complex.sigungu ? `${complex.sigungu} 생활권` : "인근 생활권";
     let locationLine = "";
     if (nearest.distance <= 800) {
-      locationLine = `${nearest.name}을 가까이 이용할 수 있는 ${dong || complex.sigungu || "생활"}권`;
+      locationLine = `${nearest.name}을 가까이 이용할 수 있는 ${livingArea}`;
     } else if (nearest.distance <= 1600) {
-      locationLine = `${nearest.name} 접근이 가능한 ${dong || complex.sigungu || "생활"}권`;
+      locationLine = `${nearest.name} 접근이 가능한 ${livingArea}`;
     } else {
-      locationLine = `${dong || complex.sigungu || "인근"} 생활권 · 가까운 주요 역 ${nearest.name}`;
+      locationLine = `${livingArea} · 가까운 주요 역 ${nearest.name}`;
     }
 
     return NextResponse.json({
