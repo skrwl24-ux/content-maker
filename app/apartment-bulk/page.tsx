@@ -172,6 +172,210 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
   ctx.drawImage(image, dx, dy, dw, dh);
 }
 
+
+function textSeed(text: string) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededRandom(seed: number) {
+  let value = seed || 1;
+  return () => {
+    value += 0x6D2B79F5;
+    let t = value;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function drawIsoTower(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  baseY: number,
+  w: number,
+  d: number,
+  h: number,
+  floors: number
+) {
+  const topY = baseY - h;
+  const halfW = w / 2;
+  const halfD = d / 2;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(35,61,72,.58)";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW, topY);
+  ctx.lineTo(cx, topY - halfD);
+  ctx.lineTo(cx + halfW, topY);
+  ctx.lineTo(cx, topY + halfD);
+  ctx.closePath();
+  ctx.fillStyle = "#f1eee8";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx - halfW, topY);
+  ctx.lineTo(cx, topY + halfD);
+  ctx.lineTo(cx, baseY + halfD);
+  ctx.lineTo(cx - halfW, baseY);
+  ctx.closePath();
+  ctx.fillStyle = "#d8dedc";
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(cx + halfW, topY);
+  ctx.lineTo(cx, topY + halfD);
+  ctx.lineTo(cx, baseY + halfD);
+  ctx.lineTo(cx + halfW, baseY);
+  ctx.closePath();
+  ctx.fillStyle = "#b9c8c8";
+  ctx.fill();
+  ctx.stroke();
+
+  const floorGap = h / Math.max(6, floors);
+  ctx.strokeStyle = "rgba(55,83,91,.24)";
+  ctx.lineWidth = 1;
+  for (let y = topY + floorGap; y < baseY - 4; y += floorGap) {
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW + 4, y);
+    ctx.lineTo(cx - 2, y + halfD - 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx + halfW - 4, y);
+    ctx.lineTo(cx + 2, y + halfD - 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(36,78,88,.22)";
+  const rows = Math.max(5, Math.min(12, Math.floor(floors / 2)));
+  for (let row = 0; row < rows; row++) {
+    const yy = topY + 20 + row * ((h - 36) / rows);
+    for (let col = 0; col < 3; col++) {
+      const offset = 14 + col * Math.max(14, (halfW - 24) / 2);
+      ctx.fillRect(cx - halfW + offset, yy, 8, 5);
+      ctx.fillRect(cx + offset - 6, yy + halfD * 0.3, 7, 5);
+    }
+  }
+  ctx.restore();
+}
+
+function makeFreeAerialIllustration(data: ApartmentData, variant = 0) {
+  const rand = seededRandom(textSeed(`${data.name}|${data.region}|${variant}`));
+
+  return canvasUrl(1254, 1254, (ctx) => {
+    const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
+    bg.addColorStop(0, "#dfe9e5");
+    bg.addColorStop(.52, "#c6ddd3");
+    bg.addColorStop(1, "#9fc2bc");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 1254, 1254);
+
+    ctx.save();
+    ctx.globalAlpha = .36;
+    ctx.strokeStyle = "#6c8c91";
+    ctx.lineWidth = 30;
+    ctx.beginPath();
+    ctx.moveTo(-80, 980);
+    ctx.lineTo(1310, 520);
+    ctx.stroke();
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = "#eff3f1";
+    ctx.beginPath();
+    ctx.moveTo(-80, 980);
+    ctx.lineTo(1310, 520);
+    ctx.stroke();
+
+    ctx.lineWidth = 24;
+    ctx.strokeStyle = "#74959a";
+    ctx.beginPath();
+    ctx.moveTo(140, -60);
+    ctx.lineTo(1030, 1310);
+    ctx.stroke();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = "#edf2ef";
+    ctx.beginPath();
+    ctx.moveTo(140, -60);
+    ctx.lineTo(1030, 1310);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(655, 620);
+    ctx.rotate(-0.22);
+    roundRect(ctx, -410, -300, 820, 610, 66);
+    ctx.fillStyle = "rgba(173,207,183,.94)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(55,93,82,.28)";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(240,244,237,.82)";
+    roundRect(ctx, -260, -95, 520, 200, 62);
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(80,116,104,.26)";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 112, 0, Math.PI * 2);
+    ctx.stroke();
+
+    for (let i = 0; i < 34; i++) {
+      const angle = rand() * Math.PI * 2;
+      const radius = 150 + rand() * 230;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * .63;
+      const r = 7 + rand() * 13;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = i % 3 === 0 ? "#6fa383" : "#79ae8c";
+      ctx.fill();
+    }
+    ctx.restore();
+
+    const towers = 8 + Math.floor(rand() * 3);
+    for (let i = 0; i < towers; i++) {
+      const ring = i < 5 ? 1 : 1.45;
+      const angle = (i / towers) * Math.PI * 2 + rand() * .3;
+      const cx = 635 + Math.cos(angle) * (220 * ring) + (rand() - .5) * 55;
+      const baseY = 650 + Math.sin(angle) * (135 * ring) + (rand() - .5) * 40;
+      const w = 82 + rand() * 48;
+      const d = 42 + rand() * 24;
+      const h = 180 + rand() * 235;
+      const floors = 12 + Math.floor(rand() * 18);
+      drawIsoTower(ctx, cx, baseY, w, d, h, floors);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = .34;
+    ctx.strokeStyle = "#57737b";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 26; i++) {
+      const y = 70 + i * 45;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(170 + rand() * 120, y - 55);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    const wash = ctx.createLinearGradient(0, 0, 0, 1254);
+    wash.addColorStop(0, "rgba(255,255,255,.08)");
+    wash.addColorStop(.62, "rgba(8,28,36,.04)");
+    wash.addColorStop(1, "rgba(7,25,34,.2)");
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, 1254, 1254);
+  });
+}
+
 function formatWon(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "-";
   const eok = value / 100000000;
@@ -535,11 +739,10 @@ export default function ApartmentBulkPage() {
   const [photoCandidates, setPhotoCandidates] = useState<PhotoCandidate[]>([]);
   const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
-  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState("");
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
-  const [aiIllustrationLoading, setAiIllustrationLoading] = useState(false);
-  const [aiIllustrationMessage, setAiIllustrationMessage] = useState("");
-  const [photoSource, setPhotoSource] = useState<"ai" | "upload" | null>(null);
+  const [illustrationVariant, setIllustrationVariant] = useState(0);
+  const [illustrationMessage, setIllustrationMessage] = useState("");
+  const [photoSource, setPhotoSource] = useState<"graphic" | "upload" | null>(null);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -552,8 +755,7 @@ export default function ApartmentBulkPage() {
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
     setPhotoCandidatesLoading(true);
-    setPhotoSearchMessage("단지 사진 후보를 찾는 중…");
-    setSelectedPhotoUrl("");
+    setPhotoSearchMessage("단지 참고 사진을 찾는 중…");
     try {
       const params = new URLSearchParams({
         query: name.trim(),
@@ -566,7 +768,7 @@ export default function ApartmentBulkPage() {
       const items = (json.items || []) as PhotoCandidate[];
       setPhotoCandidates(items);
       setPhotoSearchStart(start);
-      setPhotoSearchMessage(items.length ? "사진 3장 중 사용할 사진을 하나 선택하세요." : "사진 후보를 찾지 못했습니다. 직접 업로드해 주세요.");
+      setPhotoSearchMessage(items.length ? "검색 사진 3장은 외관 확인 참고용입니다." : "검색 사진을 찾지 못했습니다.");
     } catch (e) {
       setPhotoCandidates([]);
       setPhotoSearchMessage(e instanceof Error ? e.message : "사진 자동 검색에 실패했습니다. 직접 업로드할 수 있습니다.");
@@ -575,33 +777,14 @@ export default function ApartmentBulkPage() {
     }
   }
 
-  async function generateAiIllustration() {
-    if (!data.name.trim() || aiIllustrationLoading) return;
-    setAiIllustrationLoading(true);
-    setAiIllustrationMessage("실제 사진을 복제하지 않는 새 조감도풍 일러스트를 만드는 중…");
-    try {
-      const res = await fetch("/api/apartment/illustration", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: data.name,
-          region: data.region,
-          households: data.households,
-          moveIn: data.moveIn,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "AI 조감도풍 생성 실패");
-      setComplexPhotoDataUrl(json.imageDataUrl || "");
-      setSelectedPhotoUrl("");
-      setPhotoSource("ai");
-      setAiIllustrationMessage(json.note || "AI 조감도풍 일러스트가 썸네일 배경에 적용됐습니다.");
-      setOutputs(null);
-    } catch (e) {
-      setAiIllustrationMessage(e instanceof Error ? e.message : "AI 조감도풍 이미지 생성에 실패했습니다.");
-    } finally {
-      setAiIllustrationLoading(false);
-    }
+  function generateFreeIllustration(nextVariant?: number) {
+    const variant = nextVariant ?? illustrationVariant;
+    const image = makeFreeAerialIllustration(data, variant);
+    setComplexPhotoDataUrl(image);
+    setPhotoSource("graphic");
+    setIllustrationVariant(variant);
+    setIllustrationMessage("무료 조감도풍 그래픽을 썸네일 배경으로 적용했습니다.");
+    setOutputs(null);
   }
 
   useEffect(() => {
@@ -618,21 +801,26 @@ export default function ApartmentBulkPage() {
         const firstMedian = detail.snapshot?.first_median_price == null ? null : Number(detail.snapshot.first_median_price);
         const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
-        setData((prev) => ({
-          ...prev,
-          name: detail.complex.name || prev.name,
-          region: region || prev.region,
-          area: detail.representativeArea ? "전용 " + detail.representativeArea : prev.area,
-          recentPrice: recent ? formatWon(recent) : prev.recentPrice,
-          previousPrice: firstMedian ? "6개월 전 대표값 " + formatWon(firstMedian) : prev.previousPrice,
-          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : prev.households,
-          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : prev.moveIn,
+        const nextData: ApartmentData = {
+          ...SAMPLE,
+          name: detail.complex.name || SAMPLE.name,
+          region: region || SAMPLE.region,
+          area: detail.representativeArea ? "전용 " + detail.representativeArea : SAMPLE.area,
+          recentPrice: recent ? formatWon(recent) : SAMPLE.recentPrice,
+          previousPrice: firstMedian ? "6개월 전 대표값 " + formatWon(firstMedian) : SAMPLE.previousPrice,
+          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : SAMPLE.households,
+          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : SAMPLE.moveIn,
           station: "",
           locationLine: "",
           question: detail.snapshot?.recommended_angle || "요즘 얼마에 거래될까?",
-        }));
+        };
+        setData(nextData);
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
+        setComplexPhotoDataUrl(makeFreeAerialIllustration(nextData, 0));
+        setPhotoSource("graphic");
+        setIllustrationVariant(0);
+        setIllustrationMessage("무료 조감도풍 그래픽을 자동으로 만들었습니다.");
         setOutputs(null);
 
         void searchPhotoCandidates(detail.complex.name || "", region, 1);
@@ -671,9 +859,8 @@ export default function ApartmentBulkPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setComplexPhotoDataUrl(await fileToDataUrl(file));
-    setSelectedPhotoUrl("");
     setPhotoSource("upload");
-    setAiIllustrationMessage("");
+    setIllustrationMessage("");
     setPhotoSearchMessage("직접 올린 사진을 썸네일 배경으로 사용합니다.");
     setOutputs(null);
   }
@@ -783,25 +970,25 @@ export default function ApartmentBulkPage() {
             <section className={styles.photoSection}>
               <div className={styles.photoHead}>
                 <div>
-                  <b>AI 조감도풍 썸네일 배경</b>
-                  <span>검색 사진을 변환하지 않고 단지명·지역 정보만으로 새 일러스트를 생성합니다.</span>
+                  <b>무료 조감도풍 썸네일 배경</b>
+                  <span>외부 AI API 없이 브라우저에서 건물·도로·조경을 그래픽으로 자동 조합합니다.</span>
                 </div>
                 <button
                   type="button"
-                  disabled={aiIllustrationLoading || !data.name.trim()}
-                  onClick={() => void generateAiIllustration()}
+                  disabled={!data.name.trim()}
+                  onClick={() => generateFreeIllustration(illustrationVariant + 1)}
                 >
-                  {aiIllustrationLoading ? "생성 중…" : photoSource === "ai" ? "다시 만들기" : "조감도풍 만들기"}
+                  다른 배치 만들기
                 </button>
               </div>
-              {aiIllustrationMessage && <div className={styles.aiMessage}>{aiIllustrationMessage}</div>}
-              {photoSource === "ai" && complexPhotoDataUrl && (
+              {illustrationMessage && <div className={styles.aiMessage}>{illustrationMessage}</div>}
+              {photoSource === "graphic" && complexPhotoDataUrl && (
                 <div className={styles.aiPreview}>
-                  <img src={complexPhotoDataUrl} alt="AI 조감도풍 일러스트" />
-                  <span>AI 생성 삽화 · 실제 단지 배치와 다를 수 있음</span>
+                  <img src={complexPhotoDataUrl} alt="무료 조감도풍 그래픽" />
+                  <span>창작 그래픽 · 실제 단지 배치와 다를 수 있음 · API 비용 0원</span>
                 </div>
               )}
-              <p className={styles.photoNotice}>이 이미지는 실제 단지 사진이나 정확한 배치도가 아니라 블로그 썸네일용 창작 일러스트입니다.</p>
+              <p className={styles.photoNotice}>실제 사진을 변환하지 않는 상징적인 건축 그래픽이라 썸네일 배경용으로 쓰기 좋습니다.</p>
             </section>
           )}
 
@@ -847,7 +1034,7 @@ export default function ApartmentBulkPage() {
               <input type="file" accept="image/*" onChange={handlePhoto} />
               <span className={styles.uploadIcon}>🏙️</span>
               <b>{complexPhotoDataUrl ? "단지 사진 직접 교체" : "단지 사진 직접 업로드 · 선택"}</b>
-              <small>자동 후보가 마음에 들지 않을 때 직접 올리세요. 마지막으로 선택한 사진이 썸네일 배경에 사용됩니다.</small>
+              <small>무료 그래픽 대신 사용 권리가 있는 실제 단지 사진을 쓰고 싶을 때 직접 올리세요.</small>
             </label>
 
             <label className={styles.uploadBox}>
