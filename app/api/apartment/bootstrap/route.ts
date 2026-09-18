@@ -29,19 +29,29 @@ export async function GET() {
     return NextResponse.json({ error: "등록된 초기화 지역이 없습니다." }, { status: 404 });
   }
 
-  if (region.last_synced_at) {
+  const { count: tradeCount, error: tradeCountError } = await client
+    .from("apt_trades")
+    .select("id", { count: "exact", head: true })
+    .eq("region_code", regionCode);
+
+  if (tradeCountError) {
+    return NextResponse.json({ error: tradeCountError.message }, { status: 500 });
+  }
+
+  if (region.last_synced_at && (tradeCount || 0) > 0) {
     return NextResponse.json({
       success: true,
       alreadyInitialized: true,
       regionCode,
       regionName: region.region_name,
       lastSyncedAt: region.last_synced_at,
+      tradeCount,
     });
   }
 
   const { data: existingRun, error: runError } = await client
     .from("apt_sync_runs")
-    .select("id,status,started_at,finished_at")
+    .select("id,status,started_at,finished_at,trade_count")
     .eq("region_code", regionCode)
     .in("status", ["running", "success"])
     .order("started_at", { ascending: false })
@@ -64,7 +74,7 @@ export async function GET() {
     );
   }
 
-  if (existingRun?.status === "success") {
+  if (existingRun?.status === "success" && Number(existingRun.trade_count || 0) > 0) {
     return NextResponse.json({
       success: true,
       alreadyInitialized: true,
