@@ -193,78 +193,114 @@ function seededRandom(seed: number) {
   };
 }
 
-function drawIsoTower(
+function drawArchitecturalTower(
   ctx: CanvasRenderingContext2D,
   cx: number,
   baseY: number,
   w: number,
-  d: number,
+  depth: number,
   h: number,
-  floors: number
+  floors: number,
+  accent: number
 ) {
   const topY = baseY - h;
-  const halfW = w / 2;
-  const halfD = d / 2;
+  const hw = w / 2;
+  const hd = depth / 2;
 
   ctx.save();
-  ctx.strokeStyle = "rgba(35,61,72,.58)";
+
+  ctx.globalAlpha = .16;
+  ctx.fillStyle = "#203f45";
+  ctx.beginPath();
+  ctx.ellipse(cx + 28, baseY + hd + 22, hw * 1.1, hd * .62, -.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = "rgba(47,72,77,.58)";
   ctx.lineWidth = 2;
 
   ctx.beginPath();
-  ctx.moveTo(cx - halfW, topY);
-  ctx.lineTo(cx, topY - halfD);
-  ctx.lineTo(cx + halfW, topY);
-  ctx.lineTo(cx, topY + halfD);
+  ctx.moveTo(cx - hw, topY);
+  ctx.lineTo(cx, topY - hd);
+  ctx.lineTo(cx + hw, topY);
+  ctx.lineTo(cx, topY + hd);
   ctx.closePath();
-  ctx.fillStyle = "#f1eee8";
+  ctx.fillStyle = accent % 2 ? "#eee8dd" : "#f3efe7";
   ctx.fill();
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(cx - halfW, topY);
-  ctx.lineTo(cx, topY + halfD);
-  ctx.lineTo(cx, baseY + halfD);
-  ctx.lineTo(cx - halfW, baseY);
+  ctx.moveTo(cx - hw, topY);
+  ctx.lineTo(cx, topY + hd);
+  ctx.lineTo(cx, baseY + hd);
+  ctx.lineTo(cx - hw, baseY);
   ctx.closePath();
-  ctx.fillStyle = "#d8dedc";
+  ctx.fillStyle = accent % 2 ? "#d9ddd8" : "#dfe4df";
   ctx.fill();
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(cx + halfW, topY);
-  ctx.lineTo(cx, topY + halfD);
-  ctx.lineTo(cx, baseY + halfD);
-  ctx.lineTo(cx + halfW, baseY);
+  ctx.moveTo(cx + hw, topY);
+  ctx.lineTo(cx, topY + hd);
+  ctx.lineTo(cx, baseY + hd);
+  ctx.lineTo(cx + hw, baseY);
   ctx.closePath();
-  ctx.fillStyle = "#b9c8c8";
+  ctx.fillStyle = accent % 2 ? "#bac8c8" : "#c3cecb";
   ctx.fill();
   ctx.stroke();
 
-  const floorGap = h / Math.max(6, floors);
-  ctx.strokeStyle = "rgba(55,83,91,.24)";
+  const floorGap = h / Math.max(8, floors);
+  ctx.strokeStyle = "rgba(56,83,87,.22)";
   ctx.lineWidth = 1;
-  for (let y = topY + floorGap; y < baseY - 4; y += floorGap) {
+  for (let y = topY + floorGap; y < baseY - 6; y += floorGap) {
     ctx.beginPath();
-    ctx.moveTo(cx - halfW + 4, y);
-    ctx.lineTo(cx - 2, y + halfD - 2);
+    ctx.moveTo(cx - hw + 5, y);
+    ctx.lineTo(cx - 2, y + hd - 2);
     ctx.stroke();
-
     ctx.beginPath();
-    ctx.moveTo(cx + halfW - 4, y);
-    ctx.lineTo(cx + 2, y + halfD - 2);
+    ctx.moveTo(cx + hw - 5, y);
+    ctx.lineTo(cx + 2, y + hd - 2);
     ctx.stroke();
   }
 
-  ctx.fillStyle = "rgba(36,78,88,.22)";
-  const rows = Math.max(5, Math.min(12, Math.floor(floors / 2)));
-  for (let row = 0; row < rows; row++) {
-    const yy = topY + 20 + row * ((h - 36) / rows);
-    for (let col = 0; col < 3; col++) {
-      const offset = 14 + col * Math.max(14, (halfW - 24) / 2);
-      ctx.fillRect(cx - halfW + offset, yy, 8, 5);
-      ctx.fillRect(cx + offset - 6, yy + halfD * 0.3, 7, 5);
+  const windowRows = Math.max(7, Math.min(14, Math.floor(floors / 2)));
+  for (let row = 0; row < windowRows; row++) {
+    const yy = topY + 22 + row * ((h - 42) / windowRows);
+    for (let col = 0; col < 4; col++) {
+      const lx = cx - hw + 15 + col * Math.max(13, (w - 38) / 4);
+      ctx.fillStyle = row % 4 === 0 && col % 2 === 0 ? "rgba(203,163,109,.55)" : "rgba(73,105,111,.28)";
+      ctx.fillRect(lx, yy, 8, 5);
+      const rx = cx + 10 + col * Math.max(10, (hw - 20) / 4);
+      ctx.fillRect(rx, yy + hd * .28, 7, 5);
     }
   }
+
+  ctx.strokeStyle = "rgba(65,87,91,.38)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - hw * .72, topY - hd * .2);
+  ctx.lineTo(cx + hw * .52, topY - hd * .64);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, tone = 0) {
+  ctx.save();
+  ctx.fillStyle = "rgba(44,73,69,.18)";
+  ctx.beginPath();
+  ctx.ellipse(x + 5, y + r * .58, r * .72, r * .28, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = tone % 3 === 0 ? "#6d9478" : tone % 3 === 1 ? "#7ca286" : "#668d73";
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,.12)";
+  ctx.beginPath();
+  ctx.arc(x - r * .25, y - r * .28, r * .34, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -273,104 +309,151 @@ function makeFreeAerialIllustration(data: ApartmentData, variant = 0) {
 
   return canvasUrl(1254, 1254, (ctx) => {
     const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
-    bg.addColorStop(0, "#dfe9e5");
-    bg.addColorStop(.52, "#c6ddd3");
-    bg.addColorStop(1, "#9fc2bc");
+    bg.addColorStop(0, "#f2eee7");
+    bg.addColorStop(.46, "#e5ebe6");
+    bg.addColorStop(1, "#c5d5cf");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 1254, 1254);
 
     ctx.save();
-    ctx.globalAlpha = .36;
-    ctx.strokeStyle = "#6c8c91";
-    ctx.lineWidth = 30;
+    ctx.globalAlpha = .58;
+    ctx.strokeStyle = "#a8b9b5";
+    ctx.lineCap = "round";
+    ctx.lineWidth = 54;
     ctx.beginPath();
-    ctx.moveTo(-80, 980);
-    ctx.lineTo(1310, 520);
+    ctx.moveTo(-120, 1080);
+    ctx.lineTo(1350, 540);
     ctx.stroke();
-    ctx.lineWidth = 12;
-    ctx.strokeStyle = "#eff3f1";
-    ctx.beginPath();
-    ctx.moveTo(-80, 980);
-    ctx.lineTo(1310, 520);
+    ctx.strokeStyle = "#f5f5ef";
+    ctx.lineWidth = 32;
     ctx.stroke();
 
-    ctx.lineWidth = 24;
-    ctx.strokeStyle = "#74959a";
+    ctx.strokeStyle = "#9fb2ae";
+    ctx.lineWidth = 42;
     ctx.beginPath();
-    ctx.moveTo(140, -60);
-    ctx.lineTo(1030, 1310);
+    ctx.moveTo(110, -100);
+    ctx.lineTo(1070, 1370);
     ctx.stroke();
-    ctx.lineWidth = 9;
-    ctx.strokeStyle = "#edf2ef";
+    ctx.strokeStyle = "#f4f5ef";
+    ctx.lineWidth = 23;
+    ctx.stroke();
+
+    ctx.setLineDash([34, 30]);
+    ctx.strokeStyle = "rgba(118,135,133,.54)";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(140, -60);
-    ctx.lineTo(1030, 1310);
+    ctx.moveTo(-80, 1060);
+    ctx.lineTo(1320, 548);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(126, -80);
+    ctx.lineTo(1050, 1340);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
 
     ctx.save();
-    ctx.translate(655, 620);
-    ctx.rotate(-0.22);
-    roundRect(ctx, -410, -300, 820, 610, 66);
-    ctx.fillStyle = "rgba(173,207,183,.94)";
+    ctx.translate(650, 665);
+    ctx.rotate(-0.2);
+
+    ctx.globalAlpha = .18;
+    ctx.fillStyle = "#2c5552";
+    roundRect(ctx, -415, -300, 850, 610, 72);
     ctx.fill();
-    ctx.strokeStyle = "rgba(55,93,82,.28)";
+    ctx.globalAlpha = 1;
+
+    roundRect(ctx, -430, -325, 850, 610, 72);
+    ctx.fillStyle = "#bfd4c2";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(73,104,94,.32)";
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    ctx.fillStyle = "rgba(240,244,237,.82)";
-    roundRect(ctx, -260, -95, 520, 200, 62);
+    roundRect(ctx, -280, -120, 560, 230, 96);
+    ctx.fillStyle = "#e7eee4";
     ctx.fill();
 
-    ctx.strokeStyle = "rgba(80,116,104,.26)";
+    ctx.strokeStyle = "rgba(91,118,107,.28)";
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.arc(0, 0, 112, 0, Math.PI * 2);
+    ctx.ellipse(0, -2, 172, 78, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    for (let i = 0; i < 34; i++) {
-      const angle = rand() * Math.PI * 2;
-      const radius = 150 + rand() * 230;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * .63;
-      const r = 7 + rand() * 13;
+    ctx.fillStyle = "rgba(138,171,151,.28)";
+    ctx.beginPath();
+    ctx.ellipse(0, -5, 130, 56, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#d5ded5";
+    roundRect(ctx, -65, 142, 150, 78, 16);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(75,99,96,.28)";
+    ctx.stroke();
+
+    for (let i = 0; i < 10; i++) {
+      ctx.strokeStyle = "rgba(90,108,106,.24)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = i % 3 === 0 ? "#6fa383" : "#79ae8c";
-      ctx.fill();
+      ctx.moveTo(-48 + i * 14, 150);
+      ctx.lineTo(-48 + i * 14, 207);
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < 30; i++) {
+      const angle = rand() * Math.PI * 2;
+      const radius = 145 + rand() * 245;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * .58;
+      drawTree(ctx, x, y, 8 + rand() * 8, i);
     }
     ctx.restore();
 
-    const towers = 8 + Math.floor(rand() * 3);
-    for (let i = 0; i < towers; i++) {
-      const ring = i < 5 ? 1 : 1.45;
-      const angle = (i / towers) * Math.PI * 2 + rand() * .3;
-      const cx = 635 + Math.cos(angle) * (220 * ring) + (rand() - .5) * 55;
-      const baseY = 650 + Math.sin(angle) * (135 * ring) + (rand() - .5) * 40;
-      const w = 82 + rand() * 48;
-      const d = 42 + rand() * 24;
-      const h = 180 + rand() * 235;
-      const floors = 12 + Math.floor(rand() * 18);
-      drawIsoTower(ctx, cx, baseY, w, d, h, floors);
+    const towerCount = 6 + Math.floor(rand() * 2);
+    const slots = [
+      [420, 585, 118, 58, 340],
+      [610, 510, 132, 64, 440],
+      [805, 570, 116, 56, 360],
+      [372, 805, 126, 60, 300],
+      [640, 860, 138, 66, 390],
+      [875, 785, 112, 54, 295],
+      [728, 690, 92, 46, 255],
+    ];
+
+    for (let i = 0; i < towerCount; i++) {
+      const [sx, sy, sw, sd, sh] = slots[i];
+      const cx = sx + (rand() - .5) * 44;
+      const baseY = sy + (rand() - .5) * 34;
+      const w = sw + (rand() - .5) * 18;
+      const depth = sd + (rand() - .5) * 8;
+      const h = sh + (rand() - .5) * 74;
+      const floors = 16 + Math.floor(rand() * 18);
+      drawArchitecturalTower(ctx, cx, baseY, w, depth, h, floors, i + variant);
     }
 
     ctx.save();
     ctx.globalAlpha = .34;
-    ctx.strokeStyle = "#57737b";
+    ctx.strokeStyle = "#78918f";
     ctx.lineWidth = 2;
-    for (let i = 0; i < 26; i++) {
-      const y = 70 + i * 45;
+    for (let i = 0; i < 12; i++) {
+      const x = 45 + i * 42;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(170 + rand() * 120, y - 55);
+      ctx.moveTo(x, 72);
+      ctx.lineTo(x + 210, 10);
       ctx.stroke();
     }
     ctx.restore();
 
+    const glow = ctx.createRadialGradient(690, 360, 80, 690, 360, 690);
+    glow.addColorStop(0, "rgba(255,255,255,.34)");
+    glow.addColorStop(.7, "rgba(255,255,255,.05)");
+    glow.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 1254, 1254);
+
     const wash = ctx.createLinearGradient(0, 0, 0, 1254);
-    wash.addColorStop(0, "rgba(255,255,255,.08)");
-    wash.addColorStop(.62, "rgba(8,28,36,.04)");
-    wash.addColorStop(1, "rgba(7,25,34,.2)");
+    wash.addColorStop(0, "rgba(255,255,255,.02)");
+    wash.addColorStop(.58, "rgba(22,47,52,.03)");
+    wash.addColorStop(1, "rgba(17,39,45,.12)");
     ctx.fillStyle = wash;
     ctx.fillRect(0, 0, 1254, 1254);
   });
