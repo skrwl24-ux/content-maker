@@ -638,6 +638,8 @@ export default function ApartmentBulkPage() {
   const [autoMapLoading, setAutoMapLoading] = useState(false);
   const [autoMapMessage, setAutoMapMessage] = useState("");
   const [autoMapGenerated, setAutoMapGenerated] = useState(false);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyMessage, setNearbyMessage] = useState("");
   const [photoCandidates, setPhotoCandidates] = useState<PhotoCandidate[]>([]);
   const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
@@ -716,6 +718,30 @@ export default function ApartmentBulkPage() {
         setOutputs(null);
 
         void searchPhotoCandidates(detail.complex.name || "", region, 1);
+
+        setNearbyLoading(true);
+        setNearbyMessage("가까운 주요 역을 자동으로 찾는 중…");
+        void fetch("/api/apartment/nearby?complexId=" + encodeURIComponent(complexId), { cache: "no-store" })
+          .then(async (nearbyRes) => {
+            const nearbyJson = await nearbyRes.json();
+            if (!nearbyRes.ok) throw new Error(nearbyJson.error || "가까운 역 검색 실패");
+            setData((prev) => ({
+              ...prev,
+              station: nearbyJson.station || prev.station,
+              locationLine: nearbyJson.locationLine || prev.locationLine,
+            }));
+            if (nearbyJson.station) {
+              const distance = Number(nearbyJson.distanceMeters);
+              const distanceText = Number.isFinite(distance) ? ` · 직선거리 약 ${distance.toLocaleString("ko-KR")}m` : "";
+              setNearbyMessage(`✅ ${nearbyJson.station} 자동 입력 완료${distanceText}`);
+            } else {
+              setNearbyMessage("ℹ️ 가까운 역을 찾지 못해 입지 정보는 직접 확인해 주세요.");
+            }
+          })
+          .catch((e) => {
+            setNearbyMessage(e instanceof Error ? "ℹ️ " + e.message : "ℹ️ 가까운 역 자동 검색에 실패했습니다.");
+          })
+          .finally(() => setNearbyLoading(false));
 
         setAutoMapLoading(true);
         setAutoMapMessage("네이버 지도를 자동으로 만드는 중…");
@@ -907,6 +933,12 @@ export default function ApartmentBulkPage() {
             </div>
             <p className={styles.promptHelp}>새 채팅이 열리면 요청서가 미리 들어갑니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
           </section>
+
+          {nearbyMessage && (
+            <div className={styles.autoLoad}>
+              {nearbyLoading ? "🚉 " : ""}{nearbyMessage}
+            </div>
+          )}
 
           {autoMapMessage && (
             <div className={styles.autoLoad}>
