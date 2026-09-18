@@ -173,8 +173,12 @@ function responseTotalCount(json: unknown, fallback: number) {
 
 async function fetchJsonOrXml(url: URL) {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error("공공데이터 API HTTP " + res.status);
   const raw = await res.text();
+  if (!res.ok) {
+    const endpoint = url.pathname.split("/").slice(-2).join("/");
+    const detail = raw.replace(/\s+/g, " ").slice(0, 240);
+    throw new Error(`공공데이터 API HTTP ${res.status} (${endpoint})${detail ? ": " + detail : ""}`);
+  }
   if (raw.trim().startsWith("{")) {
     const json = JSON.parse(raw);
     const root = json as JsonRecord;
@@ -272,8 +276,12 @@ async function fetchTradeMonth(regionCode: string, yyyymm: string, key: string) 
       numOfRows: rows,
     });
     const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error("실거래 API HTTP " + res.status);
     const xml = await res.text();
+    if (!res.ok) {
+      const endpoint = url.pathname.split("/").slice(-2).join("/");
+      const detail = xml.replace(/\s+/g, " ").slice(0, 240);
+      throw new Error(`실거래 API HTTP ${res.status} (${endpoint})${detail ? ": " + detail : ""}`);
+    }
     assertPublicApiResult(xml);
     const items = parseXmlItems(xml);
     result.push(...items);
