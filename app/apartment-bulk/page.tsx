@@ -764,8 +764,6 @@ export default function ApartmentBulkPage() {
         setRecommendedAngle(detail.snapshot?.recommended_angle || "");
         setOutputs(null);
 
-        void searchPhotoCandidates(detail.complex.name || "", region, 1);
-
         setNearbyLoading(true);
         setNearbyMessage("가까운 주요 역을 자동으로 찾는 중…");
         void fetch("/api/apartment/nearby?complexId=" + encodeURIComponent(complexId), { cache: "no-store" })
@@ -943,122 +941,155 @@ export default function ApartmentBulkPage() {
           <Field label="썸네일 질문" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
-          <section className={styles.promptSection}>
-            <div className={styles.promptHead}>
-              <div>
-                <b>🤖 ChatGPT 썸네일 요청서</b>
-                <span>단지 데이터가 바뀌면 요청서도 자동으로 갱신됩니다.</span>
-              </div>
-            </div>
-            <textarea className={styles.promptBox} value={thumbnailPrompt} readOnly />
-            <div className={styles.promptActions}>
-              <button type="button" onClick={() => void copyThumbnailPrompt()}>
-                {promptCopied ? "✓ 복사 완료" : "요청서 복사"}
-              </button>
-              <button type="button" className={styles.primaryPrompt} onClick={openThumbnailPromptInChatGPT}>
-                ChatGPT에서 바로 열기
-              </button>
-            </div>
-            <p className={styles.promptHelp}>‘ChatGPT에서 바로 열기’는 요청서를 URL에 넣어 새 채팅을 엽니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
-          </section>
-
-          <section className={styles.promptSection}>
-            <div className={styles.promptHead}>
-              <div>
-                <b>📝 ChatGPT 블로그 본문 요청서</b>
-                <span>실거래 + 최신 웹 확인 + 태그 + 내부링크 위치까지 포함한 발행용 요청서를 자동 구성합니다.</span>
-              </div>
-            </div>
-            <textarea className={styles.promptBox} value={bodyPrompt} readOnly />
-            <div className={styles.promptActions}>
-              <button type="button" onClick={() => void copyBodyPrompt()}>
-                {bodyPromptCopied ? "✓ 복사 완료" : "본문 요청서 복사"}
-              </button>
-              <button type="button" className={styles.primaryPrompt} onClick={openBodyPromptInChatGPT}>
-                ChatGPT에서 본문 작성
-              </button>
-            </div>
-            <p className={styles.promptHelp}>새 채팅이 열리면 요청서가 미리 들어갑니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
-          </section>
-
-          {nearbyMessage && (
-            <div className={styles.autoLoad}>
-              {nearbyLoading ? "🚉 " : ""}{nearbyMessage}
-            </div>
-          )}
-
-          {autoMapMessage && (
-            <div className={styles.autoLoad}>
-              {autoMapLoading ? "🗺️ " : autoMapGenerated ? "✅ " : "ℹ️ "}{autoMapMessage}
-            </div>
-          )}
-
-          {(selectedComplexName || photoCandidatesLoading || photoCandidates.length > 0) && (
-            <section className={styles.photoSection}>
-              <div className={styles.photoHead}>
-                <div>
-                  <b>검색 사진 참고</b>
-                  <span>{photoSearchMessage || "자동 검색한 사진 3장은 외관 확인 참고용으로만 보여줍니다."}</span>
-                </div>
-                <button
-                  type="button"
-                  disabled={photoCandidatesLoading || !data.name.trim()}
-                  onClick={() => {
-                    const nextStart = photoSearchStart >= 981 ? 1 : photoSearchStart + 10;
-                    void searchPhotoCandidates(data.name, data.region, nextStart);
-                  }}
-                >
-                  {photoCandidatesLoading ? "검색 중…" : "다시 검색"}
-                </button>
-              </div>
-              {photoCandidates.length > 0 && (
-                <div className={styles.photoGrid}>
-                  {photoCandidates.map((candidate, index) => (
-                    <div key={candidate.imageUrl + index} className={styles.photoCard}>
-                      <img
-                        src={candidate.thumbnailUrl}
-                        alt={candidate.title || `단지 참고 사진 ${index + 1}`}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span>{`참고 ${index + 1}`}</span>
-                    </div>
-                  ))}
+          {(nearbyMessage || autoMapMessage) && (
+            <div className={styles.statusStack}>
+              {nearbyMessage && (
+                <div className={styles.statusChip}>
+                  {nearbyLoading ? "🚉 검색 중" : nearbyMessage}
                 </div>
               )}
-              <p className={styles.photoNotice}>검색 이미지는 썸네일에 직접 적용하지 않습니다. 사용 권리가 있는 사진은 아래 직접 업로드 기능을 이용하세요.</p>
-            </section>
-          )}
-
-          <div className={styles.uploadGrid}>
-            <label className={styles.uploadBox}>
-              <input type="file" accept="image/*" onChange={handleMap} />
-              <span className={styles.uploadIcon}>🗺️</span>
-              <b>{autoMapGenerated ? "네이버 지도 자동 생성 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
-              <small>{autoMapGenerated ? "단지 선택 시 주소를 좌표로 바꿔 위치 마커가 있는 지도를 자동 생성합니다." : "자동 생성이 안 되는 단지는 지도 이미지를 직접 올릴 수 있습니다."}</small>
-            </label>
-          </div>
-
-          {mapDataUrl && (
-            <div className={styles.markPanel}>
-              <div className={styles.markActions}>
-                <button className={markMode === "apt" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "apt" ? null : "apt")}>● 단지 위치 찍기</button>
-                <button className={markMode === "station" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "station" ? null : "station")}>● 역 위치 찍기</button>
-                <button onClick={() => { setAptPoint(null); setStationPoint(null); setOutputs(null); }}>표시 지우기</button>
-              </div>
-              <div className={`${styles.mapPreview} ${markMode ? styles.marking : ""}`} onClick={markOnMap}>
-                <img ref={mapPreviewRef} src={mapDataUrl} alt="업로드한 지도" />
-                {aptPoint && <span className={styles.aptDot} style={{ left: `${aptPoint.x * 100}%`, top: `${aptPoint.y * 100}%` }} />}
-                {stationPoint && <span className={styles.stationDot} style={{ left: `${stationPoint.x * 100}%`, top: `${stationPoint.y * 100}%` }} />}
-              </div>
-              <p>{markMode ? "지도에서 위치를 한 번 클릭하세요." : "표시는 선택사항입니다. 원본 지도만으로도 카드 생성이 가능합니다."}</p>
+              {autoMapMessage && (
+                <div className={styles.statusChip}>
+                  {autoMapLoading ? "🗺️ 지도 생성 중" : autoMapGenerated ? "✅ 지도 준비 완료" : autoMapMessage}
+                </div>
+              )}
             </div>
           )}
 
-          <button className={styles.generate} disabled={!ready || loading} onClick={generate}>
-            {loading ? "본문 이미지 만드는 중…" : "본문 이미지 2장 만들기"}
-          </button>
-          {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 만들고, 실패한 경우에만 직접 업로드하면 됩니다."}</p>}
+          <section className={styles.actionPanel}>
+            <div className={styles.actionHead}>
+              <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
+              <h2>이제 아래 3개만 누르면 됩니다.</h2>
+              <span>썸네일과 본문은 ChatGPT에서, 반복 데이터 이미지는 여기서 자동 생성합니다.</span>
+            </div>
+
+            <div className={styles.actionGrid}>
+              <button type="button" className={styles.actionButton} onClick={openThumbnailPromptInChatGPT}>
+                <span className={styles.actionIcon}>🖼️</span>
+                <b>1. 썸네일 만들기</b>
+                <small>ChatGPT 요청서 자동 입력</small>
+              </button>
+
+              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
+                <span className={styles.actionIcon}>📝</span>
+                <b>2. 본문 작성하기</b>
+                <small>최신 웹 확인 + 태그 + 내부링크</small>
+              </button>
+
+              <button
+                type="button"
+                className={styles.actionButton}
+                disabled={!ready || loading}
+                onClick={generate}
+              >
+                <span className={styles.actionIcon}>📊</span>
+                <b>{loading ? "본문 이미지 만드는 중…" : "3. 본문 이미지 2장"}</b>
+                <small>{mapDataUrl ? "시세 그래프 + 입지 지도" : "지도 준비 후 생성 가능"}</small>
+              </button>
+            </div>
+          </section>
+
+          <details className={styles.advancedDetails}>
+            <summary>요청서 확인 · 복사</summary>
+            <div className={styles.advancedBody}>
+              <section className={styles.promptSection}>
+                <div className={styles.promptHead}>
+                  <div>
+                    <b>🤖 썸네일 요청서</b>
+                    <span>단지 데이터가 바뀌면 자동으로 갱신됩니다.</span>
+                  </div>
+                </div>
+                <textarea className={styles.promptBoxCompact} value={thumbnailPrompt} readOnly />
+                <div className={styles.promptActionsCompact}>
+                  <button type="button" onClick={() => void copyThumbnailPrompt()}>
+                    {promptCopied ? "✓ 복사 완료" : "썸네일 요청서 복사"}
+                  </button>
+                </div>
+              </section>
+
+              <section className={styles.promptSection}>
+                <div className={styles.promptHead}>
+                  <div>
+                    <b>📝 본문 요청서</b>
+                    <span>실거래 + 최신 웹 확인 + 발행 마무리까지 포함합니다.</span>
+                  </div>
+                </div>
+                <textarea className={styles.promptBoxCompact} value={bodyPrompt} readOnly />
+                <div className={styles.promptActionsCompact}>
+                  <button type="button" onClick={() => void copyBodyPrompt()}>
+                    {bodyPromptCopied ? "✓ 복사 완료" : "본문 요청서 복사"}
+                  </button>
+                </div>
+              </section>
+            </div>
+          </details>
+
+          <details className={styles.advancedDetails}>
+            <summary>참고 사진 · 지도 세부설정</summary>
+            <div className={styles.advancedBody}>
+              <section className={styles.photoSection}>
+                <div className={styles.photoHead}>
+                  <div>
+                    <b>검색 사진 참고</b>
+                    <span>{photoSearchMessage || "필요할 때만 단지 외관 참고 사진을 검색합니다."}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={photoCandidatesLoading || !data.name.trim()}
+                    onClick={() => {
+                      const nextStart = photoCandidates.length ? (photoSearchStart >= 981 ? 1 : photoSearchStart + 10) : 1;
+                      void searchPhotoCandidates(data.name, data.region, nextStart);
+                    }}
+                  >
+                    {photoCandidatesLoading ? "검색 중…" : photoCandidates.length ? "다시 검색" : "참고 사진 찾기"}
+                  </button>
+                </div>
+                {photoCandidates.length > 0 && (
+                  <div className={styles.photoGrid}>
+                    {photoCandidates.map((candidate, index) => (
+                      <div key={candidate.imageUrl + index} className={styles.photoCard}>
+                        <img
+                          src={candidate.thumbnailUrl}
+                          alt={candidate.title || `단지 참고 사진 ${index + 1}`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span>{`참고 ${index + 1}`}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className={styles.photoNotice}>검색 이미지는 참고용이며 썸네일에 직접 적용하지 않습니다.</p>
+              </section>
+
+              <div className={styles.uploadGrid}>
+                <label className={styles.uploadBox}>
+                  <input type="file" accept="image/*" onChange={handleMap} />
+                  <span className={styles.uploadIcon}>🗺️</span>
+                  <b>{autoMapGenerated ? "네이버 지도 자동 생성 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
+                  <small>{autoMapGenerated ? "자동 생성된 지도를 그대로 써도 됩니다." : "자동 지도가 실패한 경우에만 직접 업로드하세요."}</small>
+                </label>
+              </div>
+
+              {mapDataUrl && (
+                <div className={styles.markPanel}>
+                  <div className={styles.markActions}>
+                    <button className={markMode === "apt" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "apt" ? null : "apt")}>● 단지 위치 찍기</button>
+                    <button className={markMode === "station" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "station" ? null : "station")}>● 역 위치 찍기</button>
+                    <button onClick={() => { setAptPoint(null); setStationPoint(null); setOutputs(null); }}>표시 지우기</button>
+                  </div>
+                  <div className={`${styles.mapPreview} ${markMode ? styles.marking : ""}`} onClick={markOnMap}>
+                    <img ref={mapPreviewRef} src={mapDataUrl} alt="지도 미리보기" />
+                    {aptPoint && <span className={styles.aptDot} style={{ left: `${aptPoint.x * 100}%`, top: `${aptPoint.y * 100}%` }} />}
+                    {stationPoint && <span className={styles.stationDot} style={{ left: `${stationPoint.x * 100}%`, top: `${stationPoint.y * 100}%` }} />}
+                  </div>
+                  <p>{markMode ? "지도에서 위치를 한 번 클릭하세요." : "표시는 선택사항입니다. 자동 지도 그대로 사용해도 됩니다."}</p>
+                </div>
+              )}
+            </div>
+          </details>
+
+          {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 준비합니다."}</p>}
         </div>
 
         <aside className={styles.guideCard}>
