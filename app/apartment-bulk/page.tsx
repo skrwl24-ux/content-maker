@@ -391,7 +391,7 @@ ${monthlyLines}
 본문에 아래 표시를 정확히 넣어줘.
 [이미지 1 — ChatGPT에서 만든 썸네일]
 [이미지 2 — 최근 6개월 시세 그래프]
-[이미지 3 — 입지 지도]
+[이미지 3 — 입지 인포그래픽]
 
 [내부링크]
 본문 흐름을 해치지 않는 위치에 내부링크 추천 위치를 2~3개 표시해줘.
@@ -1071,8 +1071,8 @@ export default function ApartmentBulkPage() {
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT BULK MAKER</p>
-          <h1>단지 데이터만 고르면<br />썸네일·본문 요청서와 분석 이미지가 준비됩니다.</h1>
-          <p>ChatGPT 썸네일 요청서 · 블로그 본문 요청서 · 시세 그래프 · 입지 지도 2장</p>
+          <h1>단지 데이터만 고르면<br />이미지·본문 요청서가 한 번에 준비됩니다.</h1>
+          <p>썸네일 · 시세 그래프 · 입지 이미지 · 블로그 본문까지 ChatGPT 요청서로 연결합니다.</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
@@ -1120,50 +1120,96 @@ export default function ApartmentBulkPage() {
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
-              <h2>이제 아래 3개만 누르면 됩니다.</h2>
-              <span>썸네일과 본문은 ChatGPT에서, 반복 데이터 이미지는 여기서 자동 생성합니다.</span>
+              <h2>이미지 3장과 본문을 ChatGPT에서 만듭니다.</h2>
+              <span>입지 이미지는 자동 준비된 네이버 지도 캡처를 클립보드에 복사한 뒤 새 채팅에서 Ctrl+V만 하면 됩니다.</span>
             </div>
 
             <div className={styles.actionGrid}>
               <button type="button" className={styles.actionButton} onClick={openThumbnailPromptInChatGPT}>
                 <span className={styles.actionIcon}>🖼️</span>
                 <b>1. 썸네일 만들기</b>
-                <small>ChatGPT 요청서 자동 입력</small>
-              </button>
-
-              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
-                <span className={styles.actionIcon}>📝</span>
-                <b>2. 본문 작성하기</b>
-                <small>최신 웹 확인 + 태그 + 내부링크</small>
+                <small>1254×1254 · ChatGPT 요청서 자동 입력</small>
               </button>
 
               <button
                 type="button"
                 className={styles.actionButton}
-                disabled={!ready || loading}
-                onClick={generate}
+                disabled={!monthlyStats.length}
+                onClick={openPriceImagePromptInChatGPT}
               >
-                <span className={styles.actionIcon}>📊</span>
-                <b>{loading ? "본문 이미지 만드는 중…" : "3. 본문 이미지 2장"}</b>
-                <small>{mapDataUrl ? "시세 그래프 + 입지 지도" : "지도 준비 후 생성 가능"}</small>
+                <span className={styles.actionIcon}>📈</span>
+                <b>2. 시세 그래프 만들기</b>
+                <small>6개월 월별 가격 + 거래건수 자동 입력</small>
+              </button>
+
+              <button
+                type="button"
+                className={styles.actionButton}
+                disabled={!mapDataUrl}
+                onClick={openLocationImagePromptInChatGPT}
+              >
+                <span className={styles.actionIcon}>🗺️</span>
+                <b>3. 입지 이미지 만들기</b>
+                <small>{mapDataUrl ? "지도 캡처 자동 복사 → 새 채팅에서 Ctrl+V" : "지도 준비 중"}</small>
+              </button>
+
+              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
+                <span className={styles.actionIcon}>📝</span>
+                <b>4. 본문 작성하기</b>
+                <small>최신 웹 확인 + 태그 + 내부링크</small>
               </button>
             </div>
+
+            {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
           </section>
 
           <details className={styles.advancedDetails}>
-            <summary>요청서 확인 · 복사</summary>
+            <summary>이미지 · 본문 요청서 확인 · 복사</summary>
             <div className={styles.advancedBody}>
               <section className={styles.promptSection}>
                 <div className={styles.promptHead}>
                   <div>
-                    <b>🤖 썸네일 요청서</b>
-                    <span>단지 데이터가 바뀌면 자동으로 갱신됩니다.</span>
+                    <b>🖼️ 썸네일 요청서</b>
+                    <span>1254×1254 정사각형 썸네일용</span>
                   </div>
                 </div>
                 <textarea className={styles.promptBoxCompact} value={thumbnailPrompt} readOnly />
                 <div className={styles.promptActionsCompact}>
                   <button type="button" onClick={() => void copyThumbnailPrompt()}>
                     {promptCopied ? "✓ 복사 완료" : "썸네일 요청서 복사"}
+                  </button>
+                </div>
+              </section>
+
+              <section className={styles.promptSection}>
+                <div className={styles.promptHead}>
+                  <div>
+                    <b>📈 시세 그래프 요청서</b>
+                    <span>최근 6개월 월별 대표가격과 거래건수가 자동으로 들어갑니다.</span>
+                  </div>
+                </div>
+                <textarea className={styles.promptBoxCompact} value={priceImagePrompt} readOnly />
+                <div className={styles.promptActionsCompact}>
+                  <button type="button" onClick={() => void copyPriceImagePrompt()}>
+                    {pricePromptCopied ? "✓ 복사 완료" : "시세 그래프 요청서 복사"}
+                  </button>
+                </div>
+              </section>
+
+              <section className={styles.promptSection}>
+                <div className={styles.promptHead}>
+                  <div>
+                    <b>🗺️ 입지 이미지 요청서</b>
+                    <span>네이버 지도는 위치 관계 참고용으로만 사용하도록 요청합니다.</span>
+                  </div>
+                </div>
+                <textarea className={styles.promptBoxCompact} value={locationImagePrompt} readOnly />
+                <div className={styles.promptActionsCompact}>
+                  <button type="button" onClick={() => void copyLocationImagePrompt()}>
+                    {locationPromptCopied ? "✓ 복사 완료" : "입지 요청서 복사"}
+                  </button>
+                  <button type="button" disabled={!mapDataUrl} onClick={() => void copyMapCaptureToClipboard()}>
+                    지도 캡처 복사
                   </button>
                 </div>
               </section>
@@ -1186,7 +1232,7 @@ export default function ApartmentBulkPage() {
           </details>
 
           <details className={styles.advancedDetails}>
-            <summary>참고 사진 · 지도 세부설정</summary>
+            <summary>지도 참고 캡처 · 사진 참고</summary>
             <div className={styles.advancedBody}>
               <section className={styles.photoSection}>
                 <div className={styles.photoHead}>
@@ -1220,31 +1266,31 @@ export default function ApartmentBulkPage() {
                     ))}
                   </div>
                 )}
-                <p className={styles.photoNotice}>검색 이미지는 참고용이며 썸네일에 직접 적용하지 않습니다.</p>
+                <p className={styles.photoNotice}>검색 이미지는 참고용이며 생성 이미지에 직접 복제하지 않습니다.</p>
               </section>
 
               <div className={styles.uploadGrid}>
                 <label className={styles.uploadBox}>
                   <input type="file" accept="image/*" onChange={handleMap} />
                   <span className={styles.uploadIcon}>🗺️</span>
-                  <b>{autoMapGenerated ? "네이버 지도 자동 생성 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
-                  <small>{autoMapGenerated ? "자동 생성된 지도를 그대로 써도 됩니다." : "자동 지도가 실패한 경우에만 직접 업로드하세요."}</small>
+                  <b>{autoMapGenerated ? "네이버 지도 자동 준비 완료" : mapDataUrl ? "지도 이미지 교체" : "지도 이미지 업로드"}</b>
+                  <small>{autoMapGenerated ? "입지 이미지 버튼을 누르면 이 지도가 클립보드에 복사됩니다." : "자동 지도가 실패했을 때만 직접 올리면 됩니다."}</small>
                 </label>
               </div>
 
               {mapDataUrl && (
-                <div className={styles.markPanel}>
-                  <div className={styles.markActions}>
-                    <button className={markMode === "apt" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "apt" ? null : "apt")}>● 단지 위치 찍기</button>
-                    <button className={markMode === "station" ? styles.activeMark : ""} onClick={() => setMarkMode(markMode === "station" ? null : "station")}>● 역 위치 찍기</button>
-                    <button onClick={() => { setAptPoint(null); setStationPoint(null); setOutputs(null); }}>표시 지우기</button>
+                <div className={styles.mapReferencePanel}>
+                  <div className={styles.mapReferenceHead}>
+                    <div>
+                      <b>입지 참고용 지도</b>
+                      <span>ChatGPT에서 그대로 쓰는 게 아니라 위치 관계 참고용으로만 붙여넣습니다.</span>
+                    </div>
+                    <button type="button" onClick={() => void copyMapCaptureToClipboard()}>지도 캡처 복사</button>
                   </div>
-                  <div className={`${styles.mapPreview} ${markMode ? styles.marking : ""}`} onClick={markOnMap}>
-                    <img ref={mapPreviewRef} src={mapDataUrl} alt="지도 미리보기" />
-                    {aptPoint && <span className={styles.aptDot} style={{ left: `${aptPoint.x * 100}%`, top: `${aptPoint.y * 100}%` }} />}
-                    {stationPoint && <span className={styles.stationDot} style={{ left: `${stationPoint.x * 100}%`, top: `${stationPoint.y * 100}%` }} />}
+                  <div className={styles.mapPreview}>
+                    <img src={mapDataUrl} alt="입지 참고용 네이버 지도" />
                   </div>
-                  <p>{markMode ? "지도에서 위치를 한 번 클릭하세요." : "표시는 선택사항입니다. 자동 지도 그대로 사용해도 됩니다."}</p>
+                  <p>{mapCopyMessage || "복사 후 ChatGPT 새 채팅에서 Ctrl+V로 붙여넣으면 됩니다."}</p>
                 </div>
               )}
             </div>
@@ -1255,11 +1301,11 @@ export default function ApartmentBulkPage() {
 
         <aside className={styles.guideCard}>
           <p className={styles.eyebrow}>PUBLISH FLOW</p>
-          <h2>썸네일은 ChatGPT, 본문 이미지는 자동.</h2>
-          <div className={styles.templateItem}><span>01</span><div><b>ChatGPT 썸네일</b><small>요청서 자동 생성 → 새 채팅에서 제작</small></div></div>
-          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>최근 6개월 월별 중앙값 + 거래건수</small></div></div>
-          <div className={styles.templateItem}><span>03</span><div><b>입지 지도</b><small>네이버 지도 자동 생성 + 최소 강조</small></div></div>
-          <div className={styles.note}><b>대량발행용 원칙</b><p>썸네일 퀄리티는 ChatGPT에서 확보하고, 반복 데이터 이미지는 사이트에서 자동화합니다.</p></div>
+          <h2>이미지 3장 모두 ChatGPT에서 제작.</h2>
+          <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
+          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
+          <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
+          <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
         </aside>
       </section>
 
