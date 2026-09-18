@@ -545,7 +545,8 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
       ctx.stroke();
     }
 
-    // Show the representative price on every valid monthly point.\n    points.forEach((p, index) => {
+    // Show the representative price on every valid monthly point.
+    points.forEach((p, index) => {
       const isLatest = index === points.length - 1;
       ctx.beginPath();
       ctx.arc(p.x, p.y, isLatest ? 11 : 8, 0, Math.PI * 2);
