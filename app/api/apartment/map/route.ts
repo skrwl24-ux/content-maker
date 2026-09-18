@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
     mapUrl.searchParams.set("maptype", "basic");
     mapUrl.searchParams.set("lang", "ko");
     mapUrl.searchParams.set("center", `${point.x},${point.y}`);
-    mapUrl.searchParams.set("level", "14");
+    mapUrl.searchParams.set("level", "13");
     mapUrl.searchParams.set("markers", `type:d|size:mid|color:red|pos:${point.x} ${point.y}`);
 
     const mapHeaders = {
@@ -126,6 +126,7 @@ export async function GET(req: NextRequest) {
         "Cache-Control": "private, max-age=3600",
         "X-Map-Source": "NAVER Cloud Static Map",
         "X-Map-Query": encodeURIComponent(usedQuery),
+        "X-Map-Level": "13",
       },
     });
   } catch (error) {
