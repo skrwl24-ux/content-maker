@@ -123,12 +123,13 @@ function xmlTag(block: string, tag: string) {
 }
 
 function parseXmlItems(xml: string) {
-  const blocks = xml.match(/<item>([\s\S]*?)<\/item>/gi) || [];
-  return blocks.map((block) => {
+  const matches = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)];
+  return matches.map((match) => {
+    const inner = match[1] || "";
     const result: Record<string, string> = {};
     const re = /<([A-Za-z0-9_]+)>([\s\S]*?)<\/\1>/g;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(block))) result[m[1]] = xmlDecode(m[2]);
+    while ((m = re.exec(inner))) result[m[1]] = xmlDecode(m[2]);
     return result;
   });
 }
