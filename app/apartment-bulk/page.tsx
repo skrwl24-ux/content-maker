@@ -602,7 +602,7 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
 
     ctx.font = `600 16px ${FONT}`;
     ctx.fillStyle = "rgba(255,255,255,.48)";
-    ctx.fillText("월별 중앙값 기준", 1236, 724);
+    ctx.fillText("각 월 대표가격 · 중앙값 기준", 1236, 724);
     ctx.fillText("거래 없는 달은 공백 처리", 1236, 750);
   });
 }
