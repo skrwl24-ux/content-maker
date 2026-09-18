@@ -173,293 +173,6 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
 }
 
 
-function textSeed(text: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function seededRandom(seed: number) {
-  let value = seed || 1;
-  return () => {
-    value += 0x6D2B79F5;
-    let t = value;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function drawArchitecturalTower(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  baseY: number,
-  w: number,
-  depth: number,
-  h: number,
-  floors: number,
-  accent: number
-) {
-  const topY = baseY - h;
-  const hw = w / 2;
-  const hd = depth / 2;
-
-  ctx.save();
-
-  ctx.globalAlpha = .16;
-  ctx.fillStyle = "#203f45";
-  ctx.beginPath();
-  ctx.ellipse(cx + 28, baseY + hd + 22, hw * 1.1, hd * .62, -.18, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  ctx.strokeStyle = "rgba(47,72,77,.58)";
-  ctx.lineWidth = 2;
-
-  ctx.beginPath();
-  ctx.moveTo(cx - hw, topY);
-  ctx.lineTo(cx, topY - hd);
-  ctx.lineTo(cx + hw, topY);
-  ctx.lineTo(cx, topY + hd);
-  ctx.closePath();
-  ctx.fillStyle = accent % 2 ? "#eee8dd" : "#f3efe7";
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(cx - hw, topY);
-  ctx.lineTo(cx, topY + hd);
-  ctx.lineTo(cx, baseY + hd);
-  ctx.lineTo(cx - hw, baseY);
-  ctx.closePath();
-  ctx.fillStyle = accent % 2 ? "#d9ddd8" : "#dfe4df";
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(cx + hw, topY);
-  ctx.lineTo(cx, topY + hd);
-  ctx.lineTo(cx, baseY + hd);
-  ctx.lineTo(cx + hw, baseY);
-  ctx.closePath();
-  ctx.fillStyle = accent % 2 ? "#bac8c8" : "#c3cecb";
-  ctx.fill();
-  ctx.stroke();
-
-  const floorGap = h / Math.max(8, floors);
-  ctx.strokeStyle = "rgba(56,83,87,.22)";
-  ctx.lineWidth = 1;
-  for (let y = topY + floorGap; y < baseY - 6; y += floorGap) {
-    ctx.beginPath();
-    ctx.moveTo(cx - hw + 5, y);
-    ctx.lineTo(cx - 2, y + hd - 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx + hw - 5, y);
-    ctx.lineTo(cx + 2, y + hd - 2);
-    ctx.stroke();
-  }
-
-  const windowRows = Math.max(7, Math.min(14, Math.floor(floors / 2)));
-  for (let row = 0; row < windowRows; row++) {
-    const yy = topY + 22 + row * ((h - 42) / windowRows);
-    for (let col = 0; col < 4; col++) {
-      const lx = cx - hw + 15 + col * Math.max(13, (w - 38) / 4);
-      ctx.fillStyle = row % 4 === 0 && col % 2 === 0 ? "rgba(203,163,109,.55)" : "rgba(73,105,111,.28)";
-      ctx.fillRect(lx, yy, 8, 5);
-      const rx = cx + 10 + col * Math.max(10, (hw - 20) / 4);
-      ctx.fillRect(rx, yy + hd * .28, 7, 5);
-    }
-  }
-
-  ctx.strokeStyle = "rgba(65,87,91,.38)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx - hw * .72, topY - hd * .2);
-  ctx.lineTo(cx + hw * .52, topY - hd * .64);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, tone = 0) {
-  ctx.save();
-  ctx.fillStyle = "rgba(44,73,69,.18)";
-  ctx.beginPath();
-  ctx.ellipse(x + 5, y + r * .58, r * .72, r * .28, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = tone % 3 === 0 ? "#6d9478" : tone % 3 === 1 ? "#7ca286" : "#668d73";
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(255,255,255,.12)";
-  ctx.beginPath();
-  ctx.arc(x - r * .25, y - r * .28, r * .34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function makeFreeAerialIllustration(data: ApartmentData, variant = 0) {
-  const rand = seededRandom(textSeed(`${data.name}|${data.region}|${variant}`));
-
-  return canvasUrl(1254, 1254, (ctx) => {
-    const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
-    bg.addColorStop(0, "#f2eee7");
-    bg.addColorStop(.46, "#e5ebe6");
-    bg.addColorStop(1, "#c5d5cf");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 1254, 1254);
-
-    ctx.save();
-    ctx.globalAlpha = .58;
-    ctx.strokeStyle = "#a8b9b5";
-    ctx.lineCap = "round";
-    ctx.lineWidth = 54;
-    ctx.beginPath();
-    ctx.moveTo(-120, 1080);
-    ctx.lineTo(1350, 540);
-    ctx.stroke();
-    ctx.strokeStyle = "#f5f5ef";
-    ctx.lineWidth = 32;
-    ctx.stroke();
-
-    ctx.strokeStyle = "#9fb2ae";
-    ctx.lineWidth = 42;
-    ctx.beginPath();
-    ctx.moveTo(110, -100);
-    ctx.lineTo(1070, 1370);
-    ctx.stroke();
-    ctx.strokeStyle = "#f4f5ef";
-    ctx.lineWidth = 23;
-    ctx.stroke();
-
-    ctx.setLineDash([34, 30]);
-    ctx.strokeStyle = "rgba(118,135,133,.54)";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-80, 1060);
-    ctx.lineTo(1320, 548);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(126, -80);
-    ctx.lineTo(1050, 1340);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(650, 665);
-    ctx.rotate(-0.2);
-
-    ctx.globalAlpha = .18;
-    ctx.fillStyle = "#2c5552";
-    roundRect(ctx, -415, -300, 850, 610, 72);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    roundRect(ctx, -430, -325, 850, 610, 72);
-    ctx.fillStyle = "#bfd4c2";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(73,104,94,.32)";
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    roundRect(ctx, -280, -120, 560, 230, 96);
-    ctx.fillStyle = "#e7eee4";
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(91,118,107,.28)";
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.ellipse(0, -2, 172, 78, 0, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(138,171,151,.28)";
-    ctx.beginPath();
-    ctx.ellipse(0, -5, 130, 56, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#d5ded5";
-    roundRect(ctx, -65, 142, 150, 78, 16);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(75,99,96,.28)";
-    ctx.stroke();
-
-    for (let i = 0; i < 10; i++) {
-      ctx.strokeStyle = "rgba(90,108,106,.24)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-48 + i * 14, 150);
-      ctx.lineTo(-48 + i * 14, 207);
-      ctx.stroke();
-    }
-
-    for (let i = 0; i < 30; i++) {
-      const angle = rand() * Math.PI * 2;
-      const radius = 145 + rand() * 245;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius * .58;
-      drawTree(ctx, x, y, 8 + rand() * 8, i);
-    }
-    ctx.restore();
-
-    const towerCount = 6 + Math.floor(rand() * 2);
-    const slots = [
-      [420, 585, 118, 58, 340],
-      [610, 510, 132, 64, 440],
-      [805, 570, 116, 56, 360],
-      [372, 805, 126, 60, 300],
-      [640, 860, 138, 66, 390],
-      [875, 785, 112, 54, 295],
-      [728, 690, 92, 46, 255],
-    ];
-
-    for (let i = 0; i < towerCount; i++) {
-      const [sx, sy, sw, sd, sh] = slots[i];
-      const cx = sx + (rand() - .5) * 44;
-      const baseY = sy + (rand() - .5) * 34;
-      const w = sw + (rand() - .5) * 18;
-      const depth = sd + (rand() - .5) * 8;
-      const h = sh + (rand() - .5) * 74;
-      const floors = 16 + Math.floor(rand() * 18);
-      drawArchitecturalTower(ctx, cx, baseY, w, depth, h, floors, i + variant);
-    }
-
-    ctx.save();
-    ctx.globalAlpha = .34;
-    ctx.strokeStyle = "#78918f";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 12; i++) {
-      const x = 45 + i * 42;
-      ctx.beginPath();
-      ctx.moveTo(x, 72);
-      ctx.lineTo(x + 210, 10);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    const glow = ctx.createRadialGradient(690, 360, 80, 690, 360, 690);
-    glow.addColorStop(0, "rgba(255,255,255,.34)");
-    glow.addColorStop(.7, "rgba(255,255,255,.05)");
-    glow.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, 1254, 1254);
-
-    const wash = ctx.createLinearGradient(0, 0, 0, 1254);
-    wash.addColorStop(0, "rgba(255,255,255,.02)");
-    wash.addColorStop(.58, "rgba(22,47,52,.03)");
-    wash.addColorStop(1, "rgba(17,39,45,.12)");
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, 1254, 1254);
-  });
-}
-
-
 function makeThumbnailPrompt(data: ApartmentData) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
@@ -503,6 +216,67 @@ ${value(data.question, "요즘 얼마에 거래될까?")}
 하단 보조칩: ${value(data.area)} / 최근 실거래 / 입지 핵심
 
 이미지를 바로 생성해줘.`;
+}
+
+
+function makeBodyPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], recommendedAngle: string) {
+  const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
+  const monthly = monthlyStats.slice(-6);
+  const monthlyLines = monthly.length
+    ? monthly.map((item) =>
+        `- ${item.month}: 월 대표값 ${item.medianPrice == null ? "거래 없음" : formatWon(item.medianPrice)}, 거래 ${item.tradeCount}건`
+      ).join("\n")
+    : "- 월별 실거래 데이터 없음";
+
+  return `네이버 블로그용 아파트 분석글을 최종 발행본으로 작성해줘.
+
+[글의 목적]
+검색 유입과 모바일 체류를 함께 노리는 '집값쓱' 아파트 단지 분석글이야.
+단순 홍보글이 아니라 실거래 흐름을 쉽게 설명하는 정보형 글로 써줘.
+
+[단지 기본 정보]
+단지명: ${value(data.name)}
+지역: ${value(data.region)}
+대표 전용면적: ${value(data.area)}
+최근 실거래가: ${value(data.recentPrice)}
+비교값: ${value(data.previousPrice)}
+세대수: ${value(data.households)}
+입주년도: ${value(data.moveIn)}
+주요 역: ${value(data.station)}
+입지 설명: ${value(data.locationLine)}
+이번 글의 핵심 관점: ${value(recommendedAngle || data.question, "최근 실거래 흐름")}
+
+[최근 6개월 실거래 데이터]
+${monthlyLines}
+
+[작성 규칙]
+- 먼저 검색형 제목 후보 5개를 제시하고 그중 1개를 최종 제목으로 선택
+- 제목에서 답을 전부 말하지 말고 클릭할 이유를 남길 것
+- 네이버 모바일에서 읽기 쉽게 한 문단 1~3문장
+- 과장, 매수 권유, 투자 확정 표현 금지
+- 제공되지 않은 교통 호재, 학군, 재건축, 개발계획, 실거래 숫자를 임의로 만들지 말 것
+- 숫자는 위 자료를 우선하고, 자료가 없는 내용은 '확인 필요'라고 처리
+- 전용면적은 '전용 84㎡대' 같은 방식으로 표현하고 공급면적과 혼동하지 말 것
+- 이모지는 🏠📊🚉🔎✅📌 정도만 자연스럽게 사용
+- SEO 키워드는 단지명, 지역명, '아파트 실거래가', '아파트 시세'를 자연스럽게 포함
+- 글 끝에 매수 권유 대신 앞으로 확인할 체크포인트를 넣을 것
+
+[본문 구조]
+① 2~3문장 강한 도입
+② 최근 6개월 거래·가격 흐름
+③ 단지 기본정보 핵심
+④ 최근 실거래에서 눈여겨볼 점
+⑤ 입지와 생활권 — 제공된 정보 범위에서만
+⑥ 앞으로 체크할 것
+⑦ 3줄 요약
+
+[이미지 위치]
+본문에 아래 표시를 정확히 넣어줘.
+[이미지 1 — ChatGPT에서 만든 썸네일]
+[이미지 2 — 최근 6개월 시세 그래프]
+[이미지 3 — 입지 지도]
+
+별도의 작성 설명은 빼고, 제목 후보부터 최종 발행용 본문까지 한 번에 완성해줘.`;
 }
 
 function formatWon(value: number | null | undefined) {
@@ -869,19 +643,20 @@ export default function ApartmentBulkPage() {
   const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
-  const [illustrationVariant, setIllustrationVariant] = useState(0);
-  const [illustrationMessage, setIllustrationMessage] = useState("");
-  const [photoSource, setPhotoSource] = useState<"graphic" | "upload" | null>(null);
+  const [photoSource, setPhotoSource] = useState<"upload" | null>(null);
+  const [recommendedAngle, setRecommendedAngle] = useState("");
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
   const [outputs, setOutputs] = useState<Outputs | null>(null);
   const [loading, setLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data), [data]);
+  const bodyPrompt = useMemo(() => makeBodyPrompt(data, monthlyStats, recommendedAngle), [data, monthlyStats, recommendedAngle]);
 
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
@@ -908,15 +683,6 @@ export default function ApartmentBulkPage() {
     }
   }
 
-  function generateFreeIllustration(nextVariant?: number) {
-    const variant = nextVariant ?? illustrationVariant;
-    const image = makeFreeAerialIllustration(data, variant);
-    setComplexPhotoDataUrl(image);
-    setPhotoSource("graphic");
-    setIllustrationVariant(variant);
-    setIllustrationMessage("무료 조감도풍 그래픽을 썸네일 배경으로 적용했습니다.");
-    setOutputs(null);
-  }
 
   useEffect(() => {
     const complexId = new URLSearchParams(window.location.search).get("complexId");
@@ -948,10 +714,9 @@ export default function ApartmentBulkPage() {
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
-        setComplexPhotoDataUrl(makeFreeAerialIllustration(nextData, 0));
-        setPhotoSource("graphic");
-        setIllustrationVariant(0);
-        setIllustrationMessage("무료 조감도풍 그래픽을 자동으로 만들었습니다.");
+        setRecommendedAngle(detail.snapshot?.recommended_angle || "");
+        setComplexPhotoDataUrl("");
+        setPhotoSource(null);
         setOutputs(null);
 
         void searchPhotoCandidates(detail.complex.name || "", region, 1);
@@ -1001,12 +766,26 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function copyBodyPrompt() {
+    try {
+      await navigator.clipboard.writeText(bodyPrompt);
+      setBodyPromptCopied(true);
+      window.setTimeout(() => setBodyPromptCopied(false), 1800);
+    } catch {
+      setBodyPromptCopied(false);
+    }
+  }
+
+  function openBodyPromptInChatGPT() {
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(bodyPrompt);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   async function handlePhoto(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setComplexPhotoDataUrl(await fileToDataUrl(file));
     setPhotoSource("upload");
-    setIllustrationMessage("");
     setPhotoSearchMessage("직접 올린 사진을 썸네일 배경으로 사용합니다.");
     setOutputs(null);
   }
@@ -1075,8 +854,8 @@ export default function ApartmentBulkPage() {
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT BULK MAKER</p>
-          <h1>데이터와 지도만 바꾸면<br />고정 퀄리티 3장이 바로 완성됩니다.</h1>
-          <p>썸네일 1254×1254 · 시세 요약 1600×900 · 입지 지도 1600×900</p>
+          <h1>단지 데이터만 고르면<br />썸네일·본문 요청서와 분석 이미지가 준비됩니다.</h1>
+          <p>ChatGPT 썸네일 요청서 · 블로그 본문 요청서 · 시세 그래프 · 입지 지도</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
@@ -1125,36 +904,29 @@ export default function ApartmentBulkPage() {
             <p className={styles.promptHelp}>‘ChatGPT에서 바로 열기’는 요청서를 URL에 넣어 새 채팅을 엽니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
           </section>
 
+          <section className={styles.promptSection}>
+            <div className={styles.promptHead}>
+              <div>
+                <b>📝 ChatGPT 블로그 본문 요청서</b>
+                <span>실거래 데이터와 최근 6개월 흐름을 포함해 발행용 본문 요청서를 자동 구성합니다.</span>
+              </div>
+            </div>
+            <textarea className={styles.promptBox} value={bodyPrompt} readOnly />
+            <div className={styles.promptActions}>
+              <button type="button" onClick={() => void copyBodyPrompt()}>
+                {bodyPromptCopied ? "✓ 복사 완료" : "본문 요청서 복사"}
+              </button>
+              <button type="button" className={styles.primaryPrompt} onClick={openBodyPromptInChatGPT}>
+                ChatGPT에서 본문 작성
+              </button>
+            </div>
+            <p className={styles.promptHelp}>새 채팅이 열리면 요청서가 미리 들어갑니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
+          </section>
+
           {autoMapMessage && (
             <div className={styles.autoLoad}>
               {autoMapLoading ? "🗺️ " : autoMapGenerated ? "✅ " : "ℹ️ "}{autoMapMessage}
             </div>
-          )}
-
-          {selectedComplexName && (
-            <section className={styles.photoSection}>
-              <div className={styles.photoHead}>
-                <div>
-                  <b>무료 조감도풍 썸네일 배경</b>
-                  <span>외부 AI API 없이 브라우저에서 건물·도로·조경을 그래픽으로 자동 조합합니다.</span>
-                </div>
-                <button
-                  type="button"
-                  disabled={!data.name.trim()}
-                  onClick={() => generateFreeIllustration(illustrationVariant + 1)}
-                >
-                  다른 배치 만들기
-                </button>
-              </div>
-              {illustrationMessage && <div className={styles.aiMessage}>{illustrationMessage}</div>}
-              {photoSource === "graphic" && complexPhotoDataUrl && (
-                <div className={styles.aiPreview}>
-                  <img src={complexPhotoDataUrl} alt="무료 조감도풍 그래픽" />
-                  <span>창작 그래픽 · 실제 단지 배치와 다를 수 있음 · API 비용 0원</span>
-                </div>
-              )}
-              <p className={styles.photoNotice}>실제 사진을 변환하지 않는 상징적인 건축 그래픽이라 썸네일 배경용으로 쓰기 좋습니다.</p>
-            </section>
           )}
 
           {(selectedComplexName || photoCandidatesLoading || photoCandidates.length > 0) && (
@@ -1199,7 +971,7 @@ export default function ApartmentBulkPage() {
               <input type="file" accept="image/*" onChange={handlePhoto} />
               <span className={styles.uploadIcon}>🏙️</span>
               <b>{complexPhotoDataUrl ? "단지 사진 직접 교체" : "단지 사진 직접 업로드 · 선택"}</b>
-              <small>무료 그래픽 대신 사용 권리가 있는 실제 단지 사진을 쓰고 싶을 때 직접 올리세요.</small>
+              <small>사이트 썸네일을 따로 만들고 싶을 때 사용 권리가 있는 실제 단지 사진을 직접 올리세요. ChatGPT 요청에는 이 사진이 자동 첨부되지 않습니다.</small>
             </label>
 
             <label className={styles.uploadBox}>
