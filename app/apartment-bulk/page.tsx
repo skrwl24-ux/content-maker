@@ -21,6 +21,15 @@ type Point = { x: number; y: number } | null;
 type OutputKey = "thumbnail" | "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
+type PhotoCandidate = {
+  title: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  width: number;
+  height: number;
+  imageToken: string;
+  thumbnailToken: string;
+};
 
 type ComplexDetailResponse = {
   complex: {
@@ -523,6 +532,11 @@ export default function ApartmentBulkPage() {
   const [autoMapLoading, setAutoMapLoading] = useState(false);
   const [autoMapMessage, setAutoMapMessage] = useState("");
   const [autoMapGenerated, setAutoMapGenerated] = useState(false);
+  const [photoCandidates, setPhotoCandidates] = useState<PhotoCandidate[]>([]);
+  const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
+  const [photoSearchMessage, setPhotoSearchMessage] = useState("");
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState("");
+  const [photoSearchStart, setPhotoSearchStart] = useState(1);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -531,6 +545,56 @@ export default function ApartmentBulkPage() {
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
+
+  async function searchPhotoCandidates(name: string, region: string, start = 1) {
+    if (!name.trim()) return;
+    setPhotoCandidatesLoading(true);
+    setPhotoSearchMessage("단지 사진 후보를 찾는 중…");
+    setSelectedPhotoUrl("");
+    try {
+      const params = new URLSearchParams({
+        query: name.trim(),
+        region: region.trim(),
+        start: String(start),
+      });
+      const res = await fetch("/api/apartment/photo-search?" + params.toString(), { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "사진 검색 실패");
+      const items = (json.items || []) as PhotoCandidate[];
+      setPhotoCandidates(items);
+      setPhotoSearchStart(start);
+      setPhotoSearchMessage(items.length ? "사진 3장 중 사용할 사진을 하나 선택하세요." : "사진 후보를 찾지 못했습니다. 직접 업로드해 주세요.");
+    } catch (e) {
+      setPhotoCandidates([]);
+      setPhotoSearchMessage(e instanceof Error ? e.message : "사진 자동 검색에 실패했습니다. 직접 업로드할 수 있습니다.");
+    } finally {
+      setPhotoCandidatesLoading(false);
+    }
+  }
+
+  async function selectPhoto(candidate: PhotoCandidate) {
+    setPhotoSearchMessage("선택한 사진을 불러오는 중…");
+    const tries = [
+      { url: candidate.imageUrl, token: candidate.imageToken },
+      { url: candidate.thumbnailUrl, token: candidate.thumbnailToken },
+    ];
+    for (const item of tries) {
+      try {
+        const params = new URLSearchParams({ url: item.url, token: item.token });
+        const res = await fetch("/api/apartment/photo-proxy?" + params.toString(), { cache: "no-store" });
+        if (!res.ok) continue;
+        const blob = await res.blob();
+        setComplexPhotoDataUrl(await blobToDataUrl(blob));
+        setSelectedPhotoUrl(candidate.imageUrl);
+        setPhotoSearchMessage("선택한 사진을 썸네일 배경으로 사용합니다.");
+        setOutputs(null);
+        return;
+      } catch {
+        // 원본이 막힌 경우 썸네일 주소로 한 번 더 시도합니다.
+      }
+    }
+    setPhotoSearchMessage("이 사진은 원본을 불러올 수 없습니다. 다른 후보를 선택해 주세요.");
+  }
 
   useEffect(() => {
     const complexId = new URLSearchParams(window.location.search).get("complexId");
@@ -562,6 +626,8 @@ export default function ApartmentBulkPage() {
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
         setOutputs(null);
+
+        void searchPhotoCandidates(detail.complex.name || "", region, 1);
 
         setAutoMapLoading(true);
         setAutoMapMessage("네이버 지도를 자동으로 만드는 중…");
@@ -597,6 +663,8 @@ export default function ApartmentBulkPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setComplexPhotoDataUrl(await fileToDataUrl(file));
+    setSelectedPhotoUrl("");
+    setPhotoSearchMessage("직접 올린 사진을 썸네일 배경으로 사용합니다.");
     setOutputs(null);
   }
 
@@ -701,12 +769,54 @@ export default function ApartmentBulkPage() {
             </div>
           )}
 
+          {(selectedComplexName || photoCandidatesLoading || photoCandidates.length > 0) && (
+            <section className={styles.photoSection}>
+              <div className={styles.photoHead}>
+                <div>
+                  <b>단지 사진 후보</b>
+                  <span>{photoSearchMessage || "자동으로 찾은 사진 3장 중 하나를 선택하세요."}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={photoCandidatesLoading || !data.name.trim()}
+                  onClick={() => {
+                    const nextStart = photoSearchStart >= 981 ? 1 : photoSearchStart + 10;
+                    void searchPhotoCandidates(data.name, data.region, nextStart);
+                  }}
+                >
+                  {photoCandidatesLoading ? "검색 중…" : "다시 검색"}
+                </button>
+              </div>
+              {photoCandidates.length > 0 && (
+                <div className={styles.photoGrid}>
+                  {photoCandidates.map((candidate, index) => (
+                    <button
+                      type="button"
+                      key={candidate.imageUrl + index}
+                      className={selectedPhotoUrl === candidate.imageUrl ? styles.photoCardActive : styles.photoCard}
+                      onClick={() => void selectPhoto(candidate)}
+                    >
+                      <img
+                        src={candidate.thumbnailUrl}
+                        alt={candidate.title || `단지 사진 후보 ${index + 1}`}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span>{selectedPhotoUrl === candidate.imageUrl ? "✓ 선택됨" : `후보 ${index + 1}`}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className={styles.photoNotice}>검색 결과 사진은 출처와 이용 권리를 확인한 뒤 사용하세요. 마음에 드는 사진이 없으면 아래에서 직접 업로드할 수 있습니다.</p>
+            </section>
+          )}
+
           <div className={styles.uploadGrid}>
             <label className={styles.uploadBox}>
               <input type="file" accept="image/*" onChange={handlePhoto} />
               <span className={styles.uploadIcon}>🏙️</span>
-              <b>{complexPhotoDataUrl ? "단지 사진 교체" : "단지 사진 업로드 · 선택"}</b>
-              <small>실제 단지 사진이 있으면 썸네일 배경에 사용합니다. 없으면 고급 그래픽 배경으로 제작합니다.</small>
+              <b>{complexPhotoDataUrl ? "단지 사진 직접 교체" : "단지 사진 직접 업로드 · 선택"}</b>
+              <small>자동 후보가 마음에 들지 않을 때 직접 올리세요. 마지막으로 선택한 사진이 썸네일 배경에 사용됩니다.</small>
             </label>
 
             <label className={styles.uploadBox}>
