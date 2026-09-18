@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -103,10 +104,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const signedItems = candidates.slice(0, 3).map((item) => ({
+      ...item,
+      imageToken: createHmac("sha256", clientSecret).update(item.imageUrl).digest("hex"),
+      thumbnailToken: createHmac("sha256", clientSecret).update(item.thumbnailUrl).digest("hex"),
+    }));
+
     return NextResponse.json({
       query,
       start,
-      items: candidates.slice(0, 3),
+      items: signedItems,
     });
   } catch (error) {
     return NextResponse.json(
