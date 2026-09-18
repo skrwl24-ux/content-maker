@@ -481,6 +481,16 @@ export async function syncApartmentRegion(regionCode: string) {
       .map((row) => normalizeTrade(row, regionCode, complexes))
       .filter((row): row is NormalizedTrade => Boolean(row));
 
+    // The current trade API does not always expose a unique transaction id.
+    // Preserve otherwise-identical rows by assigning a deterministic occurrence suffix.
+    const occurrenceByKey = new Map<string, number>();
+    for (const row of normalized) {
+      const baseKey = row.source_trade_key;
+      const occurrence = (occurrenceByKey.get(baseKey) || 0) + 1;
+      occurrenceByKey.set(baseKey, occurrence);
+      if (occurrence > 1) row.source_trade_key = baseKey + "|occ:" + occurrence;
+    }
+
     const tradeRows = normalized.map((row) => ({ ...row, updated_at: new Date().toISOString() })) as unknown as JsonRecord[];
     await upsertInChunks(client, "apt_trades", tradeRows, "source_trade_key", 400);
 
@@ -615,7 +625,16 @@ export async function syncApartmentRegion(regionCode: string) {
       priorityCandidates: priorityCount,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "알 수 없는 오류";
+    let message = "알 수 없는 오류";
+    if (error instanceof Error) {
+      message = error.message;
+    } else {
+      try {
+        message = JSON.stringify(error);
+      } catch {
+        message = String(error);
+      }
+    }
     await client.from("apt_sync_runs").update({
       finished_at: new Date().toISOString(),
       status: "failed",
