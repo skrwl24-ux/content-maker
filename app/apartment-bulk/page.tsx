@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 
@@ -20,6 +20,27 @@ type ApartmentData = {
 type Point = { x: number; y: number } | null;
 type OutputKey = "thumbnail" | "price" | "map";
 type Outputs = Record<OutputKey, string>;
+type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
+
+type ComplexDetailResponse = {
+  complex: {
+    id: string;
+    name: string;
+    sido?: string | null;
+    sigungu?: string | null;
+    legal_dong?: string | null;
+    households?: number | null;
+    use_date?: string | null;
+  };
+  representativeArea: string | null;
+  monthly: MonthlyStat[];
+  latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
+  snapshot?: {
+    first_median_price?: number | string | null;
+    latest_median_price?: number | string | null;
+    recommended_angle?: string | null;
+  } | null;
+};
 
 const SAMPLE: ApartmentData = {
   name: "산본 퇴계아파트",
@@ -124,146 +145,281 @@ function drawBrand(ctx: CanvasRenderingContext2D, x: number, y: number, dark = f
   ctx.fillText("APARTMENT NOTE", x, y + 42);
 }
 
-function makeThumbnail(data: ApartmentData) {
+function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number) {
+  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
+  const dw = image.naturalWidth * scale;
+  const dh = image.naturalHeight * scale;
+  const dx = x + (w - dw) / 2;
+  const dy = y + (h - dh) / 2;
+  ctx.drawImage(image, dx, dy, dw, dh);
+}
+
+function formatWon(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  const eok = value / 100000000;
+  if (eok >= 1) {
+    const fixed = eok >= 10 ? eok.toFixed(1) : eok.toFixed(2);
+    return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1") + "억";
+  }
+  return Math.round(value / 10000).toLocaleString("ko-KR") + "만원";
+}
+
+async function makeThumbnail(data: ApartmentData, photoDataUrl: string) {
+  const photo = photoDataUrl ? await loadImage(photoDataUrl) : null;
   return canvasUrl(1254, 1254, (ctx) => {
-    const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
-    bg.addColorStop(0, "#0d1b2f");
-    bg.addColorStop(0.58, "#162b46");
-    bg.addColorStop(1, "#0c5c6f");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 1254, 1254);
+    if (photo) {
+      drawCover(ctx, photo, 0, 0, 1254, 1254);
+      const shade = ctx.createLinearGradient(0, 0, 0, 1254);
+      shade.addColorStop(0, "rgba(8,19,34,.36)");
+      shade.addColorStop(.42, "rgba(8,19,34,.28)");
+      shade.addColorStop(1, "rgba(5,16,30,.92)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, 0, 1254, 1254);
+    } else {
+      const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
+      bg.addColorStop(0, "#0a1829");
+      bg.addColorStop(.58, "#123c50");
+      bg.addColorStop(1, "#0a6d70");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 1254, 1254);
 
-    ctx.globalAlpha = 0.14;
-    ctx.fillStyle = "#6ee7d8";
-    ctx.beginPath();
-    ctx.arc(1040, 220, 270, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.globalAlpha = .18;
+      ctx.strokeStyle = "#b9fff4";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 7; i++) {
+        roundRect(ctx, 740 + i * 48, 160 + i * 36, 250, 760 - i * 38, 18);
+        ctx.stroke();
+      }
+      ctx.restore();
 
-    drawBrand(ctx, 88, 82);
-
-    roundRect(ctx, 88, 196, 310, 58, 29);
-    ctx.fillStyle = "rgba(255,255,255,.12)";
-    ctx.fill();
-    ctx.font = `700 25px ${FONT}`;
-    ctx.fillStyle = "#a8f3e6";
-    ctx.fillText(data.region || "지역", 116, 211);
-
-    ctx.fillStyle = "#ffffff";
-    const nameSize = fitText(ctx, data.name || "아파트 단지", 900, 82, 56, 900);
-    ctx.font = `900 ${nameSize}px ${FONT}`;
-    ctx.fillText(data.name || "아파트 단지", 88, 332);
-
-    ctx.font = `900 74px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    drawWrapped(ctx, data.question || "요즘 얼마에 거래될까?", 88, 455, 780, 96, 2);
-
-    ctx.strokeStyle = "rgba(255,255,255,.22)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(88, 702);
-    ctx.lineTo(1166, 702);
-    ctx.stroke();
-
-    ctx.font = `700 25px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.60)";
-    ctx.fillText("단지별 실거래 · 입지 핵심 정리", 88, 748);
-
-    const bx = 852, by = 770;
-    ctx.fillStyle = "rgba(255,255,255,.09)";
-    roundRect(ctx, bx, by, 270, 330, 24);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,.18)";
-    ctx.fillRect(bx + 46, by - 74, 178, 74);
-    ctx.fillStyle = "rgba(168,243,230,.72)";
-    for (let row = 0; row < 6; row++) {
-      for (let col = 0; col < 4; col++) {
-        roundRect(ctx, bx + 42 + col * 52, by + 42 + row * 42, 24, 20, 5);
-        ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.06)";
+      roundRect(ctx, 760, 300, 330, 650, 22);
+      ctx.fill();
+      ctx.fillStyle = "rgba(161,246,231,.42)";
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 4; col++) {
+          roundRect(ctx, 804 + col * 62, 356 + row * 60, 30, 24, 5);
+          ctx.fill();
+        }
       }
     }
-    ctx.fillStyle = "rgba(255,255,255,.86)";
-    ctx.font = `800 24px ${FONT}`;
-    ctx.fillText("단지 한눈에 보기", 88, 1102);
+
+    drawBrand(ctx, 78, 70);
+
+    roundRect(ctx, 862, 70, 314, 52, 26);
+    ctx.fillStyle = "rgba(8,22,36,.52)";
+    ctx.fill();
+    ctx.font = `700 22px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,.9)";
+    ctx.textAlign = "center";
+    ctx.fillText(data.region || "지역", 1019, 83);
+    ctx.textAlign = "left";
+
+    ctx.font = `700 23px ${FONT}`;
+    ctx.fillStyle = "#88efe2";
+    ctx.fillText("단지 실거래 · 가격 흐름", 78, 328);
+
+    const nameSize = fitText(ctx, data.name || "아파트 단지", 1080, 94, 58, 900);
+    ctx.font = `900 ${nameSize}px ${FONT}`;
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(0,0,0,.28)";
+    ctx.shadowBlur = 18;
+    ctx.fillText(data.name || "아파트 단지", 78, 374);
+    ctx.shadowBlur = 0;
+
+    roundRect(ctx, 78, 650, 1098, 196, 32);
+    ctx.fillStyle = "rgba(7,20,34,.78)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.16)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ff8f84";
+    roundRect(ctx, 78, 650, 14, 196, 7);
+    ctx.fill();
+
+    ctx.font = `900 66px ${FONT}`;
+    ctx.fillStyle = "#ffffff";
+    drawWrapped(ctx, data.question || "요즘 얼마에 거래될까?", 128, 690, 980, 80, 2);
+
+    const chips = [data.area || "대표면적", "최근 실거래", "입지 핵심"];
+    let chipX = 78;
+    chips.forEach((label) => {
+      ctx.font = `800 22px ${FONT}`;
+      const w = Math.max(150, ctx.measureText(label).width + 48);
+      roundRect(ctx, chipX, 914, w, 54, 27);
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.9)";
+      ctx.fillText(label, chipX + 24, 928);
+      chipX += w + 14;
+    });
+
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath();
+    ctx.moveTo(78, 1040);
+    ctx.lineTo(1176, 1040);
+    ctx.stroke();
+
+    ctx.font = `700 24px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,.68)";
+    ctx.fillText("실거래 원자료를 기준으로 최근 흐름을 정리했습니다.", 78, 1084);
+    ctx.font = `800 20px ${FONT}`;
+    ctx.fillStyle = "#86e9dc";
+    ctx.textAlign = "right";
+    ctx.fillText("집값쓱", 1176, 1088);
+    ctx.textAlign = "left";
   });
 }
 
-function makePriceCard(data: ApartmentData) {
+function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
   return canvasUrl(1600, 900, (ctx) => {
     ctx.fillStyle = "#f4f7fb";
     ctx.fillRect(0, 0, 1600, 900);
+    drawBrand(ctx, 76, 52, true);
 
-    drawBrand(ctx, 82, 58, true);
+    const stats = monthlyStats.slice(-6);
+    const valid = stats.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
+    const last = valid[valid.length - 1];
+
+    ctx.font = `900 46px ${FONT}`;
+    ctx.fillStyle = "#101b2c";
+    ctx.fillText("최근 6개월 실거래 흐름", 76, 134);
+
     ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#75839a";
+    ctx.fillStyle = "#718096";
+    ctx.fillText(`${data.name} · ${data.area || "대표 전용면적"}`, 76, 198);
+
+    if (!valid.length) {
+      roundRect(ctx, 76, 270, 1448, 500, 30);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#e1e8f1";
+      ctx.stroke();
+      ctx.font = `900 38px ${FONT}`;
+      ctx.fillStyle = "#203047";
+      ctx.fillText("실거래 데이터 연결 후 그래프가 자동 생성됩니다.", 154, 430);
+      ctx.font = `700 22px ${FONT}`;
+      ctx.fillStyle = "#7a8799";
+      ctx.fillText("월별 중앙값 · 거래건수 · 최근 대표값을 한 장에서 보여줍니다.", 154, 494);
+      return;
+    }
+
+    const lastMonth = last.month.split("-");
     ctx.textAlign = "right";
-    ctx.fillText(data.region || "지역", 1518, 70);
+    ctx.font = `700 20px ${FONT}`;
+    ctx.fillStyle = "#78869a";
+    ctx.fillText(`${lastMonth[0]}년 ${Number(lastMonth[1])}월 확인 기준`, 1524, 64);
     ctx.textAlign = "left";
 
-    roundRect(ctx, 70, 152, 1460, 650, 34);
+    roundRect(ctx, 76, 260, 1090, 540, 30);
     ctx.fillStyle = "#ffffff";
     ctx.fill();
     ctx.strokeStyle = "#e1e8f1";
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.font = `800 26px ${FONT}`;
-    ctx.fillStyle = "#168c8c";
-    ctx.fillText("최근 실거래 핵심", 118, 204);
-
-    const nameSize = fitText(ctx, data.name || "아파트 단지", 870, 54, 38, 900);
-    ctx.font = `900 ${nameSize}px ${FONT}`;
-    ctx.fillStyle = "#101b2c";
-    ctx.fillText(data.name || "아파트 단지", 118, 252);
-
-    roundRect(ctx, 118, 334, 220, 50, 25);
-    ctx.fillStyle = "#e7f7f5";
+    roundRect(ctx, 1192, 260, 332, 540, 30);
+    ctx.fillStyle = "#0f2036";
     ctx.fill();
-    ctx.font = `800 22px ${FONT}`;
-    ctx.fillStyle = "#0f7e7d";
-    ctx.fillText(data.area || "대표 전용면적", 148, 347);
 
-    ctx.font = `700 24px ${FONT}`;
-    ctx.fillStyle = "#718096";
-    ctx.fillText("최근 실거래가", 118, 446);
-    const priceSize = fitText(ctx, data.recentPrice || "가격 입력", 810, 82, 54, 900);
-    ctx.font = `900 ${priceSize}px ${FONT}`;
-    ctx.fillStyle = "#0e1726";
-    ctx.fillText(data.recentPrice || "가격 입력", 118, 490);
+    const prices = valid.map((v) => v.medianPrice);
+    let min = Math.min(...prices);
+    let max = Math.max(...prices);
+    if (min === max) {
+      min *= .96;
+      max *= 1.04;
+    } else {
+      const pad = (max - min) * .18;
+      min -= pad;
+      max += pad;
+    }
 
-    roundRect(ctx, 118, 612, 520, 62, 18);
-    ctx.fillStyle = "#f0f4f9";
-    ctx.fill();
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#536278";
-    ctx.fillText(data.previousPrice || "비교값 입력", 146, 630);
-
-    ctx.strokeStyle = "#e5ebf3";
+    const gx = 152, gy = 344, gw = 936, gh = 320;
+    ctx.strokeStyle = "#e8edf3";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(972, 224);
-    ctx.lineTo(972, 726);
-    ctx.stroke();
+    for (let i = 0; i < 4; i++) {
+      const y = gy + (gh / 3) * i;
+      ctx.beginPath();
+      ctx.moveTo(gx, y);
+      ctx.lineTo(gx + gw, y);
+      ctx.stroke();
+    }
 
-    const info = [
-      ["세대수", data.households || "-"],
-      ["입주", data.moveIn || "-"],
-      ["가까운 역", data.station || "-"],
-    ];
-    info.forEach(([label, value], i) => {
-      const y = 248 + i * 150;
-      ctx.font = `700 22px ${FONT}`;
-      ctx.fillStyle = "#8793a5";
-      ctx.fillText(label, 1040, y);
-      const size = fitText(ctx, value, 390, 40, 28, 900);
-      ctx.font = `900 ${size}px ${FONT}`;
-      ctx.fillStyle = "#162033";
-      ctx.fillText(value, 1040, y + 40);
+    const points: Array<{ x: number; y: number; item: MonthlyStat }> = [];
+    stats.forEach((item, index) => {
+      const x = gx + (stats.length === 1 ? gw / 2 : (gw * index) / (stats.length - 1));
+      if (item.medianPrice != null) {
+        const y = gy + gh - ((item.medianPrice - min) / (max - min)) * gh;
+        points.push({ x, y, item });
+      }
+      ctx.font = `700 18px ${FONT}`;
+      ctx.fillStyle = "#728196";
+      ctx.textAlign = "center";
+      ctx.fillText(item.month.slice(5) + "월", x, gy + gh + 34);
+      ctx.font = `700 16px ${FONT}`;
+      ctx.fillStyle = "#9aa5b4";
+      ctx.fillText(item.tradeCount ? item.tradeCount + "건" : "거래 없음", x, gy + gh + 64);
     });
 
-    ctx.font = `600 18px ${FONT}`;
-    ctx.fillStyle = "#9aa5b5";
-    ctx.fillText("※ 입력한 데이터 기준 요약 카드", 118, 748);
+    if (points.length >= 2) {
+      ctx.beginPath();
+      points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      ctx.strokeStyle = "#0f8b86";
+      ctx.lineWidth = 8;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.stroke();
+    }
+
+    points.forEach((p, index) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, index === points.length - 1 ? 11 : 8, 0, Math.PI * 2);
+      ctx.fillStyle = index === points.length - 1 ? "#ef746e" : "#0f8b86";
+      ctx.fill();
+      if (index === points.length - 1) {
+        ctx.font = `900 21px ${FONT}`;
+        ctx.fillStyle = "#132033";
+        ctx.textAlign = "center";
+        ctx.fillText(formatWon(p.item.medianPrice), p.x, p.y - 44);
+      }
+    });
+    ctx.textAlign = "left";
+
+    const first = valid[0];
+    const change = first.medianPrice ? ((last.medianPrice - first.medianPrice) / first.medianPrice) * 100 : null;
+    ctx.font = `700 18px ${FONT}`;
+    ctx.fillStyle = "#83eadc";
+    ctx.fillText("최근 대표값", 1236, 320);
+    ctx.font = `900 50px ${FONT}`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(formatWon(last.medianPrice), 1236, 360);
+
+    ctx.strokeStyle = "rgba(255,255,255,.14)";
+    ctx.beginPath();
+    ctx.moveTo(1236, 444);
+    ctx.lineTo(1480, 444);
+    ctx.stroke();
+
+    ctx.font = `700 18px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,.58)";
+    ctx.fillText("6개월 첫 대표값", 1236, 486);
+    ctx.font = `900 31px ${FONT}`;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(formatWon(first.medianPrice), 1236, 524);
+
+    ctx.font = `700 18px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,.58)";
+    ctx.fillText("대표값 변화", 1236, 594);
+    ctx.font = `900 34px ${FONT}`;
+    ctx.fillStyle = change != null && change < 0 ? "#83c9ff" : "#ff9a96";
+    ctx.fillText(change == null ? "-" : (change >= 0 ? "+" : "") + change.toFixed(1) + "%", 1236, 632);
+
+    ctx.font = `600 16px ${FONT}`;
+    ctx.fillStyle = "rgba(255,255,255,.48)";
+    ctx.fillText("월별 중앙값 기준", 1236, 724);
+    ctx.fillText("거래 없는 달은 공백 처리", 1236, 750);
   });
 }
 
@@ -351,6 +507,10 @@ async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Po
 export default function ApartmentBulkPage() {
   const [data, setData] = useState<ApartmentData>(SAMPLE);
   const [mapDataUrl, setMapDataUrl] = useState("");
+  const [complexPhotoDataUrl, setComplexPhotoDataUrl] = useState("");
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
+  const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
+  const [selectedComplexName, setSelectedComplexName] = useState("");
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -360,8 +520,50 @@ export default function ApartmentBulkPage() {
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
 
+  useEffect(() => {
+    const complexId = new URLSearchParams(window.location.search).get("complexId");
+    if (!complexId) return;
+    setSelectedComplexLoading(true);
+    fetch("/api/apartment/complexes/" + encodeURIComponent(complexId), { cache: "no-store" })
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "단지 데이터를 불러오지 못했습니다.");
+        return json as ComplexDetailResponse;
+      })
+      .then((detail) => {
+        const firstMedian = detail.snapshot?.first_median_price == null ? null : Number(detail.snapshot.first_median_price);
+        const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
+        const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
+        setData((prev) => ({
+          ...prev,
+          name: detail.complex.name || prev.name,
+          region: region || prev.region,
+          area: detail.representativeArea ? "전용 " + detail.representativeArea : prev.area,
+          recentPrice: recent ? formatWon(recent) : prev.recentPrice,
+          previousPrice: firstMedian ? "6개월 전 대표값 " + formatWon(firstMedian) : prev.previousPrice,
+          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : prev.households,
+          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : prev.moveIn,
+          station: "",
+          locationLine: "",
+          question: detail.snapshot?.recommended_angle || "요즘 얼마에 거래될까?",
+        }));
+        setMonthlyStats(detail.monthly || []);
+        setSelectedComplexName(detail.complex.name || "");
+        setOutputs(null);
+      })
+      .catch(() => {})
+      .finally(() => setSelectedComplexLoading(false));
+  }, []);
+
   function update<K extends keyof ApartmentData>(key: K, value: ApartmentData[K]) {
     setData((prev) => ({ ...prev, [key]: value }));
+    setOutputs(null);
+  }
+
+  async function handlePhoto(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setComplexPhotoDataUrl(await fileToDataUrl(file));
     setOutputs(null);
   }
 
@@ -392,8 +594,8 @@ export default function ApartmentBulkPage() {
     if (!ready) return;
     setLoading(true);
     try {
-      const thumbnail = makeThumbnail(data);
-      const price = makePriceCard(data);
+      const thumbnail = await makeThumbnail(data, complexPhotoDataUrl);
+      const price = makePriceCard(data, monthlyStats);
       const map = await makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
       setOutputs({ thumbnail, price, map });
       requestAnimationFrame(() => document.getElementById("outputs")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -440,6 +642,11 @@ export default function ApartmentBulkPage() {
             <button type="button" onClick={() => { setData(SAMPLE); setOutputs(null); }}>샘플값 복원</button>
           </div>
 
+          {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
+          {selectedComplexName && !selectedComplexLoading && (
+            <div className={styles.autoLoad}><b>{selectedComplexName}</b> 실거래 데이터가 자동으로 입력됐습니다.</div>
+          )}
+
           <div className={styles.grid2}>
             <Field label="단지명" value={data.name} onChange={(v) => update("name", v)} />
             <Field label="지역" value={data.region} onChange={(v) => update("region", v)} />
@@ -453,12 +660,21 @@ export default function ApartmentBulkPage() {
           <Field label="썸네일 질문" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
-          <label className={styles.uploadBox}>
-            <input type="file" accept="image/*" onChange={handleMap} />
-            <span className={styles.uploadIcon}>🗺️</span>
-            <b>{mapDataUrl ? "지도 캡처 교체" : "네이버 지도 캡처 업로드"}</b>
-            <small>원본 비율을 유지하고 네이버 로고·출처 영역을 지우지 않습니다.</small>
-          </label>
+          <div className={styles.uploadGrid}>
+            <label className={styles.uploadBox}>
+              <input type="file" accept="image/*" onChange={handlePhoto} />
+              <span className={styles.uploadIcon}>🏙️</span>
+              <b>{complexPhotoDataUrl ? "단지 사진 교체" : "단지 사진 업로드 · 선택"}</b>
+              <small>실제 단지 사진이 있으면 썸네일 배경에 사용합니다. 없으면 고급 그래픽 배경으로 제작합니다.</small>
+            </label>
+
+            <label className={styles.uploadBox}>
+              <input type="file" accept="image/*" onChange={handleMap} />
+              <span className={styles.uploadIcon}>🗺️</span>
+              <b>{mapDataUrl ? "지도 캡처 교체" : "네이버 지도 캡처 업로드"}</b>
+              <small>원본 비율을 유지하고 네이버 로고·출처 영역을 지우지 않습니다.</small>
+            </label>
+          </div>
 
           {mapDataUrl && (
             <div className={styles.markPanel}>
@@ -486,7 +702,7 @@ export default function ApartmentBulkPage() {
           <p className={styles.eyebrow}>FIXED TEMPLATE</p>
           <h2>매번 디자인하지 않습니다.</h2>
           <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>단지명 + 궁금증형 한 줄</small></div></div>
-          <div className={styles.templateItem}><span>02</span><div><b>시세 카드</b><small>면적 + 실거래 + 핵심 정보 3개</small></div></div>
+          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>최근 6개월 월별 중앙값 + 거래건수</small></div></div>
           <div className={styles.templateItem}><span>03</span><div><b>지도 카드</b><small>원본 지도 + 최소 강조 + 입지 한 줄</small></div></div>
           <div className={styles.note}><b>대량발행용 원칙</b><p>폰트·색상·여백·정렬은 고정하고, 데이터와 지도만 교체합니다.</p></div>
         </aside>
@@ -499,7 +715,7 @@ export default function ApartmentBulkPage() {
             <button onClick={downloadZip}>3장 전체 ZIP 다운로드</button>
           </div>
           <OutputCard title="00 · 썸네일" size="1254×1254" src={outputs.thumbnail} filename="00_thumbnail.png" />
-          <OutputCard title="01 · 시세 요약 카드" size="1600×900" src={outputs.price} filename="01_price.png" />
+          <OutputCard title="01 · 시세 그래프 카드" size="1600×900" src={outputs.price} filename="01_price_graph.png" />
           <OutputCard title="02 · 입지 지도 카드" size="1600×900" src={outputs.map} filename="02_location.png" />
         </section>
       )}
