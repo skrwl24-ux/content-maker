@@ -1,8 +1,15 @@
 {
   "crons": [
-    {
-      "path": "/api/cron/apartment-refresh",
-      "schedule": "0 */2 * * *"
-    }
+    { "path": "/api/cron/apartment-refresh/41111", "schedule": "10 17 * * *" },
+    { "path": "/api/cron/apartment-refresh/41113", "schedule": "10 18 * * *" },
+    { "path": "/api/cron/apartment-refresh/41115", "schedule": "10 19 * * *" },
+    { "path": "/api/cron/apartment-refresh/41117", "schedule": "10 20 * * *" },
+    { "path": "/api/cron/apartment-refresh/41171", "schedule": "10 21 * * *" },
+    { "path": "/api/cron/apartment-refresh/41173", "schedule": "10 22 * * *" },
+    { "path": "/api/cron/apartment-refresh/41410", "schedule": "10 23 * * *" },
+    { "path": "/api/cron/apartment-refresh/41430", "schedule": "10 0 * * *" },
+    { "path": "/api/cron/apartment-refresh/41461", "schedule": "10 1 * * *" },
+    { "path": "/api/cron/apartment-refresh/41463", "schedule": "10 2 * * *" },
+    { "path": "/api/cron/apartment-refresh/41465", "schedule": "10 3 * * *" }
   ]
 }
