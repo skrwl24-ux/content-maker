@@ -459,6 +459,52 @@ function makeFreeAerialIllustration(data: ApartmentData, variant = 0) {
   });
 }
 
+
+function makeThumbnailPrompt(data: ApartmentData) {
+  const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
+  return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
+
+[기본 정보]
+단지명: ${value(data.name)}
+지역: ${value(data.region)}
+대표 전용면적: ${value(data.area)}
+최근 실거래가: ${value(data.recentPrice)}
+비교 가격: ${value(data.previousPrice)}
+세대수: ${value(data.households)}
+입주년도: ${value(data.moveIn)}
+주요 역: ${value(data.station)}
+입지 설명: ${value(data.locationLine)}
+
+[메인 문구]
+${value(data.question, "요즘 얼마에 거래될까?")}
+
+[이미지 제작 기준]
+- 네이버 블로그 썸네일용
+- 정확한 크기 1254×1254px
+- 정사각형 1:1
+- 모바일 목록에서 잘리지 않도록 핵심 문구는 중앙 안전영역에 배치
+- 집값쓱 부동산 콘텐츠 스타일
+- 깔끔하고 신뢰감 있는 고급 부동산 디자인
+- 모바일에서도 단지명과 메인 문구가 즉시 읽히도록 큰 글씨 사용
+- 너무 많은 정보는 넣지 말 것
+- 단지명은 크게
+- 메인 질문은 강하게
+- 하단에는 대표면적 / 최근 실거래 / 입지 핵심 정도만 작은 보조정보로 표시
+- 배경은 특정 검색 사진을 복사하거나 변형하지 말고, 고급 아파트·도시·건축 분위기의 새로운 그래픽 또는 일러스트로 구성
+- 실제 단지 배치를 정확히 재현한 것처럼 보이지 않게 할 것
+- 로고, 워터마크, 출처 불명의 사진 사용 금지
+- 한글 텍스트 오탈자 없이 제작
+
+[권장 구성]
+상단 좌측: 집값쓱
+상단 우측: ${value(data.region)}
+중앙: ${value(data.name)}
+메인 카피: ${value(data.question, "요즘 얼마에 거래될까?")}
+하단 보조칩: ${value(data.area)} / 최근 실거래 / 입지 핵심
+
+이미지를 바로 생성해줘.`;
+}
+
 function formatWon(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "-";
   const eok = value / 100000000;
@@ -831,9 +877,11 @@ export default function ApartmentBulkPage() {
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
   const [outputs, setOutputs] = useState<Outputs | null>(null);
   const [loading, setLoading] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
+  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data), [data]);
 
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
@@ -936,6 +984,17 @@ export default function ApartmentBulkPage() {
   function update<K extends keyof ApartmentData>(key: K, value: ApartmentData[K]) {
     setData((prev) => ({ ...prev, [key]: value }));
     setOutputs(null);
+  }
+
+  async function copyThumbnailPrompt(openChat = false) {
+    try {
+      await navigator.clipboard.writeText(thumbnailPrompt);
+      setPromptCopied(true);
+      window.setTimeout(() => setPromptCopied(false), 1800);
+      if (openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    } catch {
+      setPromptCopied(false);
+    }
   }
 
   async function handlePhoto(e: ChangeEvent<HTMLInputElement>) {
@@ -1042,6 +1101,25 @@ export default function ApartmentBulkPage() {
           </div>
           <Field label="썸네일 질문" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
+
+          <section className={styles.promptSection}>
+            <div className={styles.promptHead}>
+              <div>
+                <b>🤖 ChatGPT 썸네일 요청서</b>
+                <span>단지 데이터가 바뀌면 요청서도 자동으로 갱신됩니다.</span>
+              </div>
+            </div>
+            <textarea className={styles.promptBox} value={thumbnailPrompt} readOnly />
+            <div className={styles.promptActions}>
+              <button type="button" onClick={() => void copyThumbnailPrompt(false)}>
+                {promptCopied ? "✓ 복사 완료" : "요청서 복사"}
+              </button>
+              <button type="button" className={styles.primaryPrompt} onClick={() => void copyThumbnailPrompt(true)}>
+                복사 후 ChatGPT 열기
+              </button>
+            </div>
+            <p className={styles.promptHelp}>ChatGPT가 열리면 입력창에 붙여넣기만 하면 됩니다.</p>
+          </section>
 
           {autoMapMessage && (
             <div className={styles.autoLoad}>
