@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
     mapUrl.searchParams.set("maptype", "basic");
     mapUrl.searchParams.set("lang", "ko");
     mapUrl.searchParams.set("center", `${point.x},${point.y}`);
-    mapUrl.searchParams.set("level", "16");
+    mapUrl.searchParams.set("level", "14");
     mapUrl.searchParams.set("markers", `type:d|size:mid|color:red|pos:${point.x} ${point.y}`);
 
     const mapHeaders = {
