@@ -986,15 +986,19 @@ export default function ApartmentBulkPage() {
     setOutputs(null);
   }
 
-  async function copyThumbnailPrompt(openChat = false) {
+  async function copyThumbnailPrompt() {
     try {
       await navigator.clipboard.writeText(thumbnailPrompt);
       setPromptCopied(true);
       window.setTimeout(() => setPromptCopied(false), 1800);
-      if (openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     } catch {
       setPromptCopied(false);
     }
+  }
+
+  function openThumbnailPromptInChatGPT() {
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(thumbnailPrompt);
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function handlePhoto(e: ChangeEvent<HTMLInputElement>) {
@@ -1111,14 +1115,14 @@ export default function ApartmentBulkPage() {
             </div>
             <textarea className={styles.promptBox} value={thumbnailPrompt} readOnly />
             <div className={styles.promptActions}>
-              <button type="button" onClick={() => void copyThumbnailPrompt(false)}>
+              <button type="button" onClick={() => void copyThumbnailPrompt()}>
                 {promptCopied ? "✓ 복사 완료" : "요청서 복사"}
               </button>
-              <button type="button" className={styles.primaryPrompt} onClick={() => void copyThumbnailPrompt(true)}>
-                복사 후 ChatGPT 열기
+              <button type="button" className={styles.primaryPrompt} onClick={openThumbnailPromptInChatGPT}>
+                ChatGPT에서 바로 열기
               </button>
             </div>
-            <p className={styles.promptHelp}>ChatGPT가 열리면 입력창에 붙여넣기만 하면 됩니다.</p>
+            <p className={styles.promptHelp}>‘ChatGPT에서 바로 열기’는 요청서를 URL에 넣어 새 채팅을 엽니다. 환경에 따라 전송 버튼을 한 번 눌러야 할 수 있습니다.</p>
           </section>
 
           {autoMapMessage && (
