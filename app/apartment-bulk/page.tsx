@@ -505,21 +505,21 @@ ${monthlyLines}
 각 이미지 문구는 반드시 한 줄 단독으로 출력할 것.
 
 [폰트·출력 서식 — 최우선]
-- 제목 20pt / 소제목 18pt / 일반 본문 15pt / 태그 13~14pt 기준으로 구성할 것.
-- 실제 글에 pt 숫자 지시문은 출력하지 말 것.
-- 제목은 가장 큰 제목 계층, 소제목은 제목보다 작고 본문보다 큰 계층으로 구분하고 일반 본문은 기본 크기로 유지할 것.
-- 모든 일반 본문 문장은 '한 문장 = 한 문단'으로 작성할 것.
-- 모든 문장과 다음 문장 사이에는 반드시 '실제 빈 줄 1개'를 넣을 것.
-- 실제 빈 줄 1개란 '문장 → 엔터 → 아무 문자도 없는 빈 줄 → 엔터 → 다음 문장'이며, 결과 문자열 기준으로는 문단 사이에 줄바꿈 2개(\\n\\n)를 사용하는 것이다.
-- 빈 줄에는 스페이스, NBSP, 탭, 특수공백, 제로폭 문자 등 어떤 문자도 넣지 말 것.
-- 제목 다음에도 실제 빈 줄 1개를 넣을 것.
-- 소제목 앞뒤에도 각각 실제 빈 줄 1개를 넣을 것.
-- 이미지 위치 문구 앞뒤에도 각각 실제 빈 줄 1개를 넣을 것.
-- 3줄 요약의 각 문장 사이에도 실제 빈 줄 1개를 넣을 것.
-- 연속 빈 줄은 1개를 초과하지 말 것. 즉 문단 사이 간격은 항상 정확히 한 줄만 띄울 것.
+- 제목 20pt / 소제목 18pt / 일반 본문 15pt / 태그 13~14pt 기준으로 작성할 것.
+- 실제 최종 글에 '20pt', '18pt', '15pt', '13~14pt' 같은 편집 지시문은 출력하지 말 것.
+- 일반 본문은 네이버 블로그 기본 본문 크기로 유지하고 제목과 소제목만 크게 구분할 것.
+- 제목은 가장 크게, 소제목은 본문보다 한 단계 크게 보이도록 각각 독립된 줄로 작성할 것.
+- 소제목은 굵게, 일반 본문은 기본 굵기로 유지할 것.
+- 네이버 모바일에서 읽기 쉽게 본문은 '한 문장 = 한 문단'으로 작성할 것.
+- 일반 본문 문장과 다음 문장 사이에는 네이버 블로그에 붙여넣어도 간격이 유지되도록 스페이스바 1칸이 들어간 간격용 줄을 1개 넣을 것.
+- 기본 형식은 '문장 → 엔터 → 스페이스바 1칸이 있는 줄 → 엔터 → 다음 문장'으로 할 것.
+- 완전히 비어 있는 빈 줄을 사용하지 말 것.
+- 제목 다음에도 스페이스바 1칸이 들어간 간격용 줄을 1개 넣을 것.
+- 소제목 앞뒤에도 각각 같은 간격용 줄을 1개 넣을 것.
+- 이미지 위치 문구는 한 줄 단독으로 두고 위아래 각각 같은 간격용 줄을 1개 넣을 것.
+- 3줄 요약은 각 문장을 한 줄씩 따로 쓰고 문장 사이에도 같은 간격용 줄을 1개 넣을 것.
 - 일반 텍스트가 있는 줄의 시작에는 불필요한 공백을 넣지 말 것.
 - 코드블록과 HTML은 사용하지 말 것.
-- 최종 출력 직전에 모든 문장 사이에 실제 빈 줄 1개가 있는지 확인할 것.
 
 [마무리]
 - 앞으로 체크할 것은 매수 권유가 아니라 월 대표값, 거래량, 개별 실거래가, 정비사업 진행 단계 등 실제 데이터 중심으로 작성할 것.
@@ -530,19 +530,19 @@ ${monthlyLines}
 - 태그에 마크다운 기호나 코드 표시를 붙이지 말 것.
 
 [최종 출력]
-- writing block 1개 안에 아래 3가지만 순서대로 넣을 것.
+아래 3가지만 출력할 것.
 1) 최종 제목 1개
 2) 최종 본문
 3) 네이버 태그 7개
-- writing block 밖에는 아무것도 출력하지 말 것.
-- 제목 후보, 검색 과정, 출처 목록, 작성 설명, 내부링크 추천, 기타 부가 설명은 출력하지 말 것.
+
+제목 후보, 검색 과정, 출처 목록, 작성 설명, 내부링크 추천, 기타 부가 설명은 출력하지 말 것.
 
 [출력 직전 자가검수]
 - 제목 1개
 - 태그 정확히 7개
-- 모든 문장·제목·소제목·이미지 위치·요약 사이에 실제 빈 줄 1개
-- 빈 줄에는 공백/NBSP/탭/특수문자 0개
-- writing block 1개만 사용, 코드블록/HTML 사용 없음, 제목·소제목 외 불필요한 마크다운 사용 없음
+- 모든 문장·제목·소제목·이미지 위치·요약 사이에 스페이스바 1칸이 들어간 간격용 줄 1개
+- 완전히 비어 있는 빈 줄 0개
+- 코드블록/HTML 사용 없음
 - 최근 실거래가와 월 대표값 혼동 없음
 - 제공되지 않은 숫자 생성 없음
 - 이미지 위치 3개 포함
@@ -550,7 +550,6 @@ ${monthlyLines}
 - 원문 URL/마크다운 링크/괄호형 링크 0개
 - 태그의 # 앞에 백슬래시 0개
 - 진행 중인 최신 월 거래량은 '현재/현재까지'로 표시
-- 연속 빈 줄은 정확히 1개만 사용
 
 하나라도 어기면 스스로 수정한 뒤 최종 발행본만 출력할 것.
 
@@ -946,8 +945,6 @@ export default function ApartmentBulkPage() {
   const [pricePromptCopied, setPricePromptCopied] = useState(false);
   const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
-  const [naverPasteText, setNaverPasteText] = useState("");
-  const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
@@ -1159,36 +1156,6 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  function normalizeForNaver(raw: string) {
-    const cleaned = raw
-      .replace(/\r\n?/g, "\n")
-      .replace(/^:::writing[^\n]*$/gim, "")
-      .replace(/^:::\s*$/gim, "")
-      .replace(/^#{1,6}\s+/gm, "")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/__(.*?)__/g, "$1")
-      .replace(/\\#/g, "#")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-
-    return cleaned.join("\r\n\r\n");
-  }
-
-  async function copyNaverPlainText() {
-    const normalized = normalizeForNaver(naverPasteText);
-    if (!normalized) {
-      setNaverCopyMessage("ChatGPT 최종 글을 먼저 붙여넣어 주세요.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(normalized);
-      setNaverCopyMessage("✅ 네이버용 순수텍스트로 복사했습니다. 스마트에디터 ONE에 바로 붙여넣으세요.");
-    } catch {
-      setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
-    }
-  }
-
   async function handleMap(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1343,30 +1310,6 @@ export default function ApartmentBulkPage() {
             {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
           </section>
 
-          <section className={styles.promptSection}>
-            <div className={styles.promptHead}>
-              <div>
-                <b>📋 5. 네이버용 본문 정리 · 복사</b>
-                <span>ChatGPT 최종 글을 아래에 붙여넣으면 외부 HTML 없이 순수 텍스트로 정리하고, 모든 줄 사이를 한 줄씩 띄워 복사합니다.</span>
-              </div>
-            </div>
-            <textarea
-              className={styles.promptBoxCompact}
-              value={naverPasteText}
-              onChange={(e) => {
-                setNaverPasteText(e.target.value);
-                setNaverCopyMessage("");
-              }}
-              placeholder="ChatGPT에서 완성된 제목 + 본문 + 태그를 여기에 붙여넣으세요."
-            />
-            <div className={styles.promptActionsCompact}>
-              <button type="button" onClick={() => void copyNaverPlainText()}>
-                네이버용 순수텍스트 복사
-              </button>
-            </div>
-            {naverCopyMessage && <div className={styles.mapCopyNotice}>{naverCopyMessage}</div>}
-          </section>
-
           <details className={styles.advancedDetails}>
             <summary>이미지 · 본문 요청서 확인 · 복사</summary>
             <div className={styles.advancedBody}>
@@ -1509,8 +1452,7 @@ export default function ApartmentBulkPage() {
           <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
           <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
           <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
-          <div className={styles.templateItem}><span>04</span><div><b>네이버용 본문 복사</b><small>ChatGPT 결과 붙여넣기 → 순수 텍스트 정리 → 네이버에 붙여넣기</small></div></div>
-          <div className={styles.note}><b>최종 흐름</b><p>본문은 마지막에 네이버용 순수텍스트 복사를 거쳐 외부 HTML을 제거한 뒤 스마트에디터 ONE에 붙여넣습니다.</p></div>
+          <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
         </aside>
       </section>
 
