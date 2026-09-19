@@ -185,11 +185,20 @@ function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼�
   const priceStrong = Math.abs(delta) >= 70000000 || Math.abs(rate) >= 8;
   const firstTrades = first.tradeCount ?? 0;
   const lastTrades = last.tradeCount ?? 0;
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const isCurrentMonthIncomplete = last.month === currentMonthKey && now.getDate() < lastDayOfMonth;
+  const completedTradeLast = isCurrentMonthIncomplete && valid.length >= 2 ? valid[valid.length - 2] : last;
+  const completedLastTrades = completedTradeLast?.tradeCount ?? 0;
+
   const tradeSurge = lastTrades >= 3 && (
     (firstTrades === 0 && lastTrades >= 3) ||
     (firstTrades > 0 && lastTrades >= firstTrades * 2 && lastTrades - firstTrades >= 2)
   );
-  const tradeDrop = firstTrades >= 3 && lastTrades <= Math.max(1, Math.floor(firstTrades / 2)) && firstTrades - lastTrades >= 2;
+  const tradeDrop = firstTrades >= 3 &&
+    completedLastTrades <= Math.max(1, Math.floor(firstTrades / 2)) &&
+    firstTrades - completedLastTrades >= 2;
 
   if (priceStrong && delta !== 0) {
     return delta > 0
@@ -247,6 +256,7 @@ ${mainCopy}
 - 가격 변화가 크지 않고 거래량 증가가 훨씬 강하면 '거래가 다시 몰렸다', '거래량이 눈에 띄게 늘었다'처럼 거래 중심으로 갈 것.
 - 가격 변화와 거래 증가가 모두 강하면 제목에서는 두 요소를 함께 사용할 수 있지만, 썸네일은 가장 강한 핵심 1개를 짧게 보여줄 것.
 - 거래 감소가 가장 강하면 '거래가 눈에 띄게 줄었다'처럼 사실 중심으로 표현할 것.
+- 단, 최신 월이 아직 진행 중이면 그 달의 낮은 거래건수만으로 거래 감소형을 선택하지 말고 완료된 월끼리 비교할 것.
 - '사람들이 관심을 갖기 시작했다'처럼 거래량만으로 심리나 의도를 추정하지 말 것.
 - 제목과 썸네일은 반드시 같은 핵심 축을 공유할 것. 문구를 완전히 똑같이 복사할 필요는 없다.
 - 가격·거래 변화가 모두 뚜렷하지 않을 때만 범용 질문형이나 보합·관망형을 사용할 것.
@@ -439,6 +449,8 @@ ${monthlyLines}
 - 월 대표값 변화액이 0.7억 이상이거나 변화율 절대값이 8% 이상이면 가격형을 우선 검토할 것.
 - 가격형은 '6개월 새 00억 올랐다/빠졌다'처럼 핵심 숫자를 일부 가려 궁금증을 남기는 방식을 우선 검토할 것.
 - 가격 변화가 크지 않고 거래량 변화가 더 강하면 거래 중심 제목을 사용할 것.
+- 작성 기준일이 해당 월의 말일 이전이면 진행 중인 최신 월의 낮은 거래건수만으로 '거래 감소'라고 판단하지 말 것.
+- 거래 감소 여부는 가급적 완료된 월끼리 비교하고, 최신 월이 진행 중이면 '현재까지 N건'처럼 중간 집계임을 명확히 표현할 것.
 - 가격과 거래량이 모두 강하면 두 신호를 함께 활용할 수 있을 것.
 - 거래량만으로 사람들의 심리나 관심을 사실처럼 추정하지 말 것.
 - '왜/이유/까닭'은 원인이 확인됐을 때만 사용할 것.
