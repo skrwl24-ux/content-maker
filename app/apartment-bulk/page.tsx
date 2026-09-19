@@ -173,8 +173,37 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
 }
 
 
-function makeThumbnailPrompt(data: ApartmentData) {
+function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼마에 거래될까?") {
+  const monthly = monthlyStats.slice(-6);
+  const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  if (!first || !last || !first.medianPrice) return fallback;
+
+  const delta = last.medianPrice - first.medianPrice;
+  const rate = (delta / first.medianPrice) * 100;
+  const strongMove = Math.abs(delta) >= 70000000 || Math.abs(rate) >= 8;
+
+  if (!strongMove || delta === 0) return fallback;
+  const amount = formatWon(Math.abs(delta));
+  return delta > 0
+    ? `6개월 새 ${amount} 올랐다`
+    : `6개월 새 ${amount} 내렸다`;
+}
+
+function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
+  const monthly = monthlyStats.slice(-6);
+  const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const delta = first && last ? last.medianPrice - first.medianPrice : null;
+  const changeRate = first?.medianPrice && last?.medianPrice
+    ? (delta! / first.medianPrice) * 100
+    : null;
+  const autoHook = buildThumbnailHook(monthlyStats, "요즘 얼마에 거래될까?");
+  const mainCopy = value(data.question, autoHook);
+
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
 
 [기본 정보]
@@ -188,8 +217,26 @@ function makeThumbnailPrompt(data: ApartmentData) {
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
 
+[가격 흐름 정보]
+비교 시점: 최근 6개월
+비교값: ${first ? formatWon(first.medianPrice) : "확인 필요"}
+최근값: ${last ? formatWon(last.medianPrice) : "확인 필요"}
+변화액: ${delta == null ? "계산 불가" : (delta >= 0 ? "+" : "-") + formatWon(Math.abs(delta))}
+변화율: ${changeRate == null ? "계산 불가" : (changeRate >= 0 ? "+" : "") + changeRate.toFixed(1) + "%"}
+
 [메인 문구]
-${value(data.question, "요즘 얼마에 거래될까?")}
+${mainCopy}
+
+[썸네일 메인 문구 생성 규칙]
+- 메인 문구는 고정 질문형으로 반복하지 말 것.
+- 가격 변화가 뚜렷하면 질문형보다 숫자형 후킹을 우선 사용할 것.
+- 변화액이 0.7억 이상이거나 변화율이 ±8% 이상이면 숫자형 문구를 우선 적용할 것.
+- 상승이면 '6개월 새 ○억 올랐다', '반년 만에 ○억 상승', '○억 → ○억'처럼 기간과 숫자가 바로 읽히게 구성할 것.
+- 하락이면 '6개월 새 ○억 내렸다', '반년 만에 ○억 하락', '○억 → ○억'처럼 과장 없이 표현할 것.
+- 변화폭이 작을 때만 '요즘 얼마에 거래될까?', '가격 흐름이 바뀌었을까?' 같은 질문형을 사용할 것.
+- 숫자와 기간은 제공된 데이터만 사용하고 임의로 만들지 말 것.
+- 같은 문구 패턴이 여러 단지에서 연속 반복되지 않도록 자연스럽게 변형할 것.
+- 모바일에서 한 번에 읽히도록 짧고 강하게 작성할 것.
 
 [이미지 제작 기준]
 - 네이버 블로그 썸네일용
@@ -201,7 +248,7 @@ ${value(data.question, "요즘 얼마에 거래될까?")}
 - 모바일에서도 단지명과 메인 문구가 즉시 읽히도록 큰 글씨 사용
 - 너무 많은 정보는 넣지 말 것
 - 단지명은 크게
-- 메인 질문은 강하게
+- 숫자형 메인 카피의 금액과 기간을 가장 강하게 강조
 - 하단에는 대표면적 / 최근 실거래 / 입지 핵심 정도만 작은 보조정보로 표시
 - 배경은 특정 검색 사진을 복사하거나 변형하지 말고, 고급 아파트·도시·건축 분위기의 새로운 그래픽 또는 일러스트로 구성
 - 실제 단지 배치를 정확히 재현한 것처럼 보이지 않게 할 것
@@ -212,7 +259,7 @@ ${value(data.question, "요즘 얼마에 거래될까?")}
 상단 좌측: 집값쓱
 상단 우측: ${value(data.region)}
 중앙: ${value(data.name)}
-메인 카피: ${value(data.question, "요즘 얼마에 거래될까?")}
+메인 카피: ${mainCopy}
 하단 보조칩: ${value(data.area)} / 최근 실거래 / 입지 핵심
 
 이미지를 바로 생성해줘.`;
@@ -794,7 +841,7 @@ export default function ApartmentBulkPage() {
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
-  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data), [data]);
+  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats), [data, monthlyStats]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
   const bodyPrompt = useMemo(() => makeBodyPrompt(data, monthlyStats, recommendedAngle), [data, monthlyStats, recommendedAngle]);
@@ -850,7 +897,7 @@ export default function ApartmentBulkPage() {
           moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : SAMPLE.moveIn,
           station: "",
           locationLine: "",
-          question: detail.snapshot?.recommended_angle || "요즘 얼마에 거래될까?",
+          question: buildThumbnailHook(detail.monthly || [], detail.snapshot?.recommended_angle || "요즘 얼마에 거래될까?"),
         };
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
@@ -1091,7 +1138,7 @@ export default function ApartmentBulkPage() {
             <Field label="입주년도" value={data.moveIn} onChange={(v) => update("moveIn", v)} />
             <Field label="가까운 주요 역" value={data.station} onChange={(v) => update("station", v)} />
           </div>
-          <Field label="썸네일 질문" value={data.question} onChange={(v) => update("question", v)} />
+          <Field label="썸네일 메인 문구" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
           {(nearbyMessage || autoMapMessage) && (
