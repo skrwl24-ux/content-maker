@@ -182,13 +182,23 @@ function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼�
 
   const delta = last.medianPrice - first.medianPrice;
   const rate = (delta / first.medianPrice) * 100;
-  const strongMove = Math.abs(delta) >= 70000000 || Math.abs(rate) >= 8;
+  const priceStrong = Math.abs(delta) >= 70000000 || Math.abs(rate) >= 8;
+  const firstTrades = first.tradeCount ?? 0;
+  const lastTrades = last.tradeCount ?? 0;
+  const tradeSurge = lastTrades >= 3 && (
+    (firstTrades === 0 && lastTrades >= 3) ||
+    (firstTrades > 0 && lastTrades >= firstTrades * 2 && lastTrades - firstTrades >= 2)
+  );
+  const tradeDrop = firstTrades >= 3 && lastTrades <= Math.max(1, Math.floor(firstTrades / 2)) && firstTrades - lastTrades >= 2;
 
-  if (!strongMove || delta === 0) return fallback;
-  const amount = formatWon(Math.abs(delta));
-  return delta > 0
-    ? `6개월 새 ${amount} 올랐다`
-    : `6개월 새 ${amount} 내렸다`;
+  if (priceStrong && delta !== 0) {
+    return delta > 0
+      ? "6개월 새 00억 올랐다"
+      : "6개월 새 00억 빠졌다";
+  }
+  if (tradeSurge) return "거래가 다시 몰렸다";
+  if (tradeDrop) return "거래가 눈에 띄게 줄었다";
+  return fallback;
 }
 
 function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
@@ -217,25 +227,30 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
 
-[가격 흐름 정보]
+[가격·거래 흐름 정보]
 비교 시점: 최근 6개월
 비교값: ${first ? formatWon(first.medianPrice) : "확인 필요"}
 최근값: ${last ? formatWon(last.medianPrice) : "확인 필요"}
 변화액: ${delta == null ? "계산 불가" : (delta >= 0 ? "+" : "-") + formatWon(Math.abs(delta))}
 변화율: ${changeRate == null ? "계산 불가" : (changeRate >= 0 ? "+" : "") + changeRate.toFixed(1) + "%"}
+첫 유효월 거래량: ${first ? first.tradeCount + "건" : "확인 필요"}
+최근 유효월 거래량: ${last ? last.tradeCount + "건" : "확인 필요"}
 
 [메인 문구]
 ${mainCopy}
 
 [썸네일 메인 문구 생성 규칙]
-- 메인 문구는 고정 질문형으로 반복하지 말 것.
-- 가격 변화가 뚜렷하면 질문형보다 숫자형 후킹을 우선 사용할 것.
-- 변화액이 0.7억 이상이거나 변화율이 ±8% 이상이면 숫자형 문구를 우선 적용할 것.
-- 상승이면 '6개월 새 ○억 올랐다', '반년 만에 ○억 상승', '○억 → ○억'처럼 기간과 숫자가 바로 읽히게 구성할 것.
-- 하락이면 '6개월 새 ○억 내렸다', '반년 만에 ○억 하락', '○억 → ○억'처럼 과장 없이 표현할 것.
-- 변화폭이 작을 때만 '요즘 얼마에 거래될까?', '가격 흐름이 바뀌었을까?' 같은 질문형을 사용할 것.
+- 모든 단지에 같은 문구 패턴을 반복하지 말고, 최근 6개월 데이터에서 가장 강한 포인트 1개를 먼저 고를 것.
+- 기본 유형은 가격상승형, 가격하락형, 거래량급증형, 거래감소형, 가격+거래형, 보합·관망형으로 판단할 것.
+- 가격 변화액이 0.7억 이상이거나 변화율 절대값이 8% 이상이면 가격형을 우선 검토할 것.
+- 가격형을 선택하면 실제 변화액을 썸네일에서 모두 공개하기보다 '6개월 새 00억 올랐다', '6개월 새 00억 빠졌다'처럼 짧게 궁금증을 남기는 방식을 기본으로 할 것.
+- 가격 변화가 크지 않고 거래량 증가가 훨씬 강하면 '거래가 다시 몰렸다', '거래량이 눈에 띄게 늘었다'처럼 거래 중심으로 갈 것.
+- 가격 변화와 거래 증가가 모두 강하면 제목에서는 두 요소를 함께 사용할 수 있지만, 썸네일은 가장 강한 핵심 1개를 짧게 보여줄 것.
+- 거래 감소가 가장 강하면 '거래가 눈에 띄게 줄었다'처럼 사실 중심으로 표현할 것.
+- '사람들이 관심을 갖기 시작했다'처럼 거래량만으로 심리나 의도를 추정하지 말 것.
+- 제목과 썸네일은 반드시 같은 핵심 축을 공유할 것. 문구를 완전히 똑같이 복사할 필요는 없다.
+- 가격·거래 변화가 모두 뚜렷하지 않을 때만 범용 질문형이나 보합·관망형을 사용할 것.
 - 숫자와 기간은 제공된 데이터만 사용하고 임의로 만들지 말 것.
-- 같은 문구 패턴이 여러 단지에서 연속 반복되지 않도록 자연스럽게 변형할 것.
 - 모바일에서 한 번에 읽히도록 짧고 강하게 작성할 것.
 
 [이미지 제작 기준]
@@ -367,6 +382,7 @@ function makeBodyPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], recomm
     : null;
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
   const lastTradeCount = lastMonthly?.tradeCount ?? null;
+  const sharedHook = buildThumbnailHook(monthlyStats, data.question.trim() || recommendedAngle || "최근 실거래 흐름");
   const today = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -388,7 +404,8 @@ ${today}
 입주년도: ${value(data.moveIn)}
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
-이번 글의 핵심 관점: ${value(recommendedAngle || data.question, "최근 실거래 흐름")}
+이번 글의 핵심 관점: ${value(sharedHook, "최근 실거래 흐름")}
+제목·썸네일 공통 핵심 축: ${value(sharedHook, "최근 실거래 흐름")}
 
 [최근 6개월 실거래 데이터]
 ${monthlyLines}
@@ -417,14 +434,20 @@ ${monthlyLines}
 - 제목은 단지명을 맨 앞 또는 제목 초반에 반드시 넣을 것
 - 네이버 모바일에서 한눈에 읽히도록 가능하면 32자 이내로 압축하고, 긴 단지명 때문에 필요한 경우에도 최대 38자를 넘기지 말 것
 - 내부적으로 제목 후보 5개를 비교한 뒤 가장 강한 1개만 최종 출력하고 후보는 절대 보여주지 말 것
-- 최근 6개월 월 대표값 변화액이 0.7억 이상이거나 변화율 절대값이 8% 이상이면 일반 질문형보다 숫자형 후킹을 우선할 것
-- 가격 변화가 크고 거래량도 증가했다면 '가격 숫자 1개 + 거래 변화'를 함께 묶는 제목을 우선 검토할 것
-- '최근 6개월 가격은 얼마나 움직였을까?', '요즘 얼마에 거래될까?', '최근 거래가 왜 늘었을까?' 같은 범용 문구를 제목에 그대로 반복하지 말 것
+- 먼저 최근 6개월 데이터와 최신 확인 정보를 보고 가장 강한 핵심 유형 1개를 선택할 것
+- 기본 유형은 가격상승형, 가격하락형, 거래량급증형, 거래감소형, 가격+거래형, 신고가·고점형, 재건축·정비사업형, 신축·입주형, 보합·관망형으로 검토할 것
+- 최근 6개월 월 대표값 변화액이 0.7억 이상이거나 변화율 절대값이 8% 이상이면 가격형을 우선 검토할 것
+- 가격형 제목은 실제 변화액을 모두 공개하기보다 '6개월 새 00억 올랐다', '6개월 새 00억 빠졌다'처럼 핵심 숫자를 가려 클릭 이유를 남기는 방식을 우선 검토할 것
+- 가격 변화가 크지 않고 거래량 증가가 훨씬 강하면 거래량형을 우선하고 '거래가 몰렸다', '거래가 다시 늘었다'처럼 사실 중심으로 쓸 것
+- 가격 변화와 거래량 증가가 모두 강하면 가격+거래형으로 묶어 제목에서 두 신호를 함께 활용할 수 있을 것
+- 거래량만으로 '사람들이 관심을 많이 갖는다' 같은 심리·의도를 사실처럼 단정하지 말 것
+- 신고가·정비사업·신축 입주가 더 강한 포인트라면 실제 확인된 정보에 한해 해당 유형을 선택할 수 있을 것
+- 제목과 썸네일은 반드시 같은 핵심 축을 공유할 것. 제목은 '단지명 + 핵심 변화 + 보조 후킹', 썸네일은 같은 핵심을 더 짧고 크게 표현할 것
 - '왜', '이유', '까닭'은 실제 확인된 원인이 있을 때만 단정적으로 사용할 것
-- 원인이 완전히 확인되지 않았다면 '배경은?', '무엇이 달라졌나', '거래 증가도 이어질까'처럼 열어 둔 표현을 사용할 것
+- 원인이 완전히 확인되지 않았다면 '배경은?', '무엇이 달라졌나', '이어질까'처럼 열어 둔 표현을 사용할 것
 - 제목에서 최근 실거래가 1건과 월 대표값을 혼합해 하나의 가격처럼 표현하지 말 것
-- 같은 제목 패턴이 여러 단지에서 반복되지 않도록 숫자형·거래량형·비교형·변화형을 번갈아 검토할 것
-- 직전 발행글과 같은 문장 구조가 반복되지 않도록 어순과 후킹 방식을 자연스럽게 바꿀 것
+- 모든 단지에 '6개월 새 00억 올랐다'를 반복하지 말고 실제로 가장 강한 데이터 유형에 따라 제목 구조를 바꿀 것
+- 직전 발행글과 같은 어순과 후킹 방식을 연속해서 반복하지 말 것
 - 예시 문구를 그대로 복사하지 말고 해당 단지 데이터에 맞춰 새로 작성할 것
 - 네이버 모바일에서 읽기 쉽게 본문은 '한 문장 = 한 문단'을 기본으로 작성할 것
 - 일반 본문 문장과 다음 문장 사이에는 네이버 블로그에 붙여넣어도 간격이 유지되도록 '스페이스바 1칸이 들어간 빈 줄'을 반드시 넣을 것
