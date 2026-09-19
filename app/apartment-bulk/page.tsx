@@ -946,6 +946,8 @@ export default function ApartmentBulkPage() {
   const [pricePromptCopied, setPricePromptCopied] = useState(false);
   const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
+  const [naverPasteText, setNaverPasteText] = useState("");
+  const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
@@ -1157,6 +1159,36 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  function normalizeForNaver(raw: string) {
+    const cleaned = raw
+      .replace(/\r\n?/g, "\n")
+      .replace(/^:::writing[^\n]*$/gim, "")
+      .replace(/^:::\s*$/gim, "")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/__(.*?)__/g, "$1")
+      .replace(/\\#/g, "#")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    return cleaned.join("\r\n\r\n");
+  }
+
+  async function copyNaverPlainText() {
+    const normalized = normalizeForNaver(naverPasteText);
+    if (!normalized) {
+      setNaverCopyMessage("ChatGPT 최종 글을 먼저 붙여넣어 주세요.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(normalized);
+      setNaverCopyMessage("✅ 네이버용 순수텍스트로 복사했습니다. 스마트에디터 ONE에 바로 붙여넣으세요.");
+    } catch {
+      setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+    }
+  }
+
   async function handleMap(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1311,6 +1343,30 @@ export default function ApartmentBulkPage() {
             {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
           </section>
 
+          <section className={styles.promptSection}>
+            <div className={styles.promptHead}>
+              <div>
+                <b>📋 5. 네이버용 본문 정리 · 복사</b>
+                <span>ChatGPT 최종 글을 아래에 붙여넣으면 외부 HTML 없이 순수 텍스트로 정리하고, 모든 줄 사이를 한 줄씩 띄워 복사합니다.</span>
+              </div>
+            </div>
+            <textarea
+              className={styles.promptBoxCompact}
+              value={naverPasteText}
+              onChange={(e) => {
+                setNaverPasteText(e.target.value);
+                setNaverCopyMessage("");
+              }}
+              placeholder="ChatGPT에서 완성된 제목 + 본문 + 태그를 여기에 붙여넣으세요."
+            />
+            <div className={styles.promptActionsCompact}>
+              <button type="button" onClick={() => void copyNaverPlainText()}>
+                네이버용 순수텍스트 복사
+              </button>
+            </div>
+            {naverCopyMessage && <div className={styles.mapCopyNotice}>{naverCopyMessage}</div>}
+          </section>
+
           <details className={styles.advancedDetails}>
             <summary>이미지 · 본문 요청서 확인 · 복사</summary>
             <div className={styles.advancedBody}>
@@ -1453,7 +1509,8 @@ export default function ApartmentBulkPage() {
           <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
           <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
           <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
-          <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
+          <div className={styles.templateItem}><span>04</span><div><b>네이버용 본문 복사</b><small>ChatGPT 결과 붙여넣기 → 순수 텍스트 정리 → 네이버에 붙여넣기</small></div></div>
+          <div className={styles.note}><b>최종 흐름</b><p>본문은 마지막에 네이버용 순수텍스트 복사를 거쳐 외부 HTML을 제거한 뒤 스마트에디터 ONE에 붙여넣습니다.</p></div>
         </aside>
       </section>
 
