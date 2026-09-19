@@ -21,6 +21,10 @@ type Point = { x: number; y: number } | null;
 type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
+type NaverBlock = {
+  type: "title" | "subheading" | "body" | "image" | "tags";
+  text: string;
+};
 type PhotoCandidate = {
   title: string;
   imageUrl: string;
@@ -152,6 +156,105 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 
 function dataUrlBase64(dataUrl: string) {
   return dataUrl.split(",")[1] || "";
+}
+
+function cleanNaverLine(line: string) {
+  return line
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^\*\*(.*?)\*\*$/, "$1")
+    .replace(/^__(.*?)__$/, "$1")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/\\#/g, "#")
+    .trim();
+}
+
+function parseNaverBlog(raw: string): NaverBlock[] {
+  const lines = raw
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) =>
+      line &&
+      !/^:::writing\b/i.test(line) &&
+      line !== ":::" &&
+      !/^---option\b/i.test(line)
+    );
+
+  if (!lines.length) return [];
+
+  const blocks: NaverBlock[] = [];
+  let firstContent = true;
+
+  for (const original of lines) {
+    const line = cleanNaverLine(original);
+    if (!line) continue;
+
+    if (firstContent) {
+      blocks.push({ type: "title", text: line });
+      firstContent = false;
+      continue;
+    }
+
+    const hashtagCount = (line.match(/#[^\s#]+/g) || []).length;
+    if (hashtagCount >= 2 && line.startsWith("#")) {
+      blocks.push({ type: "tags", text: line });
+      continue;
+    }
+
+    if (/^\[이미지\s*\d+/i.test(line)) {
+      blocks.push({ type: "image", text: line });
+      continue;
+    }
+
+    const markdownHeading = /^#{2,6}\s+/.test(original);
+    const wholeBold = /^(\*\*|__)[\s\S]+\1$/.test(original);
+    const emojiHeading = /^[🏠📊🚉🔎✅📌]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
+
+    if (markdownHeading || wholeBold || emojiHeading) {
+      blocks.push({ type: "subheading", text: line });
+      continue;
+    }
+
+    blocks.push({ type: "body", text: line });
+  }
+
+  return blocks;
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function naverPlainText(blocks: NaverBlock[]) {
+  return blocks.map((block) => block.text).join("\r\n \r\n");
+}
+
+function naverRichHtml(blocks: NaverBlock[]) {
+  const font = "'Nanum Gothic','Noto Sans KR','Apple SD Gothic Neo',Arial,sans-serif";
+  const blockHtml = blocks.map((block) => {
+    const safe = escapeHtml(block.text);
+    if (block.type === "title") {
+      return `<div style="font-family:${font};font-size:20pt;line-height:1.5;font-weight:700;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "subheading") {
+      return `<div style="font-family:${font};font-size:18pt;line-height:1.55;font-weight:700;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "tags") {
+      return `<div style="font-family:${font};font-size:13.5pt;line-height:1.6;font-weight:400;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "image") {
+      return `<div style="font-family:${font};font-size:15pt;line-height:1.6;font-weight:600;margin:0;">${safe}</div>`;
+    }
+    return `<div style="font-family:${font};font-size:15pt;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
+  });
+
+  const spacer = `<div style="font-family:${font};font-size:15pt;line-height:1.7;margin:0;"><br></div>`;
+  return `<div>${blockHtml.join(spacer)}</div>`;
 }
 
 function drawBrand(ctx: CanvasRenderingContext2D, x: number, y: number, dark = false) {
@@ -945,6 +1048,8 @@ export default function ApartmentBulkPage() {
   const [pricePromptCopied, setPricePromptCopied] = useState(false);
   const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
+  const [finalBlogText, setFinalBlogText] = useState("");
+  const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
@@ -953,6 +1058,7 @@ export default function ApartmentBulkPage() {
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
   const bodyPrompt = useMemo(() => makeBodyPrompt(data, monthlyStats, recommendedAngle), [data, monthlyStats, recommendedAngle]);
+  const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
 
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
@@ -1156,6 +1262,51 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function copyNaverRichText() {
+    if (!naverBlocks.length) {
+      setNaverCopyMessage("ChatGPT 완성글을 먼저 붙여넣어 주세요.");
+      return;
+    }
+
+    const plain = naverPlainText(naverBlocks);
+    const html = naverRichHtml(naverBlocks);
+
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([plain], { type: "text/plain" }),
+          }),
+        ]);
+        setNaverCopyMessage("✅ 서식 포함 전체복사 완료 · 네이버에 Ctrl+V 하세요.");
+      } else {
+        await navigator.clipboard.writeText(plain);
+        setNaverCopyMessage("ℹ️ 브라우저 제한으로 한줄띄기 텍스트로 복사했습니다.");
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(plain);
+        setNaverCopyMessage("ℹ️ 서식 복사가 제한되어 한줄띄기 텍스트로 복사했습니다.");
+      } catch {
+        setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+      }
+    }
+  }
+
+  async function copyNaverSafeText() {
+    if (!naverBlocks.length) {
+      setNaverCopyMessage("ChatGPT 완성글을 먼저 붙여넣어 주세요.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(naverPlainText(naverBlocks));
+      setNaverCopyMessage("✅ 한줄띄기 안전복사 완료 · 폰트는 네이버 기본 설정을 사용합니다.");
+    } catch {
+      setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+    }
+  }
+
   async function handleMap(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1308,6 +1459,70 @@ export default function ApartmentBulkPage() {
             </div>
 
             {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
+          </section>
+
+          <section className={styles.naverEditor}>
+            <div className={styles.naverEditorHead}>
+              <div>
+                <p className={styles.eyebrow}>NAVER FINAL COPY</p>
+                <h2>5. 네이버 최종 편집 · 전체복사</h2>
+                <span>ChatGPT 완성글을 붙여넣으면 제목 20pt · 소제목 18pt · 본문 15pt · 태그 13~14pt와 한 줄 띄기를 자동 적용합니다.</span>
+              </div>
+            </div>
+
+            <div className={styles.naverEditorGrid}>
+              <div className={styles.naverInputPane}>
+                <b>① ChatGPT 완성글 붙여넣기</b>
+                <textarea
+                  className={styles.naverInput}
+                  value={finalBlogText}
+                  onChange={(e) => {
+                    setFinalBlogText(e.target.value);
+                    setNaverCopyMessage("");
+                  }}
+                  placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요."
+                />
+              </div>
+
+              <div className={styles.naverPreviewPane}>
+                <div className={styles.naverPreviewHead}>
+                  <b>② 네이버 붙여넣기 미리보기</b>
+                  <span>{naverBlocks.length ? `${naverBlocks.length}개 블록 자동 인식` : "완성글을 붙여넣으면 미리보기가 나타납니다."}</span>
+                </div>
+                <div className={styles.naverPreview}>
+                  {naverBlocks.length ? naverBlocks.map((block, index) => (
+                    <div key={index}>
+                      <div
+                        className={
+                          block.type === "title" ? styles.naverTitle :
+                          block.type === "subheading" ? styles.naverSubheading :
+                          block.type === "tags" ? styles.naverTags :
+                          block.type === "image" ? styles.naverImageLine :
+                          styles.naverBody
+                        }
+                      >
+                        {block.text}
+                      </div>
+                      {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
+                    </div>
+                  )) : (
+                    <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.naverCopyActions}>
+              <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
+                ③ 서식 포함 전체복사
+              </button>
+              <button type="button" onClick={() => void copyNaverSafeText()}>
+                한줄띄기 안전복사
+              </button>
+              <span>기본은 서식 포함 전체복사 → 네이버 Ctrl+V</span>
+            </div>
+
+            {naverCopyMessage && <div className={styles.naverCopyNotice}>{naverCopyMessage}</div>}
           </section>
 
           <details className={styles.advancedDetails}>
