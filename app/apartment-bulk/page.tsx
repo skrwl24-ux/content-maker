@@ -4,6 +4,8 @@ import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "r
 import JSZip from "jszip";
 import styles from "./page.module.css";
 
+type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
+
 type ApartmentData = {
   name: string;
   region: string;
@@ -15,6 +17,7 @@ type ApartmentData = {
   station: string;
   locationLine: string;
   question: string;
+  thumbnailTone: ThumbnailTone;
 };
 
 type Point = { x: number; y: number } | null;
@@ -66,6 +69,7 @@ const SAMPLE: ApartmentData = {
   station: "수리산역",
   locationLine: "수리산역·학교·공원을 가까이 누리는 생활권",
   question: "",
+  thumbnailTone: "auto",
 };
 
 const FONT = 'Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif';
@@ -324,10 +328,26 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
     ? (delta! / first.medianPrice) * 100
     : null;
   const userMainCopy = data.question.trim();
+  const toneLabel: Record<ThumbnailTone, string> = {
+    auto: "자동 추천",
+    standard: "정석형",
+    hook: "후킹형",
+    humor: "유머형",
+  };
+  const toneInstruction: Record<ThumbnailTone, string> = {
+    auto: "정석형·후킹형·유머형 3가지를 내부적으로 비교한 뒤 가장 잘 맞는 1픽을 선택할 것.",
+    standard: "정석형만 사용. 데이터가 바로 이해되는 안정적이고 신뢰감 있는 문구를 선택할 것.",
+    hook: "후킹형만 사용. 실제 데이터에 근거한 놀람·의문·반전 표현으로 클릭을 유도하되 과장하지 말 것.",
+    humor: "유머형만 사용. 부동산 신뢰감을 해치지 않는 선에서 가볍고 재치 있는 문구를 선택할 것.",
+  };
   const mainCopyBlock = userMainCopy
     ? `\n[사용자 지정 메인 문구]\n${userMainCopy}\n- 사용자가 직접 입력한 문구이므로 이 문구를 우선 사용하되, 숫자나 사실이 제공 데이터와 충돌하면 데이터에 맞게 최소 수정할 것.\n`
     : "";
-  const selectedCopyGuide = userMainCopy || "정석형·후킹형·유머형 3가지를 내부적으로 비교해 고른 최종 1픽";
+  const selectedCopyGuide = userMainCopy
+    ? userMainCopy
+    : data.thumbnailTone === "auto"
+      ? "정석형·후킹형·유머형 3가지를 내부적으로 비교해 고른 최종 1픽"
+      : `${toneLabel[data.thumbnailTone]} 톤으로 고른 최종 1픽`;
 
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
 
@@ -352,11 +372,16 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
 최근 유효월 거래량: ${last ? last.tradeCount + "건" : "확인 필요"}
 
 ${mainCopyBlock}
+[썸네일 톤 선택]
+${toneLabel[data.thumbnailTone]}
+${toneInstruction[data.thumbnailTone]}
+
 [썸네일 메인 문구 생성 규칙]
 - 사용자가 메인 문구를 직접 입력했다면 그 문구를 우선 사용한다.
-- 입력값이 비어 있으면 GPT가 최근 6개월 가격·거래 데이터를 먼저 분석해 썸네일 메인 문구를 자동 선정할 것.
-- 내부적으로 반드시 3가지 톤을 비교할 것: ① 정석형 = 데이터가 바로 이해되는 안정형 ② 후킹형 = 놀람·의문·반전으로 클릭을 유도하는 형 ③ 유머형 = 부동산 신뢰감을 해치지 않는 선에서 살짝 재치 있는 형.
-- 3가지 후보를 사용자에게 나열하지 말고, 해당 단지 데이터와 전체 부동산 콘텐츠 톤에 가장 잘 맞는 1픽만 최종 이미지에 사용할 것.
+- 입력값이 비어 있으면 위 [썸네일 톤 선택]을 최우선으로 따를 것.
+- 자동 추천이면 반드시 3가지 톤을 내부 비교할 것: ① 정석형 = 데이터가 바로 이해되는 안정형 ② 후킹형 = 놀람·의문·반전으로 클릭을 유도하는 형 ③ 유머형 = 부동산 신뢰감을 해치지 않는 선에서 살짝 재치 있는 형.
+- 정석형·후킹형·유머형 중 하나를 직접 선택했다면 다른 톤과 비교하지 말고 선택한 톤 안에서 가장 좋은 문구를 만들 것.
+- 후보를 사용자에게 나열하지 말고 최종 1픽만 이미지에 사용할 것.
 - 가격 상승·하락, 가격대 전환, 저점 반등, 고점 접근, 거래량 급증·감소, 가격과 거래량의 엇갈림 중 가장 눈에 띄는 장면을 우선 찾을 것.
 - '6개월 새 00억 올랐다' 같은 하나의 고정 문법을 기본값으로 반복하지 말 것.
 - 가격 변화가 강하더라도 상승액만 기계적으로 요약하지 말고 '4억대였는데 5억 넘었다', '저점 찍고 다시 5억대'처럼 사람이 한눈에 이해하는 장면형 표현도 적극 검토할 것.
@@ -1111,6 +1136,7 @@ export default function ApartmentBulkPage() {
           station: "",
           locationLine: "",
           question: "",
+          thumbnailTone: "auto",
         };
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
@@ -1396,7 +1422,18 @@ export default function ApartmentBulkPage() {
             <Field label="입주년도" value={data.moveIn} onChange={(v) => update("moveIn", v)} />
             <Field label="가까운 주요 역" value={data.station} onChange={(v) => update("station", v)} />
           </div>
-          <Field label="썸네일 메인 문구 (비워두면 GPT 추천)" value={data.question} onChange={(v) => update("question", v)} />
+          <SelectField
+            label="썸네일 문구 톤"
+            value={data.thumbnailTone}
+            onChange={(v) => update("thumbnailTone", v)}
+            options={[
+              { value: "auto", label: "자동 추천 · 정석/후킹/유머 중 1픽" },
+              { value: "standard", label: "정석형 · 깔끔하고 신뢰감 있게" },
+              { value: "hook", label: "후킹형 · 놀람/의문/반전" },
+              { value: "humor", label: "유머형 · 재치 한 스푼" },
+            ]}
+          />
+          <Field label="썸네일 메인 문구 (비워두면 선택 톤으로 GPT 추천)" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
           {(nearbyMessage || autoMapMessage) && (
@@ -1686,6 +1723,29 @@ export default function ApartmentBulkPage() {
 
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label className={styles.field}><span>{label}</span><input value={value} onChange={(e) => onChange(e.target.value)} /></label>;
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: Array<{ value: T; label: string }>;
+}) {
+  return (
+    <label className={styles.field}>
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function OutputCard({ title, size, src, filename }: { title: string; size: string; src: string; filename: string }) {
