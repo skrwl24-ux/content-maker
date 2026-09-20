@@ -15,10 +15,44 @@ type ArticleThemeChoice = {
 };
 
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
+type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
+type WorkAttachment = {
+  name: string;
+  type: string;
+  dataUrl: string;
+};
 type DailySlot = {
   id: number;
   type: DailyContentType;
   done: boolean;
+  workId: string;
+};
+type DailyWorkSnapshot = {
+  workId: string;
+  dateKey: string;
+  slotId: number;
+  contentType: DailyContentType;
+  topic: string;
+  materials: string;
+  body: string;
+  imageNotes: string;
+  attachments: WorkAttachment[];
+  progress: WorkProgress;
+  updatedAt: string;
+  bulk?: {
+    data: ApartmentData;
+    monthlyStats: MonthlyStat[];
+    mapDataUrl: string;
+    aptPoint: Point;
+    stationPoint: Point;
+    outputs: Outputs | null;
+    selectedComplexName: string;
+    recommendedAngle: string;
+    articleThemeMode: ArticleThemeMode;
+    autoMapGenerated: boolean;
+    autoMapMessage: string;
+    nearbyMessage: string;
+  };
 };
 
 type ApartmentData = {
@@ -97,14 +131,73 @@ const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }
 };
 
 const DEFAULT_DAILY_SLOTS: DailySlot[] = [
-  { id: 1, type: "bulk", done: false },
-  { id: 2, type: "bulk", done: false },
-  { id: 3, type: "bulk", done: false },
-  { id: 4, type: "top3", done: false },
-  { id: 5, type: "bulk", done: false },
-  { id: 6, type: "tip", done: false },
-  { id: 7, type: "power", done: false },
+  { id: 1, type: "bulk", done: false, workId: "" },
+  { id: 2, type: "bulk", done: false, workId: "" },
+  { id: 3, type: "bulk", done: false, workId: "" },
+  { id: 4, type: "top3", done: false, workId: "" },
+  { id: 5, type: "bulk", done: false, workId: "" },
+  { id: 6, type: "tip", done: false, workId: "" },
+  { id: 7, type: "power", done: false, workId: "" },
 ];
+
+const WORK_DB_NAME = "jibssuk-apartment-work-v1";
+const WORK_STORE_NAME = "dailyWorks";
+
+function createWorkId(dateKey: string, slotId: number) {
+  const compact = dateKey.replace(/-/g, "");
+  const suffix = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return `jibssuk-${compact}-${String(slotId).padStart(2, "0")}-${suffix}`;
+}
+
+function makeDailySlots(dateKey: string) {
+  return DEFAULT_DAILY_SLOTS.map((slot) => ({
+    ...slot,
+    workId: createWorkId(dateKey, slot.id),
+  }));
+}
+
+function openWorkDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(WORK_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(WORK_STORE_NAME)) {
+        db.createObjectStore(WORK_STORE_NAME, { keyPath: "workId" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("작업 저장소를 열지 못했습니다."));
+  });
+}
+
+async function readWorkSnapshot(workId: string): Promise<DailyWorkSnapshot | null> {
+  const db = await openWorkDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(WORK_STORE_NAME, "readonly");
+    const request = tx.objectStore(WORK_STORE_NAME).get(workId);
+    request.onsuccess = () => resolve((request.result as DailyWorkSnapshot | undefined) || null);
+    request.onerror = () => reject(request.error || new Error("작업을 불러오지 못했습니다."));
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function writeWorkSnapshot(snapshot: DailyWorkSnapshot) {
+  const db = await openWorkDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(WORK_STORE_NAME, "readwrite");
+    tx.objectStore(WORK_STORE_NAME).put(snapshot);
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error || new Error("작업을 저장하지 못했습니다."));
+    };
+  });
+}
 
 const FONT = 'Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif';
 
@@ -1269,6 +1362,17 @@ export default function ApartmentBulkPage() {
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const [dailyDateKey, setDailyDateKey] = useState("");
   const [dailySlots, setDailySlots] = useState<DailySlot[]>(DEFAULT_DAILY_SLOTS);
+  const [activeWorkId, setActiveWorkId] = useState("");
+  const [activeWorkType, setActiveWorkType] = useState<DailyContentType | null>(null);
+  const [workTopic, setWorkTopic] = useState("");
+  const [workMaterials, setWorkMaterials] = useState("");
+  const [workBody, setWorkBody] = useState("");
+  const [workImageNotes, setWorkImageNotes] = useState("");
+  const [workAttachments, setWorkAttachments] = useState<WorkAttachment[]>([]);
+  const [workProgress, setWorkProgress] = useState<WorkProgress>("not_started");
+  const [startedWorkIds, setStartedWorkIds] = useState<string[]>([]);
+  const [workSaveMessage, setWorkSaveMessage] = useState("");
+  const workHydratingRef = useRef(false);
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
@@ -1287,6 +1391,10 @@ export default function ApartmentBulkPage() {
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
   const nextDailySlot = useMemo(() => dailySlots.find((slot) => !slot.done) || null, [dailySlots]);
+  const activeWorkSlot = useMemo(
+    () => dailySlots.find((slot) => slot.workId && slot.workId === activeWorkId) || null,
+    [dailySlots, activeWorkId]
+  );
 
   useEffect(() => {
     const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -1306,15 +1414,66 @@ export default function ApartmentBulkPage() {
           id: index + 1,
           type: validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type,
           done: Boolean(slot?.done),
+          workId: typeof slot?.workId === "string" && slot.workId
+            ? slot.workId
+            : createWorkId(dateKey, index + 1),
         }));
         setDailySlots(normalized);
+        window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(normalized));
       } else {
-        setDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
+        const next = makeDailySlots(dateKey);
+        setDailySlots(next);
+        window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(next));
       }
+      const indexRaw = window.localStorage.getItem("apartment-bulk-work-index-v1:" + dateKey);
+      const index = indexRaw ? JSON.parse(indexRaw) : [];
+      setStartedWorkIds(Array.isArray(index) ? index.filter((item): item is string => typeof item === "string") : []);
     } catch {
-      setDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
+      setDailySlots(makeDailySlots(dateKey));
+      setStartedWorkIds([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!dailyDateKey || activeWorkId || !dailySlots.some((slot) => slot.workId)) return;
+    try {
+      const lastActive = window.localStorage.getItem("apartment-bulk-active-work-v1:" + dailyDateKey) || "";
+      const slot = dailySlots.find((item) => item.workId === lastActive);
+      if (slot) void openDailyWork(slot, false);
+    } catch {
+      // 자동 이어하기가 실패해도 작업판은 그대로 사용합니다.
+    }
+  }, [dailyDateKey, dailySlots, activeWorkId]);
+
+  useEffect(() => {
+    if (!activeWorkId || !activeWorkType || workHydratingRef.current) return;
+    const timer = window.setTimeout(() => {
+      void persistActiveWork();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeWorkId,
+    activeWorkType,
+    workTopic,
+    workMaterials,
+    workBody,
+    workImageNotes,
+    workAttachments,
+    workProgress,
+    data,
+    monthlyStats,
+    mapDataUrl,
+    aptPoint,
+    stationPoint,
+    outputs,
+    selectedComplexName,
+    recommendedAngle,
+    articleThemeMode,
+    autoMapGenerated,
+    autoMapMessage,
+    nearbyMessage,
+    finalBlogText,
+  ]);
 
   useEffect(() => {
     try {
@@ -1455,6 +1614,7 @@ export default function ApartmentBulkPage() {
 
   function updateDailyType(id: number, type: DailyContentType) {
     saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, type } : slot));
+    if (activeWorkSlot?.id === id) setActiveWorkType(type);
   }
 
   function toggleDailyDone(id: number) {
@@ -1462,7 +1622,180 @@ export default function ApartmentBulkPage() {
   }
 
   function resetDailyBoard() {
-    saveDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
+    const next = makeDailySlots(dailyDateKey || new Date().toISOString().slice(0, 10));
+    saveDailySlots(next);
+    setActiveWorkId("");
+    setActiveWorkType(null);
+    setWorkTopic("");
+    setWorkMaterials("");
+    setWorkBody("");
+    setWorkImageNotes("");
+    setWorkAttachments([]);
+    setWorkProgress("not_started");
+    setWorkSaveMessage("");
+    setStartedWorkIds([]);
+    if (dailyDateKey) {
+      try {
+        window.localStorage.removeItem("apartment-bulk-work-index-v1:" + dailyDateKey);
+        window.localStorage.removeItem("apartment-bulk-active-work-v1:" + dailyDateKey);
+      } catch {
+        // 초기화는 화면 기준으로 계속 진행합니다.
+      }
+    }
+  }
+
+  function markWorkStarted(workId: string) {
+    if (!dailyDateKey || !workId) return;
+    const next = Array.from(new Set([...startedWorkIds, workId]));
+    setStartedWorkIds(next);
+    try {
+      window.localStorage.setItem("apartment-bulk-work-index-v1:" + dailyDateKey, JSON.stringify(next));
+      window.localStorage.setItem("apartment-bulk-active-work-v1:" + dailyDateKey, workId);
+    } catch {
+      // 인덱스 저장 실패는 본문 작업 저장을 막지 않습니다.
+    }
+  }
+
+  function buildActiveWorkSnapshot(): DailyWorkSnapshot | null {
+    if (!activeWorkId || !activeWorkType) return null;
+    const slot = dailySlots.find((item) => item.workId === activeWorkId);
+    if (!slot) return null;
+    const isBulk = activeWorkType === "bulk";
+    return {
+      workId: activeWorkId,
+      dateKey: dailyDateKey,
+      slotId: slot.id,
+      contentType: activeWorkType,
+      topic: workTopic,
+      materials: workMaterials,
+      body: isBulk ? finalBlogText : workBody,
+      imageNotes: workImageNotes,
+      attachments: workAttachments,
+      progress: workProgress,
+      updatedAt: new Date().toISOString(),
+      bulk: isBulk ? {
+        data,
+        monthlyStats,
+        mapDataUrl,
+        aptPoint,
+        stationPoint,
+        outputs,
+        selectedComplexName,
+        recommendedAngle,
+        articleThemeMode,
+        autoMapGenerated,
+        autoMapMessage,
+        nearbyMessage,
+      } : undefined,
+    };
+  }
+
+  async function persistActiveWork() {
+    const snapshot = buildActiveWorkSnapshot();
+    if (!snapshot || workHydratingRef.current) return;
+    try {
+      setWorkSaveMessage("저장 중…");
+      await writeWorkSnapshot(snapshot);
+      markWorkStarted(snapshot.workId);
+      setWorkSaveMessage("자동 저장됨");
+    } catch (error) {
+      setWorkSaveMessage(error instanceof Error ? "저장 실패 · " + error.message : "저장 실패");
+    }
+  }
+
+  function resetBulkWorkspace() {
+    setData(SAMPLE);
+    setMonthlyStats([]);
+    setMapDataUrl("");
+    setAptPoint(null);
+    setStationPoint(null);
+    setOutputs(null);
+    setSelectedComplexName("");
+    setRecommendedAngle("");
+    setArticleThemeMode("auto");
+    setAutoMapGenerated(false);
+    setAutoMapMessage("");
+    setNearbyMessage("");
+    setFinalBlogText("");
+  }
+
+  async function openDailyWork(slot: DailySlot, scroll = true) {
+    if (!slot.workId) return;
+    if (activeWorkId && activeWorkId !== slot.workId) {
+      await persistActiveWork();
+    }
+
+    workHydratingRef.current = true;
+    setWorkSaveMessage("작업 불러오는 중…");
+    try {
+      const saved = await readWorkSnapshot(slot.workId);
+      setActiveWorkId(slot.workId);
+      setActiveWorkType(slot.type);
+
+      if (saved) {
+        setWorkTopic(saved.topic || "");
+        setWorkMaterials(saved.materials || "");
+        setWorkBody(saved.body || "");
+        setWorkImageNotes(saved.imageNotes || "");
+        setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
+        setWorkProgress(saved.progress || "preparing");
+
+        if (slot.type === "bulk" && saved.bulk) {
+          setData(saved.bulk.data || SAMPLE);
+          setMonthlyStats(saved.bulk.monthlyStats || []);
+          setMapDataUrl(saved.bulk.mapDataUrl || "");
+          setAptPoint(saved.bulk.aptPoint || null);
+          setStationPoint(saved.bulk.stationPoint || null);
+          setOutputs(saved.bulk.outputs || null);
+          setSelectedComplexName(saved.bulk.selectedComplexName || "");
+          setRecommendedAngle(saved.bulk.recommendedAngle || "");
+          setArticleThemeMode(saved.bulk.articleThemeMode || "auto");
+          setAutoMapGenerated(Boolean(saved.bulk.autoMapGenerated));
+          setAutoMapMessage(saved.bulk.autoMapMessage || "");
+          setNearbyMessage(saved.bulk.nearbyMessage || "");
+          setFinalBlogText(saved.body || "");
+        } else if (slot.type === "bulk") {
+          resetBulkWorkspace();
+        }
+        markWorkStarted(slot.workId);
+        setWorkSaveMessage("저장된 작업 복원됨");
+      } else {
+        setWorkTopic("");
+        setWorkMaterials("");
+        setWorkBody("");
+        setWorkImageNotes("");
+        setWorkAttachments([]);
+        setWorkProgress("preparing");
+        if (slot.type === "bulk") resetBulkWorkspace();
+        markWorkStarted(slot.workId);
+        setWorkSaveMessage("새 작업 시작");
+      }
+    } catch (error) {
+      setActiveWorkId(slot.workId);
+      setActiveWorkType(slot.type);
+      setWorkSaveMessage(error instanceof Error ? "불러오기 실패 · " + error.message : "불러오기 실패");
+    } finally {
+      window.setTimeout(() => {
+        workHydratingRef.current = false;
+        if (scroll) document.getElementById("active-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    }
+  }
+
+  async function addWorkAttachments(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []).slice(0, 4);
+    if (!files.length) return;
+    const converted = await Promise.all(files.map(async (file) => ({
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      dataUrl: await fileToDataUrl(file),
+    })));
+    setWorkAttachments((prev) => [...prev, ...converted].slice(0, 6));
+    e.target.value = "";
+  }
+
+  function removeWorkAttachment(index: number) {
+    setWorkAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   }
 
   async function copyThumbnailPrompt() {
@@ -1713,14 +2046,24 @@ export default function ApartmentBulkPage() {
                    slot.type === "compare" ? "지역·단지 차이를 비교" :
                    "시간을 더 쓰는 주력 콘텐츠"}
                 </small>
+                <code className={styles.dailyWorkId}>{slot.workId || "작업 ID 준비 중"}</code>
               </div>
-              <button
-                type="button"
-                className={slot.done ? styles.dailyUndo : styles.dailyComplete}
-                onClick={() => toggleDailyDone(slot.id)}
-              >
-                {slot.done ? "완료 취소" : "완료"}
-              </button>
+              <div className={styles.dailySlotActions}>
+                <button
+                  type="button"
+                  className={activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
+                  onClick={() => void openDailyWork(slot)}
+                >
+                  {activeWorkId === slot.workId ? "작업 중" : startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
+                </button>
+                <button
+                  type="button"
+                  className={slot.done ? styles.dailyUndo : styles.dailyComplete}
+                  onClick={() => toggleDailyDone(slot.id)}
+                >
+                  {slot.done ? "완료 취소" : "완료"}
+                </button>
+              </div>
             </article>
           ))}
         </div>
@@ -1732,6 +2075,112 @@ export default function ApartmentBulkPage() {
         </div>
       </section>
 
+      {activeWorkId && activeWorkSlot && (
+        <section id="active-work" className={styles.activeWorkPanel}>
+          <div className={styles.activeWorkHead}>
+            <div>
+              <p className={styles.eyebrow}>ACTIVE WORK</p>
+              <h2>{activeWorkSlot.id}번 · {DAILY_TYPE_META[activeWorkType || activeWorkSlot.type].label}</h2>
+              <code>{activeWorkId}</code>
+            </div>
+            <div className={styles.activeWorkMeta}>
+              <select value={workProgress} onChange={(e) => setWorkProgress(e.target.value as WorkProgress)}>
+                <option value="not_started">미시작</option>
+                <option value="preparing">자료 준비</option>
+                <option value="drafting">본문 작성</option>
+                <option value="images">이미지 작업</option>
+                <option value="review">검수</option>
+              </select>
+              <button type="button" onClick={() => void persistActiveWork()}>지금 저장</button>
+              <span>{workSaveMessage || "변경 내용 자동 저장"}</span>
+            </div>
+          </div>
+
+          <div className={styles.workPrepGrid}>
+            <label className={styles.workField}>
+              <span>작업 주제</span>
+              <input
+                data-testid="work-topic"
+                value={workTopic}
+                onChange={(e) => setWorkTopic(e.target.value)}
+                placeholder={activeWorkType === "bulk" ? "예: 산본 퇴계아파트 · 거래량 변화" : "오늘 만들 구체적인 주제를 적어두세요."}
+              />
+            </label>
+            <label className={styles.workField}>
+              <span>자료·근거 메모</span>
+              <textarea
+                data-testid="work-materials"
+                value={workMaterials}
+                onChange={(e) => setWorkMaterials(e.target.value)}
+                placeholder="확인할 자료, 출처, 수치, 비교 기준 등을 저장합니다."
+              />
+            </label>
+          </div>
+
+          {activeWorkType === "bulk" ? (
+            <div className={styles.bulkWorkBridge}>
+              <div>
+                <b>기존 단지 제작 화면과 연결됨</b>
+                <p>아래 단지 데이터·본문·지도·생성 이미지가 이 작업 ID에 독립적으로 자동 저장됩니다.</p>
+              </div>
+              <div className={styles.bulkSaveState}>
+                <span>본문 {finalBlogText.trim() ? "저장됨" : "미작성"}</span>
+                <span>지도 {mapDataUrl ? "저장됨" : "없음"}</span>
+                <span>본문 이미지 {outputs ? "저장됨" : "없음"}</span>
+              </div>
+              <label className={styles.workField}>
+                <span>이미지·검수 메모</span>
+                <textarea value={workImageNotes} onChange={(e) => setWorkImageNotes(e.target.value)} placeholder="외부에서 만든 썸네일이나 수정할 이미지 메모를 적어두세요." />
+              </label>
+            </div>
+          ) : (
+            <div className={styles.prepOnlyPanel}>
+              <div className={styles.prepOnlyNotice}>
+                <b>{DAILY_TYPE_META[activeWorkType || activeWorkSlot.type].label} 준비 화면</b>
+                <span>이번 단계에서는 분석·자동 생성 기능을 추가하지 않고, 주제와 자료를 작업별로 저장합니다.</span>
+              </div>
+              <label className={styles.workField}>
+                <span>본문 초안·구성 메모</span>
+                <textarea
+                  data-testid="work-body"
+                  value={workBody}
+                  onChange={(e) => setWorkBody(e.target.value)}
+                  placeholder="본문 초안, 소제목 구성, ChatGPT 결과 등을 임시 저장할 수 있습니다."
+                />
+              </label>
+              <label className={styles.workField}>
+                <span>이미지 메모</span>
+                <textarea
+                  data-testid="work-image-notes"
+                  value={workImageNotes}
+                  onChange={(e) => setWorkImageNotes(e.target.value)}
+                  placeholder="필요한 이미지 구성이나 제작 메모를 적어두세요."
+                />
+              </label>
+              <div className={styles.workAttachmentBox}>
+                <label>
+                  참고 이미지 저장
+                  <input type="file" accept="image/*" multiple onChange={(e) => void addWorkAttachments(e)} />
+                </label>
+                <span>작업별로 최대 6장까지 브라우저 저장소에 보관합니다.</span>
+              </div>
+              {workAttachments.length > 0 && (
+                <div className={styles.workAttachmentGrid}>
+                  {workAttachments.map((item, index) => (
+                    <div key={item.name + index} className={styles.workAttachmentCard}>
+                      <img src={item.dataUrl} alt={item.name} />
+                      <span>{item.name}</span>
+                      <button type="button" onClick={() => removeWorkAttachment(index)}>삭제</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {(!activeWorkId || activeWorkType === "bulk") && (
       <section className={styles.layout}>
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
@@ -2057,8 +2506,9 @@ export default function ApartmentBulkPage() {
           <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
         </aside>
       </section>
+      )}
 
-      {outputs && (
+      {(!activeWorkId || activeWorkType === "bulk") && outputs && (
         <section id="outputs" className={styles.outputs}>
           <div className={styles.outputHead}>
             <div><p className={styles.eyebrow}>OUTPUT</p><h2>본문 이미지 2장 완성</h2><span>썸네일은 위 ChatGPT 요청서로 만들고, 아래 2장은 블로그 본문에 사용하세요.</span></div>
