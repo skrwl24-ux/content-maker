@@ -379,8 +379,8 @@ ${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구
 function isPreviousStrictBodyPrompt(prompt: string, topic: Topic, slotId: SlotId) {
   if (slotId === "00") return false;
   const info = SLOT_INFO[slotId];
-  return prompt.includes(\`슬롯: \${slotId} · \${info.label}\`) &&
-    prompt.includes(\`글 주제: \${topic.title}\`) &&
+  return prompt.includes(`슬롯: ${slotId} · ${info.label}`) &&
+    prompt.includes(`글 주제: ${topic.title}`) &&
     prompt.includes("- 큰 제목, 질문형 카피, 제목 박스, 리본, 배지, 카드형 설명 문구를 넣지 말 것") &&
     prompt.includes("- 원형 배지·화살표·강조 카피를 여러 개 배치한 광고형 인포그래픽") &&
     prompt.includes("- 과학적 이해에 꼭 필요한 경우에만 짧은 라벨 1~3개 정도 허용");
