@@ -5,6 +5,14 @@ import JSZip from "jszip";
 import styles from "./page.module.css";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
+type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
+type ArticleThemeMode = "auto" | ArticleThemeId;
+type ArticleThemeChoice = {
+  id: ArticleThemeId;
+  label: string;
+  angle: string;
+  score: number;
+};
 
 type ApartmentData = {
   name: string;
@@ -317,7 +325,144 @@ function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼�
   return fallback;
 }
 
-function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
+const ARTICLE_THEME_META: Record<ArticleThemeId, { label: string; angle: string }> = {
+  price: {
+    label: "가격 변화",
+    angle: "6개월 첫 대표값과 최근 대표값의 변화폭·변화율을 중심으로 보되 단순 숫자 나열은 피한다.",
+  },
+  band: {
+    label: "가격대 전환",
+    angle: "몇 억대에서 몇 억대로 가격대가 바뀌었는지와 그 과정의 월별 흐름을 중심으로 본다.",
+  },
+  trade: {
+    label: "거래량 변화",
+    angle: "거래가 유독 몰린 달·줄어든 달을 찾고 가격 흐름과 함께 해석한다. 거래량만으로 심리를 단정하지 않는다.",
+  },
+  mixed: {
+    label: "가격·거래 엇갈림",
+    angle: "가격 방향과 거래량 방향이 서로 다르게 움직였는지를 중심으로 본다.",
+  },
+  rebound: {
+    label: "저점·고점·반등",
+    angle: "6개월 중간 저점 또는 고점 이후 최근 대표값이 어디까지 회복·조정됐는지를 중심으로 본다.",
+  },
+  volatility: {
+    label: "가격 변동성",
+    angle: "월별 대표값의 고저 차이와 출렁임 자체를 핵심 장면으로 잡는다.",
+  },
+  highlow: {
+    label: "6개월 고점·저점 위치",
+    angle: "최근 대표값이 6개월 범위의 고점·저점 중 어디에 가까운지를 중심으로 본다.",
+  },
+  stable: {
+    label: "보합·관망",
+    angle: "큰 방향성보다 좁은 가격 범위와 거래량 변화를 중심으로 차분하게 본다.",
+  },
+};
+
+function analyzeArticleThemes(monthlyStats: MonthlyStat[]): ArticleThemeChoice[] {
+  const valid = monthlyStats.slice(-6).filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
+  const baseScores: Record<ArticleThemeId, number> = {
+    price: 25,
+    band: 5,
+    trade: 15,
+    mixed: 5,
+    rebound: 5,
+    volatility: 10,
+    highlow: 15,
+    stable: 5,
+  };
+
+  if (valid.length < 2) {
+    return (Object.keys(baseScores) as ArticleThemeId[])
+      .map((id) => ({ id, ...ARTICLE_THEME_META[id], score: baseScores[id] }))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const delta = last.medianPrice - first.medianPrice;
+  const rate = first.medianPrice ? (delta / first.medianPrice) * 100 : 0;
+  const prices = valid.map((item) => item.medianPrice);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const minIndex = prices.indexOf(minPrice);
+  const maxIndex = prices.indexOf(maxPrice);
+  const rangeRate = minPrice ? ((maxPrice - minPrice) / minPrice) * 100 : 0;
+
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const completed = valid.filter((item) => !(item.month === currentMonthKey && now.getDate() < lastDayOfMonth));
+  const tradeStats = completed.length ? completed : valid;
+  const tradeCounts = tradeStats.map((item) => item.tradeCount ?? 0);
+  const sortedTrades = [...tradeCounts].sort((a, b) => a - b);
+  const medianTrade = sortedTrades.length
+    ? sortedTrades[Math.floor(sortedTrades.length / 2)]
+    : 0;
+  const firstTrades = tradeStats[0]?.tradeCount ?? 0;
+  const lastTrades = tradeStats[tradeStats.length - 1]?.tradeCount ?? 0;
+  const maxTrades = Math.max(...tradeCounts, 0);
+  const tradeSurge = lastTrades >= 3 && firstTrades > 0 && lastTrades >= firstTrades * 1.6 && lastTrades - firstTrades >= 2;
+  const tradeDrop = firstTrades >= 3 && lastTrades <= Math.max(1, Math.floor(firstTrades * 0.6)) && firstTrades - lastTrades >= 2;
+  const tradeConcentration = maxTrades >= 5 && maxTrades >= Math.max(5, medianTrade * 1.7);
+
+  baseScores.price = 35 + Math.min(35, Math.abs(rate) * 2.4);
+
+  const firstBand = Math.floor(first.medianPrice / 100000000);
+  const lastBand = Math.floor(last.medianPrice / 100000000);
+  if (firstBand !== lastBand) baseScores.band = 88;
+
+  if (tradeSurge || tradeDrop) baseScores.trade = 84;
+  else if (tradeConcentration) baseScores.trade = 72;
+
+  const priceUp = rate >= 4;
+  const priceDown = rate <= -4;
+  if ((priceUp && tradeDrop) || (priceDown && tradeSurge)) baseScores.mixed = 92;
+  else if ((priceUp && lastTrades < firstTrades) || (priceDown && lastTrades > firstTrades)) baseScores.mixed = 70;
+
+  const reboundedFromLow = minIndex > 0 && minIndex < valid.length - 1 && minPrice > 0 && ((last.medianPrice - minPrice) / minPrice) * 100 >= 5;
+  const pulledBackFromHigh = maxIndex > 0 && maxIndex < valid.length - 1 && maxPrice > 0 && ((maxPrice - last.medianPrice) / maxPrice) * 100 >= 4;
+  if (reboundedFromLow || pulledBackFromHigh) baseScores.rebound = 86;
+
+  if (rangeRate >= 12) baseScores.volatility = 82;
+  else if (rangeRate >= 8) baseScores.volatility = 68;
+
+  const nearHigh = maxPrice > 0 && last.medianPrice >= maxPrice * 0.98;
+  const nearLow = minPrice > 0 && last.medianPrice <= minPrice * 1.02;
+  if (nearHigh || nearLow) baseScores.highlow = 74;
+
+  if (Math.abs(rate) <= 3 && rangeRate <= 6) baseScores.stable = 88;
+  else if (Math.abs(rate) <= 5 && rangeRate <= 8) baseScores.stable = 68;
+
+  return (Object.keys(baseScores) as ArticleThemeId[])
+    .map((id) => ({ id, ...ARTICLE_THEME_META[id], score: baseScores[id] }))
+    .sort((a, b) => b.score - a.score);
+}
+
+function selectArticleTheme(
+  monthlyStats: MonthlyStat[],
+  mode: ArticleThemeMode,
+  recentThemes: ArticleThemeId[],
+  recommendedAngle: string
+): ArticleThemeChoice {
+  const candidates = analyzeArticleThemes(monthlyStats);
+  if (mode !== "auto") {
+    const manual = candidates.find((item) => item.id === mode);
+    if (manual) return manual;
+  }
+
+  const recent = new Set(recentThemes.slice(-2));
+  const fresh = candidates.find((item) => item.score >= 60 && !recent.has(item.id));
+  const choice = fresh || candidates.find((item) => !recent.has(item.id)) || candidates[0];
+
+  if (recommendedAngle.trim() && monthlyStats.filter((item) => item.medianPrice != null).length < 2) {
+    return { ...choice, angle: recommendedAngle.trim() };
+  }
+  return choice;
+}
+
+function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], articleTheme: ArticleThemeChoice) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
   const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
@@ -372,6 +517,10 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
 최근 유효월 거래량: ${last ? last.tradeCount + "건" : "확인 필요"}
 
 ${mainCopyBlock}
+[이번 글의 주제 방향]
+주제: ${articleTheme.label}
+관점: ${articleTheme.angle}
+
 [썸네일 톤 선택]
 ${toneLabel[data.thumbnailTone]}
 ${toneInstruction[data.thumbnailTone]}
@@ -382,7 +531,8 @@ ${toneInstruction[data.thumbnailTone]}
 - 자동 추천이면 반드시 3가지 톤을 내부 비교할 것: ① 정석형 = 데이터가 바로 이해되는 안정형 ② 후킹형 = 놀람·의문·반전으로 클릭을 유도하는 형 ③ 유머형 = 부동산 신뢰감을 해치지 않는 선에서 살짝 재치 있는 형.
 - 정석형·후킹형·유머형 중 하나를 직접 선택했다면 다른 톤과 비교하지 말고 선택한 톤 안에서 가장 좋은 문구를 만들 것.
 - 후보를 사용자에게 나열하지 말고 최종 1픽만 이미지에 사용할 것.
-- 가격 상승·하락, 가격대 전환, 저점 반등, 고점 접근, 거래량 급증·감소, 가격과 거래량의 엇갈림 중 가장 눈에 띄는 장면을 우선 찾을 것.
+- 위 [이번 글의 주제 방향]을 우선 반영해 본문과 썸네일이 같은 핵심 이야기를 하게 할 것.
+- 가격 상승·하락, 가격대 전환, 저점 반등, 고점 접근, 거래량 급증·감소, 가격과 거래량의 엇갈림 중 선택된 주제 안에서 가장 눈에 띄는 장면을 찾을 것.
 - '6개월 새 00억 올랐다' 같은 하나의 고정 문법을 기본값으로 반복하지 말 것.
 - 가격 변화가 강하더라도 상승액만 기계적으로 요약하지 말고 '4억대였는데 5억 넘었다', '저점 찍고 다시 5억대'처럼 사람이 한눈에 이해하는 장면형 표현도 적극 검토할 것.
 - 후킹형은 '초원부영, 5억 넘었다고?'처럼 실제 데이터에 근거한 가벼운 놀람·의문형을 사용할 수 있다.
@@ -506,7 +656,12 @@ function makeLocationImagePrompt(data: ApartmentData) {
 }
 
 
-function makeBodyPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], recommendedAngle: string) {
+function makeBodyPrompt(
+  data: ApartmentData,
+  monthlyStats: MonthlyStat[],
+  recommendedAngle: string,
+  articleTheme: ArticleThemeChoice
+) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
   const monthlyLines = monthly.length
@@ -547,6 +702,13 @@ ${today}
 입지 설명: ${value(data.locationLine)}
 참고 관점: ${articleAngle || "없음 — GPT가 최근 6개월 데이터에서 직접 선정"}
 
+[이번 글의 주제 — 최우선]
+주제 유형: ${articleTheme.label}
+핵심 관점: ${articleTheme.angle}
+- 제목, 도입부, ⑤ 이 단지만의 핵심 포인트는 이 주제를 중심으로 작성할 것.
+- 선택 주제가 '가격 변화'가 아닌데 가격 상승폭만 다시 메인 제목으로 가져오지 말 것.
+- 데이터가 선택 주제를 뒷받침하지 못할 때만 가장 가까운 다른 주제로 최소 조정할 것.
+
 [최근 6개월 실거래 데이터]
 ${monthlyLines}
 
@@ -578,8 +740,10 @@ ${monthlyLines}
 - 최종 제목 1개만 출력할 것.
 - 제목 후보는 내부적으로 최소 5개를 만들어 비교한 뒤 가장 좋은 1개만 출력할 것. 후보 목록은 최종 결과에 표시하지 말 것.
 - 단지명을 제목 앞부분에 자연스럽게 넣고, 지역명·대표 전용면적·아파트 시세 검색어는 필요할 때만 자연스럽게 조합할 것.
-- 최근 6개월 가격·거래 데이터를 먼저 보고 가격상승, 가격하락, 가격대 전환, 저점 반등, 거래량 급증·감소, 가격+거래 엇갈림, 신고가·고점 접근, 정비사업, 신축·입주, 보합·관망 중 가장 강한 핵심 포인트를 선택할 것.
+- 위 [이번 글의 주제 — 최우선]을 제목의 핵심 소재로 사용할 것.
+- 자동 주제는 가격 변화, 가격대 전환, 거래량 변화, 가격·거래 엇갈림, 저점·고점·반등, 가격 변동성, 6개월 고점·저점 위치, 보합·관망의 8개 계열에서 데이터에 맞게 선택된다.
 - '6개월 새 ○○억 올랐다' 같은 한 가지 제목 문법을 모든 단지에 반복하지 말 것.
+- 최근 글들이 가격 상승형으로 몰리지 않도록 거래량·고점/저점·반등·변동성·엇갈림처럼 데이터가 뒷받침되는 다른 관점을 적극 사용할 것.
 - 상승액·상승률이 크더라도 숫자를 단순 나열하는 방식만 고집하지 말고 가격대 변화, 반등, 거래 흐름 등 더 직관적인 장면이 있으면 그쪽을 우선 검토할 것.
 - 검색 유입을 고려해 무엇을 다루는 글인지 바로 알 수 있게 쓰되, 답을 전부 공개하지 않아 클릭할 이유는 남길 것.
 - 가능하면 32자 이내, 최대 38자 이내로 작성할 것.
@@ -1063,6 +1227,8 @@ export default function ApartmentBulkPage() {
   const [photoSearchMessage, setPhotoSearchMessage] = useState("");
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
   const [recommendedAngle, setRecommendedAngle] = useState("");
+  const [articleThemeMode, setArticleThemeMode] = useState<ArticleThemeMode>("auto");
+  const [recentArticleThemes, setRecentArticleThemes] = useState<ArticleThemeId[]>([]);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -1078,11 +1244,30 @@ export default function ApartmentBulkPage() {
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
-  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats), [data, monthlyStats]);
+  const selectedArticleTheme = useMemo(
+    () => selectArticleTheme(monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle),
+    [monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle]
+  );
+  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme), [data, monthlyStats, selectedArticleTheme]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
-  const bodyPrompt = useMemo(() => makeBodyPrompt(data, monthlyStats, recommendedAngle), [data, monthlyStats, recommendedAngle]);
+  const bodyPrompt = useMemo(
+    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme),
+    [data, monthlyStats, recommendedAngle, selectedArticleTheme]
+  );
   const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("apartment-bulk-theme-history-v1") || "[]");
+      if (Array.isArray(saved)) {
+        const valid = saved.filter((item): item is ArticleThemeId => Object.prototype.hasOwnProperty.call(ARTICLE_THEME_META, item));
+        setRecentArticleThemes(valid.slice(-6));
+      }
+    } catch {
+      setRecentArticleThemes([]);
+    }
+  }, []);
 
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
@@ -1142,6 +1327,7 @@ export default function ApartmentBulkPage() {
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
         setRecommendedAngle(detail.snapshot?.recommended_angle || "");
+        setArticleThemeMode("auto");
         setOutputs(null);
 
         setNearbyLoading(true);
@@ -1283,6 +1469,13 @@ export default function ApartmentBulkPage() {
   }
 
   function openBodyPromptInChatGPT() {
+    const nextHistory = [...recentArticleThemes, selectedArticleTheme.id].slice(-6);
+    setRecentArticleThemes(nextHistory);
+    try {
+      window.localStorage.setItem("apartment-bulk-theme-history-v1", JSON.stringify(nextHistory));
+    } catch {
+      // localStorage가 막혀 있어도 본문 생성은 계속 진행합니다.
+    }
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(bodyPrompt);
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -1421,6 +1614,25 @@ export default function ApartmentBulkPage() {
             <Field label="세대수" value={data.households} onChange={(v) => update("households", v)} />
             <Field label="입주년도" value={data.moveIn} onChange={(v) => update("moveIn", v)} />
             <Field label="가까운 주요 역" value={data.station} onChange={(v) => update("station", v)} />
+          </div>
+          <SelectField
+            label="본문 주제"
+            value={articleThemeMode}
+            onChange={setArticleThemeMode}
+            options={[
+              { value: "auto", label: "자동 다양화 · 데이터 + 최근 주제 중복 회피" },
+              { value: "price", label: "가격 변화 · 상승/하락폭 중심" },
+              { value: "band", label: "가격대 전환 · 4억대→5억대 같은 장면" },
+              { value: "trade", label: "거래량 변화 · 몰린 달/줄어든 달" },
+              { value: "mixed", label: "가격·거래 엇갈림" },
+              { value: "rebound", label: "저점·고점·반등" },
+              { value: "volatility", label: "가격 변동성 · 월별 출렁임" },
+              { value: "highlow", label: "6개월 고점·저점 위치" },
+              { value: "stable", label: "보합·관망" },
+            ]}
+          />
+          <div className={styles.autoLoad}>
+            이번 글 추천 주제: <b>{selectedArticleTheme.label}</b> · {selectedArticleTheme.angle}
           </div>
           <SelectField
             label="썸네일 문구 톤"
