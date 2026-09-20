@@ -13,9 +13,15 @@ type Phase = "home" | "input" | "analysis" | "images" | "review" | "done";
 const TYPES = [
   ["🏠", "아파트 블로그", "시세·실거래·TOP3"],
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
-  ["🐾", "동물·자연", "질문형 콘텐츠"],
+  ["🌿", "Paramma 블로거", "동물·자연·생활 궁금증"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
   ["🎬", "집값쓱 쇼츠", "세로 장면 6~7개"],
+] as const;
+
+const PARAMMA_CATEGORIES = [
+  ["🐾", "신기한 동물이야기", "동물의 행동·능력·생태"],
+  ["🌌", "신비로운 자연", "기묘한 자연현상과 숨은 원리"],
+  ["💡", "생활 속 궁금증", "일상에서 문득 궁금한 이유"],
 ] as const;
 
 const RECOMMENDATIONS: Record<string, Recommendation[]> = {
@@ -33,12 +39,41 @@ const RECOMMENDATIONS: Record<string, Recommendation[]> = {
     { title: "에어컨 청소, 집에서 어디까지 가능할까?", brief: "직접 가능한 범위와 전문가 분해청소가 필요한 경우를 구분합니다." },
     { title: "아파트 관리비 줄이는 현실적인 방법", brief: "전기·난방·수도·공용관리비에서 확인할 수 있는 절약 포인트를 정리합니다." },
   ],
-  "동물·자연": [
-    { title: "고양이는 왜 박스를 좋아할까?", brief: "안정감·체온 유지·사냥 본능·스트레스 감소 관점에서 설명합니다." },
-    { title: "비 온 뒤 흙냄새는 왜 날까?", brief: "페트리코르와 지오스민, 빗방울이 냄새 입자를 퍼뜨리는 과정을 설명합니다." },
-    { title: "강아지는 왜 고개를 갸웃할까?", brief: "청각·시야·학습 행동 관점에서 이유를 정리합니다." },
-    { title: "문어는 정말 머리가 좋을까?", brief: "문제 해결 능력·도구 사용·위장 행동을 사례 중심으로 소개합니다." },
-    { title: "새들은 길을 어떻게 잃지 않을까?", brief: "태양·별·지구 자기장·냄새를 이용한 이동 원리를 쉽게 설명합니다." },
+  "신기한 동물이야기": [
+    { title: "고양이는 왜 박스를 좋아할까?", brief: "안정감·체온 유지·사냥 본능과 연결해 쉽게 설명합니다." },
+    { title: "문어는 정말 머리가 좋을까?", brief: "문제 해결 능력·도구 사용·학습 행동을 사례 중심으로 소개합니다." },
+    { title: "새들은 길을 어떻게 잃지 않을까?", brief: "태양·별·지구 자기장 등을 이용한 이동 원리를 쉽게 설명합니다." },
+    { title: "피스톨새우는 어떻게 총소리를 낼까?", brief: "집게가 만드는 초고속 물줄기와 충격파의 원리를 설명합니다." },
+    { title: "돌고래는 잠잘 때 어떻게 숨을 쉴까?", brief: "뇌의 한쪽씩 쉬는 수면 방식과 호흡을 연결해 설명합니다." },
+    { title: "해달은 왜 돌을 들고 다닐까?", brief: "먹이를 깨는 도구 사용과 돌을 보관하는 행동을 소개합니다." },
+    { title: "부엉이는 왜 고개를 크게 돌릴 수 있을까?", brief: "목뼈 구조와 혈류를 유지하는 신체 특징을 쉽게 설명합니다." },
+    { title: "카멜레온은 왜 색을 바꿀까?", brief: "위장뿐 아니라 체온·감정·의사소통과 관련된 이유를 설명합니다." },
+    { title: "플라밍고는 왜 한쪽 다리로 서 있을까?", brief: "체온 유지와 에너지 절약 가설을 중심으로 정리합니다." },
+    { title: "문어의 팔은 왜 각각 따로 움직일 수 있을까?", brief: "분산된 신경계와 팔의 독립적인 움직임을 흥미롭게 설명합니다." },
+  ],
+  "신비로운 자연": [
+    { title: "블러드폴스는 왜 피처럼 빨갛게 흐를까?", brief: "남극의 붉은 폭포가 생기는 철 성분과 산화 과정을 설명합니다." },
+    { title: "바닷속에도 고드름이 생길까? 브리니클의 정체", brief: "차가운 염수가 내려오며 얼음 기둥을 만드는 과정을 설명합니다." },
+    { title: "밤바다가 파랗게 빛나는 이유는 뭘까?", brief: "생물발광 플랑크톤이 빛을 내는 원리와 조건을 소개합니다." },
+    { title: "비 온 뒤 흙냄새는 왜 더 진하게 날까?", brief: "페트리코르와 지오스민, 빗방울이 냄새를 퍼뜨리는 과정을 설명합니다." },
+    { title: "오로라는 왜 초록색으로 보일까?", brief: "태양 입자와 대기 기체의 충돌로 색이 생기는 원리를 설명합니다." },
+    { title: "번개는 왜 지그재그로 칠까?", brief: "전기가 공기 중에서 경로를 찾아가는 과정을 쉽게 풀어냅니다." },
+    { title: "사막의 모래는 왜 밤에 급격히 차가워질까?", brief: "수분과 열용량, 지표의 열 방출 차이로 설명합니다." },
+    { title: "무지개는 왜 항상 같은 색 순서일까?", brief: "빛의 굴절·반사·분산으로 색 순서가 정해지는 이유를 설명합니다." },
+    { title: "파도는 왜 해변 가까이에서 더 크게 부서질까?", brief: "수심이 얕아질 때 파도의 속도와 높이가 바뀌는 과정을 설명합니다." },
+    { title: "눈 결정은 왜 모두 육각형일까?", brief: "물 분자의 결합 구조가 만들어내는 육각 대칭을 쉽게 설명합니다." },
+  ],
+  "생활 속 궁금증": [
+    { title: "9월인데 모기가 왜 이렇게 많지? 가을 모기가 사라지지 않는 이유", brief: "기온과 습도, 가을철 모기 활동이 이어지는 이유를 생활 관점에서 설명합니다." },
+    { title: "가을 모기는 여름 모기보다 정말 더 독할까?", brief: "계절에 따라 더 독하게 느껴지는 이유와 실제 차이를 구분해 설명합니다." },
+    { title: "모기는 왜 나만 물까? 유독 잘 물리는 사람의 특징", brief: "이산화탄소·체온·냄새 등 모기가 사람을 찾는 단서를 설명합니다." },
+    { title: "가을에 벌이 더 무섭게 느껴지는 이유", brief: "먹이 활동과 계절 변화 속에서 벌을 자주 마주치는 이유를 설명합니다." },
+    { title: "밤에 창문을 열면 벌레가 불빛으로 몰려드는 이유", brief: "빛을 이용해 방향을 잡는 곤충의 행동과 인공조명의 영향을 설명합니다." },
+    { title: "비 온 다음날 지렁이가 길 위로 올라오는 이유", brief: "젖은 토양과 이동·호흡 가설을 중심으로 쉽게 설명합니다." },
+    { title: "가을 하늘은 왜 유난히 높고 파랗게 보일까?", brief: "습도와 대기 상태, 빛의 산란을 연결해 설명합니다." },
+    { title: "은행나무 열매는 왜 그렇게 냄새가 심할까?", brief: "은행 열매 바깥 과육에서 나는 냄새 성분의 이유를 설명합니다." },
+    { title: "나뭇잎은 왜 가을이 되면 빨강·노랑으로 변할까?", brief: "엽록소가 줄고 다른 색소가 드러나는 과정을 설명합니다." },
+    { title: "환절기에는 왜 정전기가 더 자주 생길까?", brief: "건조한 공기와 전하 이동이 정전기를 늘리는 이유를 설명합니다." },
   ],
   "AI Price Atlas": [
     { title: "ChatGPT Plus Price in South Korea 2026", brief: "South Korea 가격, Web vs App, 결제수단과 확인사항을 정리하는 영문 SEO 글입니다." },
@@ -161,6 +196,7 @@ async function composeImage(src: string, task: Task, contentType: string) {
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("home");
   const [contentType, setContentType] = useState("아파트 블로그");
+  const [parammaCategory, setParammaCategory] = useState("신기한 동물이야기");
   const [projectTitle, setProjectTitle] = useState("");
   const [rawContent, setRawContent] = useState("");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -176,6 +212,7 @@ export default function Home() {
   const bulkRef = useRef<HTMLInputElement | null>(null);
 
   const current = tasks[currentIndex];
+  const effectiveContentType = contentType === "Paramma 블로거" ? parammaCategory : contentType;
   const preset = PRESETS[contentType] || PRESETS.default;
   const completeCount = useMemo(() => tasks.filter(t => t.done).length, [tasks]);
   const imageCount = useMemo(() => tasks.filter(t => !!t.imageDataUrl).length, [tasks]);
@@ -206,7 +243,7 @@ export default function Home() {
   async function analyze() {
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType, projectTitle, rawContent }) });
+      const r = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType: effectiveContentType, projectTitle, rawContent }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "분석 실패");
       setAnalysis(data);
@@ -225,7 +262,7 @@ export default function Home() {
   function promptFor(task: Task) {
     const ratio = contentType === "집값쓱 쇼츠" ? "9:16 세로" : "16:9 가로";
     return [
-      `[${contentType} 이미지 배경 제작]`,
+      `[${effectiveContentType} 이미지 배경 제작]`,
       `장면 ${String(task.order).padStart(2, "0")} · ${task.title}`,
       task.sourceText ? `근거: ${task.sourceText}` : "",
       task.imagePrompt || "",
@@ -314,7 +351,7 @@ export default function Home() {
       const { supabase, session } = await ensureAnonymousSession();
       const payload = {
         user_id: session.user.id,
-        content_type: contentType,
+        content_type: contentType === "Paramma 블로거" ? `Paramma 블로거 · ${parammaCategory}` : contentType,
         project_title: projectTitle || analysis?.recommendedTitle || "새 콘텐츠",
         raw_content: rawContent,
         memo: "",
@@ -359,7 +396,18 @@ export default function Home() {
       if (error) throw error;
       const { data: imgs, error: ie } = await supabase.from("image_tasks").select("*").eq("project_id", id).order("order_no");
       if (ie) throw ie;
-      setProjectId(id); setContentType(p.content_type); setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setAnalysis(p.analysis_json);
+      setProjectId(id);
+      const savedType = String(p.content_type || "");
+      if (savedType.startsWith("Paramma 블로거 · ")) {
+        setContentType("Paramma 블로거");
+        setParammaCategory(savedType.replace("Paramma 블로거 · ", "") || "신기한 동물이야기");
+      } else if (savedType === "동물·자연") {
+        setContentType("Paramma 블로거");
+        setParammaCategory("신기한 동물이야기");
+      } else {
+        setContentType(savedType);
+      }
+      setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setAnalysis(p.analysis_json);
       setTasks((imgs || []).map((x: any) => ({ order: x.order_no, title: x.section_title, keyMessage: x.key_message, sourceText: x.source_text, imagePrompt: x.image_prompt, imageDataUrl: x.image_url, imageUrl: x.image_url, done: x.status === "done", replaced: x.replaced })));
       setCurrentIndex(0); setPhase((imgs || []).length ? "images" : "analysis");
     } catch (e: any) { setError(e.message || "불러오기 실패"); }
@@ -388,7 +436,7 @@ export default function Home() {
   async function exportZip() {
     setLoading(true); setError("");
     try {
-      const r = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectTitle, contentType, finalTitle, finalBody, tasks, templateKey: "overlay-v7" }) });
+      const r = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectTitle, contentType: effectiveContentType, finalTitle, finalBody, tasks, templateKey: "overlay-v7" }) });
       if (!r.ok) throw new Error("ZIP 생성 실패");
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -421,13 +469,15 @@ export default function Home() {
       {phase === "home" && <>
         <div className="sectionHead"><div><h2>무엇을 만들까요?</h2><p>카테고리를 고르면 그 작업에 맞게 이미지 구성과 규격을 준비합니다.</p></div></div>
         <div className="types">{TYPES.map(([ico, name, desc]) => <button key={name} className={`type ${contentType === name ? "sel" : ""}`} onClick={() => setContentType(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div>
+        {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>🌿 Paramma 블로거 작업 선택</h3><p className="muted">세 가지 카테고리를 구분해서 작업합니다. 선택한 카테고리마다 발행 순서 10개가 따로 준비됩니다.</p><div className="parammaGrid">{PARAMMA_CATEGORIES.map(([ico, name, desc]) => <button key={name} className={`parammaCard ${parammaCategory === name ? "sel" : ""}`} onClick={() => setParammaCategory(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div></div>}
         <div className="actions"><button className="primary" onClick={() => setPhase("input")}>새 작업 시작</button></div>
         <div className="box"><h3>저장 프로젝트</h3>{saved.length === 0 ? <div className="muted">아직 저장된 작업이 없습니다.</div> : <div className="savedList">{saved.map(p => <div className="savedItem" key={p.id}><div><b>{p.project_title}</b><small>{p.content_type}</small></div><button className="secondary compact" onClick={() => loadProject(p.id)}>불러오기</button></div>)}</div>}</div>
       </>}
 
       {phase === "input" && <>
-        <div className="sectionHead"><div><h2>자료 입력</h2><p>본문이 있으면 붙여넣고, 없으면 추천 주제로 시작하세요.</p></div><span className="counter">{rawContent.trim().length}자</span></div>
-        <div className="box"><h3>✨ 시작용 주제 추천</h3><div className="recommendGrid">{(RECOMMENDATIONS[contentType] || []).map((item, i) => <button key={item.title} className="recommend" onClick={() => applyRecommendation(item)}><span>{i + 1}</span><div><b>{item.title}</b><small>{item.brief}</small></div></button>)}</div></div>
+        <div className="sectionHead"><div><h2>자료 입력</h2><p>{contentType === "Paramma 블로거" ? `Paramma 블로거 · ${parammaCategory}` : "본문이 있으면 붙여넣고, 없으면 추천 주제로 시작하세요."}</p></div><span className="counter">{rawContent.trim().length}자</span></div>
+        {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>카테고리 선택</h3><div className="parammaGrid compactGrid">{PARAMMA_CATEGORIES.map(([ico, name, desc]) => <button key={name} className={`parammaCard ${parammaCategory === name ? "sel" : ""}`} onClick={() => setParammaCategory(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div></div>}
+        <div className="box"><h3>{contentType === "Paramma 블로거" ? `✨ ${parammaCategory} · 추천 발행 순서 10개` : "✨ 시작용 주제 추천"}</h3>{contentType === "Paramma 블로거" && <p className="muted">1번부터 10번까지 순서대로 진행하고, 모두 끝나면 다음 10개로 교체해서 이어갈 수 있습니다.</p>}<div className="recommendGrid">{(RECOMMENDATIONS[effectiveContentType] || []).map((item, i) => <button key={item.title} className="recommend" onClick={() => applyRecommendation(item)}><span>{i + 1}</span><div><b>{item.title}</b><small>{item.brief}</small></div></button>)}</div></div>
         <label>작업 제목</label><input value={projectTitle} onChange={e => setProjectTitle(e.target.value)} placeholder="예: 송도 아파트 시세" />
         <label>본문</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="본문을 붙여넣으세요. 30자 이상이면 분석할 수 있습니다." />
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><button className="primary" disabled={rawContent.trim().length < 30 || loading} onClick={analyze}>{loading ? "분석 중..." : "본문 분석"}</button></div>
