@@ -14,6 +14,13 @@ type ArticleThemeChoice = {
   score: number;
 };
 
+type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
+type DailySlot = {
+  id: number;
+  type: DailyContentType;
+  done: boolean;
+};
+
 type ApartmentData = {
   name: string;
   region: string;
@@ -79,6 +86,25 @@ const SAMPLE: ApartmentData = {
   question: "",
   thumbnailTone: "auto",
 };
+
+const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
+  bulk: { label: "아파트 대량발행", short: "대량발행" },
+  top3: { label: "TOP3 유입글", short: "TOP3" },
+  tip: { label: "아파트 꿀팁", short: "꿀팁" },
+  moving: { label: "이사 체크리스트", short: "이사체크" },
+  compare: { label: "지역·단지 비교글", short: "비교글" },
+  power: { label: "파워글 · 주력 콘텐츠", short: "파워글" },
+};
+
+const DEFAULT_DAILY_SLOTS: DailySlot[] = [
+  { id: 1, type: "bulk", done: false },
+  { id: 2, type: "bulk", done: false },
+  { id: 3, type: "bulk", done: false },
+  { id: 4, type: "top3", done: false },
+  { id: 5, type: "bulk", done: false },
+  { id: 6, type: "tip", done: false },
+  { id: 7, type: "power", done: false },
+];
 
 const FONT = 'Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif';
 
@@ -1241,6 +1267,8 @@ export default function ApartmentBulkPage() {
   const [finalBlogText, setFinalBlogText] = useState("");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
+  const [dailyDateKey, setDailyDateKey] = useState("");
+  const [dailySlots, setDailySlots] = useState<DailySlot[]>(DEFAULT_DAILY_SLOTS);
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
   const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
@@ -1256,6 +1284,37 @@ export default function ApartmentBulkPage() {
     [data, monthlyStats, recommendedAngle, selectedArticleTheme]
   );
   const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
+  const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
+  const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
+  const nextDailySlot = useMemo(() => dailySlots.find((slot) => !slot.done) || null, [dailySlots]);
+
+  useEffect(() => {
+    const formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const dateKey = formatter.format(new Date());
+    setDailyDateKey(dateKey);
+    try {
+      const raw = window.localStorage.getItem("apartment-bulk-daily-board-v1:" + dateKey);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved) && saved.length === 7) {
+        const validTypes = new Set(Object.keys(DAILY_TYPE_META));
+        const normalized = saved.map((slot, index) => ({
+          id: index + 1,
+          type: validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type,
+          done: Boolean(slot?.done),
+        }));
+        setDailySlots(normalized);
+      } else {
+        setDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
+      }
+    } catch {
+      setDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -1382,6 +1441,28 @@ export default function ApartmentBulkPage() {
   function update<K extends keyof ApartmentData>(key: K, value: ApartmentData[K]) {
     setData((prev) => ({ ...prev, [key]: value }));
     setOutputs(null);
+  }
+
+  function saveDailySlots(next: DailySlot[]) {
+    setDailySlots(next);
+    if (!dailyDateKey) return;
+    try {
+      window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dailyDateKey, JSON.stringify(next));
+    } catch {
+      // 저장이 막혀 있어도 화면에서는 계속 사용할 수 있습니다.
+    }
+  }
+
+  function updateDailyType(id: number, type: DailyContentType) {
+    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, type } : slot));
+  }
+
+  function toggleDailyDone(id: number) {
+    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: !slot.done } : slot));
+  }
+
+  function resetDailyBoard() {
+    saveDailySlots(DEFAULT_DAILY_SLOTS.map((slot) => ({ ...slot })));
   }
 
   async function copyThumbnailPrompt() {
@@ -1591,6 +1672,64 @@ export default function ApartmentBulkPage() {
           <p>썸네일 · 시세 그래프 · 입지 이미지 · 블로그 본문까지 ChatGPT 요청서로 연결합니다.</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
+      </section>
+
+      <section className={styles.dailyBoard}>
+        <div className={styles.dailyBoardHead}>
+          <div>
+            <p className={styles.eyebrow}>TODAY · 7 POSTS</p>
+            <h2>오늘 집값쓱 발행 <strong>{dailyDoneCount}/7</strong></h2>
+            <span>{dailyDateKey || "오늘"} · 7개 완료하면 아파트 블로그 작업 종료</span>
+          </div>
+          <div className={styles.dailyBoardActions}>
+            <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "🎉 오늘 할당 완료" : nextDailySlot ? `다음: ${nextDailySlot.id}번 · ${DAILY_TYPE_META[nextDailySlot.type].short}` : "오늘 할당 완료"}</div>
+            <button type="button" onClick={resetDailyBoard}>오늘판 초기화</button>
+          </div>
+        </div>
+
+        <div className={styles.dailyProgressTrack} aria-label={`오늘 발행 진행률 ${dailyDoneCount}/7`}>
+          <span style={{ width: `${(dailyDoneCount / 7) * 100}%` }} />
+        </div>
+
+        <div className={styles.dailySlots}>
+          {dailySlots.map((slot) => (
+            <article key={slot.id} className={slot.done ? styles.dailySlotDone : styles.dailySlot}>
+              <div className={styles.dailySlotNumber}>{slot.done ? "✓" : slot.id}</div>
+              <div className={styles.dailySlotMain}>
+                <select
+                  aria-label={`${slot.id}번 발행 유형`}
+                  value={slot.type}
+                  onChange={(e) => updateDailyType(slot.id, e.target.value as DailyContentType)}
+                >
+                  {(Object.keys(DAILY_TYPE_META) as DailyContentType[]).map((type) => (
+                    <option key={type} value={type}>{DAILY_TYPE_META[type].label}</option>
+                  ))}
+                </select>
+                <small>
+                  {slot.type === "bulk" ? "단지 데이터 기반 자동 주제" :
+                   slot.type === "top3" ? "조회 유입용 지역 TOP3" :
+                   slot.type === "tip" ? "검색형 에버그린 정보" :
+                   slot.type === "moving" ? "이사 전·후 실용 체크" :
+                   slot.type === "compare" ? "지역·단지 차이를 비교" :
+                   "시간을 더 쓰는 주력 콘텐츠"}
+                </small>
+              </div>
+              <button
+                type="button"
+                className={slot.done ? styles.dailyUndo : styles.dailyComplete}
+                onClick={() => toggleDailyDone(slot.id)}
+              >
+                {slot.done ? "완료 취소" : "완료"}
+              </button>
+            </article>
+          ))}
+        </div>
+
+        <div className={dailyBulkCount > 4 ? styles.dailyWarning : styles.dailyRule}>
+          {dailyBulkCount > 4
+            ? `대량발행이 ${dailyBulkCount}개입니다. 4개를 넘으면 꿀팁·비교글·파워글로 바꾸는 걸 권장합니다.`
+            : `현재 대량발행 ${dailyBulkCount}개 · 나머지는 TOP3/꿀팁/비교/파워글로 구성합니다.`}
+        </div>
       </section>
 
       <section className={styles.layout}>
