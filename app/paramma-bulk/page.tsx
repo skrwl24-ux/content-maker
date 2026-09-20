@@ -490,14 +490,20 @@ export default function ParammaBulkPage() {
     if (copied && openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
   }
 
-  async function copyImagePrompt(slotId: SlotId, openChat = false) {
+  async function copyImagePrompt(slotId: SlotId) {
     const current = ensureWork();
     const meta = current.slots[slotId];
-    const copied = await copyText(meta.prompt, `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다.`);
+    const copied = await copyText(
+      meta.prompt,
+      `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다. ChatGPT 새 채팅에서 Ctrl+V로 붙여넣으세요.`
+    );
     if (!copied) return;
     startTopic(selected.id);
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
-    if (openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+  }
+
+  function openChatGPT() {
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
   }
 
   async function handleUpload(slotId: SlotId, event: ChangeEvent<HTMLInputElement>) {
@@ -777,11 +783,11 @@ export default function ParammaBulkPage() {
                     {meta.warning && <div className={styles.ratioWarning}>⚠ {meta.warning}</div>}
 
                     <div className={styles.imageActions}>
-                      <button type="button" onClick={() => void copyImagePrompt(slotId, true)} disabled={optionalInactive}>
-                        요청서 복사 + ChatGPT
+                      <button type="button" onClick={() => void copyImagePrompt(slotId)} disabled={optionalInactive}>
+                        요청서 복사
                       </button>
-                      <button type="button" onClick={() => void copyImagePrompt(slotId, false)} disabled={optionalInactive}>
-                        복사만
+                      <button type="button" onClick={openChatGPT} disabled={optionalInactive}>
+                        ChatGPT 열기
                       </button>
                     </div>
 
