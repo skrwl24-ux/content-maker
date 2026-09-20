@@ -347,6 +347,7 @@ export default function ParammaBulkPage() {
 
   const selected = TOPICS.find((t) => t.id === selectedId) || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
+  const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(work.articlePrompt);
   const doneCount = useMemo(() => TOPICS.filter((t) => statuses[t.id] === "done").length, [statuses]);
   const progress = Math.round((doneCount / TOPICS.length) * 100);
 
@@ -484,11 +485,10 @@ export default function ParammaBulkPage() {
     }
   }
 
-  async function copyArticlePrompt(openChat = false) {
+  async function copyArticlePrompt() {
     startTopic(selected.id);
     const current = ensureWork();
-    const copied = await copyText(current.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
-    if (copied && openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    await copyText(current.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
   }
 
   async function copyImagePrompt(slotId: SlotId) {
@@ -698,10 +698,19 @@ export default function ParammaBulkPage() {
             <p className={styles.brief}>{selected.brief}</p>
 
             <div className={styles.primaryActions}>
-              <button type="button" className={styles.primary} onClick={() => void copyArticlePrompt(true)}>
+              <a
+                className={styles.primary}
+                href={articleChatUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  startTopic(selected.id);
+                  void copyText(work.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+                }}
+              >
                 📝 본문·이미지 기획 요청서 복사 + 열기
-              </button>
-              <button type="button" className={styles.secondary} onClick={() => void copyArticlePrompt(false)}>
+              </a>
+              <button type="button" className={styles.secondary} onClick={() => void copyArticlePrompt()}>
                 요청서만 복사
               </button>
             </div>
