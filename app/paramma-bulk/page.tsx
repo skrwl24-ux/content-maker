@@ -309,7 +309,7 @@ ${textLine}
 중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
 }
 
-function buildPreLabelImagePrompt(topic: Topic, slotId: SlotId) {
+function buildImagePrompt(topic: Topic, slotId: SlotId) {
   const info = SLOT_INFO[slotId];
   const isThumbnail = slotId === "00";
   const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
@@ -376,78 +376,6 @@ ${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구
 중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
 }
 
-
-function buildImagePrompt(topic: Topic, slotId: SlotId) {
-  const info = SLOT_INFO[slotId];
-  const isThumbnail = slotId === "00";
-  const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
-
-  const compositionRules = isThumbnail
-    ? `[썸네일 구성 원칙]
-- 주제를 한눈에 이해시키는 대표 썸네일로 구성
-- 핵심 피사체와 질문형 문구가 모바일 목록에서도 바로 보이게
-- 문구는 1~2줄 중심으로 크게 배치
-- 정보 과밀 없이 강한 대표 장면 1개를 중심으로 구성
-
-[이미지에 넣을 문구]
-${topic.title}
-- 위 문구 외에 긴 설명문을 추가하지 말 것
-- 한글 문구는 크고 선명하게, 오탈자 없이 표시할 것`
-    : `[본문 이미지 구성 원칙]
-- 이 이미지는 썸네일이 아니라 글 중간에 삽입되는 본문용 이미지
-- 이미지 상단이나 중앙에 주제 전체를 반복하는 큰 제목·질문형 메인 카피만 넣지 말 것
-- 화면의 중심은 실제 장면·생물·자연 현상·과정 자체가 되게 할 것
-- 사진형이 적합하면 자연 다큐멘터리 사진처럼 사실적인 한 장면으로 구성
-- 설명형이면 원인·과정·비교를 쉽게 이해하도록 짧은 라벨, 원형 설명 요소, 화살표를 자연스럽게 사용할 수 있음
-- 여러 설명 요소를 사용해도 전체가 광고 썸네일이 아니라 본문 설명 이미지처럼 보이게 할 것
-- 여백은 자연스럽게 두고 블로그 본문에 넣었을 때 설명 이미지/삽화처럼 보이게 할 것
-
-[이미지 내 텍스트]
-- 주제 전체를 반복하는 큰 헤드라인은 넣지 말 것
-- 원인·과정·비교를 설명하는 짧은 라벨은 1~4개 정도 허용
-- 필요한 경우 화살표와 단계 문구를 함께 사용 가능
-- 설명 라벨은 읽기 쉽게 표시하되 메인 제목처럼 크게 만들지 말 것`;
-
-  return `작업 이미지: ${slotId} · ${info.label}
-※ 위 번호와 슬롯명은 채팅 작업 구분용이며 실제 이미지 안에는 넣지 말 것.
-
-Paramma 블로거용 이미지를 1장 만들어줘.
-
-[글 정보]
-카테고리: ${topic.category}
-글 주제: ${topic.title}
-기획 의도: ${topic.brief}
-
-[이미지 역할]
-슬롯: ${slotId} · ${info.label}
-역할: ${info.role}
-이 이미지가 전달할 내용: ${info.copy}
-
-[제작 목표]
-목표 크기: ${info.width}×${info.height}px
-목표 비율: ${ratio}
-네이버 블로그용 단일 이미지 1장
-
-[공통 스타일]
-- 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게
-- 과도한 AI 느낌, 네온, 유리질감, 과한 3D 효과, 불필요한 장식 금지
-- 실제 생물·자연의 형태와 색을 과장하거나 왜곡하지 말 것
-- 모바일에서도 핵심 피사체가 잘 보이도록 단순한 구도와 여백 사용
-
-${compositionRules}
-
-[제외할 요소]
-- 작업 구분용 번호(00/01/02/03), 슬롯 번호, "작업 이미지" 문구
-- 워터마크, 타사 로고
-- 출처 불명 숫자·통계
-- 본문에서 확인되지 않은 사실
-- 여러 장을 한 장에 합친 콜라주
-- 작은 글자를 빽빽하게 채운 구성
-${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구성\n- 주제 전체를 반복하는 대형 헤드라인·질문형 카피"}
-
-중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
-}
-
 function isPreviousStrictBodyPrompt(prompt: string, topic: Topic, slotId: SlotId) {
   if (slotId === "00") return false;
   const info = SLOT_INFO[slotId];
@@ -469,14 +397,10 @@ function refreshLegacyImagePrompts(works: Record<number, TopicWork>) {
     let topicChanged = false;
     const slots = { ...current.slots };
 
-    for (const slotId of SLOT_IDS) {
+    for (const slotId of ["01", "02", "03"] as SlotId[]) {
       const slot = slots[slotId];
       if (!slot) continue;
-      if (
-        slot.prompt === buildPreLabelImagePrompt(topic, slotId) ||
-        slot.prompt === buildLegacyImagePrompt(topic, slotId) ||
-        isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)
-      ) {
+      if (slot.prompt === buildLegacyImagePrompt(topic, slotId) || isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)) {
         slots[slotId] = { ...slot, prompt: buildImagePrompt(topic, slotId) };
         topicChanged = true;
         changed = true;
