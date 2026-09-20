@@ -327,17 +327,18 @@ ${topic.title}
 - 한글 문구는 크고 선명하게, 오탈자 없이 표시할 것`
     : `[본문 이미지 구성 원칙]
 - 이 이미지는 썸네일이 아니라 글 중간에 삽입되는 본문용 이미지
-- 큰 제목, 질문형 카피, 제목 박스, 리본, 배지, 카드형 설명 문구를 넣지 말 것
-- 화면의 중심은 글자가 아니라 실제 장면·생물·자연 현상·과정 자체가 되게 할 것
+- 이미지 상단이나 중앙에 주제 전체를 반복하는 큰 제목·질문형 메인 카피만 넣지 말 것
+- 화면의 중심은 실제 장면·생물·자연 현상·과정 자체가 되게 할 것
 - 사진형이 적합하면 자연 다큐멘터리 사진처럼 사실적인 한 장면으로 구성
-- 설명형이 필요해도 '썸네일 카드'가 아니라 본문 삽화처럼 자연스럽게 구성
-- 과정·비교가 필요하면 시각적 흐름은 보여주되 여러 카드나 콜라주처럼 쪼개지 말 것
-- 여백은 자연스럽게 두고, 블로그 본문에 넣었을 때 사진/삽화처럼 보이게 할 것
+- 설명형이면 원인·과정·비교를 쉽게 이해하도록 짧은 라벨, 원형 설명 요소, 화살표를 자연스럽게 사용할 수 있음
+- 여러 설명 요소를 사용해도 전체가 광고 썸네일이 아니라 본문 설명 이미지처럼 보이게 할 것
+- 여백은 자연스럽게 두고 블로그 본문에 넣었을 때 설명 이미지/삽화처럼 보이게 할 것
 
 [이미지 내 텍스트]
-- 원칙적으로 큰 제목이나 설명 문구를 넣지 말 것
-- 과학적 이해에 꼭 필요한 경우에만 짧은 라벨 1~3개 정도 허용
-- 라벨도 작고 보조적으로 사용하며 이미지보다 글자가 먼저 보이면 안 됨`;
+- 주제 전체를 반복하는 큰 헤드라인은 넣지 말 것
+- 원인·과정·비교를 설명하는 짧은 라벨은 1~4개 정도 허용
+- 필요한 경우 화살표와 단계 문구를 함께 사용 가능
+- 설명 라벨은 읽기 쉽게 표시하되 메인 제목처럼 크게 만들지 말 것`;
 
   return `Paramma 블로거용 이미지를 1장 만들어줘.
 
@@ -370,9 +371,19 @@ ${compositionRules}
 - 본문에서 확인되지 않은 사실
 - 여러 장을 한 장에 합친 콜라주
 - 작은 글자를 빽빽하게 채운 구성
-${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구성\n- 원형 배지·화살표·강조 카피를 여러 개 배치한 광고형 인포그래픽"}
+${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구성\n- 주제 전체를 반복하는 대형 헤드라인·질문형 카피"}
 
 중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
+}
+
+function isPreviousStrictBodyPrompt(prompt: string, topic: Topic, slotId: SlotId) {
+  if (slotId === "00") return false;
+  const info = SLOT_INFO[slotId];
+  return prompt.includes(\`슬롯: \${slotId} · \${info.label}\`) &&
+    prompt.includes(\`글 주제: \${topic.title}\`) &&
+    prompt.includes("- 큰 제목, 질문형 카피, 제목 박스, 리본, 배지, 카드형 설명 문구를 넣지 말 것") &&
+    prompt.includes("- 원형 배지·화살표·강조 카피를 여러 개 배치한 광고형 인포그래픽") &&
+    prompt.includes("- 과학적 이해에 꼭 필요한 경우에만 짧은 라벨 1~3개 정도 허용");
 }
 
 function refreshLegacyImagePrompts(works: Record<number, TopicWork>) {
@@ -389,7 +400,7 @@ function refreshLegacyImagePrompts(works: Record<number, TopicWork>) {
     for (const slotId of ["01", "02", "03"] as SlotId[]) {
       const slot = slots[slotId];
       if (!slot) continue;
-      if (slot.prompt === buildLegacyImagePrompt(topic, slotId)) {
+      if (slot.prompt === buildLegacyImagePrompt(topic, slotId) || isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)) {
         slots[slotId] = { ...slot, prompt: buildImagePrompt(topic, slotId) };
         topicChanged = true;
         changed = true;
