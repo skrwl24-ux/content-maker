@@ -344,29 +344,116 @@ ${previous}
 export default function ParammaBulkPage() {
   const [selectedId, setSelectedId] = useState(1);
   const [statuses, setStatuses] = useState<Record<number, Status>>({});
+  const [works, setWorks] = useState<Record<number, TopicWork>>({});
+  const [images, setImages] = useState<Partial<Record<SlotId, LoadedImage>>>({});
   const [notice, setNotice] = useState("");
+  const [imageBusy, setImageBusy] = useState<SlotId | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const previewUrls = useRef<string[]>([]);
+
+  const selected = TOPICS.find((t) => t.id === selectedId) || TOPICS[0];
+  const work = works[selected.id] || defaultWork(selected);
+  const doneCount = useMemo(() => TOPICS.filter((t) => statuses[t.id] === "done").length, [statuses]);
+  const progress = Math.round((doneCount / TOPICS.length) * 100);
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
         if (parsed?.statuses) setStatuses(parsed.statuses);
-        if (parsed?.selectedId) setSelectedId(parsed.selectedId);
+        if (parsed?.selectedId && TOPICS.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
+        if (parsed?.works) setWorks(parsed.works);
       }
-    } catch {}
+    } catch {
+      setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
+    } finally {
+      setHydrated(true);
+    }
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, selectedId }));
-    } catch {}
-  }, [statuses, selectedId]);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, selectedId, works }));
+    } catch {
+      setNotice("작업 상태 저장에 실패했습니다. 브라우저 저장공간을 확인해주세요.");
+    }
+  }, [hydrated, statuses, selectedId, works]);
 
-  const selected = TOPICS.find((t) => t.id === selectedId) || TOPICS[0];
-  const doneCount = useMemo(() => TOPICS.filter((t) => statuses[t.id] === "done").length, [statuses]);
-  const progress = Math.round((doneCount / TOPICS.length) * 100);
-  const articlePrompt = useMemo(() => buildArticlePrompt(selected), [selected]);
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreImages() {
+      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.current = [];
+      const next: Partial<Record<SlotId, LoadedImage>> = {};
+      for (const slotId of SLOT_IDS) {
+        try {
+          const record = await idbGet(selected.id, slotId);
+          if (record) {
+            const url = URL.createObjectURL(record.blob);
+            previewUrls.current.push(url);
+            next[slotId] = { ...record, url };
+          }
+        } catch {}
+      }
+      if (cancelled) {
+        Object.values(next).forEach((item) => item && URL.revokeObjectURL(item.url));
+        return;
+      }
+      setImages(next);
+      setWorks((prev) => {
+        const base = prev[selected.id] || defaultWork(selected);
+        let changed = false;
+        const slots = { ...base.slots };
+        for (const slotId of SLOT_IDS) {
+          const registered = !!next[slotId];
+          if (registered && slots[slotId].status !== "registered") {
+            slots[slotId] = { ...slots[slotId], status: "registered", width: next[slotId]?.width, height: next[slotId]?.height };
+            changed = true;
+          } else if (!registered && slots[slotId].status === "registered") {
+            slots[slotId] = { ...slots[slotId], status: "waiting", width: undefined, height: undefined, warning: undefined };
+            changed = true;
+          }
+        }
+        return changed ? { ...prev, [selected.id]: { ...base, slots } } : prev;
+      });
+    }
+    void restoreImages();
+    return () => { cancelled = true; };
+  }, [selected.id]);
+
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
+  function ensureWork(topicId = selected.id) {
+    const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+    return works[topicId] || defaultWork(topic);
+  }
+
+  function patchWork(patch: Partial<TopicWork>, topicId = selected.id) {
+    setWorks((prev) => {
+      const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+      const base = prev[topicId] || defaultWork(topic);
+      return { ...prev, [topicId]: { ...base, ...patch } };
+    });
+  }
+
+  function patchSlot(slotId: SlotId, patch: Partial<SlotMeta>, topicId = selected.id) {
+    setWorks((prev) => {
+      const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+      const base = prev[topicId] || defaultWork(topic);
+      return {
+        ...prev,
+        [topicId]: {
+          ...base,
+          slots: { ...base.slots, [slotId]: { ...base.slots[slotId], ...patch } },
+        },
+      };
+    });
+  }
 
   function statusOf(id: number): Status {
     return statuses[id] || "waiting";
@@ -380,6 +467,10 @@ export default function ParammaBulkPage() {
   function startTopic(id: number) {
     setSelectedId(id);
     setStatuses((prev) => ({ ...prev, [id]: prev[id] === "done" ? "done" : "working" }));
+    if (!works[id]) {
+      const topic = TOPICS.find((t) => t.id === id) || TOPICS[0];
+      setWorks((prev) => ({ ...prev, [id]: defaultWork(topic) }));
+    }
   }
 
   function completeTopic(id: number) {
@@ -393,15 +484,130 @@ export default function ParammaBulkPage() {
     try {
       await navigator.clipboard.writeText(text);
       setNotice(success);
+      return true;
     } catch {
-      setNotice("클립보드 복사에 실패했습니다. 요청서에서 직접 선택해 복사해주세요.");
+      setNotice("클립보드 복사에 실패했습니다. 요청서 내용을 직접 선택해 복사해주세요.");
+      return false;
     }
   }
 
-  async function copyAndOpen() {
+  async function copyArticlePrompt(openChat = false) {
     startTopic(selected.id);
-    await copyText(articlePrompt, `${selected.id}번 ChatGPT 검색 요청서를 복사했습니다. 새 채팅에 붙여넣으세요.`);
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    const current = ensureWork();
+    const copied = await copyText(current.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+    if (copied && openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+  }
+
+  async function copyImagePrompt(slotId: SlotId, openChat = false) {
+    const current = ensureWork();
+    const meta = current.slots[slotId];
+    const copied = await copyText(meta.prompt, `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다.`);
+    if (!copied) return;
+    startTopic(selected.id);
+    if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
+    if (openChat) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+  }
+
+  async function handleUpload(slotId: SlotId, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const info = SLOT_INFO[slotId];
+    const oldImage = images[slotId];
+    setImageBusy(slotId);
+    setNotice("");
+    try {
+      const converted = await convertToPng(file, info.width, info.height);
+      const record: ImageRecord = { blob: converted.blob, width: converted.width, height: converted.height, updatedAt: new Date().toISOString() };
+      await idbPut(selected.id, slotId, record);
+      const url = URL.createObjectURL(record.blob);
+      previewUrls.current.push(url);
+      setImages((prev) => {
+        if (prev[slotId]?.url) URL.revokeObjectURL(prev[slotId]!.url);
+        return { ...prev, [slotId]: { ...record, url } };
+      });
+      patchSlot(slotId, { status: "registered", width: record.width, height: record.height, warning: converted.warning, updatedAt: record.updatedAt });
+      setNotice(`${slotId} 이미지를 실제 PNG로 변환해 등록했습니다.${converted.warning ? " 비율 경고를 확인해주세요." : ""}`);
+    } catch (error: any) {
+      setNotice(oldImage
+        ? `이미지 교체에 실패했습니다. 기존 ${slotId} 이미지는 그대로 보존했습니다. ${error?.message || ""}`
+        : `이미지 등록에 실패했습니다. ${error?.message || ""}`);
+    } finally {
+      setImageBusy(null);
+    }
+  }
+
+  async function deleteImage(slotId: SlotId) {
+    if (!images[slotId]) return;
+    if (!window.confirm(`${slotId} 등록 이미지를 실제로 삭제할까요?`)) return;
+    try {
+      await idbDelete(selected.id, slotId);
+      const oldUrl = images[slotId]?.url;
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
+      setImages((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+      patchSlot(slotId, { status: "waiting", width: undefined, height: undefined, warning: undefined, updatedAt: undefined });
+      setNotice(`${slotId} 이미지를 삭제했습니다.`);
+    } catch (error: any) {
+      setNotice(`이미지 삭제에 실패했습니다. ${error?.message || ""}`);
+    }
+  }
+
+  function toggleOptional03() {
+    const next = !work.optional03;
+    patchWork({ optional03: next });
+    setNotice(!next && images["03"]
+      ? "선택 이미지 03을 사용 안 함으로 바꿨습니다. 등록된 이미지는 삭제하지 않고 보관하며 ZIP에서만 제외합니다."
+      : next
+        ? "선택 이미지 03을 활성화했습니다. ZIP 전에 이미지를 등록하거나 다시 선택 해제해야 합니다."
+        : "선택 이미지 03을 사용하지 않습니다.");
+  }
+
+  const requiredSlots: SlotId[] = ["00", "01", "02"];
+  const missingRequired = requiredSlots.filter((slotId) => !images[slotId]);
+  const optionalMissing = work.optional03 && !images["03"];
+  const bodyReady = work.body.trim().length > 0 && work.bodyConfirmed;
+  const canZip = bodyReady && missingRequired.length === 0 && !optionalMissing;
+
+  async function downloadZip() {
+    if (!canZip) {
+      setNotice("최종 검수 조건을 먼저 충족해주세요.");
+      return;
+    }
+    setZipBusy(true);
+    setNotice("");
+    try {
+      const current = ensureWork();
+      const zip = new JSZip();
+      const folder = zip.folder(cleanFolderName(selected));
+      if (!folder) throw new Error("ZIP 폴더를 만들 수 없습니다.");
+      const includeSlots: SlotId[] = current.optional03 ? ["00", "01", "02", "03"] : ["00", "01", "02"];
+      for (const slotId of includeSlots) {
+        const record = await idbGet(selected.id, slotId);
+        if (!record) throw new Error(`${slotId} 이미지가 없습니다.`);
+        if (!(await hasPngSignature(record.blob))) throw new Error(`${slotId} 파일의 실제 형식이 PNG가 아닙니다.`);
+        folder.file(SLOT_INFO[slotId].filename, record.blob);
+      }
+      folder.file("final_post.txt", current.body);
+      folder.file("article_request.txt", current.articlePrompt);
+      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${current.slots[slotId].prompt}`).join("\n\n====================\n\n"));
+      folder.file("project.json", JSON.stringify({ topic: selected, bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${cleanFolderName(selected)}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice("최종 검수 통과. 글별 폴더 구조의 ZIP을 만들었습니다.");
+    } catch (error: any) {
+      setNotice(`ZIP 생성에 실패했습니다. ${error?.message || ""}`);
+    } finally {
+      setZipBusy(false);
+    }
   }
 
   async function requestNextTen() {
@@ -410,10 +616,11 @@ export default function ParammaBulkPage() {
   }
 
   function resetProgress() {
-    if (!window.confirm("이번 10개의 진행 상태를 모두 초기화할까요?")) return;
+    if (!window.confirm("이번 10개의 진행 상태와 본문·요청서 설정을 초기화할까요? 등록 이미지는 별도 삭제하지 않습니다.")) return;
     setStatuses({});
+    setWorks({});
     setSelectedId(1);
-    setNotice("진행 상태를 초기화했습니다.");
+    setNotice("진행 상태와 글 설정을 초기화했습니다. 등록 이미지 파일은 보존했습니다.");
   }
 
   return (
