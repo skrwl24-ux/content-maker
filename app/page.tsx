@@ -13,7 +13,7 @@ type Phase = "home" | "input" | "analysis" | "images" | "review" | "done";
 const TYPES = [
   ["🏠", "아파트 블로그", "시세·실거래·TOP3"],
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
-  ["🌿", "Paramma 블로거", "동물·자연·생활 궁금증"],
+  ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
   ["🎬", "집값쓱 쇼츠", "세로 장면 6~7개"],
 ] as const;
@@ -469,8 +469,8 @@ export default function Home() {
       {phase === "home" && <>
         <div className="sectionHead"><div><h2>무엇을 만들까요?</h2><p>카테고리를 고르면 그 작업에 맞게 이미지 구성과 규격을 준비합니다.</p></div></div>
         <div className="types">{TYPES.map(([ico, name, desc]) => <button key={name} className={`type ${contentType === name ? "sel" : ""}`} onClick={() => setContentType(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div>
-        {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>🌿 Paramma 블로거 작업 선택</h3><p className="muted">세 가지 카테고리를 구분해서 작업합니다. 선택한 카테고리마다 발행 순서 10개가 따로 준비됩니다.</p><div className="parammaGrid">{PARAMMA_CATEGORIES.map(([ico, name, desc]) => <button key={name} className={`parammaCard ${parammaCategory === name ? "sel" : ""}`} onClick={() => setParammaCategory(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div></div>}
-        <div className="actions"><button className="primary" onClick={() => setPhase("input")}>새 작업 시작</button></div>
+        {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>🌿 Paramma 블로거 · 순차 발행 모드</h3><p className="muted">신기한 동물이야기 · 신비로운 자연 · 생활 속 궁금증을 한 발행 큐에 섞어 1번부터 10번까지 순서대로 진행합니다.</p></div>}
+        <div className="actions"><button className="primary" onClick={() => { if (contentType === "Paramma 블로거") window.location.href = "/paramma-bulk"; else setPhase("input"); }}>{contentType === "Paramma 블로거" ? "발행 10개 열기" : "새 작업 시작"}</button></div>
         <div className="box"><h3>저장 프로젝트</h3>{saved.length === 0 ? <div className="muted">아직 저장된 작업이 없습니다.</div> : <div className="savedList">{saved.map(p => <div className="savedItem" key={p.id}><div><b>{p.project_title}</b><small>{p.content_type}</small></div><button className="secondary compact" onClick={() => loadProject(p.id)}>불러오기</button></div>)}</div>}</div>
       </>}
 
