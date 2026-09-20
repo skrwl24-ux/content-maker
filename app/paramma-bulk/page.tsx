@@ -106,10 +106,22 @@ function cleanNaverLine(line: string) {
     .trim();
 }
 
+function isNonPublishNaverHeading(line: string) {
+  const normalized = cleanNaverLine(line)
+    .replace(/^\[|\]$/g, "")
+    .replace(/^\d+[.)]\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /^(이미지.*기획\s*메모|검수\s*메모)(?:\s*[:：-].*)?$/i.test(normalized);
+}
+
 function parseNaverBlog(raw: string): NaverBlock[] {
-  const lines = raw
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
+  const allLines = raw.replace(/\r\n?/g, "\n").split("\n");
+  const cutoff = allLines.findIndex((line) => isNonPublishNaverHeading(line));
+  const publishLines = cutoff >= 0 ? allLines.slice(0, cutoff) : allLines;
+
+  const lines = publishLines
     .map((line) => line.trim())
     .filter((line) => line && !/^:::writing\b/i.test(line) && line !== ":::" && !/^---option\b/i.test(line));
 
@@ -253,7 +265,7 @@ ${categoryGuide(topic.category)}
 }
 
 
-function buildImagePrompt(topic: Topic, slotId: SlotId) {
+function buildLegacyImagePrompt(topic: Topic, slotId: SlotId) {
   const info = SLOT_INFO[slotId];
   const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
   const textLine = slotId === "00" ? topic.title : info.copy;
@@ -295,6 +307,99 @@ ${textLine}
 - 작은 글자를 빽빽하게 채운 구성
 
 중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
+}
+
+function buildImagePrompt(topic: Topic, slotId: SlotId) {
+  const info = SLOT_INFO[slotId];
+  const isThumbnail = slotId === "00";
+  const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
+
+  const compositionRules = isThumbnail
+    ? `[썸네일 구성 원칙]
+- 주제를 한눈에 이해시키는 대표 썸네일로 구성
+- 핵심 피사체와 질문형 문구가 모바일 목록에서도 바로 보이게
+- 문구는 1~2줄 중심으로 크게 배치
+- 정보 과밀 없이 강한 대표 장면 1개를 중심으로 구성
+
+[이미지에 넣을 문구]
+${topic.title}
+- 위 문구 외에 긴 설명문을 추가하지 말 것
+- 한글 문구는 크고 선명하게, 오탈자 없이 표시할 것`
+    : `[본문 이미지 구성 원칙]
+- 이 이미지는 썸네일이 아니라 글 중간에 삽입되는 본문용 이미지
+- 큰 제목, 질문형 카피, 제목 박스, 리본, 배지, 카드형 설명 문구를 넣지 말 것
+- 화면의 중심은 글자가 아니라 실제 장면·생물·자연 현상·과정 자체가 되게 할 것
+- 사진형이 적합하면 자연 다큐멘터리 사진처럼 사실적인 한 장면으로 구성
+- 설명형이 필요해도 '썸네일 카드'가 아니라 본문 삽화처럼 자연스럽게 구성
+- 과정·비교가 필요하면 시각적 흐름은 보여주되 여러 카드나 콜라주처럼 쪼개지 말 것
+- 여백은 자연스럽게 두고, 블로그 본문에 넣었을 때 사진/삽화처럼 보이게 할 것
+
+[이미지 내 텍스트]
+- 원칙적으로 큰 제목이나 설명 문구를 넣지 말 것
+- 과학적 이해에 꼭 필요한 경우에만 짧은 라벨 1~3개 정도 허용
+- 라벨도 작고 보조적으로 사용하며 이미지보다 글자가 먼저 보이면 안 됨`;
+
+  return `Paramma 블로거용 이미지를 1장 만들어줘.
+
+[글 정보]
+카테고리: ${topic.category}
+글 주제: ${topic.title}
+기획 의도: ${topic.brief}
+
+[이미지 역할]
+슬롯: ${slotId} · ${info.label}
+역할: ${info.role}
+이 이미지가 전달할 내용: ${info.copy}
+
+[제작 목표]
+목표 크기: ${info.width}×${info.height}px
+목표 비율: ${ratio}
+네이버 블로그용 단일 이미지 1장
+
+[공통 스타일]
+- 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게
+- 과도한 AI 느낌, 네온, 유리질감, 과한 3D 효과, 불필요한 장식 금지
+- 실제 생물·자연의 형태와 색을 과장하거나 왜곡하지 말 것
+- 모바일에서도 핵심 피사체가 잘 보이도록 단순한 구도와 여백 사용
+
+${compositionRules}
+
+[제외할 요소]
+- 워터마크, 타사 로고
+- 출처 불명 숫자·통계
+- 본문에서 확인되지 않은 사실
+- 여러 장을 한 장에 합친 콜라주
+- 작은 글자를 빽빽하게 채운 구성
+${isThumbnail ? "" : "- 썸네일처럼 큰 제목이 전면을 차지하는 구성\n- 원형 배지·화살표·강조 카피를 여러 개 배치한 광고형 인포그래픽"}
+
+중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
+}
+
+function refreshLegacyImagePrompts(works: Record<number, TopicWork>) {
+  let changed = false;
+  const next = { ...works };
+
+  for (const topic of TOPICS) {
+    const current = works[topic.id];
+    if (!current?.slots) continue;
+
+    let topicChanged = false;
+    const slots = { ...current.slots };
+
+    for (const slotId of ["01", "02", "03"] as SlotId[]) {
+      const slot = slots[slotId];
+      if (!slot) continue;
+      if (slot.prompt === buildLegacyImagePrompt(topic, slotId)) {
+        slots[slotId] = { ...slot, prompt: buildImagePrompt(topic, slotId) };
+        topicChanged = true;
+        changed = true;
+      }
+    }
+
+    if (topicChanged) next[topic.id] = { ...current, slots };
+  }
+
+  return changed ? next : works;
 }
 
 function defaultWork(topic: Topic): TopicWork {
@@ -457,7 +562,7 @@ export default function ParammaBulkPage() {
         const parsed = JSON.parse(raw);
         if (parsed?.statuses) setStatuses(parsed.statuses);
         if (parsed?.selectedId && TOPICS.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
-        if (parsed?.works) setWorks(parsed.works);
+        if (parsed?.works) setWorks(refreshLegacyImagePrompts(parsed.works));
       }
     } catch {
       setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
