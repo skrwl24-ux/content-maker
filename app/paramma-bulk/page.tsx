@@ -502,8 +502,13 @@ export default function ParammaBulkPage() {
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
   }
 
-  function openChatGPT() {
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+  function openImagePromptInChatGPT(slotId: SlotId) {
+    const current = ensureWork();
+    const meta = current.slots[slotId];
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt);
+    startTopic(selected.id);
+    if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function handleUpload(slotId: SlotId, event: ChangeEvent<HTMLInputElement>) {
@@ -786,7 +791,7 @@ export default function ParammaBulkPage() {
                       <button type="button" onClick={() => void copyImagePrompt(slotId)} disabled={optionalInactive}>
                         요청서 복사
                       </button>
-                      <button type="button" onClick={openChatGPT} disabled={optionalInactive}>
+                      <button type="button" onClick={() => openImagePromptInChatGPT(slotId)} disabled={optionalInactive}>
                         ChatGPT 열기
                       </button>
                     </div>
