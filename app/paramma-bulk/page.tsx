@@ -339,6 +339,7 @@ export default function ParammaBulkPage() {
   const [works, setWorks] = useState<Record<number, TopicWork>>({});
   const [images, setImages] = useState<Partial<Record<SlotId, LoadedImage>>>({});
   const [notice, setNotice] = useState("");
+  const [chatDiagnostic, setChatDiagnostic] = useState<{ slotId: SlotId; url: string } | null>(null);
   const [imageBusy, setImageBusy] = useState<SlotId | null>(null);
   const [zipBusy, setZipBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -744,6 +745,8 @@ export default function ParammaBulkPage() {
                 const meta = work.slots[slotId];
                 const image = images[slotId];
                 const optionalInactive = slotId === "03" && !work.optional03;
+                const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt);
+                const shortTestUrl = "https://chatgpt.com/?q=" + encodeURIComponent("PARAMMA_Q_TEST");
                 return (
                   <article key={slotId} className={`${styles.imageCard} ${optionalInactive ? styles.inactiveCard : ""}`}>
                     <div className={styles.imageCardHead}>
@@ -786,10 +789,11 @@ export default function ParammaBulkPage() {
                         <span className={styles.chatLinkDisabled} aria-disabled="true">ChatGPT 열기</span>
                       ) : (
                         <a
-                          href={"https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt)}
+                          href={chatUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => {
+                            setChatDiagnostic({ slotId, url: chatUrl });
                             startTopic(selected.id);
                             if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
                           }}
@@ -798,6 +802,30 @@ export default function ParammaBulkPage() {
                         </a>
                       )}
                     </div>
+
+                    {chatDiagnostic?.slotId === slotId && (
+                      <details className={styles.slotPrompt} open>
+                        <summary>ChatGPT q 진단 · 실제 사용 URL</summary>
+                        <textarea value={chatDiagnostic.url} readOnly />
+                        <div className={styles.imageActions}>
+                          <button
+                            type="button"
+                            onClick={() => void copyText(chatDiagnostic.url, "ChatGPT 최종 URL을 복사했습니다.")}
+                          >
+                            주소 복사
+                          </button>
+                          <a href={chatDiagnostic.url} target="_blank" rel="noopener noreferrer">
+                            직접 열기
+                          </a>
+                          <a href={shortTestUrl} target="_blank" rel="noopener noreferrer">
+                            짧은 문장 테스트
+                          </a>
+                        </div>
+                        <div className={styles.imageMeta}>
+                          진단 URL은 현재 화면 상태에만 보관하며 외부 로그나 localStorage에 저장하지 않습니다.
+                        </div>
+                      </details>
+                    )}
 
                     <details className={styles.slotPrompt}>
                       <summary>요청서 확인·수정</summary>
