@@ -25,8 +25,12 @@ function localAnalyze(contentType: string, projectTitle: string, rawContent: str
     ? ["썸네일","최근 흐름","대표 단지 비교","실거래 핵심","가격 차이 이유","앞으로 체크"]
     : contentType === "AI Price Atlas"
     ? ["Thumbnail","Official Price","Web vs App","Payment Methods","Tax / Notes","Summary"]
-    : contentType === "동물·자연"
-    ? ["썸네일","궁금증","핵심 원리","과정","의외의 사실","요약"]
+    : contentType === "신기한 동물이야기" || contentType === "동물·자연"
+    ? ["썸네일","왜 그럴까?","핵심 특징","놀라운 능력","의외의 사실","한눈에 요약"]
+    : contentType === "신비로운 자연"
+    ? ["썸네일","이 현상은 뭘까?","핵심 원리","어떻게 생길까?","신기한 포인트","한눈에 요약"]
+    : contentType === "생활 속 궁금증"
+    ? ["썸네일","왜 그럴까?","핵심 원리","생활 속 원인","알아두면 좋은 점","한눈에 요약"]
     : ["썸네일","준비/핵심","방법 1","방법 2","주의점","최종 체크"];
 
   const images = sections.map((section,idx)=>({
@@ -37,9 +41,14 @@ function localAnalyze(contentType: string, projectTitle: string, rawContent: str
     imagePrompt: `${section} 내용을 한 장의 카드 이미지로 정리. 원문에 없는 숫자나 사실은 추가하지 않는다.`
   }));
 
+  const isParamma = ["신기한 동물이야기","신비로운 자연","생활 속 궁금증","동물·자연"].includes(contentType);
+  const titleCandidates = isParamma
+    ? [title, `${title}｜이유를 쉽게 알아보자`, `${title} 정말 그럴까?`, `${title} 알고 보면 더 신기한 이유`, `${title} 핵심만 쉽게 정리`]
+    : [`${title}, 핵심 흐름 한눈에 정리`,`${title}, 왜 차이가 날까?`,`${title}, 숫자로 보는 현재 상황`,`${title}, 핵심만 비교`,`${title}, 앞으로 체크할 포인트`];
+
   return {
-    recommendedTitle: `${title}, 핵심 흐름 한눈에 정리`,
-    titleCandidates: [`${title}, 핵심 흐름 한눈에 정리`,`${title}, 왜 차이가 날까?`,`${title}, 숫자로 보는 현재 상황`,`${title}, 핵심만 비교`,`${title}, 앞으로 체크할 포인트`],
+    recommendedTitle: titleCandidates[0],
+    titleCandidates,
     keywords: keywords.length >= 3 ? keywords : ["핵심","비교","정리"],
     facts,
     images
