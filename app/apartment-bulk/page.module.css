@@ -67,3 +67,42 @@
 .dailyWarning{background:#fff2e8;color:#9a4e18}
 @media(max-width:1000px){.dailySlots{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:640px){.dailyBoard{padding:18px 14px;border-radius:20px}.dailyBoardHead{align-items:flex-start;flex-direction:column}.dailyBoardActions{width:100%;justify-content:space-between}.dailySlots{grid-template-columns:1fr}.dailySlot,.dailySlotDone{display:grid;grid-template-columns:36px minmax(0,1fr) 74px;align-items:center;gap:8px}.dailySlotMain small{min-height:0}.dailyBoardHead h2{font-size:24px}}
+
+.dailySlotActions{display:flex;flex-direction:column;gap:6px}
+.dailyStart,.dailyActiveWork{border:0;border-radius:10px;padding:9px 8px;font-size:11px;font-weight:900;cursor:pointer}
+.dailyStart{background:#e9eff5;color:#33465c}
+.dailyActiveWork{background:#163b5b;color:#fff}
+.dailyWorkId{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;color:#97a2af;background:#f1f4f7;border-radius:7px;padding:4px 6px}
+.activeWorkPanel{width:min(1180px,100%);margin:18px auto 0;background:#fff;border:1px solid #dce5ee;border-radius:24px;padding:22px 24px;box-shadow:0 10px 28px rgba(26,42,66,.06)}
+.activeWorkHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:16px;border-bottom:1px solid #edf1f5}
+.activeWorkHead h2{margin:4px 0 6px;font-size:25px;color:#17243a}
+.activeWorkHead code{font-size:11px;color:#728094;background:#f3f6f9;border-radius:8px;padding:5px 8px}
+.activeWorkMeta{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.activeWorkMeta select,.activeWorkMeta button{border:1px solid #dbe4ed;border-radius:11px;padding:9px 11px;background:#fff;color:#33465c;font-size:12px;font-weight:800}
+.activeWorkMeta button{border:0;background:#0f827f;color:#fff;cursor:pointer}
+.activeWorkMeta span{font-size:11px;color:#6d7b8d}
+.workPrepGrid{display:grid;grid-template-columns:1fr 1.25fr;gap:12px;margin-top:16px}
+.workField{display:flex;flex-direction:column;gap:7px}
+.workField>span{font-size:12px;font-weight:900;color:#516075}
+.workField input,.workField textarea{width:100%;box-sizing:border-box;border:1px solid #d9e2eb;border-radius:13px;padding:12px 13px;background:#fbfcfe;color:#1f2e42;font:600 13px/1.55 Pretendard,"Noto Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;outline:none}
+.workField textarea{min-height:94px;resize:vertical}
+.workField input:focus,.workField textarea:focus{border-color:#35a79f;box-shadow:0 0 0 3px rgba(53,167,159,.09)}
+.bulkWorkBridge,.prepOnlyPanel{margin-top:14px;padding:16px;border:1px solid #e0e7ee;border-radius:17px;background:#f9fbfc}
+.bulkWorkBridge>div:first-child b,.prepOnlyNotice b{display:block;font-size:14px;color:#17314f}
+.bulkWorkBridge>div:first-child p{margin:5px 0 12px;font-size:11px;color:#778596;line-height:1.5}
+.bulkSaveState{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.bulkSaveState span{padding:6px 9px;border-radius:999px;background:#eaf8f5;color:#176d68;font-size:10px;font-weight:900}
+.prepOnlyNotice{display:flex;flex-direction:column;gap:4px;margin-bottom:13px}
+.prepOnlyNotice span{font-size:11px;color:#7a8798;line-height:1.5}
+.prepOnlyPanel>.workField{margin-top:11px}
+.workAttachmentBox{margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px dashed #bdc9d6;border-radius:13px;padding:12px;background:#fff}
+.workAttachmentBox label{font-size:12px;font-weight:900;color:#405168;cursor:pointer}
+.workAttachmentBox input{display:block;margin-top:7px;font-size:11px}
+.workAttachmentBox span{font-size:10px;color:#8793a4}
+.workAttachmentGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}
+.workAttachmentCard{min-width:0;border:1px solid #dfe6ed;border-radius:12px;overflow:hidden;background:#fff}
+.workAttachmentCard img{display:block;width:100%;height:110px;object-fit:cover;background:#edf1f5}
+.workAttachmentCard span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:7px 8px 2px;font-size:10px;color:#5d6b7c}
+.workAttachmentCard button{margin:5px 8px 8px;border:0;border-radius:8px;padding:6px 8px;background:#eef2f6;color:#5d6b7c;font-size:10px;font-weight:800;cursor:pointer}
+@media(max-width:1000px){.dailySlotActions{flex-direction:row}.workAttachmentGrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.activeWorkPanel{padding:18px 14px;border-radius:20px}.activeWorkHead{flex-direction:column}.activeWorkMeta{justify-content:flex-start}.workPrepGrid{grid-template-columns:1fr}.workAttachmentBox{align-items:flex-start;flex-direction:column}.workAttachmentGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.dailySlotActions{flex-direction:column}}
