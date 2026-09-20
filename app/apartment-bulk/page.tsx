@@ -2051,10 +2051,10 @@ export default function ApartmentBulkPage() {
               <div className={styles.dailySlotActions}>
                 <button
                   type="button"
-                  className={activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
+                  className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
                   onClick={() => void openDailyWork(slot)}
                 >
-                  {activeWorkId === slot.workId ? "작업 중" : startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
+                  {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
                 </button>
                 <button
                   type="button"
