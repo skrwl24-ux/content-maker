@@ -506,9 +506,9 @@ export default function ParammaBulkPage() {
     const current = ensureWork();
     const meta = current.slots[slotId];
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt);
+    window.open(url, "_blank", "noopener,noreferrer");
     startTopic(selected.id);
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
-    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function handleUpload(slotId: SlotId, event: ChangeEvent<HTMLInputElement>) {
