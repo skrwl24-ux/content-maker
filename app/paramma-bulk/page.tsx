@@ -502,15 +502,6 @@ export default function ParammaBulkPage() {
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
   }
 
-  function openImagePromptInChatGPT(slotId: SlotId) {
-    const current = ensureWork();
-    const meta = current.slots[slotId];
-    const url = "https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt);
-    window.open(url, "_blank", "noopener,noreferrer");
-    startTopic(selected.id);
-    if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
-  }
-
   async function handleUpload(slotId: SlotId, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -791,9 +782,21 @@ export default function ParammaBulkPage() {
                       <button type="button" onClick={() => void copyImagePrompt(slotId)} disabled={optionalInactive}>
                         요청서 복사
                       </button>
-                      <button type="button" onClick={() => openImagePromptInChatGPT(slotId)} disabled={optionalInactive}>
-                        ChatGPT 열기
-                      </button>
+                      {optionalInactive ? (
+                        <span className={styles.chatLinkDisabled} aria-disabled="true">ChatGPT 열기</span>
+                      ) : (
+                        <a
+                          href={"https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            startTopic(selected.id);
+                            if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
+                          }}
+                        >
+                          ChatGPT 열기
+                        </a>
+                      )}
                     </div>
 
                     <details className={styles.slotPrompt}>
