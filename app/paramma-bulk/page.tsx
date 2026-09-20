@@ -1,10 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import JSZip from "jszip";
 import styles from "./page.module.css";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증";
 type Status = "waiting" | "working" | "done";
+type SlotStatus = "waiting" | "working" | "registered";
+type SlotId = "00" | "01" | "02" | "03";
+
+type SlotMeta = {
+  status: SlotStatus;
+  prompt: string;
+  width?: number;
+  height?: number;
+  warning?: string;
+  updatedAt?: string;
+};
+
+type TopicWork = {
+  articlePrompt: string;
+  body: string;
+  bodyConfirmed: boolean;
+  optional03: boolean;
+  slots: Record<SlotId, SlotMeta>;
+};
+
+type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string };
+type LoadedImage = ImageRecord & { url: string };
 
 type Topic = {
   id: number;
@@ -27,6 +50,15 @@ const TOPICS: Topic[] = [
 ];
 
 const STORAGE_KEY = "paramma-publish-queue-v1";
+const DB_NAME = "paramma-blogger-images-v1";
+const DB_STORE = "images";
+const SLOT_IDS: SlotId[] = ["00", "01", "02", "03"];
+const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
+  "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
+  "01": { label: "본문 이미지 01", role: "핵심 원리", width: 1600, height: 900, filename: "01_body.png", copy: "핵심 원리를 한눈에 이해시키는 장면" },
+  "02": { label: "본문 이미지 02", role: "과정·비교", width: 1600, height: 900, filename: "02_body.png", copy: "원인과 과정 또는 비교를 쉽게 보여주는 장면" },
+  "03": { label: "선택 이미지 03", role: "추가 설명", width: 1600, height: 900, filename: "03_body.png", copy: "추가로 알아두면 좋은 점을 보여주는 보조 장면" },
+};
 
 function categoryEmoji(category: Category) {
   if (category === "신기한 동물이야기") return "🐾";
@@ -128,6 +160,158 @@ ${categoryGuide(topic.category)}
 5. 마지막에 ‘검수 메모’로 사용한 주요 출처와 핵심 사실을 짧게 정리
 
 중요: 검색하지 않고 일반 상식만으로 작성하지 말고, 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
+}
+
+
+function buildImagePrompt(topic: Topic, slotId: SlotId) {
+  const info = SLOT_INFO[slotId];
+  const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
+  const textLine = slotId === "00" ? topic.title : info.copy;
+  return `Paramma 블로거용 이미지를 1장 만들어줘.
+
+[글 정보]
+카테고리: ${topic.category}
+글 주제: ${topic.title}
+기획 의도: ${topic.brief}
+
+[이미지 역할]
+슬롯: ${slotId} · ${info.label}
+역할: ${info.role}
+이 이미지가 전달할 내용: ${info.copy}
+
+[제작 목표]
+목표 크기: ${info.width}×${info.height}px
+목표 비율: ${ratio}
+네이버 블로그용 단일 이미지 1장
+
+[공통 스타일]
+- 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게
+- 과도한 AI 느낌, 네온, 유리질감, 과한 3D 효과, 불필요한 장식 금지
+- 실제 생물·자연의 형태와 색을 과장하거나 왜곡하지 말 것
+- 설명형이면 교육용 인포그래픽처럼 구조가 한눈에 보이게
+- 사진형이 적합하면 자연 다큐멘터리 사진처럼 사실적으로
+- 모바일에서도 핵심 피사체가 잘 보이도록 단순한 구도와 여백 사용
+
+[이미지에 넣을 문구]
+${textLine}
+- 위 문구 외에 긴 설명문을 추가하지 말 것
+- 한글 문구는 짧고 크게, 오탈자 없이 표시할 것
+
+[제외할 요소]
+- 워터마크, 타사 로고
+- 출처 불명 숫자·통계
+- 본문에서 확인되지 않은 사실
+- 여러 장을 한 장에 합친 콜라주
+- 작은 글자를 빽빽하게 채운 구성
+
+중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
+}
+
+function defaultWork(topic: Topic): TopicWork {
+  return {
+    articlePrompt: buildArticlePrompt(topic),
+    body: "",
+    bodyConfirmed: false,
+    optional03: false,
+    slots: {
+      "00": { status: "waiting", prompt: buildImagePrompt(topic, "00") },
+      "01": { status: "waiting", prompt: buildImagePrompt(topic, "01") },
+      "02": { status: "waiting", prompt: buildImagePrompt(topic, "02") },
+      "03": { status: "waiting", prompt: buildImagePrompt(topic, "03") },
+    },
+  };
+}
+
+function cleanFolderName(topic: Topic) {
+  const short = topic.title.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_").slice(0, 40);
+  return `${String(topic.id).padStart(2, "0")}_${short || "paramma"}`;
+}
+
+function imageKey(topicId: number, slotId: SlotId) {
+  return `topic-${topicId}/slot-${slotId}`;
+}
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(DB_STORE)) req.result.createObjectStore(DB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("이미지 저장소를 열 수 없습니다."));
+  });
+}
+
+async function idbGet(topicId: number, slotId: SlotId): Promise<ImageRecord | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).get(imageKey(topicId, slotId));
+    req.onsuccess = () => resolve((req.result as ImageRecord | undefined) || null);
+    req.onerror = () => reject(req.error || new Error("이미지를 불러오지 못했습니다."));
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function idbPut(topicId: number, slotId: SlotId, record: ImageRecord) {
+  const db = await openDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(record, imageKey(topicId, slotId));
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("이미지를 저장하지 못했습니다.")); };
+  });
+}
+
+async function idbDelete(topicId: number, slotId: SlotId) {
+  const db = await openDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).delete(imageKey(topicId, slotId));
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("이미지를 삭제하지 못했습니다.")); };
+  });
+}
+
+function loadHtmlImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("이미지 파일을 읽을 수 없습니다."));
+    img.src = src;
+  });
+}
+
+async function convertToPng(file: File, targetWidth: number, targetHeight: number) {
+  if (!file.type.startsWith("image/")) throw new Error("이미지 파일만 등록할 수 있습니다.");
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const img = await loadHtmlImage(sourceUrl);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("PNG 변환 기능을 사용할 수 없습니다.");
+    ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((out) => out ? resolve(out) : reject(new Error("PNG 변환에 실패했습니다.")), "image/png");
+    });
+    const actualRatio = img.naturalWidth / img.naturalHeight;
+    const targetRatio = targetWidth / targetHeight;
+    const gap = Math.abs(actualRatio - targetRatio) / targetRatio;
+    const warning = gap > 0.04
+      ? `목표 비율과 다릅니다. 원본 ${img.naturalWidth}×${img.naturalHeight}px 그대로 보존하며 자르거나 늘리지 않았습니다.`
+      : "";
+    return { blob, width: img.naturalWidth, height: img.naturalHeight, warning };
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+async function hasPngSignature(blob: Blob) {
+  const bytes = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+  const png = [137, 80, 78, 71, 13, 10, 26, 10];
+  return png.every((value, index) => bytes[index] === value);
 }
 
 function buildNextTenPrompt() {
