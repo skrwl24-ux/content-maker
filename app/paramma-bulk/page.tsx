@@ -635,7 +635,7 @@ export default function ParammaBulkPage() {
         <div>
           <p className={styles.eyebrow}>PARAMMA PUBLISH QUEUE</p>
           <h1>이번 발행 10개</h1>
-          <p>카테고리를 따로 고르지 않습니다. 추천 순서대로 하나씩 검색·작성하고 발행 완료만 체크하세요.</p>
+          <p>본문·이미지 기획 확정 → 여러 ChatGPT 창에 이미지 요청서 전달 → 본문 검수 → 이미지 등록 → 최종 검수·ZIP 순서로 진행합니다.</p>
         </div>
         <div className={styles.progressCard}>
           <div><b>{doneCount}</b><span>/ 10 완료</span></div>
@@ -692,39 +692,190 @@ export default function ParammaBulkPage() {
           </div>
         </div>
 
-        <aside className={styles.workPanel}>
-          <p className={styles.eyebrow}>CURRENT ARTICLE</p>
-          <div className={styles.currentNo}>{String(selected.id).padStart(2, "0")}</div>
-          <span className={`${styles.category} ${categoryClass(selected.category)}`}>
-            {categoryEmoji(selected.category)} {selected.category}
-          </span>
-          <h2>{selected.title}</h2>
-          <p className={styles.brief}>{selected.brief}</p>
+        <div className={styles.workColumn}>
+          <section className={styles.workPanel}>
+            <p className={styles.eyebrow}>01 · BODY & PLAN</p>
+            <div className={styles.currentNo}>{String(selected.id).padStart(2, "0")}</div>
+            <span className={`${styles.category} ${categoryClass(selected.category)}`}>
+              {categoryEmoji(selected.category)} {selected.category}
+            </span>
+            <h2>{selected.title}</h2>
+            <p className={styles.brief}>{selected.brief}</p>
 
-          <div className={styles.flow}>
-            <div><span>1</span><p><b>요청서 복사</b><small>작성 기준일·카테고리·검색 규칙 자동 포함</small></p></div>
-            <div><span>2</span><p><b>ChatGPT 검색·작성</b><small>최신 웹 검색 → 제목 → 본문 → 이미지 요청서</small></p></div>
-            <div><span>3</span><p><b>네이버 발행</b><small>최종 글과 이미지를 올린 뒤 완료 체크</small></p></div>
-          </div>
+            <div className={styles.primaryActions}>
+              <button type="button" className={styles.primary} onClick={() => void copyArticlePrompt(true)}>
+                📝 본문·이미지 기획 요청서 복사 + 열기
+              </button>
+              <button type="button" className={styles.secondary} onClick={() => void copyArticlePrompt(false)}>
+                요청서만 복사
+              </button>
+            </div>
 
-          <div className={styles.primaryActions}>
-            <button type="button" className={styles.primary} onClick={() => void copyAndOpen()}>
-              🔎 ChatGPT 검색 요청서 복사 + 열기
+            <details className={styles.promptDetails}>
+              <summary>본문 요청서 확인·수정</summary>
+              <textarea value={work.articlePrompt} onChange={(e) => patchWork({ articlePrompt: e.target.value })} />
+            </details>
+
+            <label className={styles.bodyLabel}>
+              <span>ChatGPT 완성 본문 붙여넣기</span>
+              <textarea
+                className={styles.bodyEditor}
+                value={work.body}
+                onChange={(e) => patchWork({ body: e.target.value, bodyConfirmed: false })}
+                placeholder="최종 제목 + 본문 + 태그를 붙여넣으세요."
+              />
+            </label>
+            <button
+              type="button"
+              className={`${styles.confirmButton} ${work.bodyConfirmed ? styles.confirmed : ""}`}
+              disabled={!work.body.trim()}
+              onClick={() => patchWork({ bodyConfirmed: !work.bodyConfirmed })}
+            >
+              {work.bodyConfirmed ? "✓ 본문 검수 완료" : "본문 검수 완료로 표시"}
             </button>
-            <button type="button" className={styles.secondary} onClick={() => void copyText(articlePrompt, "요청서를 복사했습니다.")}>
-              요청서만 복사
-            </button>
-          </div>
+          </section>
 
-          <details className={styles.promptDetails}>
-            <summary>요청서 내용 확인</summary>
-            <textarea value={articlePrompt} readOnly />
-          </details>
+          <section className={styles.imageSection}>
+            <div className={styles.sectionHead}>
+              <div>
+                <p className={styles.eyebrow}>02 · PARALLEL IMAGE WORK</p>
+                <h2>이미지 요청서를 여러 창에 나눠 작업</h2>
+              </div>
+              <span>복사 → 작업 중 → 파일 등록</span>
+            </div>
 
-          <button type="button" className={styles.completeButton} onClick={() => completeTopic(selected.id)}>
-            ✓ 이 글 발행 완료
-          </button>
-        </aside>
+            <div className={styles.imageGrid}>
+              {SLOT_IDS.map((slotId) => {
+                const info = SLOT_INFO[slotId];
+                const meta = work.slots[slotId];
+                const image = images[slotId];
+                const optionalInactive = slotId === "03" && !work.optional03;
+                return (
+                  <article key={slotId} className={`${styles.imageCard} ${optionalInactive ? styles.inactiveCard : ""}`}>
+                    <div className={styles.imageCardHead}>
+                      <div>
+                        <span className={styles.slotNo}>{slotId}</span>
+                        <b>{info.label}</b>
+                        <small>{info.width}×{info.height}px 제작 목표</small>
+                      </div>
+                      <span className={`${styles.slotStatus} ${styles[meta.status]}`}>
+                        {meta.status === "registered" ? "등록 완료" : meta.status === "working" ? "작업 중" : "대기"}
+                      </span>
+                    </div>
+
+                    {slotId === "03" && (
+                      <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
+                        {work.optional03 ? "✓ 선택 이미지 03 사용 중 · 선택 해제" : "+ 선택 이미지 03 사용"}
+                      </button>
+                    )}
+
+                    {optionalInactive && image && (
+                      <div className={styles.retained}>등록 이미지 보관 중 · 현재 ZIP에서는 제외</div>
+                    )}
+
+                    <div className={styles.preview}>
+                      {image ? (
+                        <img src={image.url} alt={`${slotId} 미리보기`} />
+                      ) : (
+                        <div><b>이미지 미등록</b><span>다른 ChatGPT 창에서 만든 이미지를 여기에 등록</span></div>
+                      )}
+                    </div>
+
+                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · 실제 PNG 저장</div>}
+                    {meta.warning && <div className={styles.ratioWarning}>⚠ {meta.warning}</div>}
+
+                    <div className={styles.imageActions}>
+                      <button type="button" onClick={() => void copyImagePrompt(slotId, true)} disabled={optionalInactive}>
+                        요청서 복사 + ChatGPT
+                      </button>
+                      <button type="button" onClick={() => void copyImagePrompt(slotId, false)} disabled={optionalInactive}>
+                        복사만
+                      </button>
+                    </div>
+
+                    <details className={styles.slotPrompt}>
+                      <summary>요청서 확인·수정</summary>
+                      <textarea
+                        value={meta.prompt}
+                        onChange={(e) => patchSlot(slotId, { prompt: e.target.value })}
+                        disabled={optionalInactive}
+                      />
+                    </details>
+
+                    <div className={styles.uploadRow}>
+                      <label className={`${styles.uploadButton} ${imageBusy === slotId ? styles.busy : ""}`}>
+                        {imageBusy === slotId ? "PNG 변환 중…" : image ? "이미지 교체" : "이미지 등록"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => void handleUpload(slotId, e)}
+                          disabled={imageBusy !== null || optionalInactive}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className={styles.deleteButton}
+                        onClick={() => void deleteImage(slotId)}
+                        disabled={!image || imageBusy !== null}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className={styles.reviewPanel}>
+            <div className={styles.sectionHead}>
+              <div><p className={styles.eyebrow}>03 · FINAL REVIEW & ZIP</p><h2>최종 검수</h2></div>
+              <span>{canZip ? "ZIP 준비 완료" : "필수 항목 확인 필요"}</span>
+            </div>
+
+            <div className={styles.checkList}>
+              <div className={bodyReady ? styles.pass : styles.fail}>
+                <span>{bodyReady ? "✓" : "!"}</span>
+                <p><b>본문</b><small>{work.body.trim() ? (work.bodyConfirmed ? "본문 입력·검수 완료" : "본문은 입력됐지만 검수 완료 표시가 필요합니다.") : "본문을 붙여넣어야 합니다."}</small></p>
+              </div>
+              {requiredSlots.map((slotId) => (
+                <div key={slotId} className={images[slotId] ? styles.pass : styles.fail}>
+                  <span>{images[slotId] ? "✓" : "!"}</span>
+                  <p><b>{slotId} {SLOT_INFO[slotId].label}</b><small>{images[slotId] ? `${images[slotId]!.width}×${images[slotId]!.height}px · 실제 PNG` : "필수 이미지가 없습니다."}</small></p>
+                </div>
+              ))}
+              <div className={!work.optional03 || images["03"] ? styles.pass : styles.fail}>
+                <span>{!work.optional03 || images["03"] ? "✓" : "!"}</span>
+                <p>
+                  <b>03 선택 이미지</b>
+                  <small>
+                    {work.optional03
+                      ? (images["03"] ? "사용함 · 이미지 등록 완료" : "사용 중이므로 이미지를 등록하거나 선택 해제해야 합니다.")
+                      : images["03"] ? "사용 안 함 · 등록 이미지는 보관 중, ZIP 제외" : "사용 안 함"}
+                  </small>
+                </p>
+              </div>
+            </div>
+
+            {missingRequired.length > 0 && <div className={styles.blocker}>필수 이미지 누락: {missingRequired.join(", ")}</div>}
+            {optionalMissing && <div className={styles.blocker}>선택 이미지 03을 활성화했습니다. 이미지를 등록하거나 선택 해제해주세요.</div>}
+
+            <div className={styles.zipInfo}>
+              <b>ZIP 내부 글별 폴더</b>
+              <code>{cleanFolderName(selected)}/</code>
+              <span>00_thumbnail.png · 01_body.png · 02_body.png{work.optional03 ? " · 03_body.png" : ""} · final_post.txt · 요청서 파일</span>
+            </div>
+
+            <div className={styles.finalActions}>
+              <button type="button" className={styles.zipButton} disabled={!canZip || zipBusy} onClick={() => void downloadZip()}>
+                {zipBusy ? "PNG 확인·ZIP 생성 중…" : "최종 검수 통과 · ZIP 다운로드"}
+              </button>
+              <button type="button" className={styles.completeButton} onClick={() => completeTopic(selected.id)}>
+                ✓ 이 글 발행 완료
+              </button>
+            </div>
+          </section>
+        </div>
       </section>
     </main>
   );
