@@ -40,3 +40,30 @@
 .naverCopyActions span{font-size:11px;color:#7b8794}
 .naverCopyNotice{margin-top:10px;border-radius:11px;padding:10px 12px;background:#eef7f2;color:#315c4b;font-size:12px;font-weight:800}
 @media(max-width:960px){.naverEditorGrid{grid-template-columns:1fr}.naverInput{min-height:300px}.naverPreview{min-height:320px}}
+
+.dailyBoard{width:min(1180px,100%);margin:22px auto 0;background:#fff;border:1px solid #dfe7ef;border-radius:24px;padding:22px 24px;box-shadow:0 10px 28px rgba(26,42,66,.06)}
+.dailyBoardHead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}
+.dailyBoardHead h2{margin:4px 0 5px;font-size:27px;line-height:1.2;color:#17243a}
+.dailyBoardHead h2 strong{color:#0f827f}
+.dailyBoardHead>div>span{font-size:12px;color:#7c899a}
+.dailyBoardActions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.dailyBoardActions button{border:0;border-radius:11px;padding:9px 12px;background:#eef3f8;color:#46566c;font-size:12px;font-weight:900;cursor:pointer}
+.dailyProgressText{font-size:12px;font-weight:900;color:#176d68;background:#eaf8f5;padding:9px 12px;border-radius:999px}
+.dailyProgressTrack{height:8px;border-radius:999px;background:#edf2f6;overflow:hidden;margin-bottom:16px}
+.dailyProgressTrack span{display:block;height:100%;background:#0f827f;border-radius:999px;transition:width .2s ease}
+.dailySlots{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}
+.dailySlot,.dailySlotDone{min-width:0;border:1px solid #e0e7ee;border-radius:16px;padding:12px;background:#fbfcfe;display:flex;flex-direction:column;gap:9px}
+.dailySlotDone{background:#eff8f5;border-color:#b9dfd8}
+.dailySlotNumber{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;background:#e9eef4;color:#526176;font-size:13px;font-weight:900}
+.dailySlotDone .dailySlotNumber{background:#0f827f;color:#fff}
+.dailySlotMain{min-width:0;display:flex;flex-direction:column;gap:5px}
+.dailySlotMain select{width:100%;min-width:0;border:0;background:transparent;color:#17243a;font-size:13px;font-weight:900;outline:none;cursor:pointer}
+.dailySlotMain small{min-height:30px;color:#8490a0;font-size:10px;line-height:1.45}
+.dailyComplete,.dailyUndo{border:0;border-radius:10px;padding:9px 8px;font-size:11px;font-weight:900;cursor:pointer}
+.dailyComplete{background:#0f827f;color:#fff}
+.dailyUndo{background:#dfece9;color:#34625d}
+.dailyRule,.dailyWarning{margin-top:13px;border-radius:12px;padding:10px 12px;font-size:11px;font-weight:800;line-height:1.5}
+.dailyRule{background:#f3f7fa;color:#627184}
+.dailyWarning{background:#fff2e8;color:#9a4e18}
+@media(max-width:1000px){.dailySlots{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:640px){.dailyBoard{padding:18px 14px;border-radius:20px}.dailyBoardHead{align-items:flex-start;flex-direction:column}.dailyBoardActions{width:100%;justify-content:space-between}.dailySlots{grid-template-columns:1fr}.dailySlot,.dailySlotDone{display:grid;grid-template-columns:36px minmax(0,1fr) 74px;align-items:center;gap:8px}.dailySlotMain small{min-height:0}.dailyBoardHead h2{font-size:24px}}
