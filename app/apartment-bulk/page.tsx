@@ -3,6 +3,8 @@
 import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
+import Top3Workspace from "./Top3Workspace";
+import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
@@ -28,6 +30,7 @@ type DailySlot = {
   workId: string;
 };
 type DailyWorkSnapshot = {
+  top3?: Top3Work;
   workId: string;
   dateKey: string;
   slotId: number;
@@ -1370,6 +1373,8 @@ export default function ApartmentBulkPage() {
   const [workImageNotes, setWorkImageNotes] = useState("");
   const [workAttachments, setWorkAttachments] = useState<WorkAttachment[]>([]);
   const [workProgress, setWorkProgress] = useState<WorkProgress>("not_started");
+  const [top3Work, setTop3Work] = useState<Top3Work>(emptyTop3);
+  const workOpeningRef = useRef(false);
   const [startedWorkIds, setStartedWorkIds] = useState<string[]>([]);
   const [workSaveMessage, setWorkSaveMessage] = useState("");
   const workHydratingRef = useRef(false);
@@ -1460,6 +1465,7 @@ export default function ApartmentBulkPage() {
     workImageNotes,
     workAttachments,
     workProgress,
+    top3Work,
     data,
     monthlyStats,
     mapDataUrl,
@@ -1632,6 +1638,7 @@ export default function ApartmentBulkPage() {
     setWorkImageNotes("");
     setWorkAttachments([]);
     setWorkProgress("not_started");
+    setTop3Work(emptyTop3());
     setWorkSaveMessage("");
     setStartedWorkIds([]);
     if (dailyDateKey) {
@@ -1672,6 +1679,7 @@ export default function ApartmentBulkPage() {
       imageNotes: workImageNotes,
       attachments: workAttachments,
       progress: workProgress,
+      top3: top3Work,
       updatedAt: new Date().toISOString(),
       bulk: isBulk ? {
         data,
@@ -1698,8 +1706,10 @@ export default function ApartmentBulkPage() {
       await writeWorkSnapshot(snapshot);
       markWorkStarted(snapshot.workId);
       setWorkSaveMessage("자동 저장됨");
+      return true;
     } catch (error) {
       setWorkSaveMessage(error instanceof Error ? "저장 실패 · " + error.message : "저장 실패");
+      return false;
     }
   }
 
@@ -1720,9 +1730,11 @@ export default function ApartmentBulkPage() {
   }
 
   async function openDailyWork(slot: DailySlot, scroll = true) {
-    if (!slot.workId) return;
+    if (!slot.workId || workOpeningRef.current) return;
+    workOpeningRef.current = true;
     if (activeWorkId && activeWorkId !== slot.workId) {
-      await persistActiveWork();
+      const saved = await persistActiveWork();
+      if (!saved) { workOpeningRef.current = false; return; }
     }
 
     workHydratingRef.current = true;
@@ -1739,6 +1751,7 @@ export default function ApartmentBulkPage() {
         setWorkImageNotes(saved.imageNotes || "");
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
         setWorkProgress(saved.progress || "preparing");
+        setTop3Work(normalizeTop3(saved.top3));
 
         if (slot.type === "bulk" && saved.bulk) {
           setData(saved.bulk.data || SAMPLE);
@@ -1766,17 +1779,17 @@ export default function ApartmentBulkPage() {
         setWorkImageNotes("");
         setWorkAttachments([]);
         setWorkProgress("preparing");
+        setTop3Work(emptyTop3());
         if (slot.type === "bulk") resetBulkWorkspace();
         markWorkStarted(slot.workId);
         setWorkSaveMessage("새 작업 시작");
       }
     } catch (error) {
-      setActiveWorkId(slot.workId);
-      setActiveWorkType(slot.type);
       setWorkSaveMessage(error instanceof Error ? "불러오기 실패 · " + error.message : "불러오기 실패");
     } finally {
       window.setTimeout(() => {
         workHydratingRef.current = false;
+        workOpeningRef.current = false;
         if (scroll) document.getElementById("active-work")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     }
@@ -2133,6 +2146,18 @@ export default function ApartmentBulkPage() {
                 <textarea value={workImageNotes} onChange={(e) => setWorkImageNotes(e.target.value)} placeholder="외부에서 만든 썸네일이나 수정할 이미지 메모를 적어두세요." />
               </label>
             </div>
+          ) : activeWorkType === "top3" ? (
+            <>
+              <Top3Workspace key={activeWorkId} workId={activeWorkId} topic={workTopic} materials={workMaterials}
+                body={workBody} onBodyChange={setWorkBody} data={top3Work} onChange={setTop3Work} />
+              {(workImageNotes || workAttachments.length > 0) && <details>
+                <summary>기존 이미지 메모·참고 첨부 (보존됨)</summary>
+                <p>{workImageNotes}</p>
+                <div className={styles.workAttachmentGrid}>{workAttachments.map((item, index) => (
+                  <div className={styles.workAttachmentCard} key={index}><img src={item.dataUrl} alt={item.name} /><span>{item.name}</span></div>
+                ))}</div>
+              </details>}
+            </>
           ) : (
             <div className={styles.prepOnlyPanel}>
               <div className={styles.prepOnlyNotice}>
@@ -2557,3 +2582,4 @@ function OutputCard({ title, size, src, filename }: { title: string; size: strin
     </article>
   );
 }
+
