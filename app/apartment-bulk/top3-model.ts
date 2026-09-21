@@ -1,6 +1,7 @@
 export type Top3Image = { dataUrl: string; revision: string };
 export type Top3Work = {
   recommendations: string;
+  requestTopic?: string;
   imagePlans?: Record<string, { text: string; revision: string }>;
   region: string; period: string; area: string; criterion: string;
   source: string; asOf: string; scope: string; facts: string;
@@ -22,7 +23,7 @@ export function emptyTop3(): Top3Work {
 export function normalizeTop3(saved?: Partial<Top3Work>): Top3Work {
   const base = emptyTop3();
   if (!saved) return base;
-  for (const key of ["recommendations", "region", "period", "area", "criterion", "source", "asOf", "scope", "facts", "confirmedRevision"] as const) {
+  for (const key of ["requestTopic", "recommendations", "region", "period", "area", "criterion", "source", "asOf", "scope", "facts", "confirmedRevision"] as const) {
     if (typeof saved[key] === "string") base[key] = saved[key];
   }
   base.optionalImage = saved.optionalImage === true;
