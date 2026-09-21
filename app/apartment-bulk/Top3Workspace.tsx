@@ -2,7 +2,7 @@
 
 import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
-import { Top3Work, IMAGE_SLOTS, recommendationRequest, bodyRequest, imageRequest, revision, missingEvidence, exportIssues } from "./top3-model";
+import { Top3Work, IMAGE_SLOTS, recommendationRequest, bodyRequest, imageRequest, imageRecommendationRequest, imageRevision, revision, missingEvidence, exportIssues } from "./top3-model";
 import styles from "./top3.module.css";
 
 type Props = {
@@ -58,12 +58,12 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
   }
 
   async function upload(id: string, file: File) {
-    const imageRevision = current;
+    const uploadedRevision = imageRevision(id, current, data);
     setBusy(id); setMessage("");
     try {
       const dataUrl = await toPng(file);
       if (!alive.current) return;
-      onChange((prev) => ({ ...prev, images: { ...prev.images, [id]: { dataUrl, revision: imageRevision } } }));
+      onChange((prev) => ({ ...prev, images: { ...prev.images, [id]: { dataUrl, revision: uploadedRevision } } }));
       setMessage(`이미지 ${id} 등록 완료. 원본 비율·크기를 유지해 PNG로 저장합니다.`);
     } catch (error) { if (alive.current) setMessage(`${error instanceof Error ? error.message : "등록 실패"} 기존 이미지는 유지됩니다.`); }
     finally { if (alive.current) setBusy(""); }
@@ -133,17 +133,23 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
     </section>
     <section className={styles.panel}>
       <h3>4. 이미지 요청서 · 등록</h3>
+      <p>각 이미지도 GPT에서 구성 3개 추천 → 번호 선택 → 생성 요청서 받기 → 아래에 붙여넣기 → GPT에서 이미지 만들기 순서로 진행하세요. 기본 구성으로 바로 생성할 수도 있습니다.</p>
       <label className={styles.check}><input type="checkbox" checked={data.optionalImage} onChange={(e) => patch("optionalImage", e.target.checked)} />선택 이미지 03 사용 (해제해도 파일 보존)</label>
       {!confirmed && <p>본문·근거 확정 후 이미지 요청서와 업로드가 열립니다.</p>}
       <div className={styles.grid}>{slots.map((slot) => {
         const prompt = imageRequest(slot.id, topic, materials, body, data);
+        const recommendationPrompt = imageRecommendationRequest(slot.id, topic, materials, body, data);
+        const plan = data.imagePlans?.[slot.id];
         const image = data.images[slot.id];
         return <article className={styles.imageCard} key={slot.id}>
           <h4>{slot.id} · {slot.name}</h4>
           <p>{slot.ratio}</p>
-          <strong>{image ? image.revision === current ? "등록 완료" : "이전 내용 이미지 · 재등록 필요" : "대기"}</strong>
-          {prompt && <>{promptButtons(prompt)}<details><summary>이미지 {slot.id} 요청서 펼치기</summary><pre>{prompt}</pre></details></>}
-          <label>이미지 {slot.id} 등록·교체<input aria-label={`이미지 ${slot.id} 등록·교체`} type="file" accept="image/png,image/jpeg,image/webp" disabled={!confirmed || !!busy} onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(slot.id, file); }} /></label>
+          <strong>{image ? image.revision === imageRevision(slot.id, current, data) ? "등록 완료" : "이전 내용 이미지 · 재등록 필요" : "대기"}</strong>
+          {recommendationPrompt && <>{promptButtons(recommendationPrompt, `GPT에서 이미지 ${slot.id} 구성 추천받기`)}<details><summary>구성 추천 요청서 펼치기</summary><pre>{recommendationPrompt}</pre></details></>}
+          <label>선택한 구성·GPT 이미지 생성 요청서<textarea disabled={!confirmed || !!busy} value={plan?.text || ""} onChange={(e) => { const text = e.target.value; onChange((prev) => ({ ...prev, imagePlans: { ...prev.imagePlans, [slot.id]: { text, revision: current } } })); }} placeholder="GPT에서 번호 선택 후 받은 이미지 생성 요청서를 붙여넣으세요. 비워 두면 기본 구성으로 생성합니다." /></label>
+          {plan?.text.trim() && plan.revision !== current && <p className={styles.warning}>본문이 변경되었습니다. 새 본문으로 구성을 다시 추천받아 요청서를 교체해 주세요.</p>}
+          {prompt && <>{promptButtons(prompt, `GPT에서 이미지 ${slot.id} 만들기`)}<details><summary>이미지 {slot.id} 생성 요청서 펼치기</summary><pre>{prompt}</pre></details></>}
+          <label>이미지 {slot.id} 등록·교체<input aria-label={`이미지 ${slot.id} 등록·교체`} type="file" accept="image/png,image/jpeg,image/webp" disabled={!prompt || !!busy} onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(slot.id, file); }} /></label>
           {image && <><img src={image.dataUrl} alt={`등록 이미지 ${slot.id}`} /><button type="button" disabled={!!busy} onClick={() => onChange((prev) => { const images = { ...prev.images }; delete images[slot.id]; return { ...prev, images }; })}>이미지 {slot.id} 등록 해제</button></>}
         </article>;
       })}</div>

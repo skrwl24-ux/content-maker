@@ -35,4 +35,16 @@ other.images['00'] = { dataUrl: 'other', revision: '' };
 assert.notEqual(other.images['00'].dataUrl, work.images['00'].dataUrl);
 assert.ok(m.bodyRequest(topic, '', work).includes('순위 확정을 보류'));
 console.log('PASS: shared facts, confirmation invalidation, optional image gating, legacy defaults, independent snapshots');
-
+const designWork = m.normalizeTop3(work);
+designWork.imagePlans = { '00': { text: '큰 제목과 세 단지 카드 구성', revision: designWork.confirmedRevision } };
+assert.ok(m.imageRecommendationRequest('00', topic, '', body, designWork).includes('구성안 3개'));
+assert.ok(m.imageRequest('00', topic, '', body, designWork).includes('큰 제목과 세 단지 카드 구성'));
+assert.ok(m.exportIssues(topic, '', body, designWork).some(x => x.includes('00')));
+designWork.images['00'].revision = m.imageRevision('00', designWork.confirmedRevision, designWork);
+assert.equal(m.exportIssues(topic, '', body, designWork).length, 0);
+const changedBody = body + ' 새 본문';
+designWork.confirmedRevision = m.revision(topic, '', changedBody, designWork);
+assert.equal(m.imageRequest('00', topic, '', changedBody, designWork), null);
+assert.ok(m.imageRecommendationRequest('00', topic, '', changedBody, designWork));
+assert.ok(m.normalizeTop3(JSON.parse(JSON.stringify(designWork))).imagePlans['00'].text);
+console.log('PASS: image recommendation, selected design, stale design and image invalidation, restoration');
