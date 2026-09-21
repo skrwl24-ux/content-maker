@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import { Top3Work, IMAGE_SLOTS, imageRevision, revision } from "./top3-model";
 import { articleRequest, parseArticle, imageRequest, exportIssues } from "./top3-simple";
 import styles from "./top3.module.css";
+import { naverCopy } from "./top3-naver";
 
 type Props = {
   workId: string; topic: string; materials: string; body: string;
@@ -39,6 +40,7 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = revision(topic, materials, body, data);
+  const formatted = naverCopy(body, topic);
   const request = articleRequest(data.requestTopic || "", materials);
   const issues = exportIssues(topic, materials, body, data);
   const slots = IMAGE_SLOTS.filter((slot) => slot.id !== "03" || data.optionalImage);
@@ -54,6 +56,20 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
       <a href={"https://chatgpt.com/?q=" + encodeURIComponent(text)} target="_blank" rel="noopener noreferrer">{label}</a>
       <button type="button" onClick={() => void copy(text)}>요청서 복사</button>
     </div>;
+  }
+
+  async function copyNaver() {
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("plain");
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([formatted.html], { type: "text/html" }),
+        "text/plain": new Blob([formatted.plain], { type: "text/plain" }),
+      })]);
+      if (alive.current) setMessage("네이버 본문 서식 복사 완료. 본문 입력칸에 Ctrl+V로 붙여넣으세요. 제목은 제목 복사로 따로 넣으세요.");
+    } catch {
+      try { await navigator.clipboard.writeText(formatted.plain); if (alive.current) setMessage("서식 복사가 제한되어 문단 간격을 정리한 일반 텍스트로 복사했습니다."); }
+      catch { if (alive.current) setMessage("복사하지 못했습니다. 본문 미리보기에서 직접 선택해 복사해 주세요."); }
+    }
   }
 
   async function upload(id: string, file: File) {
@@ -75,6 +91,8 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
       const zip = new JSZip();
       const folder = zip.folder(workId.replace(/[^a-zA-Z0-9_-]/g, "_"))!;
       folder.file("final_post.txt", body);
+      folder.file("naver_body.html", formatted.html);
+      folder.file("naver_body.txt", formatted.plain);
       folder.file("article_request.txt", request);
       folder.file("image_prompts.txt", slots.map((slot) => imageRequest(slot.id, topic, materials, body, data)).join("\n\n---\n\n"));
       folder.file("evidence.json", JSON.stringify({ topic, materials, region: data.region, period: data.period, area: data.area, criterion: data.criterion, source: data.source, asOf: data.asOf, scope: data.scope, facts: data.facts }, null, 2));
@@ -140,10 +158,12 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
       })}</div>
     </section>
     <section className={styles.panel}>
-      <h3>4. 저장 · 다운로드</h3>
+      <h3>4. 네이버 복사 · 다운로드</h3>
+      <p>제목은 네이버 제목칸에, 서식 복사한 글은 본문칸에 Ctrl+V로 붙여넣으세요. 이미지는 내려받아 별도로 넣으세요. 붙여넣은 뒤 글꼴과 간격은 편집기에서 확인해 주세요.</p>
+      <details><summary>네이버 본문 미리보기</summary><div dangerouslySetInnerHTML={{ __html: formatted.html }} /></details>
       <p>같은 브라우저에 자동 저장됩니다. 저장 완료 표시를 확인한 뒤 창을 닫으세요.</p>
       {issues.length > 0 && <p>남은 항목: {issues.join(", ")}</p>}
-      <div className={styles.actions}><button type="button" disabled={!body.trim()} onClick={() => void copy(body)}>본문 복사</button><button type="button" disabled={!!issues.length || !!busy} onClick={() => void download()}>ZIP 다운로드</button></div>
+      <div className={styles.actions}><button type="button" disabled={!topic.trim()} onClick={() => void copy(formatted.title)}>제목 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copyNaver()}>네이버 본문 서식 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copy(formatted.plain)}>일반 텍스트 복사</button><button type="button" disabled={!!issues.length || !!busy} onClick={() => void download()}>ZIP 다운로드</button></div>
     </section>
     <p role="status" aria-live="polite">{busy ? "처리 중… " : ""}{message}</p>
   </div>;
