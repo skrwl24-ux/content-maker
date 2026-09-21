@@ -1,0 +1,75 @@
+import { IMAGE_SLOTS, Top3Work, revision, imageRevision } from "./top3-model";
+
+export function articleRequest(topic: string, materials: string): string {
+  return `집값쓱 네이버 블로그 TOP3 글을 만들어 주세요.
+관심 주제·지역 (비어 있으면 직접 추천): ${topic}
+참고 사항: ${materials}
+
+최신 웹 검색과 공식 출처를 확인해 좋은 주제를 추천하고, 가장 적합한 하나를 직접 선정해 완성된 제목·본문·태그까지 한 번에 작성하세요. 선택 질문으로 멈추지 마세요. 추천 이유는 본문 앞에 짧게 적으세요. 비교 범위·기간·기준·출처 링크·확인 날짜를 본문에 포함하세요. 검색에서 찾은 세 단지를 지역 전체 TOP3라고 단정하거나 숫자를 추측하지 마세요. 순위 근거가 없으면 ‘주목할 단지 3곳’처럼 제목과 표현을 바꾸세요.
+
+이어서 이 본문에 필요한 이미지 항목을 작성하세요. 00은 썸네일, 01·02는 서로 다른 본문 이미지이며 03은 필요한 경우에만 추가하세요. 각 항목에는 사용할 정확한 문구·수치·단위, 구체적인 화면 구성, 본문과의 연결을 적으세요. 본문에 없는 사실은 추가하지 마세요. 이미지를 직접 생성하지는 마세요.
+
+콘텐츠메이커에 답변 전체를 한 번에 붙여넣을 수 있도록 아래 구분자를 각 줄에 정확히 사용하세요. 제목에는 실제 제목만, 본문에는 발행할 완성 글·출처·태그만 넣으세요. 안내 문구나 생략 표시로 채우지 마세요. 필요 없는 이미지 03 구간은 통째로 생략하세요.
+[제목]
+완성 제목
+[/제목]
+[본문]
+완성 본문과 출처 및 태그
+[/본문]
+[이미지 00]
+썸네일 문구와 구성
+[/이미지 00]
+[이미지 01]
+본문 이미지 01 문구와 구성
+[/이미지 01]
+[이미지 02]
+본문 이미지 02 문구와 구성
+[/이미지 02]
+[이미지 03]
+필요한 경우만 작성
+[/이미지 03]`;
+}
+
+export function parseArticle(raw: string) {
+  const read = (name: string) => {
+    const open = `[${name}]`, close = `[/${name}]`;
+    const start = raw.indexOf(open), end = raw.indexOf(close, start + open.length);
+    if (start < 0 || end < 0 || raw.indexOf(open, start + open.length) >= 0) throw new Error(`${name} 구간을 확인해 주세요. GPT 요청서의 구분자를 포함해 답변 전체를 복사해 주세요.`);
+    const value = raw.slice(start + open.length, end).trim();
+    if (!value) throw new Error(`${name} 내용이 비어 있습니다.`);
+    return value;
+  };
+  const topic = read("제목"), body = read("본문");
+  const plans: Record<string, string> = {};
+  for (const id of ["00", "01", "02"]) plans[id] = read(`이미지 ${id}`);
+  if (raw.includes("[이미지 03]") || raw.includes("[/이미지 03]")) plans["03"] = read("이미지 03");
+  return { topic, body: `${topic}\n\n${body}`, plans };
+}
+
+export function imageRequest(id: string, topic: string, materials: string, body: string, data: Top3Work): string | null {
+  const slot = IMAGE_SLOTS.find(item => item.id === id);
+  const plan = data.imagePlans?.[id]?.text.trim();
+  if (!slot || !body.trim() || !plan || (id === "03" && !data.optionalImage)) return null;
+  return `아래 내용에 맞는 이미지 한 장을 바로 생성하세요. 요청서나 설명만 작성하지 마세요.
+이미지 ${id}: ${slot.name}
+비율: ${slot.ratio}
+주제: ${topic}
+이 이미지에 필요한 내용·구성:
+${plan}
+
+참고 본문:
+${body}
+
+이 이미지 항목만 제작하세요. 다른 이미지 항목을 합치지 마세요. 본문과 항목에 있는 사실·수치·단위를 그대로 사용하고 새로 검색하거나 추측하지 마세요. 항목이 본문과 충돌하면 본문을 우선하세요. 한국어가 선명하고 읽기 쉬운 흰 배경·남색 글자·청록 강조 스타일로 통일하세요. 로고와 워터마크는 넣지 마세요.`;
+}
+
+export function exportIssues(topic: string, materials: string, body: string, data: Top3Work): string[] {
+  const issues: string[] = [];
+  if (!body.trim()) issues.push("본문 붙여넣기");
+  const current = revision(topic, materials, body, data);
+  for (const slot of IMAGE_SLOTS.filter(slot => slot.id !== "03" || data.optionalImage)) {
+    if (!data.imagePlans?.[slot.id]?.text.trim()) issues.push(`이미지 ${slot.id} 내용`);
+    if (!data.images[slot.id] || data.images[slot.id].revision !== imageRevision(slot.id, current, data)) issues.push(`이미지 ${slot.id} 등록 또는 재등록`);
+  }
+  return issues;
+}
