@@ -866,8 +866,20 @@ export default function ParammaBulkPage() {
   }
 
   async function requestNextTen() {
-    await copyText(buildNextTenPrompt(), "다음 10개 추천 요청서를 복사했습니다. ChatGPT에 붙여넣으세요.");
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    const prompt = buildNextTenPrompt();
+
+    // Open immediately while the click still has user activation, so popup blockers
+    // do not swallow the ChatGPT window. Prefill the request just like other prompts.
+    window.open(
+      "https://chatgpt.com/?q=" + encodeURIComponent(prompt),
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    await copyText(
+      prompt,
+      "다음 10개 추천 요청서를 열고 클립보드에도 복사했습니다."
+    );
   }
 
   function resetProgress() {
