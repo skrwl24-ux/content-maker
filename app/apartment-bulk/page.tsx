@@ -2149,7 +2149,7 @@ export default function ApartmentBulkPage() {
           ) : activeWorkType === "top3" ? (
             <>
               <Top3Workspace key={activeWorkId} workId={activeWorkId} topic={workTopic} materials={workMaterials}
-                body={workBody} onBodyChange={setWorkBody} data={top3Work} onChange={setTop3Work} />
+                body={workBody} onBodyChange={setWorkBody} onTopicChange={setWorkTopic} data={top3Work} onChange={setTop3Work} />
               {(workImageNotes || workAttachments.length > 0) && <details>
                 <summary>기존 이미지 메모·참고 첨부 (보존됨)</summary>
                 <p>{workImageNotes}</p>
@@ -2582,4 +2582,3 @@ function OutputCard({ title, size, src, filename }: { title: string; size: strin
     </article>
   );
 }
-
