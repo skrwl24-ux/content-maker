@@ -39,7 +39,7 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = revision(topic, materials, body, data);
-  const request = articleRequest(topic, materials);
+  const request = articleRequest(data.requestTopic || "", materials);
   const issues = exportIssues(topic, materials, body, data);
   const slots = IMAGE_SLOTS.filter((slot) => slot.id !== "03" || data.optionalImage);
   const patch = (key: keyof Top3Work, value: string | boolean) => onChange((prev) => ({ ...prev, [key]: value }));
@@ -110,6 +110,7 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
     <section className={styles.panel}>
       <h3>1. GPT에서 TOP3 글 만들기</h3>
       <p>GPT가 주제를 추천·선정하고, 본문과 필요한 이미지 내용을 한 번에 작성합니다.</p>
+      <label>관심 지역·주제 (선택)<input value={data.requestTopic || ""} onChange={e => patch("requestTopic", e.target.value)} placeholder="비워 두면 새로운 단지 주제를 추천합니다" /></label>
       {promptButtons(request, "GPT에서 TOP3 글 만들기")}
       <details><summary>글 요청서 보기</summary><pre>{request}</pre></details>
     </section>
