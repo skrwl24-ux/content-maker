@@ -99,6 +99,114 @@
     {
       "path": "/api/cron/apartment-refresh/41597",
       "schedule": "40 10 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11200",
+      "schedule": "20 15 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11215",
+      "schedule": "40 15 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11350",
+      "schedule": "20 16 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11440",
+      "schedule": "40 16 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11530",
+      "schedule": "20 17 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11560",
+      "schedule": "40 17 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11590",
+      "schedule": "20 18 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11620",
+      "schedule": "40 18 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11650",
+      "schedule": "20 19 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11680",
+      "schedule": "40 19 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11710",
+      "schedule": "20 20 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/11740",
+      "schedule": "40 20 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41150",
+      "schedule": "20 21 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41192",
+      "schedule": "40 21 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41194",
+      "schedule": "20 22 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41196",
+      "schedule": "40 22 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41281",
+      "schedule": "20 23 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41285",
+      "schedule": "40 23 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41287",
+      "schedule": "20 0 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41360",
+      "schedule": "40 0 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41370",
+      "schedule": "20 1 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41570",
+      "schedule": "40 1 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/41630",
+      "schedule": "20 2 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/28185",
+      "schedule": "40 2 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/28237",
+      "schedule": "20 3 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/28275",
+      "schedule": "40 3 * * *"
+    },
+    {
+      "path": "/api/cron/apartment-refresh/28290",
+      "schedule": "20 4 * * *"
     }
   ]
 }
