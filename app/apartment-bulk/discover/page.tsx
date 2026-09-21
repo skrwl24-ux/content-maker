@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 
 type Region = {
@@ -41,6 +41,21 @@ type CandidateResponse = {
   candidates: Candidate[];
   noData: boolean;
   syncConfigured: boolean;
+};
+
+type SearchResult = {
+  id: string;
+  name: string;
+  legalDong: string | null;
+  households: number | null;
+  useDate: string | null;
+  matchStatus: string | null;
+  status: "priority" | "candidate" | "hold" | "unanalysed";
+  recent30Count: number | null;
+  sixMonthCount: number | null;
+  daysSinceLastTrade: number | null;
+  marketSignalCount: number | null;
+  reason: string;
 };
 
 type Detail = {
@@ -93,6 +108,19 @@ function dateTime(value: string | null) {
   }).format(d);
 }
 
+function useYear(value: string | null) {
+  if (!value) return "사용승인 확인 중";
+  const year = value.slice(0, 4);
+  return year ? year + "년 사용승인" : "사용승인 확인 중";
+}
+
+function searchStatus(result: SearchResult) {
+  if (result.status === "priority") return "우선 검토";
+  if (result.status === "candidate") return "발행 후보";
+  if (result.status === "hold") return "자동추천 제외";
+  return "분석 전";
+}
+
 export default function ApartmentDiscoverPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [regionCode, setRegionCode] = useState("41410");
@@ -103,6 +131,10 @@ export default function ApartmentDiscoverPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchMessage, setSearchMessage] = useState("");
 
   useEffect(() => {
     fetch("/api/apartment/regions", { cache: "no-store" })
@@ -138,6 +170,41 @@ export default function ApartmentDiscoverPage() {
   useEffect(() => {
     if (regionCode) loadCandidates(filter);
   }, [regionCode, filter]);
+
+  useEffect(() => {
+    setSearchResults([]);
+    setSearchMessage("");
+  }, [regionCode]);
+
+  async function searchComplexes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      setSearchMessage("단지명을 두 글자 이상 입력해 주세요.");
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchMessage("");
+    try {
+      const res = await fetch(
+        "/api/apartment/search?regionCode=" + encodeURIComponent(regionCode) +
+          "&q=" + encodeURIComponent(q),
+        { cache: "no-store" }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "단지 검색 실패");
+      const results = (json.results || []) as SearchResult[];
+      setSearchResults(results);
+      setSearchMessage(results.length ? "" : "선택한 지역에서 일치하는 단지를 찾지 못했습니다.");
+    } catch (e) {
+      setSearchResults([]);
+      setSearchMessage(e instanceof Error ? e.message : "단지 검색 실패");
+    } finally {
+      setSearchLoading(false);
+    }
+  }
 
   async function openDetail(id: string) {
     if (detailId === id) {
@@ -196,6 +263,68 @@ export default function ApartmentDiscoverPage() {
         <div><span>발행 후보</span><b>{data?.candidateCount ?? "-"}</b></div>
         <div><span>우선 검토</span><b>{data?.priorityCount ?? "-"}</b></div>
         <div><span>마지막 갱신</span><b className={styles.smallStat}>{dateTime(data?.lastSyncedAt || selectedRegion?.last_synced_at || null)}</b></div>
+      </section>
+
+      <section className={styles.searchPanel}>
+        <div className={styles.searchHeading}>
+          <div>
+            <span>직접 찾기</span>
+            <h2>자동추천에 없어도 단지명으로 바로 찾기</h2>
+            <p>네이버 인기급상승·청약·입주·뉴스처럼 외부 이슈로 찾은 단지를 검색하세요.</p>
+          </div>
+          <small>{selectedRegion ? selectedRegion.sido_name + " " + selectedRegion.region_name : "선택 지역"} 안에서 검색</small>
+        </div>
+        <form className={styles.searchForm} onSubmit={searchComplexes}>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="예: 철산자이더헤리티지"
+            aria-label="단지명 직접 검색"
+          />
+          <button type="submit" disabled={searchLoading}>
+            {searchLoading ? "검색 중…" : "단지 검색"}
+          </button>
+        </form>
+
+        {searchMessage && <p className={styles.searchMessage}>{searchMessage}</p>}
+
+        {searchResults.length > 0 && (
+          <div className={styles.searchResults}>
+            {searchResults.map((result) => (
+              <article key={result.id} className={styles.searchCard}>
+                <div className={styles.searchCardTop}>
+                  <div>
+                    <div className={styles.statusLine}>
+                      <span className={result.status === "hold" || result.status === "unanalysed" ? styles.hold : result.status === "priority" ? styles.priority : styles.candidate}>
+                        {searchStatus(result)}
+                      </span>
+                      <span>{result.legalDong || "법정동 확인 중"}</span>
+                    </div>
+                    <h3>{result.name}</h3>
+                    <p>
+                      {result.households ? result.households.toLocaleString("ko-KR") + "세대" : "세대수 확인 중"}
+                      {" · "}
+                      {useYear(result.useDate)}
+                    </p>
+                  </div>
+                  <a href={"/apartment-bulk?complexId=" + result.id}>이 단지로 글 만들기 →</a>
+                </div>
+
+                <div className={styles.searchReason}>
+                  <b>{result.status === "hold" ? "자동추천에서 빠진 이유" : "현재 상태"}</b>
+                  <span>{result.reason}</span>
+                </div>
+
+                <div className={styles.searchStats}>
+                  <div><span>최근 30일</span><b>{result.recent30Count == null ? "-" : result.recent30Count + "건"}</b></div>
+                  <div><span>최근 6개월</span><b>{result.sixMonthCount == null ? "-" : result.sixMonthCount + "건"}</b></div>
+                  <div><span>최근 거래</span><b>{result.daysSinceLastTrade == null ? "없음" : result.daysSinceLastTrade + "일 전"}</b></div>
+                  <div><span>시장신호</span><b>{result.marketSignalCount == null ? "-" : result.marketSignalCount + "개"}</b></div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className={styles.filters}>
