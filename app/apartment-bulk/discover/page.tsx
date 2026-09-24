@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { DISCOVERY_MONTHS, describePeriod, MonthlyStat } from "@/lib/apartment-analysis";
 import styles from "./page.module.css";
 
 type Region = {
@@ -67,7 +68,7 @@ type Detail = {
     use_date: string | null;
   };
   representativeArea: string | null;
-  monthly: Array<{ month: string; tradeCount: number; medianPrice: number | null }>;
+  monthly: MonthlyStat[];
   latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
 };
 
@@ -243,7 +244,7 @@ export default function ApartmentDiscoverPage() {
         <div>
           <p className={styles.eyebrow}>집값쓱 DISCOVERY</p>
           <h1>오늘 쓸 아파트를<br />데이터가 먼저 찾아줍니다.</h1>
-          <p>거래 증가 · 가격 변화 · 거래 활발 · 최근성 신호를 보고 후보만 추립니다.</p>
+          <p>시장신호 종합순으로 콘텐츠 후보를 찾습니다. 거래량·상승률 TOP3 순위가 아닙니다.</p>
         </div>
         <div className={styles.heroSide}>
           <span>지역 선택</span>
@@ -317,7 +318,7 @@ export default function ApartmentDiscoverPage() {
 
                 <div className={styles.searchStats}>
                   <div><span>최근 30일</span><b>{result.recent30Count == null ? "-" : result.recent30Count + "건"}</b></div>
-                  <div><span>최근 6개월</span><b>{result.sixMonthCount == null ? "-" : result.sixMonthCount + "건"}</b></div>
+                  <div><span>후보 참고 {DISCOVERY_MONTHS}개월</span><b>{result.sixMonthCount == null ? "-" : result.sixMonthCount + "건"}</b></div>
                   <div><span>최근 거래</span><b>{result.daysSinceLastTrade == null ? "없음" : result.daysSinceLastTrade + "일 전"}</b></div>
                   <div><span>시장신호</span><b>{result.marketSignalCount == null ? "-" : result.marketSignalCount + "개"}</b></div>
                 </div>
@@ -403,12 +404,12 @@ export default function ApartmentDiscoverPage() {
               <div className={styles.metrics}>
                 <div><span>최근 30일</span><b>{candidate.recent30Count}건</b></div>
                 <div><span>직전 30일</span><b>{candidate.previous30Count}건</b></div>
-                <div><span>최근 6개월</span><b>{candidate.sixMonthCount}건</b></div>
+                <div><span>후보 참고 {DISCOVERY_MONTHS}개월</span><b>{candidate.sixMonthCount}건</b></div>
                 <div><span>{candidate.representativeArea || "대표면적"}</span><b>{won(candidate.latestMedianPrice)}</b></div>
               </div>
 
               <div className={styles.priceLine}>
-                <span>6개월 대표가격</span>
+                <span>후보 기간 대표가격</span>
                 <b>{won(candidate.firstMedianPrice)} → {won(candidate.latestMedianPrice)}</b>
                 {candidate.priceChangePct != null && (
                   <em className={candidate.priceChangePct >= 0 ? styles.up : styles.down}>
@@ -435,15 +436,16 @@ export default function ApartmentDiscoverPage() {
                     <>
                       <div className={styles.detailHead}>
                         <div><span>대표면적</span><b>{detail.representativeArea || "-"}</b></div>
-                        <div><span>최근 실거래</span><b>{detail.latestTrade ? won(detail.latestTrade.price) : "-"}</b></div>
-                        <div><span>최근 거래일</span><b>{detail.latestTrade?.date || "-"}</b></div>
+                        <div><span>같은 면적대 개별 거래</span><b>{detail.latestTrade ? `${won(detail.latestTrade.price)} · 전용 ${detail.latestTrade.area}㎡` : "해당 면적 거래 확인 필요"}</b></div>
+                        <div><span>분석기간 거래일</span><b>{detail.latestTrade?.date || "-"}</b></div>
                       </div>
+                      <p style={{whiteSpace:"pre-line"}}>{describePeriod(detail.monthly)}</p>
                       <div className={styles.monthly}>
-                        {detail.monthly.slice(-6).map((m) => (
+                        {detail.monthly.map((m) => (
                           <div key={m.month}>
                             <span>{m.month.slice(5)}월</span>
-                            <b>{m.medianPrice == null ? "거래 없음" : won(m.medianPrice)}</b>
-                            <small>{m.tradeCount}건</small>
+                            <b>{m.medianPrice == null ? (m.status === "unverified" ? "미확인" : "가격 없음") : won(m.medianPrice)}</b>
+                            <small>{m.status === "unverified" ? "건수 미확인" : m.tradeCount + "건"}</small>
                           </div>
                         ))}
                       </div>
@@ -458,8 +460,9 @@ export default function ApartmentDiscoverPage() {
 
       <section className={styles.ruleNote}>
         <b>V1 후보 기준</b>
-        <p>최근 6개월 6건 이상 + 최근 거래 60일 이내를 기본자격으로 보고, 거래량 증가·거래 활발·가격 변화·최근 거래 중 최소 1개 시장신호가 있어야 후보로 표시합니다. 대단지는 보조신호로만 사용합니다.</p>
+        <p>후보 참고 {DISCOVERY_MONTHS}개월 6건 이상 + 최근 거래 60일 이내를 기본자격으로 보고, 거래량 증가·거래 활발·가격 변화·최근 거래 중 최소 1개 시장신호가 있어야 후보로 표시합니다. 대단지는 보조신호로만 사용합니다.</p>
       </section>
     </main>
   );
 }
+

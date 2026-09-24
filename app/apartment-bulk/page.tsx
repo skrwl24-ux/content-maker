@@ -6,16 +6,10 @@ import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 
-type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
-type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
-type ArticleThemeMode = "auto" | ArticleThemeId;
-type ArticleThemeChoice = {
-  id: ArticleThemeId;
-  label: string;
-  angle: string;
-  score: number;
-};
+import { ANALYSIS_MONTHS, analysisRows, describePeriod, monthLine, matchesArea, AREA_RULE, RANKING_RULE, MonthlyStat, FinishedArticle, finishedExcerpt, rememberFinished, readFinished, diversityPrompt } from "@/lib/apartment-analysis";
+import { ArticleThemeId, ArticleThemeMode, ArticleThemeChoice, selectArticleTheme } from "@/lib/apartment-themes";
 
+type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
 type WorkAttachment = {
@@ -70,12 +64,19 @@ type ApartmentData = {
   locationLine: string;
   question: string;
   thumbnailTone: ThumbnailTone;
+  sourceVersion?: number;
+  enteredFields?: string[];
+  sourceArea?: string;
+  sourceName?: string;
+  sourceRegion?: string;
+  tradeArea?: number;
+  tradeDate?: string;
 };
 
 type Point = { x: number; y: number } | null;
 type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
-type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
+
 type NaverBlock = {
   type: "title" | "subheading" | "body" | "image" | "tags";
   text: string;
@@ -101,6 +102,7 @@ type ComplexDetailResponse = {
     use_date?: string | null;
   };
   representativeArea: string | null;
+  representativeAreaGroup: number | null;
   monthly: MonthlyStat[];
   latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
   snapshot?: {
@@ -110,19 +112,7 @@ type ComplexDetailResponse = {
   } | null;
 };
 
-const SAMPLE: ApartmentData = {
-  name: "산본 퇴계아파트",
-  region: "경기 군포시 금정동",
-  area: "전용 42㎡",
-  recentPrice: "3억 5,000만원",
-  previousPrice: "직전 3억 3,000만원",
-  households: "1,992세대",
-  moveIn: "1993년 6월",
-  station: "수리산역",
-  locationLine: "수리산역·학교·공원을 가까이 누리는 생활권",
-  question: "",
-  thumbnailTone: "auto",
-};
+const SAMPLE: ApartmentData = { name:"", region:"", area:"", recentPrice:"", previousPrice:"", households:"", moveIn:"", station:"", locationLine:"", question:"", thumbnailTone:"auto" };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
   bulk: { label: "아파트 대량발행", short: "대량발행" },
@@ -410,8 +400,8 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: nu
 }
 
 
-function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼마에 거래될까?") {
-  const monthly = monthlyStats.slice(-6);
+function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "확인된 단지 특징에서 문구 선정") {
+  const monthly = analysisRows(monthlyStats);
   const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
   const first = valid[0];
   const last = valid[valid.length - 1];
@@ -438,160 +428,36 @@ function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼�
     firstTrades - completedLastTrades >= 2;
 
   if (priceStrong && delta !== 0) {
-    return delta > 0
-      ? "6개월 새 00억 올랐다"
-      : "6개월 새 00억 빠졌다";
+    return delta > 0 ? "가격이 움직인 구간은?" : "고점 이후 얼마나 달라졌나";
   }
   if (tradeSurge) return "거래가 다시 몰렸다";
   if (tradeDrop) return "거래가 눈에 띄게 줄었다";
   return fallback;
 }
 
-const ARTICLE_THEME_META: Record<ArticleThemeId, { label: string; angle: string }> = {
-  price: {
-    label: "가격 변화",
-    angle: "6개월 첫 대표값과 최근 대표값의 변화폭·변화율을 중심으로 보되 단순 숫자 나열은 피한다.",
-  },
-  band: {
-    label: "가격대 전환",
-    angle: "몇 억대에서 몇 억대로 가격대가 바뀌었는지와 그 과정의 월별 흐름을 중심으로 본다.",
-  },
-  trade: {
-    label: "거래량 변화",
-    angle: "거래가 유독 몰린 달·줄어든 달을 찾고 가격 흐름과 함께 해석한다. 거래량만으로 심리를 단정하지 않는다.",
-  },
-  mixed: {
-    label: "가격·거래 엇갈림",
-    angle: "가격 방향과 거래량 방향이 서로 다르게 움직였는지를 중심으로 본다.",
-  },
-  rebound: {
-    label: "저점·고점·반등",
-    angle: "6개월 중간 저점 또는 고점 이후 최근 대표값이 어디까지 회복·조정됐는지를 중심으로 본다.",
-  },
-  volatility: {
-    label: "가격 변동성",
-    angle: "월별 대표값의 고저 차이와 출렁임 자체를 핵심 장면으로 잡는다.",
-  },
-  highlow: {
-    label: "6개월 고점·저점 위치",
-    angle: "최근 대표값이 6개월 범위의 고점·저점 중 어디에 가까운지를 중심으로 본다.",
-  },
-  stable: {
-    label: "보합·관망",
-    angle: "큰 방향성보다 좁은 가격 범위와 거래량 변화를 중심으로 차분하게 본다.",
-  },
-};
-
-function analyzeArticleThemes(monthlyStats: MonthlyStat[]): ArticleThemeChoice[] {
-  const valid = monthlyStats.slice(-6).filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
-  const baseScores: Record<ArticleThemeId, number> = {
-    price: 25,
-    band: 5,
-    trade: 15,
-    mixed: 5,
-    rebound: 5,
-    volatility: 10,
-    highlow: 15,
-    stable: 5,
-  };
-
-  if (valid.length < 2) {
-    return (Object.keys(baseScores) as ArticleThemeId[])
-      .map((id) => ({ id, ...ARTICLE_THEME_META[id], score: baseScores[id] }))
-      .sort((a, b) => b.score - a.score);
+function priceContext(data: ApartmentData) {
+  if (data.sourceVersion !== 1 && data.enteredFields?.includes("recentPrice") && data.tradeArea && /^\d{4}-\d{2}-\d{2}$/.test(data.tradeDate || "")) {
+    const target = Number(data.area.match(/[0-9]+(?:\.[0-9]+)?/)?.[0]);
+    const match = data.area.includes("대") ? matchesArea(data.tradeArea, target) : Math.abs(target-data.tradeArea)<0.001;
+    return match ? `사용자 확인 개별 실거래: ${data.recentPrice} / 실제 전용 ${data.tradeArea}㎡ / ${data.tradeDate}` : "입력한 거래 면적이 대상과 다릅니다. 이 가격은 사용하지 않습니다.";
   }
-
-  const first = valid[0];
-  const last = valid[valid.length - 1];
-  const delta = last.medianPrice - first.medianPrice;
-  const rate = first.medianPrice ? (delta / first.medianPrice) * 100 : 0;
-  const prices = valid.map((item) => item.medianPrice);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const minIndex = prices.indexOf(minPrice);
-  const maxIndex = prices.indexOf(maxPrice);
-  const rangeRate = minPrice ? ((maxPrice - minPrice) / minPrice) * 100 : 0;
-
-  const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const completed = valid.filter((item) => !(item.month === currentMonthKey && now.getDate() < lastDayOfMonth));
-  const tradeStats = completed.length ? completed : valid;
-  const tradeCounts = tradeStats.map((item) => item.tradeCount ?? 0);
-  const sortedTrades = [...tradeCounts].sort((a, b) => a - b);
-  const medianTrade = sortedTrades.length
-    ? sortedTrades[Math.floor(sortedTrades.length / 2)]
-    : 0;
-  const firstTrades = tradeStats[0]?.tradeCount ?? 0;
-  const lastTrades = tradeStats[tradeStats.length - 1]?.tradeCount ?? 0;
-  const maxTrades = Math.max(...tradeCounts, 0);
-  const tradeSurge = lastTrades >= 3 && firstTrades > 0 && lastTrades >= firstTrades * 1.6 && lastTrades - firstTrades >= 2;
-  const tradeDrop = firstTrades >= 3 && lastTrades <= Math.max(1, Math.floor(firstTrades * 0.6)) && firstTrades - lastTrades >= 2;
-  const tradeConcentration = maxTrades >= 5 && maxTrades >= Math.max(5, medianTrade * 1.7);
-
-  baseScores.price = 35 + Math.min(35, Math.abs(rate) * 2.4);
-
-  const firstBand = Math.floor(first.medianPrice / 100000000);
-  const lastBand = Math.floor(last.medianPrice / 100000000);
-  if (firstBand !== lastBand) baseScores.band = 88;
-
-  if (tradeSurge || tradeDrop) baseScores.trade = 84;
-  else if (tradeConcentration) baseScores.trade = 72;
-
-  const priceUp = rate >= 4;
-  const priceDown = rate <= -4;
-  if ((priceUp && tradeDrop) || (priceDown && tradeSurge)) baseScores.mixed = 92;
-  else if ((priceUp && lastTrades < firstTrades) || (priceDown && lastTrades > firstTrades)) baseScores.mixed = 70;
-
-  const reboundedFromLow = minIndex > 0 && minIndex < valid.length - 1 && minPrice > 0 && ((last.medianPrice - minPrice) / minPrice) * 100 >= 5;
-  const pulledBackFromHigh = maxIndex > 0 && maxIndex < valid.length - 1 && maxPrice > 0 && ((maxPrice - last.medianPrice) / maxPrice) * 100 >= 4;
-  if (reboundedFromLow || pulledBackFromHigh) baseScores.rebound = 86;
-
-  if (rangeRate >= 12) baseScores.volatility = 82;
-  else if (rangeRate >= 8) baseScores.volatility = 68;
-
-  const nearHigh = maxPrice > 0 && last.medianPrice >= maxPrice * 0.98;
-  const nearLow = minPrice > 0 && last.medianPrice <= minPrice * 1.02;
-  if (nearHigh || nearLow) baseScores.highlow = 74;
-
-  if (Math.abs(rate) <= 3 && rangeRate <= 6) baseScores.stable = 88;
-  else if (Math.abs(rate) <= 5 && rangeRate <= 8) baseScores.stable = 68;
-
-  return (Object.keys(baseScores) as ArticleThemeId[])
-    .map((id) => ({ id, ...ARTICLE_THEME_META[id], score: baseScores[id] }))
-    .sort((a, b) => b.score - a.score);
+  if (data.sourceVersion !== 1) return "개별 실거래 가격·세대수·입주일: 기존 저장값/수기값은 출처와 실제 면적 확인 전 사용하지 않음. 단지를 다시 선택하면 검증된 정보를 불러옵니다.";
+  if((data.area !== data.sourceArea || data.name !== data.sourceName || data.region !== data.sourceRegion)) return "대상 단지·지역·면적이 변경되었습니다. 기존 가격·월 자료를 새 대상에 사용하지 마세요. 해당 면적 자료 확인 전에는 입지 등 확인된 사실 중심으로 작성하세요.";
+  const group = Number(data.sourceArea?.match(/[0-9]+/)?.[0]);
+  return data.tradeArea != null && matchesArea(data.tradeArea, group) && /^\d{4}-\d{2}-\d{2}$/.test(data.tradeDate || "") ? "개별 실거래가: "+data.recentPrice+" / 실제 전용 "+data.tradeArea+"㎡ / 거래일 "+data.tradeDate : "해당 면적 최근 거래 확인 필요 — 다른 면적 가격을 대신 쓰지 않음";
 }
-
-function selectArticleTheme(
-  monthlyStats: MonthlyStat[],
-  mode: ArticleThemeMode,
-  recentThemes: ArticleThemeId[],
-  recommendedAngle: string
-): ArticleThemeChoice {
-  const candidates = analyzeArticleThemes(monthlyStats);
-  if (mode !== "auto") {
-    const manual = candidates.find((item) => item.id === mode);
-    if (manual) return manual;
-  }
-
-  const recent = new Set(recentThemes.slice(-2));
-  const fresh = candidates.find((item) => item.score >= 60 && !recent.has(item.id));
-  const choice = fresh || candidates.find((item) => !recent.has(item.id)) || candidates[0];
-
-  if (recommendedAngle.trim() && monthlyStats.filter((item) => item.medianPrice != null).length < 2) {
-    return { ...choice, angle: recommendedAngle.trim() };
-  }
-  return choice;
+function accuracyGuide(data: ApartmentData, rows: MonthlyStat[]) {
+  return "\n[데이터 기준]\n"+describePeriod(rows)+"\n"+AREA_RULE+"\n"+priceContext(data)+"\n"+RANKING_RULE+"\n확인되지 않은 월은 0건으로 만들지 말고 선도 연결하지 마세요. 1건 거래가 있는 월은 표시하고 양끝 월 중 1건이면 상승률·급등을 제목의 근거로 쓰지 마세요. 정확성 검증은 문단 순서를 강제하는 규칙이 아닙니다. 숫자가 부족하면 실제 확인된 거래 흐름·입지 등으로 중심을 옮기되 미확인 사실을 만들지 마세요.\n";
 }
 
 function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], articleTheme: ArticleThemeChoice) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
-  const monthly = monthlyStats.slice(-6);
+  const monthly = analysisRows(monthlyStats);
   const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
   const first = valid[0];
   const last = valid[valid.length - 1];
-  const delta = first && last ? last.medianPrice - first.medianPrice : null;
-  const changeRate = first?.medianPrice && last?.medianPrice
+  const delta = valid.length >= 2 && first && last ? last.medianPrice - first.medianPrice : null;
+  const changeRate = valid.length >= 2 && first?.medianPrice && last?.medianPrice
     ? (delta! / first.medianPrice) * 100
     : null;
   const userMainCopy = data.question.trim();
@@ -617,20 +483,21 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], a
       : `${toneLabel[data.thumbnailTone]} 톤으로 고른 최종 1픽`;
 
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
+${accuracyGuide(data, monthlyStats)}
 
 [기본 정보]
 단지명: ${value(data.name)}
 지역: ${value(data.region)}
 대표 전용면적: ${value(data.area)}
-최근 실거래가: ${value(data.recentPrice)}
-비교 가격: ${value(data.previousPrice)}
-세대수: ${value(data.households)}
-입주년도: ${value(data.moveIn)}
+${priceContext(data)}
+비교 가격: ${data.sourceVersion === 1 && data.area === data.sourceArea && data.name === data.sourceName && data.region === data.sourceRegion ? value(data.previousPrice) : "확인 필요"}
+세대수: ${(data.sourceVersion === 1 || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
+입주년도: ${(data.sourceVersion === 1 || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
 
 [가격·거래 흐름 정보]
-비교 시점: 최근 6개월
+비교 시점: 확인된 기간
 비교값: ${first ? formatWon(first.medianPrice) : "확인 필요"}
 최근값: ${last ? formatWon(last.medianPrice) : "확인 필요"}
 변화액: ${delta == null ? "계산 불가" : (delta >= 0 ? "+" : "-") + formatWon(Math.abs(delta))}
@@ -655,7 +522,7 @@ ${toneInstruction[data.thumbnailTone]}
 - 후보를 사용자에게 나열하지 말고 최종 1픽만 이미지에 사용할 것.
 - 위 [이번 글의 주제 방향]을 우선 반영해 본문과 썸네일이 같은 핵심 이야기를 하게 할 것.
 - 가격 상승·하락, 가격대 전환, 저점 반등, 고점 접근, 거래량 급증·감소, 가격과 거래량의 엇갈림 중 선택된 주제 안에서 가장 눈에 띄는 장면을 찾을 것.
-- '6개월 새 00억 올랐다' 같은 하나의 고정 문법을 기본값으로 반복하지 말 것.
+- '확인 기간 새 00억 올랐다' 같은 하나의 고정 문법을 기본값으로 반복하지 말 것.
 - 가격 변화가 강하더라도 상승액만 기계적으로 요약하지 말고 '4억대였는데 5억 넘었다', '저점 찍고 다시 5억대'처럼 사람이 한눈에 이해하는 장면형 표현도 적극 검토할 것.
 - 후킹형은 '초원부영, 5억 넘었다고?'처럼 실제 데이터에 근거한 가벼운 놀람·의문형을 사용할 수 있다.
 - 유머형은 '조용했는데 가격은 안 조용했다'처럼 한 스푼 정도의 재치만 허용하고, '폭등', '무조건 오른다', '지금 안 보면 후회' 같은 과장·투자유도 표현은 금지한다.
@@ -696,27 +563,26 @@ ${toneInstruction[data.thumbnailTone]}
 
 function makePriceImagePrompt(data: ApartmentData, monthlyStats: MonthlyStat[]) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
-  const monthly = monthlyStats.slice(-6);
+  const monthly = analysisRows(monthlyStats);
   const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
   const first = valid[0];
   const last = valid[valid.length - 1];
-  const change = first?.medianPrice && last?.medianPrice
+  const change = valid.length >= 2 && first?.medianPrice && last?.medianPrice
     ? ((last.medianPrice - first.medianPrice) / first.medianPrice) * 100
     : null;
   const lines = monthly.length
-    ? monthly.map((item) =>
-        `- ${item.month}: 대표가격 ${item.medianPrice == null ? "거래 없음" : formatWon(item.medianPrice)} / 거래 ${item.tradeCount}건`
-      ).join("\n")
-    : "- 최근 6개월 데이터 없음";
+    ? monthly.map(monthLine).join("\n")
+    : "- 확인된 기간 데이터 없음";
 
   return `네이버 블로그 본문용 아파트 시세 그래프 이미지를 만들어줘.
+${accuracyGuide(data, monthlyStats)}
 
 [단지 정보]
 단지명: ${value(data.name)}
 지역: ${value(data.region)}
 대표 전용면적: ${value(data.area)}
 
-[최근 6개월 월별 실거래 데이터]
+[확인된 기간 월별 실거래 데이터]
 ${lines}
 
 [요약값]
@@ -729,7 +595,7 @@ ${lines}
 - 네이버 블로그 본문용 가로 이미지
 - 집값쓱 부동산 콘텐츠 스타일
 - 깔끔하고 신뢰감 있는 고급 정보형 디자인
-- 제목은 '최근 6개월 실거래 흐름'
+- 제목은 실제 데이터에서 드러나는 핵심 장면에 맞춰 짧게 정하고 실제 가격 확인 시작월·끝월을 하단에 표시할 것
 - 선그래프로 월별 대표가격 흐름을 보여줄 것
 - 거래가 있는 모든 월의 데이터 포인트 위에 가격 라벨을 반드시 표시할 것
 - 최신 월 가격 라벨은 다른 월보다 조금 더 크게 강조할 것
@@ -785,17 +651,15 @@ function makeBodyPrompt(
   articleTheme: ArticleThemeChoice
 ) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
-  const monthly = monthlyStats.slice(-6);
+  const monthly = analysisRows(monthlyStats);
   const monthlyLines = monthly.length
-    ? monthly.map((item) =>
-        `- ${item.month}: 월 대표값 ${item.medianPrice == null ? "거래 없음" : formatWon(item.medianPrice)}, 거래 ${item.tradeCount}건`
-      ).join("\n")
+    ? monthly.map(monthLine).join("\n")
     : "- 월별 실거래 데이터 없음";
   const validMonthly = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
   const firstMonthly = validMonthly[0];
   const lastMonthly = validMonthly[validMonthly.length - 1];
-  const priceDelta = firstMonthly && lastMonthly ? lastMonthly.medianPrice - firstMonthly.medianPrice : null;
-  const priceRate = firstMonthly?.medianPrice && lastMonthly?.medianPrice
+  const priceDelta = validMonthly.length >= 2 && firstMonthly && lastMonthly ? lastMonthly.medianPrice - firstMonthly.medianPrice : null;
+  const priceRate = validMonthly.length >= 2 && firstMonthly?.medianPrice && lastMonthly?.medianPrice
     ? (priceDelta! / firstMonthly.medianPrice) * 100
     : null;
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
@@ -808,6 +672,7 @@ function makeBodyPrompt(
   }).format(new Date());
 
   return `네이버 블로그용 아파트 분석글을 최종 발행본으로 작성해줘.
+${accuracyGuide(data, monthlyStats)}
 
 [작성 기준일]
 ${today}
@@ -816,22 +681,22 @@ ${today}
 단지명: ${value(data.name)}
 지역: ${value(data.region)}
 대표 전용면적: ${value(data.area)}
-최근 실거래가: ${value(data.recentPrice)}
-비교값: ${value(data.previousPrice)}
-세대수: ${value(data.households)}
-입주년도: ${value(data.moveIn)}
+${priceContext(data)}
+비교값: ${data.sourceVersion === 1 && data.area === data.sourceArea && data.name === data.sourceName && data.region === data.sourceRegion ? value(data.previousPrice) : "확인 필요"}
+세대수: ${(data.sourceVersion === 1 || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
+입주년도: ${(data.sourceVersion === 1 || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
-참고 관점: ${articleAngle || "없음 — GPT가 최근 6개월 데이터에서 직접 선정"}
+참고 관점: ${articleAngle || "없음 — GPT가 확인된 기간 데이터에서 직접 선정"}
 
 [이번 글의 주제 — 최우선]
 주제 유형: ${articleTheme.label}
 핵심 관점: ${articleTheme.angle}
-- 제목, 도입부, ⑤ 이 단지만의 핵심 포인트는 이 주제를 중심으로 작성할 것.
+- 제목, 도입부, 핵심 설명는 이 주제를 중심으로 작성할 것.
 - 선택 주제가 '가격 변화'가 아닌데 가격 상승폭만 다시 메인 제목으로 가져오지 말 것.
 - 데이터가 선택 주제를 뒷받침하지 못할 때만 가장 가까운 다른 주제로 최소 조정할 것.
 
-[최근 6개월 실거래 데이터]
+[확인된 기간 실거래 데이터]
 ${monthlyLines}
 
 [제목용 요약 — 월 대표값 기준]
@@ -863,8 +728,8 @@ ${monthlyLines}
 - 제목 후보는 내부적으로 최소 5개를 만들어 비교한 뒤 가장 좋은 1개만 출력할 것. 후보 목록은 최종 결과에 표시하지 말 것.
 - 단지명을 제목 앞부분에 자연스럽게 넣고, 지역명·대표 전용면적·아파트 시세 검색어는 필요할 때만 자연스럽게 조합할 것.
 - 위 [이번 글의 주제 — 최우선]을 제목의 핵심 소재로 사용할 것.
-- 자동 주제는 가격 변화, 가격대 전환, 거래량 변화, 가격·거래 엇갈림, 저점·고점·반등, 가격 변동성, 6개월 고점·저점 위치, 보합·관망의 8개 계열에서 데이터에 맞게 선택된다.
-- '6개월 새 ○○억 올랐다' 같은 한 가지 제목 문법을 모든 단지에 반복하지 말 것.
+- 자동 주제는 가격 변화, 가격대 전환, 거래량 변화, 가격·거래 엇갈림, 저점·고점·반등, 가격 변동성, 확인 기간 고점·저점 위치, 보합·관망·거래 공백·단지 입지 특징 계열에서 데이터에 맞게 선택된다.
+- '확인 기간 새 ○○억 올랐다' 같은 한 가지 제목 문법을 모든 단지에 반복하지 말 것.
 - 최근 글들이 가격 상승형으로 몰리지 않도록 거래량·고점/저점·반등·변동성·엇갈림처럼 데이터가 뒷받침되는 다른 관점을 적극 사용할 것.
 - 상승액·상승률이 크더라도 숫자를 단순 나열하는 방식만 고집하지 말고 가격대 변화, 반등, 거래 흐름 등 더 직관적인 장면이 있으면 그쪽을 우선 검토할 것.
 - 검색 유입을 고려해 무엇을 다루는 글인지 바로 알 수 있게 쓰되, 답을 전부 공개하지 않아 클릭할 이유는 남길 것.
@@ -892,25 +757,21 @@ ${monthlyLines}
 - 확인되지 않은 원인은 '~때문이다'라고 단정하지 말고 '배경 중 하나로 볼 수 있다', '함께 살펴볼 요소다'처럼 표현할 것.
 - 거래 건수가 적으면 소수 거래의 영향도 함께 언급할 것.
 
-[본문 구조 — 70% 고정 + 30% 가변]
-① 강한 도입 2~3문장
-② 최근 6개월 시세 흐름
-③ 거래량 변화
-④ 입지·생활권
-⑤ 이 단지만의 핵심 포인트
-⑥ 앞으로 체크할 것
-⑦ 짧은 마무리 + 3줄 요약
-- 세대수·입주년도 같은 기본정보는 별도 정보 나열로 길게 빼지 말고 도입이나 관련 섹션에 자연스럽게 녹일 것.
-- ⑤ 핵심 포인트는 단지별 데이터에 따라 반등, 거래 급증·감소, 고점 접근, 가격과 거래량의 엇갈림, 정비사업, 신축·입주 등으로 자유롭게 바꿀 것.
-- 전체 원칙은 '틀은 일정하게, 내용과 후킹은 다르게'로 할 것.
-- 모바일 가독성을 위해 한 문단은 짧게 유지하고, 같은 숫자와 같은 설명을 여러 섹션에서 반복하지 말 것.
+[본문 구성 — 데이터 장면에 따라 가변]
+- 관련 수치 가까이에 실제 가격 확인 시작월·끝월과 확인 월 수를 짧게 밝힌다. 희망 분석기간을 확보 기간처럼 쓰지 않는다. 기간 안에 미확인 월이 있으면 짧게 구분한다.
+- 이 단지에서 가장 강한 장면을 도입 2~3문장에 먼저 제시한다. 확인 기간 설명으로 매번 시작하지 않는다.
+- 선택된 핵심 관점에 가장 많은 설명을 배정한다. 가격→거래량→입지 순서를 고정하지 않는다.
+- 가격대 전환이면 금액 구간 변화, 조정/반등이면 기간 내 고저점 이후 움직임, 거래량이면 건수 차이, 거래 공백이면 확인된 무거래 월을 먼저 설명한다.
+- 자료가 없는 섹션은 생략하고 확인된 단지·입지 특징으로 전환한다. 같은 소제목과 결론을 재사용하지 않는다.
+- 확인 필요 안내를 본문 전체에 반복하지 말고 중요한 한계만 관련 수치 가까이 짧게 밝힌다.
+- 마지막은 이 데이터에서 다음에 확인할 사항과 짧은 요약으로 마무리한다.
 
 [이미지 위치]
 도입부 뒤:
 [이미지 1 — 썸네일]
 
-최근 6개월 가격 흐름 설명 뒤:
-[이미지 2 — 최근 6개월 시세 그래프]
+확인된 기간 가격 흐름 설명 뒤:
+[이미지 2 — 확인된 기간 시세 그래프]
 
 입지와 생활권 설명 전후:
 [이미지 3 — 입지 인포그래픽]
@@ -1095,13 +956,13 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
     ctx.fillRect(0, 0, 1600, 900);
     drawBrand(ctx, 76, 52, true);
 
-    const stats = monthlyStats.slice(-6);
+    const stats = analysisRows(monthlyStats);
     const valid = stats.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
     const last = valid[valid.length - 1];
 
     ctx.font = `900 46px ${FONT}`;
     ctx.fillStyle = "#101b2c";
-    ctx.fillText("최근 6개월 실거래 흐름", 76, 134);
+    ctx.fillText("확인된 월별 실거래 흐름", 76, 134);
 
     ctx.font = `700 22px ${FONT}`;
     ctx.fillStyle = "#718096";
@@ -1176,12 +1037,16 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
       ctx.fillText(item.month.slice(5) + "월", x, gy + gh + 34);
       ctx.font = `700 16px ${FONT}`;
       ctx.fillStyle = "#9aa5b4";
-      ctx.fillText(item.tradeCount ? item.tradeCount + "건" : "거래 없음", x, gy + gh + 64);
+      ctx.fillText(item.status === "unverified" ? "미확인" : item.tradeCount ? item.tradeCount + "건" : "0건", x, gy + gh + 64);
     });
 
     if (points.length >= 2) {
       ctx.beginPath();
-      points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      points.forEach((p, i) => {
+        const currentIndex = stats.indexOf(p.item);
+        const adjacent = i > 0 && stats.indexOf(points[i - 1].item) === currentIndex - 1;
+        if (adjacent) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y);
+      });
       ctx.strokeStyle = "#0f8b86";
       ctx.lineWidth = 8;
       ctx.lineCap = "round";
@@ -1233,7 +1098,7 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
 
     ctx.font = `700 18px ${FONT}`;
     ctx.fillStyle = "rgba(255,255,255,.58)";
-    ctx.fillText("6개월 첫 대표값", 1236, 486);
+    ctx.fillText("확인 기간 첫 대표값", 1236, 486);
     ctx.font = `900 31px ${FONT}`;
     ctx.fillStyle = "#ffffff";
     ctx.fillText(formatWon(first.medianPrice), 1236, 524);
@@ -1248,6 +1113,8 @@ function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
     ctx.font = `600 16px ${FONT}`;
     ctx.fillStyle = "rgba(255,255,255,.48)";
     ctx.fillText("각 월 대표가격 · 중앙값 기준", 1236, 724);
+    ctx.font = `500 15px ${FONT}`;
+    ctx.fillText(`${valid[0]?.month || "미확인"}~${valid.at(-1)?.month || "미확인"} · 가격 확인 ${valid.length}개월`, 76, 838);
     ctx.fillText("거래 없는 달은 공백 처리", 1236, 750);
   });
 }
@@ -1350,7 +1217,6 @@ export default function ApartmentBulkPage() {
   const [photoSearchStart, setPhotoSearchStart] = useState(1);
   const [recommendedAngle, setRecommendedAngle] = useState("");
   const [articleThemeMode, setArticleThemeMode] = useState<ArticleThemeMode>("auto");
-  const [recentArticleThemes, setRecentArticleThemes] = useState<ArticleThemeId[]>([]);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
   const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
@@ -1380,17 +1246,26 @@ export default function ApartmentBulkPage() {
   const workHydratingRef = useRef(false);
   const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
-  const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
+  const ready = useMemo(() => Boolean(data.name.trim() && mapDataUrl), [data.name, mapDataUrl]);
+  const contentStats = useMemo(() => data.sourceVersion === 1 && (data.area !== data.sourceArea || data.name !== data.sourceName || data.region !== data.sourceRegion) ? [] : monthlyStats, [data.area, data.sourceArea, data.name, data.sourceName, data.region, data.sourceRegion, data.sourceVersion, monthlyStats]);
+  const [finishedHistory, setFinishedHistory] = useState<FinishedArticle[]>([]);
+  useEffect(() => { setFinishedHistory(readFinished()); }, []);
+  function captureFinished(raw: string) {
+    setFinalBlogText(raw);
+    const excerpt = finishedExcerpt(raw, activeWorkId || "bulk:" + data.name, selectedArticleTheme.id);
+    if (excerpt) { rememberFinished(excerpt); setFinishedHistory(readFinished()); }
+  }
+  const recentExcerptGuide = diversityPrompt(finishedHistory, activeWorkId || "bulk:" + data.name);
   const selectedArticleTheme = useMemo(
-    () => selectArticleTheme(monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle),
-    [monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle]
+    () => selectArticleTheme(contentStats, articleThemeMode, finishedHistory.map(h => h.theme).filter((v): v is ArticleThemeId => !!v) , recommendedAngle),
+    [contentStats, articleThemeMode, finishedHistory, recommendedAngle]
   );
-  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme), [data, monthlyStats, selectedArticleTheme]);
-  const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
+  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, contentStats, selectedArticleTheme) + recentExcerptGuide, [data, contentStats, selectedArticleTheme, recentExcerptGuide]);
+  const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, contentStats), [data, contentStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
   const bodyPrompt = useMemo(
-    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme),
-    [data, monthlyStats, recommendedAngle, selectedArticleTheme]
+    () => makeBodyPrompt(data, contentStats, recommendedAngle, selectedArticleTheme) + recentExcerptGuide,
+    [data, contentStats, recommendedAngle, selectedArticleTheme, recentExcerptGuide]
   );
   const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
@@ -1481,18 +1356,6 @@ export default function ApartmentBulkPage() {
     finalBlogText,
   ]);
 
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(window.localStorage.getItem("apartment-bulk-theme-history-v1") || "[]");
-      if (Array.isArray(saved)) {
-        const valid = saved.filter((item): item is ArticleThemeId => Object.prototype.hasOwnProperty.call(ARTICLE_THEME_META, item));
-        setRecentArticleThemes(valid.slice(-6));
-      }
-    } catch {
-      setRecentArticleThemes([]);
-    }
-  }, []);
-
   async function searchPhotoCandidates(name: string, region: string, start = 1) {
     if (!name.trim()) return;
     setPhotoCandidatesLoading(true);
@@ -1530,18 +1393,22 @@ export default function ApartmentBulkPage() {
         return json as ComplexDetailResponse;
       })
       .then(async (detail) => {
-        const firstMedian = detail.snapshot?.first_median_price == null ? null : Number(detail.snapshot.first_median_price);
-        const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
+        const firstMonthly = detail.monthly.find(row => row.medianPrice != null);
+        const firstMedian = firstMonthly?.medianPrice;
+        const trade = detail.latestTrade && matchesArea(detail.latestTrade.area, detail.representativeAreaGroup) ? detail.latestTrade : null;
+        const recent = trade?.price;
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
         const nextData: ApartmentData = {
           ...SAMPLE,
-          name: detail.complex.name || SAMPLE.name,
-          region: region || SAMPLE.region,
-          area: detail.representativeArea ? "전용 " + detail.representativeArea : SAMPLE.area,
-          recentPrice: recent ? formatWon(recent) : SAMPLE.recentPrice,
-          previousPrice: firstMedian ? "6개월 전 대표값 " + formatWon(firstMedian) : SAMPLE.previousPrice,
-          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : SAMPLE.households,
-          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : SAMPLE.moveIn,
+          sourceVersion: 1, sourceName: detail.complex.name || "단지명 확인 필요", sourceRegion: region || "지역 확인 필요", sourceArea: detail.representativeArea ? "전용 " + detail.representativeArea : "확인 필요",
+          tradeArea: trade?.area, tradeDate: trade?.date,
+          name: detail.complex.name || "단지명 확인 필요",
+          region: region || "지역 확인 필요",
+          area: detail.representativeArea ? "전용 " + detail.representativeArea : "확인 필요",
+          recentPrice: recent ? formatWon(recent) : "해당 면적 최근 거래 확인 필요",
+          previousPrice: firstMedian ? (firstMonthly?.month || "") + " 월 중앙값 " + formatWon(firstMedian) : "비교 가격 확인 필요",
+          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : "세대수 확인 필요",
+          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : "입주일 확인 필요",
           station: "",
           locationLine: "",
           question: "",
@@ -1550,7 +1417,7 @@ export default function ApartmentBulkPage() {
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
-        setRecommendedAngle(detail.snapshot?.recommended_angle || "");
+        setRecommendedAngle("");
         setArticleThemeMode("auto");
         setOutputs(null);
 
@@ -1604,7 +1471,8 @@ export default function ApartmentBulkPage() {
   }, []);
 
   function update<K extends keyof ApartmentData>(key: K, value: ApartmentData[K]) {
-    setData((prev) => ({ ...prev, [key]: value }));
+    if ((key === "name" || key === "region" || key === "area") && data[key] !== value) setMonthlyStats([]);
+    setData((prev) => ({ ...prev, [key]: value, enteredFields: [...new Set([...(prev.enteredFields || []), key])] }));
     setOutputs(null);
   }
 
@@ -1896,13 +1764,6 @@ export default function ApartmentBulkPage() {
   }
 
   function openBodyPromptInChatGPT() {
-    const nextHistory = [...recentArticleThemes, selectedArticleTheme.id].slice(-6);
-    setRecentArticleThemes(nextHistory);
-    try {
-      window.localStorage.setItem("apartment-bulk-theme-history-v1", JSON.stringify(nextHistory));
-    } catch {
-      // localStorage가 막혀 있어도 본문 생성은 계속 진행합니다.
-    }
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(bodyPrompt);
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -1981,7 +1842,7 @@ export default function ApartmentBulkPage() {
     if (!ready) return;
     setLoading(true);
     try {
-      const price = makePriceCard(data, monthlyStats);
+      const price = makePriceCard(data, contentStats);
       const map = await makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
       setOutputs({ price, map });
       requestAnimationFrame(() => document.getElementById("outputs")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -2209,8 +2070,8 @@ export default function ApartmentBulkPage() {
       <section className={styles.layout}>
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
-            <div><b>단지 데이터</b><span>샘플: 산본 퇴계아파트</span></div>
-            <button type="button" onClick={() => { setData(SAMPLE); setOutputs(null); }}>샘플값 복원</button>
+            <div><b>단지 데이터</b><span>단지를 선택하거나 확인한 정보를 입력하세요</span></div>
+            <button type="button" onClick={() => { setData(SAMPLE); setMonthlyStats([]); setSelectedComplexName(""); setOutputs(null); }}>입력값 비우기</button>
           </div>
 
           {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
@@ -2222,7 +2083,9 @@ export default function ApartmentBulkPage() {
             <Field label="단지명" value={data.name} onChange={(v) => update("name", v)} />
             <Field label="지역" value={data.region} onChange={(v) => update("region", v)} />
             <Field label="대표 전용면적" value={data.area} onChange={(v) => update("area", v)} />
-            <Field label="최근 실거래가" value={data.recentPrice} onChange={(v) => update("recentPrice", v)} />
+            <Field label="분석기간 내 최근 실거래가" value={data.recentPrice} onChange={(v) => update("recentPrice", v)} />
+            <Field label="실거래 실제 전용면적(㎡)" value={data.tradeArea?.toString() || ""} onChange={(v) => update("tradeArea", v.trim() && Number.isFinite(Number(v)) ? Number(v) : undefined)} />
+            <Field label="실거래 계약일(YYYY-MM-DD)" value={data.tradeDate || ""} onChange={(v) => update("tradeDate", v)} />
             <Field label="이전 실거래가 / 비교값" value={data.previousPrice} onChange={(v) => update("previousPrice", v)} />
             <Field label="세대수" value={data.households} onChange={(v) => update("households", v)} />
             <Field label="입주년도" value={data.moveIn} onChange={(v) => update("moveIn", v)} />
@@ -2240,8 +2103,10 @@ export default function ApartmentBulkPage() {
               { value: "mixed", label: "가격·거래 엇갈림" },
               { value: "rebound", label: "저점·고점·반등" },
               { value: "volatility", label: "가격 변동성 · 월별 출렁임" },
-              { value: "highlow", label: "6개월 고점·저점 위치" },
+              { value: "highlow", label: "확인 기간 고점·저점 위치" },
               { value: "stable", label: "보합·관망" },
+              { value: "gap", label: "거래 공백" },
+              { value: "context", label: "단지·입지 특징" },
             ]}
           />
           <div className={styles.autoLoad}>
@@ -2276,6 +2141,7 @@ export default function ApartmentBulkPage() {
             </div>
           )}
 
+          <details className={styles.advancedDetails}><summary>분석 기간·가격 확인 상태</summary><div className={styles.advancedBody} style={{whiteSpace:"pre-line",fontSize:13}}>{describePeriod(contentStats)}<br />{priceContext(data)}<br />가격 자료가 부족해도 확인된 거래 흐름·단지·입지 중심 본문을 만들 수 있습니다.</div></details>
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
@@ -2293,12 +2159,12 @@ export default function ApartmentBulkPage() {
               <button
                 type="button"
                 className={styles.actionButton}
-                disabled={!monthlyStats.length}
+                disabled={!contentStats.some(row => row.medianPrice != null)}
                 onClick={openPriceImagePromptInChatGPT}
               >
                 <span className={styles.actionIcon}>📈</span>
                 <b>2. 시세 그래프 만들기</b>
-                <small>6개월 월별 가격 + 거래건수 자동 입력</small>
+                <small>확인 기간 월별 가격 + 거래건수 자동 입력</small>
               </button>
 
               <button
@@ -2338,7 +2204,7 @@ export default function ApartmentBulkPage() {
                   className={styles.naverInput}
                   value={finalBlogText}
                   onChange={(e) => {
-                    setFinalBlogText(e.target.value);
+                    captureFinished(e.target.value);
                     setNaverCopyMessage("");
                   }}
                   placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요."
@@ -2408,7 +2274,7 @@ export default function ApartmentBulkPage() {
                 <div className={styles.promptHead}>
                   <div>
                     <b>📈 시세 그래프 요청서</b>
-                    <span>최근 6개월 월별 대표가격과 거래건수가 자동으로 들어갑니다.</span>
+                    <span>확인된 기간 월별 대표가격과 거래건수가 자동으로 들어갑니다.</span>
                   </div>
                 </div>
                 <textarea className={styles.promptBoxCompact} value={priceImagePrompt} readOnly />
@@ -2526,7 +2392,7 @@ export default function ApartmentBulkPage() {
           <p className={styles.eyebrow}>PUBLISH FLOW</p>
           <h2>이미지 3장 모두 ChatGPT에서 제작.</h2>
           <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
-          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
+          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>확인 기간 월별 가격·거래건수 요청서 자동 생성</small></div></div>
           <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
           <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
         </aside>
@@ -2582,3 +2448,4 @@ function OutputCard({ title, size, src, filename }: { title: string; size: strin
     </article>
   );
 }
+

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apartmentSetupState, createApartmentReadClient } from "@/lib/apartment-server";
 
+import { DISCOVERY_MONTHS, RANKING_RULE } from "@/lib/apartment-analysis";
+
 export const dynamic = "force-dynamic";
 
 function badgeList(row: Record<string, unknown>) {
@@ -38,7 +40,8 @@ export async function GET(req: NextRequest) {
 
     if (!latest) {
       return NextResponse.json({
-        region: region ? { code: region.region_code, name: region.region_name, sido: region.sido_name } : { code: regionCode, name: regionCode },
+        selectionBasis: { id: "market_signals", label: "콘텐츠 후보 추천순", rankingVerified: false, periodMonths: DISCOVERY_MONTHS, description: RANKING_RULE },
+      region: region ? { code: region.region_code, name: region.region_name, sido: region.sido_name } : { code: regionCode, name: regionCode },
         analysisDate: null,
         lastSyncedAt: region?.last_synced_at || null,
         totalComplexes: totalComplexes || 0,
@@ -105,6 +108,7 @@ export async function GET(req: NextRequest) {
 
     const all = snapshots || [];
     return NextResponse.json({
+      selectionBasis: { id: "market_signals", label: "콘텐츠 후보 추천순", rankingVerified: false, periodMonths: DISCOVERY_MONTHS, description: RANKING_RULE },
       region: region ? { code: region.region_code, name: region.region_name, sido: region.sido_name } : { code: regionCode, name: regionCode },
       analysisDate: latest.analysis_date,
       lastSyncedAt: region?.last_synced_at || null,
@@ -122,3 +126,4 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+

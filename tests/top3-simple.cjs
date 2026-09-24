@@ -7,8 +7,8 @@ function load(name) {
  vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/apartment-bulk/'+name+'.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:out,require:()=>model});
  return out;
 }
-const model=load('top3-model');
-const m=load('top3-simple');
+const model=require("./load-ts.cjs").load("app/apartment-bulk/top3-model.ts");
+const m=require("./load-ts.cjs").load("app/apartment-bulk/top3-simple.ts");
 const raw='추천 이유\n[제목]\n테스트 제목\n[/제목]\n[본문]\n본문과 출처\n[/본문]\n[이미지 00]\n썸네일 전용\n[/이미지 00]\n[이미지 01]\n도표 전용\n[/이미지 01]\n[이미지 02]\n체크리스트 전용\n[/이미지 02]';
 const parsed=m.parseArticle(raw);
 assert.equal(parsed.body,'테스트 제목\n\n본문과 출처');

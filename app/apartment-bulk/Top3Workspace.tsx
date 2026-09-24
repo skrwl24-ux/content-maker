@@ -7,6 +7,8 @@ import { articleRequest, parseArticle, imageRequest, exportIssues } from "./top3
 import styles from "./top3.module.css";
 import { naverCopy } from "./top3-naver";
 
+import { FinishedArticle, readFinished, finishedExcerpt, rememberFinished, diversityPrompt } from "@/lib/apartment-analysis";
+
 type Props = {
   workId: string; topic: string; materials: string; body: string;
   onBodyChange: (body: string) => void;
@@ -36,12 +38,18 @@ async function toPng(file: File): Promise<string> {
 
 export default function Top3Workspace({ workId, topic, materials, body, onBodyChange, onTopicChange, data, onChange }: Props) {
   const [message, setMessage] = useState("");
+  const [finishedHistory, setFinishedHistory] = useState<FinishedArticle[]>([]);
+  useEffect(() => { setFinishedHistory(readFinished()); }, []);
+  function recordBody(text: string) {
+    const excerpt = finishedExcerpt(text, workId);
+    if(excerpt) { rememberFinished(excerpt); setFinishedHistory(readFinished()); }
+  }
   const [busy, setBusy] = useState("");
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = revision(topic, materials, body, data);
   const formatted = naverCopy(body, topic);
-  const request = articleRequest(data.requestTopic || "", materials);
+  const request = articleRequest(data.requestTopic || "", materials) + diversityPrompt(finishedHistory, workId);
   const issues = exportIssues(topic, materials, body, data);
   const slots = IMAGE_SLOTS.filter((slot) => slot.id !== "03" || data.optionalImage);
   const patch = (key: keyof Top3Work, value: string | boolean) => onChange((prev) => ({ ...prev, [key]: value }));
@@ -119,6 +127,7 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
       const nextRevision = revision(parsed.topic, materials, parsed.body, data);
       onTopicChange(parsed.topic);
       onBodyChange(parsed.body);
+      recordBody(parsed.body);
       onChange(prev => ({ ...prev, optionalImage: !!parsed.plans["03"], imagePlans: Object.fromEntries(Object.entries(parsed.plans).map(([id, text]) => [id, { text, revision: nextRevision }])) }));
       setMessage("본문과 이미지 항목을 나눴습니다. 아래에서 이미지별로 GPT에 요청하세요.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "답변을 확인해 주세요. 기존 본문과 이미지는 유지됩니다."); }
@@ -137,7 +146,7 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
       <p>제목·본문·이미지 항목이 포함된 GPT 답변 전체를 붙여넣으세요. 채팅에 요청서가 나타나지 않으면 요청서 복사를 사용하세요.</p>
       <label>GPT 답변<textarea value={data.recommendations} onChange={e => patch("recommendations", e.target.value)} placeholder="[제목], [본문], [이미지 00] 등이 포함된 답변 전체" /></label>
       <button type="button" disabled={!data.recommendations.trim() || !!busy} onClick={importResult}>본문·이미지 항목 나누기</button>
-      <details><summary>나눈 본문 확인·수정</summary><label>본문<textarea className={styles.body} value={body} onChange={e => onBodyChange(e.target.value)} /></label></details>
+      <details><summary>나눈 본문 확인·수정</summary><label>본문<textarea className={styles.body} value={body} onChange={e => { onBodyChange(e.target.value); recordBody(e.target.value); }} /></label></details>
     </section>
     <section className={styles.panel}>
       <h3>3. 이미지별 GPT에서 만들기</h3>
@@ -168,3 +177,4 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
     <p role="status" aria-live="polite">{busy ? "처리 중… " : ""}{message}</p>
   </div>;
 }
+
