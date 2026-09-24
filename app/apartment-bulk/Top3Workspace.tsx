@@ -72,16 +72,18 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
     </div>;
   }
 
-  async function copyNaver() {
+  async function copyNaver(includeTitle = false, titleOnly = false) {
+    const html = titleOnly ? formatted.titleHtml : includeTitle ? formatted.fullHtml : formatted.html;
+    const plain = titleOnly ? formatted.title : includeTitle ? formatted.fullPlain : formatted.plain;
     try {
       if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("plain");
       await navigator.clipboard.write([new ClipboardItem({
-        "text/html": new Blob([formatted.html], { type: "text/html" }),
-        "text/plain": new Blob([formatted.plain], { type: "text/plain" }),
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plain], { type: "text/plain" }),
       })]);
-      if (alive.current) setMessage("네이버 본문 서식 복사 완료. 본문 입력칸에 Ctrl+V로 붙여넣으세요. 제목은 제목 복사로 따로 넣으세요.");
+      if (alive.current) setMessage(titleOnly ? "제목 20pt 서식 복사 완료. 네이버 전용 제목칸은 편집기 자체 서식이 적용될 수 있습니다." : includeTitle ? "전체 서식 복사 완료 · 제목 20pt / 소제목 18pt / 본문 15pt · Ctrl+V로 붙여넣으세요." : "본문 서식 복사 완료 · 소제목 18pt / 본문 15pt · 제목은 별도로 복사하세요.");
     } catch {
-      try { await navigator.clipboard.writeText(formatted.plain); if (alive.current) setMessage("서식 복사가 제한되어 문단 간격을 정리한 일반 텍스트로 복사했습니다."); }
+      try { await navigator.clipboard.writeText(plain); if (alive.current) setMessage("일반 텍스트로 복사됐습니다. 글자 크기와 굵기는 적용되지 않았으니 서식 복사를 지원하는 브라우저에서 다시 시도하세요."); }
       catch { if (alive.current) setMessage("복사하지 못했습니다. 본문 미리보기에서 직접 선택해 복사해 주세요."); }
     }
   }
@@ -174,11 +176,11 @@ export default function Top3Workspace({ workId, topic, materials, body, onBodyCh
     </section>
     <section className={styles.panel}>
       <h3>4. 네이버 복사 · 다운로드</h3>
-      <p>제목은 네이버 제목칸에, 서식 복사한 글은 본문칸에 Ctrl+V로 붙여넣으세요. 이미지는 내려받아 별도로 넣으세요. 붙여넣은 뒤 글꼴과 간격은 편집기에서 확인해 주세요.</p>
-      <details><summary>네이버 본문 미리보기</summary><div dangerouslySetInnerHTML={{ __html: formatted.html }} /></details>
+      <p>기본 서식: 제목 20pt · 소제목 18pt · 본문 15pt · 핵심 강조는 굵게. 제목까지 본문에 넣으려면 전체 서식 복사를, 제목칸을 따로 쓰려면 본문 서식 복사를 사용하세요. Ctrl+V로 붙여넣고 [이미지 위치] 표시를 해당 이미지로 바꿔 넣으세요.</p>
+      <details><summary>네이버 본문 미리보기</summary><div dangerouslySetInnerHTML={{ __html: formatted.fullHtml }} /></details>
       <p>같은 브라우저에 자동 저장됩니다. 저장 완료 표시를 확인한 뒤 창을 닫으세요.</p>
       {issues.length > 0 && <p>남은 항목: {issues.join(", ")}</p>}
-      <div className={styles.actions}><button type="button" disabled={!topic.trim()} onClick={() => void copy(formatted.title)}>제목 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copyNaver()}>네이버 본문 서식 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copy(formatted.plain)}>일반 텍스트 복사</button><button type="button" disabled={!!issues.length || !!busy} onClick={() => void download()}>ZIP 다운로드</button></div>
+      <div className={styles.actions}><button type="button" disabled={!topic.trim()} onClick={() => void copyNaver(false, true)}>제목 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copyNaver(true)}>제목 포함 전체 서식 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copyNaver()}>네이버 본문 서식 복사</button><button type="button" disabled={!formatted.plain.trim()} onClick={() => void copy(formatted.plain)}>일반 텍스트 복사</button><button type="button" disabled={!!issues.length || !!busy} onClick={() => void download()}>ZIP 다운로드</button></div>
     </section>
     <p role="status" aria-live="polite">{busy ? "처리 중… " : ""}{message}</p>
   </div>;
