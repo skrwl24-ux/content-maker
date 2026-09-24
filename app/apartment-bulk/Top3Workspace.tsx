@@ -7,7 +7,7 @@ import { articleRequest, parseArticle, imageRequest, exportIssues } from "./top3
 import styles from "./top3.module.css";
 import { naverCopy } from "./top3-naver";
 
-import { FinishedArticle, readFinished, finishedExcerpt, rememberFinished, diversityPrompt } from "@/lib/apartment-analysis";
+import { FINISHED_KEY, FinishedArticle, readFinished, finishedExcerpt, rememberFinished, diversityPrompt } from "@/lib/apartment-analysis";
 
 type Props = {
   workId: string; topic: string; materials: string; body: string;
@@ -39,7 +39,13 @@ async function toPng(file: File): Promise<string> {
 export default function Top3Workspace({ workId, topic, materials, body, onBodyChange, onTopicChange, data, onChange }: Props) {
   const [message, setMessage] = useState("");
   const [finishedHistory, setFinishedHistory] = useState<FinishedArticle[]>([]);
-  useEffect(() => { setFinishedHistory(readFinished()); }, []);
+  useEffect(() => {
+    const refresh = () => setFinishedHistory(readFinished());
+    refresh();
+    window.addEventListener(FINISHED_KEY, refresh);
+    window.addEventListener("storage", refresh);
+    return () => { window.removeEventListener(FINISHED_KEY, refresh); window.removeEventListener("storage", refresh); };
+  }, []);
   function recordBody(text: string) {
     const excerpt = finishedExcerpt(text, workId);
     if(excerpt) { rememberFinished(excerpt); setFinishedHistory(readFinished()); }

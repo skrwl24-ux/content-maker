@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 
-import { ANALYSIS_MONTHS, analysisRows, describePeriod, monthLine, matchesArea, AREA_RULE, RANKING_RULE, MonthlyStat, FinishedArticle, finishedExcerpt, rememberFinished, readFinished, diversityPrompt } from "@/lib/apartment-analysis";
+import { ANALYSIS_MONTHS, analysisRows, describePeriod, monthLine, matchesArea, AREA_RULE, RANKING_RULE, MonthlyStat, FINISHED_KEY, FinishedArticle, finishedExcerpt, rememberFinished, readFinished, diversityPrompt } from "@/lib/apartment-analysis";
 import { ArticleThemeId, ArticleThemeMode, ArticleThemeChoice, selectArticleTheme } from "@/lib/apartment-themes";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
@@ -1249,7 +1249,13 @@ export default function ApartmentBulkPage() {
   const ready = useMemo(() => Boolean(data.name.trim() && mapDataUrl), [data.name, mapDataUrl]);
   const contentStats = useMemo(() => data.sourceVersion === 1 && (data.area !== data.sourceArea || data.name !== data.sourceName || data.region !== data.sourceRegion) ? [] : monthlyStats, [data.area, data.sourceArea, data.name, data.sourceName, data.region, data.sourceRegion, data.sourceVersion, monthlyStats]);
   const [finishedHistory, setFinishedHistory] = useState<FinishedArticle[]>([]);
-  useEffect(() => { setFinishedHistory(readFinished()); }, []);
+  useEffect(() => {
+    const refresh = () => setFinishedHistory(readFinished());
+    refresh();
+    window.addEventListener(FINISHED_KEY, refresh);
+    window.addEventListener("storage", refresh);
+    return () => { window.removeEventListener(FINISHED_KEY, refresh); window.removeEventListener("storage", refresh); };
+  }, []);
   function captureFinished(raw: string) {
     setFinalBlogText(raw);
     const excerpt = finishedExcerpt(raw, activeWorkId || "bulk:" + data.name, selectedArticleTheme.id);

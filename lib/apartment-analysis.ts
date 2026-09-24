@@ -42,7 +42,7 @@ export function finishedExcerpt(raw:string,key:string,theme?:string): FinishedAr
   return {key,title:lines[0].slice(0,150),intro:lines.slice(1,4).join(" ").slice(0,350),theme};
 }
 export function rememberFinished(item:FinishedArticle) {
-  try { const raw=JSON.parse(localStorage.getItem(FINISHED_KEY)||"[]"); const prev:FinishedArticle[]=Array.isArray(raw)?raw.filter(v=>typeof v?.key==="string" && typeof v?.title==="string" && typeof v?.intro==="string"):[]; localStorage.setItem(FINISHED_KEY,JSON.stringify([...prev.filter(v=>v.key!==item.key && v.title!==item.title),item].slice(-8))); } catch { /* Optional history must never stop production. */ }
+  try { const raw=JSON.parse(localStorage.getItem(FINISHED_KEY)||"[]"); const prev:FinishedArticle[]=Array.isArray(raw)?raw.filter(v=>typeof v?.key==="string" && typeof v?.title==="string" && typeof v?.intro==="string"):[]; localStorage.setItem(FINISHED_KEY,JSON.stringify([...prev.filter(v=>v.key!==item.key && v.title!==item.title),item].slice(-8))); if (typeof window !== "undefined") window.dispatchEvent(new Event(FINISHED_KEY)); } catch { /* Optional history must never stop production. */ }
 }
 export function readFinished(): FinishedArticle[] {
   try { const v=JSON.parse(localStorage.getItem(FINISHED_KEY)||"[]"); return Array.isArray(v)?v.filter(x=>typeof x?.title==="string" && typeof x?.intro==="string").slice(-8):[]; } catch {return [];}
