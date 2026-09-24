@@ -112,7 +112,7 @@ type ComplexDetailResponse = {
   } | null;
 };
 
-const SAMPLE: ApartmentData = { name:"", region:"", area:"", recentPrice:"", previousPrice:"", households:"", moveIn:"", station:"", locationLine:"", question:"", thumbnailTone:"auto" };
+const EMPTY_DATA: ApartmentData = { name:"", region:"", area:"", recentPrice:"", previousPrice:"", households:"", moveIn:"", station:"", locationLine:"", question:"", thumbnailTone:"auto" };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
   bulk: { label: "아파트 대량발행", short: "대량발행" },
@@ -436,7 +436,7 @@ function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "확인된 �
 }
 
 function priceContext(data: ApartmentData) {
-  if (data.sourceVersion !== 1 && data.enteredFields?.includes("recentPrice") && data.tradeArea && /^\d{4}-\d{2}-\d{2}$/.test(data.tradeDate || "")) {
+  if (data.enteredFields?.includes("recentPrice") && data.tradeArea && /^\d{4}-\d{2}-\d{2}$/.test(data.tradeDate || "")) {
     const target = Number(data.area.match(/[0-9]+(?:\.[0-9]+)?/)?.[0]);
     const match = data.area.includes("대") ? matchesArea(data.tradeArea, target) : Math.abs(target-data.tradeArea)<0.001;
     return match ? `사용자 확인 개별 실거래: ${data.recentPrice} / 실제 전용 ${data.tradeArea}㎡ / ${data.tradeDate}` : "입력한 거래 면적이 대상과 다릅니다. 이 가격은 사용하지 않습니다.";
@@ -491,8 +491,8 @@ ${accuracyGuide(data, monthlyStats)}
 대표 전용면적: ${value(data.area)}
 ${priceContext(data)}
 비교 가격: ${data.sourceVersion === 1 && data.area === data.sourceArea && data.name === data.sourceName && data.region === data.sourceRegion ? value(data.previousPrice) : "확인 필요"}
-세대수: ${(data.sourceVersion === 1 || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
-입주년도: ${(data.sourceVersion === 1 || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
+세대수: ${((data.sourceVersion === 1 && data.name === data.sourceName && data.region === data.sourceRegion) || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
+입주년도: ${((data.sourceVersion === 1 && data.name === data.sourceName && data.region === data.sourceRegion) || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
 
@@ -683,8 +683,8 @@ ${today}
 대표 전용면적: ${value(data.area)}
 ${priceContext(data)}
 비교값: ${data.sourceVersion === 1 && data.area === data.sourceArea && data.name === data.sourceName && data.region === data.sourceRegion ? value(data.previousPrice) : "확인 필요"}
-세대수: ${(data.sourceVersion === 1 || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
-입주년도: ${(data.sourceVersion === 1 || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
+세대수: ${((data.sourceVersion === 1 && data.name === data.sourceName && data.region === data.sourceRegion) || data.enteredFields?.includes("households")) ? value(data.households) : "확인 필요"}
+입주년도: ${((data.sourceVersion === 1 && data.name === data.sourceName && data.region === data.sourceRegion) || data.enteredFields?.includes("moveIn")) ? value(data.moveIn) : "확인 필요"}
 주요 역: ${value(data.station)}
 입지 설명: ${value(data.locationLine)}
 참고 관점: ${articleAngle || "없음 — GPT가 확인된 기간 데이터에서 직접 선정"}
@@ -1201,7 +1201,7 @@ async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Po
 }
 
 export default function ApartmentBulkPage() {
-  const [data, setData] = useState<ApartmentData>(SAMPLE);
+  const [data, setData] = useState<ApartmentData>(EMPTY_DATA);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
@@ -1399,7 +1399,7 @@ export default function ApartmentBulkPage() {
         const recent = trade?.price;
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
         const nextData: ApartmentData = {
-          ...SAMPLE,
+          ...EMPTY_DATA,
           sourceVersion: 1, sourceName: detail.complex.name || "단지명 확인 필요", sourceRegion: region || "지역 확인 필요", sourceArea: detail.representativeArea ? "전용 " + detail.representativeArea : "확인 필요",
           tradeArea: trade?.area, tradeDate: trade?.date,
           name: detail.complex.name || "단지명 확인 필요",
@@ -1472,7 +1472,7 @@ export default function ApartmentBulkPage() {
 
   function update<K extends keyof ApartmentData>(key: K, value: ApartmentData[K]) {
     if ((key === "name" || key === "region" || key === "area") && data[key] !== value) setMonthlyStats([]);
-    setData((prev) => ({ ...prev, [key]: value, enteredFields: [...new Set([...(prev.enteredFields || []), key])] }));
+    setData((prev) => ({ ...prev, ...(["recentPrice", "name", "region", "area"].includes(key) ? {tradeArea: undefined, tradeDate: undefined} : {}), [key]: value, enteredFields: [...new Set([...(["name", "region", "area"].includes(key) ? [] : (prev.enteredFields || [])), key])] }));
     setOutputs(null);
   }
 
@@ -1582,7 +1582,7 @@ export default function ApartmentBulkPage() {
   }
 
   function resetBulkWorkspace() {
-    setData(SAMPLE);
+    setData(EMPTY_DATA);
     setMonthlyStats([]);
     setMapDataUrl("");
     setAptPoint(null);
@@ -1622,7 +1622,7 @@ export default function ApartmentBulkPage() {
         setTop3Work(normalizeTop3(saved.top3));
 
         if (slot.type === "bulk" && saved.bulk) {
-          setData(saved.bulk.data || SAMPLE);
+          setData(saved.bulk.data || EMPTY_DATA);
           setMonthlyStats(saved.bulk.monthlyStats || []);
           setMapDataUrl(saved.bulk.mapDataUrl || "");
           setAptPoint(saved.bulk.aptPoint || null);
@@ -2071,7 +2071,7 @@ export default function ApartmentBulkPage() {
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
             <div><b>단지 데이터</b><span>단지를 선택하거나 확인한 정보를 입력하세요</span></div>
-            <button type="button" onClick={() => { setData(SAMPLE); setMonthlyStats([]); setSelectedComplexName(""); setOutputs(null); }}>입력값 비우기</button>
+            <button type="button" onClick={() => { setData(EMPTY_DATA); setMonthlyStats([]); setSelectedComplexName(""); setOutputs(null); }}>입력값 비우기</button>
           </div>
 
           {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
