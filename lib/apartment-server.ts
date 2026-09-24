@@ -1,3 +1,4 @@
+import { DISCOVERY_MONTHS, TRADE_REFRESH_MONTHS } from "./apartment-analysis";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const FALLBACK_SUPABASE_URL = "https://ygrgamfvykuyhijogxou.supabase.co";
@@ -475,7 +476,7 @@ export async function syncApartmentRegion(regionCode: string) {
     if (complexError) throw complexError;
     const complexes = (complexRows || []) as ComplexRow[];
 
-    const rawTradeMonths = await mapInBatches(recentYearMonths(7), 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
+    const rawTradeMonths = await mapInBatches(recentYearMonths(TRADE_REFRESH_MONTHS), 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
     const normalized = rawTradeMonths
       .flat()
       .map((row) => normalizeTrade(row, regionCode, complexes))
@@ -529,7 +530,7 @@ export async function syncApartmentRegion(regionCode: string) {
     await upsertInChunks(client, "apt_monthly_stats", monthlyRows, "complex_id,area_group,year_month", 400);
 
     const analysisDate = currentAnalysisDate();
-    const sixMonthLabels = new Set(monthLabels(6));
+    const sixMonthLabels = new Set(monthLabels(DISCOVERY_MONTHS));
     const snapshots: JsonRecord[] = [];
 
     for (const complex of complexes) {
@@ -643,3 +644,4 @@ export async function syncApartmentRegion(regionCode: string) {
     throw error;
   }
 }
+
