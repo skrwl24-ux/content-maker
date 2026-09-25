@@ -4,7 +4,7 @@ import { createApartmentReadClient, syncApartmentRegion } from "@/lib/apartment-
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-export async function POST() {
+export async function GET() {
   const regionCode = "11170";
   const supabase = createApartmentReadClient();
   const { data: region, error } = await supabase
