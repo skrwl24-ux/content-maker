@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 
 type SchoolDistrictPreset = {
@@ -13,14 +13,16 @@ type SchoolDistrictPreset = {
 };
 
 const SCHOOL_DISTRICTS: SchoolDistrictPreset[] = [
-  { id: "daechi", label: "대치", region: "서울 강남구 대치·도곡 생활권", academyAnchor: "대치동 학원가·은마사거리", note: "1차 · 대치 학군", done: true },
-  { id: "mokdong", label: "목동", region: "서울 양천구 목동·신정동 생활권", academyAnchor: "목동 학원가", note: "2차 · 다음 추천" },
+  { id: "daechi", label: "대치", region: "서울 강남구 대치·도곡 생활권", academyAnchor: "대치동 학원가·은마사거리", note: "1차" },
+  { id: "mokdong", label: "목동", region: "서울 양천구 목동·신정동 생활권", academyAnchor: "목동 학원가", note: "2차" },
   { id: "banpo", label: "반포·잠원", region: "서울 서초구 반포·잠원 생활권", academyAnchor: "반포·잠원 학원가와 서초 교육 생활권", note: "3차" },
   { id: "junggye", label: "중계", region: "서울 노원구 중계동 생활권", academyAnchor: "은행사거리 학원가", note: "4차" },
   { id: "bundang", label: "분당", region: "경기 성남시 분당구 수내·정자 생활권", academyAnchor: "수내·정자 학원가", note: "5차" },
   { id: "pyeongchon", label: "평촌", region: "경기 안양시 동안구 평촌·귀인 생활권", academyAnchor: "평촌 학원가", note: "6차" },
   { id: "songpa", label: "송파·잠실", region: "서울 송파구 잠실·가락 생활권", academyAnchor: "잠실 학원가와 송파 교육 생활권", note: "7차" },
   { id: "ilsan", label: "일산", region: "경기 고양시 일산서구·일산동구", academyAnchor: "후곡·백마 학원가", note: "8차" },
+  { id: "gwanggyo", label: "광교", region: "경기 수원시 영통구 광교 생활권", academyAnchor: "광교 중심상업지·학원가", note: "9차" },
+  { id: "dongtan", label: "동탄", region: "경기 화성시 동탄 생활권", academyAnchor: "동탄 학원가·동탄2신도시 교육 생활권", note: "10차" },
 ];
 
 function schoolTitle(district: SchoolDistrictPreset) {
@@ -263,6 +265,30 @@ function makeSchoolPrompts(district: SchoolDistrictPreset) {
   };
 }
 
+function makeNextSchoolBatchPrompt() {
+  const current = SCHOOL_DISTRICTS.map((item) => item.label).join(", ");
+  return [
+    "현재 학군 아파트 시리즈 10개를 모두 작성했습니다.",
+    "",
+    "[이미 작성한 학군 — 반드시 제외]",
+    current,
+    "",
+    "이 목록과 겹치지 않게 다음에 발행할 수도권 학군 아파트 주제 10개를 새로 추천해줘.",
+    "",
+    "[선정 기준]",
+    "- 현재 기준 최신 웹 검색으로 실제 학원가와 대표 아파트가 존재하는지 확인할 것.",
+    "- 수도권 중심으로 검색 수요가 있고 32~35평형을 '34평대'로 묶어 매매·전세 비교 콘텐츠를 만들기 좋은 지역을 우선할 것.",
+    "- 서로 너무 비슷한 생활권을 연속해서 추천하지 말고 서울·경기·인천을 적절히 섞을 것.",
+    "- 단순히 학교가 유명하다는 이유만으로 넣지 말고 실제 아파트 비교 콘텐츠성이 있는 곳을 우선할 것.",
+    "- 특정 아파트 거주가 특정 학교 배정을 보장한다고 표현하지 말 것.",
+    "",
+    "[각 항목에 포함]",
+    "발행순서 / 학군명 / 핵심 학원가 / 비교할 대표 아파트 5곳 / 추천 이유 / 예상 제목",
+    "",
+    "1번부터 10번까지 실제 다음 발행 순서로 정리해줘.",
+  ].join("\n");
+}
+
 function openChat(prompt: string) {
   window.open("https://chatgpt.com/?q=" + encodeURIComponent(prompt), "_blank", "noopener,noreferrer");
 }
@@ -270,11 +296,30 @@ function openChat(prompt: string) {
 export default function SchoolDistrictWorkspace() {
   const [selectedId, setSelectedId] = useState("mokdong");
   const [copied, setCopied] = useState(false);
+  const [completedIds, setCompletedIds] = useState<string[]>(["daechi"]);
   const district = useMemo(
     () => SCHOOL_DISTRICTS.find((item) => item.id === selectedId) || SCHOOL_DISTRICTS[1],
     [selectedId]
   );
   const prompts = useMemo(() => makeSchoolPrompts(district), [district]);
+  const doneCount = completedIds.filter((id) => SCHOOL_DISTRICTS.some((item) => item.id === id)).length;
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("apartment-school-series-done-v1") || "null");
+      if (Array.isArray(saved)) setCompletedIds(saved.filter((item): item is string => typeof item === "string"));
+    } catch {
+      setCompletedIds(["daechi"]);
+    }
+  }, []);
+
+  function toggleDone(id: string) {
+    setCompletedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
+      try { window.localStorage.setItem("apartment-school-series-done-v1", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
 
   async function copyAllImagePrompts() {
     const all = [
@@ -304,77 +349,80 @@ export default function SchoolDistrictWorkspace() {
       <div className={styles.dailyBoardHead}>
         <div>
           <p className={styles.eyebrow}>SCHOOL DISTRICT SERIES</p>
-          <h2>학군 아파트 시리즈 · <strong>대치 다음부터 순서대로</strong></h2>
-          <span>32~35평형은 비교 편의를 위해 모두 ‘34평대’로 묶고, 가격·전세·학원가 동선을 중심으로 만듭니다.</span>
+          <h2>학군 아파트 <strong>{doneCount}/10</strong></h2>
+          <span>32~35평형은 ‘34평대’로 묶고 가격·전세·학원가 동선을 중심으로 비교합니다.</span>
+        </div>
+        <div className={styles.dailyBoardActions}>
+          <div className={styles.dailyProgressText}>{doneCount === 10 ? "🎉 1차 10개 완료" : "완료한 글은 체크해 두세요"}</div>
+          <button type="button" disabled={doneCount < 10} onClick={() => openChat(makeNextSchoolBatchPrompt())}>
+            다음 10개 추천받기
+          </button>
         </div>
       </div>
 
+      <div className={styles.dailyProgressTrack} aria-label={`학군 시리즈 진행률 ${doneCount}/10`}>
+        <span style={{ width: `${doneCount * 10}%` }} />
+      </div>
+
       <div className={styles.dailySlots}>
-        {SCHOOL_DISTRICTS.map((item, index) => (
-          <article key={item.id} className={styles.dailySlot}>
-            <div className={styles.dailySlotNumber}>{item.done ? "✓" : index + 1}</div>
-            <div className={styles.dailySlotMain}>
-              <b>{item.label} 학군</b>
-              <small>{item.region} · {item.academyAnchor}</small>
-              <code className={styles.dailyWorkId}>{item.done ? "대치 글 완료 · 필요하면 다시 생성" : item.note}</code>
-            </div>
-            <div className={styles.dailySlotActions}>
-              <button
-                type="button"
-                className={selectedId === item.id ? styles.dailyActiveWork : styles.dailyStart}
-                onClick={() => setSelectedId(item.id)}
-              >
-                {selectedId === item.id ? "선택됨" : "선택"}
-              </button>
-            </div>
-          </article>
-        ))}
+        {SCHOOL_DISTRICTS.map((item, index) => {
+          const done = completedIds.includes(item.id);
+          return (
+            <article key={item.id} className={done ? styles.dailySlotDone : styles.dailySlot}>
+              <div className={styles.dailySlotNumber}>{done ? "✓" : index + 1}</div>
+              <div className={styles.dailySlotMain}>
+                <b>{item.label}</b>
+                <small>{item.academyAnchor}</small>
+                <code className={styles.dailyWorkId}>{item.note}</code>
+              </div>
+              <div className={styles.dailySlotActions}>
+                <button
+                  type="button"
+                  className={selectedId === item.id ? styles.dailyActiveWork : styles.dailyStart}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  {selectedId === item.id ? "선택됨" : "선택"}
+                </button>
+                <button type="button" className={done ? styles.dailyUndo : styles.dailyComplete} onClick={() => toggleDone(item.id)}>
+                  {done ? "완료 취소" : "완료"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       <section className={styles.actionPanel}>
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {district.label}</p>
           <h2>{schoolTitle(district)}</h2>
-          <span>각 버튼은 최신 자료 확인 규칙과 34평대 기준이 포함된 요청서를 새 ChatGPT 채팅으로 바로 엽니다.</span>
+          <span>본문과 이미지 요청서는 모두 최신 웹 확인 + 34평대 통합 기준이 자동으로 들어갑니다.</span>
         </div>
 
         <div className={styles.actionGrid}>
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}>
-            <span className={styles.actionIcon}>🖼️</span>
-            <b>00. 썸네일 챗 열기</b>
-            <small>1254×1254 · 질문형 썸네일</small>
-          </button>
-
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}>
-            <span className={styles.actionIcon}>💰</span>
-            <b>01. 가격 비교 챗 열기</b>
-            <small>1600×900 · 매매·전세 5곳 비교</small>
-          </button>
-
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.academy)}>
-            <span className={styles.actionIcon}>🎓</span>
-            <b>02. 학원가 챗 열기</b>
-            <small>1600×900 · 실제 학원 동선 비교</small>
-          </button>
-
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.summary)}>
-            <span className={styles.actionIcon}>✅</span>
-            <b>03. 핵심 정리 챗 열기</b>
-            <small>1600×900 · 5개 단지 특징 요약</small>
-          </button>
-
           <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.body)}>
             <span className={styles.actionIcon}>📝</span>
-            <b>본문 챗 열기</b>
-            <small>최신 웹 확인 · 34평대 매매·전세·학원가</small>
+            <b>본문 만들기</b>
+            <small>최신 매매·전세·학원가까지 확인</small>
+          </button>
+          <button type="button" className={styles.actionButton} onClick={() => void copyAllImagePrompts()}>
+            <span className={styles.actionIcon}>🖼️</span>
+            <b>{copied ? "✓ 이미지 요청서 복사됨" : "이미지 4장 요청서 전체복사"}</b>
+            <small>00 썸네일 + 01 가격 + 02 학원가 + 03 정리</small>
           </button>
         </div>
 
-        <div className={styles.promptActionsCompact}>
-          <button type="button" onClick={() => void copyAllImagePrompts()}>
-            {copied ? "✓ 이미지 4장 요청서 복사 완료" : "이미지 4장 요청서 전체복사"}
-          </button>
-        </div>
+        <details className={styles.advancedDetails}>
+          <summary>이미지 4장 개별 챗 열기</summary>
+          <div className={styles.advancedBody}>
+            <div className={styles.actionGrid}>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}><b>00. 썸네일</b><small>1254×1254</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}><b>01. 가격 비교</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.academy)}><b>02. 학원가 접근</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.summary)}><b>03. 핵심 정리</b><small>1600×900</small></button>
+            </div>
+          </div>
+        </details>
       </section>
     </section>
   );
