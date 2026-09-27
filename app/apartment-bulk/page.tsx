@@ -19,6 +19,7 @@ type ArticleThemeChoice = {
 };
 
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
+type ContentMode = "bulk" | "school" | "mega";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
 type WorkAttachment = {
   name: string;
@@ -1336,6 +1337,7 @@ async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Po
 }
 
 export default function ApartmentBulkPage() {
+  const [contentMode, setContentMode] = useState<ContentMode>("bulk");
   const [data, setData] = useState<ApartmentData>(SAMPLE);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
@@ -2010,18 +2012,31 @@ export default function ApartmentBulkPage() {
     <main className={styles.page}>
       <div className={styles.topbar}>
         <a href="/" className={styles.back}>← 콘텐츠 메이커</a>
-        <span className={styles.modeBadge}>아파트 단지 대량발행</span>
+        <span className={styles.modeBadge}>아파트 콘텐츠 작업실</span>
       </div>
 
       <section className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>집값쓱 APARTMENT BULK MAKER</p>
-          <h1>단지 데이터만 고르면<br />이미지·본문 요청서가 한 번에 준비됩니다.</h1>
-          <p>썸네일 · 시세 그래프 · 입지 이미지 · 블로그 본문까지 ChatGPT 요청서로 연결합니다.</p>
+          <p className={styles.eyebrow}>집값쓱 APARTMENT CONTENT STUDIO</p>
+          <h1>오늘 만들 콘텐츠만 고르면<br />작업 화면이 깔끔하게 열립니다.</h1>
+          <p>단지 대량발행 · 학군 아파트 · 수도권 초대형단지를 한 곳에서 작업합니다.</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
 
+      <nav className={styles.contentTabs} aria-label="아파트 콘텐츠 종류">
+        <button type="button" className={contentMode === "bulk" ? styles.contentTabActive : styles.contentTab} onClick={() => setContentMode("bulk")}>
+          <b>단지 대량발행</b><small>실거래·가격 흐름</small>
+        </button>
+        <button type="button" className={contentMode === "school" ? styles.contentTabActive : styles.contentTab} onClick={() => setContentMode("school")}>
+          <b>학군 아파트</b><small>34평대·학원가 비교</small>
+        </button>
+        <button type="button" className={contentMode === "mega" ? styles.contentTabActive : styles.contentTab} onClick={() => setContentMode("mega")}>
+          <b>수도권 초대형단지</b><small>세대수·34평대 분석</small>
+        </button>
+      </nav>
+
+      {contentMode === "bulk" && (
       <section className={styles.dailyBoard}>
         <div className={styles.dailyBoardHead}>
           <div>
@@ -2089,12 +2104,12 @@ export default function ApartmentBulkPage() {
             : `현재 대량발행 ${dailyBulkCount}개 · 나머지는 TOP3/꿀팁/비교/파워글로 구성합니다.`}
         </div>
       </section>
+      )}
 
-      <SchoolDistrictWorkspace />
+      {contentMode === "school" && <SchoolDistrictWorkspace />}
+      {contentMode === "mega" && <MegaComplexWorkspace />}
 
-      <MegaComplexWorkspace />
-
-      {activeWorkId && activeWorkSlot && (
+      {contentMode === "bulk" && activeWorkId && activeWorkSlot && (
         <section id="active-work" className={styles.activeWorkPanel}>
           <div className={styles.activeWorkHead}>
             <div>
@@ -2211,7 +2226,7 @@ export default function ApartmentBulkPage() {
         </section>
       )}
 
-      {(!activeWorkId || activeWorkType === "bulk") && (
+      {contentMode === "bulk" && (!activeWorkId || activeWorkType === "bulk") && (
       <section className={styles.layout}>
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
@@ -2328,69 +2343,7 @@ export default function ApartmentBulkPage() {
             {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
           </section>
 
-          <section className={styles.naverEditor}>
-            <div className={styles.naverEditorHead}>
-              <div>
-                <p className={styles.eyebrow}>NAVER FINAL COPY</p>
-                <h2>5. 네이버 최종 편집 · 전체복사</h2>
-                <span>ChatGPT 완성글을 붙여넣으면 제목 20pt · 소제목 18pt · 본문 15pt · 태그 13~14pt와 한 줄 띄기를 자동 적용합니다.</span>
-              </div>
-            </div>
 
-            <div className={styles.naverEditorGrid}>
-              <div className={styles.naverInputPane}>
-                <b>① ChatGPT 완성글 붙여넣기</b>
-                <textarea
-                  className={styles.naverInput}
-                  value={finalBlogText}
-                  onChange={(e) => {
-                    setFinalBlogText(e.target.value);
-                    setNaverCopyMessage("");
-                  }}
-                  placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요."
-                />
-              </div>
-
-              <div className={styles.naverPreviewPane}>
-                <div className={styles.naverPreviewHead}>
-                  <b>② 네이버 붙여넣기 미리보기</b>
-                  <span>{naverBlocks.length ? `${naverBlocks.length}개 블록 자동 인식` : "완성글을 붙여넣으면 미리보기가 나타납니다."}</span>
-                </div>
-                <div className={styles.naverPreview}>
-                  {naverBlocks.length ? naverBlocks.map((block, index) => (
-                    <div key={index}>
-                      <div
-                        className={
-                          block.type === "title" ? styles.naverTitle :
-                          block.type === "subheading" ? styles.naverSubheading :
-                          block.type === "tags" ? styles.naverTags :
-                          block.type === "image" ? styles.naverImageLine :
-                          styles.naverBody
-                        }
-                      >
-                        {block.text}
-                      </div>
-                      {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
-                    </div>
-                  )) : (
-                    <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.naverCopyActions}>
-              <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
-                ③ 서식 포함 전체복사
-              </button>
-              <button type="button" onClick={() => void copyNaverSafeText()}>
-                한줄띄기 안전복사
-              </button>
-              <span>기본은 서식 포함 전체복사 → 네이버 Ctrl+V</span>
-            </div>
-
-            {naverCopyMessage && <div className={styles.naverCopyNotice}>{naverCopyMessage}</div>}
-          </section>
 
           <details className={styles.advancedDetails}>
             <summary>이미지 · 본문 요청서 확인 · 복사</summary>
@@ -2539,7 +2492,79 @@ export default function ApartmentBulkPage() {
       </section>
       )}
 
-      {(!activeWorkId || activeWorkType === "bulk") && outputs && (
+      <details className={styles.sharedEditor}>
+        <summary>
+          <span><b>네이버 최종편집</b><small>단지 · 학군 · 초대형단지 공통</small></span>
+          <strong>완성글 붙여넣기</strong>
+        </summary>
+        <div className={styles.sharedEditorBody}>
+          <section className={styles.naverEditor}>
+            <div className={styles.naverEditorHead}>
+              <div>
+                <p className={styles.eyebrow}>NAVER FINAL COPY</p>
+                <h2>5. 네이버 최종 편집 · 전체복사</h2>
+                <span>ChatGPT 완성글을 붙여넣으면 제목 20pt · 소제목 18pt · 본문 15pt · 태그 13~14pt와 한 줄 띄기를 자동 적용합니다.</span>
+              </div>
+            </div>
+
+            <div className={styles.naverEditorGrid}>
+              <div className={styles.naverInputPane}>
+                <b>① ChatGPT 완성글 붙여넣기</b>
+                <textarea
+                  className={styles.naverInput}
+                  value={finalBlogText}
+                  onChange={(e) => {
+                    setFinalBlogText(e.target.value);
+                    setNaverCopyMessage("");
+                  }}
+                  placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요."
+                />
+              </div>
+
+              <div className={styles.naverPreviewPane}>
+                <div className={styles.naverPreviewHead}>
+                  <b>② 네이버 붙여넣기 미리보기</b>
+                  <span>{naverBlocks.length ? `${naverBlocks.length}개 블록 자동 인식` : "완성글을 붙여넣으면 미리보기가 나타납니다."}</span>
+                </div>
+                <div className={styles.naverPreview}>
+                  {naverBlocks.length ? naverBlocks.map((block, index) => (
+                    <div key={index}>
+                      <div
+                        className={
+                          block.type === "title" ? styles.naverTitle :
+                          block.type === "subheading" ? styles.naverSubheading :
+                          block.type === "tags" ? styles.naverTags :
+                          block.type === "image" ? styles.naverImageLine :
+                          styles.naverBody
+                        }
+                      >
+                        {block.text}
+                      </div>
+                      {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
+                    </div>
+                  )) : (
+                    <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.naverCopyActions}>
+              <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
+                ③ 서식 포함 전체복사
+              </button>
+              <button type="button" onClick={() => void copyNaverSafeText()}>
+                한줄띄기 안전복사
+              </button>
+              <span>기본은 서식 포함 전체복사 → 네이버 Ctrl+V</span>
+            </div>
+
+            {naverCopyMessage && <div className={styles.naverCopyNotice}>{naverCopyMessage}</div>}
+          </section>
+        </div>
+      </details>
+
+      {contentMode === "bulk" && (!activeWorkId || activeWorkType === "bulk") && outputs && (
         <section id="outputs" className={styles.outputs}>
           <div className={styles.outputHead}>
             <div><p className={styles.eyebrow}>OUTPUT</p><h2>본문 이미지 2장 완성</h2><span>썸네일은 위 ChatGPT 요청서로 만들고, 아래 2장은 블로그 본문에 사용하세요.</span></div>
