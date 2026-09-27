@@ -4,6 +4,7 @@ import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "r
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
+import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
@@ -2087,6 +2088,8 @@ export default function ApartmentBulkPage() {
             : `현재 대량발행 ${dailyBulkCount}개 · 나머지는 TOP3/꿀팁/비교/파워글로 구성합니다.`}
         </div>
       </section>
+
+      <SchoolDistrictWorkspace />
 
       {activeWorkId && activeWorkSlot && (
         <section id="active-work" className={styles.activeWorkPanel}>
