@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 
 type MegaComplexPreset = {
@@ -23,10 +23,6 @@ const MEGA_COMPLEXES: MegaComplexPreset[] = [
   { id: "ricenz", name: "리센츠", region: "서울 송파구 잠실동", households: "5,563세대", moveIn: "2008년", scaleNote: "단일 초대형 단지" },
   { id: "bupyeong-grandhills", name: "e편한세상부평그랑힐스", region: "인천 부평구 청천동", households: "5,050세대", moveIn: "2023년", scaleNote: "단일 초대형 단지" },
   { id: "godeok-gracium", name: "고덕그라시움", region: "서울 강동구 고덕동", households: "4,932세대", moveIn: "2019년", scaleNote: "단일 초대형 단지" },
-  { id: "sanseong-foresta", name: "산성역포레스티아", region: "경기 성남시 수정구 신흥동", households: "4,089세대", moveIn: "2020년", scaleNote: "단일 초대형 단지" },
-  { id: "godeok-arteon", name: "고덕아르테온", region: "서울 강동구 상일동", households: "4,066세대", moveIn: "2020년", scaleNote: "단일 초대형 단지" },
-  { id: "mapo-raemian", name: "마포래미안푸르지오", region: "서울 마포구 아현동", households: "3,885세대", moveIn: "2014년", scaleNote: "단일 대단지" },
-  { id: "maegyo-prugio-sk", name: "매교역푸르지오SK뷰", region: "경기 수원시 팔달구 매교동", households: "3,603세대", moveIn: "2022년", scaleNote: "단일 대단지" },
 ];
 
 function researchRules(complex: MegaComplexPreset) {
@@ -220,6 +216,30 @@ function locationPrompt(complex: MegaComplexPreset) {
   ].join("\n");
 }
 
+function makeNextMegaBatchPrompt() {
+  const current = MEGA_COMPLEXES.map((item) => item.name).join(", ");
+  return [
+    "현재 수도권 초대형 아파트 단지 시리즈 10개를 모두 작성했습니다.",
+    "",
+    "[이미 작성한 단지 — 반드시 제외]",
+    current,
+    "",
+    "이 목록과 겹치지 않게 다음에 발행할 수도권 대규모·초대형 아파트 단지 10곳을 새로 추천해줘.",
+    "",
+    "[선정 기준]",
+    "- 최신 웹 검색으로 세대수·입주년도·단지 구성을 확인할 것.",
+    "- 세대수, 검색 관심도, 최근 거래 이슈, 입지, 신축·재건축·재개발 등 콘텐츠성이 있는 단지를 우선할 것.",
+    "- 단일 관리단지와 여러 블록·단지 합산형을 반드시 구분할 것.",
+    "- 이미 작성한 단지는 제외하고 서울·경기·인천을 적절히 섞을 것.",
+    "- 가능하면 3,000세대 이상을 우선하되, 규모는 조금 작아도 콘텐츠성이 강하면 포함할 수 있다.",
+    "",
+    "[각 항목에 포함]",
+    "발행순서 / 단지명 / 지역 / 세대수 / 입주년도 / 단일단지·합산형 여부 / 콘텐츠 포인트 / 예상 제목",
+    "",
+    "1번부터 10번까지 실제 다음 발행 순서로 정리해줘.",
+  ].join("\n");
+}
+
 function openChat(prompt: string) {
   window.open("https://chatgpt.com/?q=" + encodeURIComponent(prompt), "_blank", "noopener,noreferrer");
 }
@@ -227,6 +247,7 @@ function openChat(prompt: string) {
 export default function MegaComplexWorkspace() {
   const [selectedId, setSelectedId] = useState(MEGA_COMPLEXES[0].id);
   const [copied, setCopied] = useState(false);
+  const [completedIds, setCompletedIds] = useState<string[]>([]);
   const complex = useMemo(
     () => MEGA_COMPLEXES.find((item) => item.id === selectedId) || MEGA_COMPLEXES[0],
     [selectedId]
@@ -238,6 +259,24 @@ export default function MegaComplexWorkspace() {
     location: locationPrompt(complex),
     body: bodyPrompt(complex),
   }), [complex]);
+  const doneCount = completedIds.filter((id) => MEGA_COMPLEXES.some((item) => item.id === id)).length;
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("apartment-mega-series-done-v1") || "null");
+      if (Array.isArray(saved)) setCompletedIds(saved.filter((item): item is string => typeof item === "string"));
+    } catch {
+      setCompletedIds([]);
+    }
+  }, []);
+
+  function toggleDone(id: string) {
+    setCompletedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
+      try { window.localStorage.setItem("apartment-mega-series-done-v1", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
 
   async function copyAllImages() {
     const text = [
@@ -260,77 +299,84 @@ export default function MegaComplexWorkspace() {
       <div className={styles.dailyBoardHead}>
         <div>
           <p className={styles.eyebrow}>METRO MEGA COMPLEX SERIES</p>
-          <h2>수도권 초대형단지 시리즈 · <strong>{MEGA_COMPLEXES.length}곳</strong></h2>
-          <span>세대수 3,500세대 이상급을 중심으로 리스트업했습니다. 합산형은 별도 표시하고, 실제 글에서는 최신 세대수와 34평대 거래를 다시 검증합니다.</span>
+          <h2>수도권 초대형단지 <strong>{doneCount}/10</strong></h2>
+          <span>단일 관리단지와 합산형을 구분하고, 실제 글에서는 최신 세대수와 34평대 거래를 다시 확인합니다.</span>
+        </div>
+        <div className={styles.dailyBoardActions}>
+          <div className={styles.dailyProgressText}>{doneCount === 10 ? "🎉 1차 10개 완료" : "완료한 글은 체크해 두세요"}</div>
+          <button type="button" disabled={doneCount < 10} onClick={() => openChat(makeNextMegaBatchPrompt())}>
+            다음 10개 추천받기
+          </button>
         </div>
       </div>
 
+      <div className={styles.dailyProgressTrack} aria-label={`초대형단지 시리즈 진행률 ${doneCount}/10`}>
+        <span style={{ width: `${doneCount * 10}%` }} />
+      </div>
+
       <div className={styles.dailySlots}>
-        {MEGA_COMPLEXES.map((item, index) => (
-          <article key={item.id} className={styles.dailySlot}>
-            <div className={styles.dailySlotNumber}>{index + 1}</div>
-            <div className={styles.dailySlotMain}>
-              <b>{item.name}</b>
-              <small>{item.region} · {item.households} · {item.moveIn}</small>
-              <code className={styles.dailyWorkId}>{item.scaleNote || "초대형단지"}</code>
-            </div>
-            <div className={styles.dailySlotActions}>
-              <button
-                type="button"
-                className={selectedId === item.id ? styles.dailyActiveWork : styles.dailyStart}
-                onClick={() => setSelectedId(item.id)}
-              >
-                {selectedId === item.id ? "선택됨" : "선택"}
-              </button>
-            </div>
-          </article>
-        ))}
+        {MEGA_COMPLEXES.map((item, index) => {
+          const done = completedIds.includes(item.id);
+          return (
+            <article key={item.id} className={done ? styles.dailySlotDone : styles.dailySlot}>
+              <div className={styles.dailySlotNumber}>{done ? "✓" : index + 1}</div>
+              <div className={styles.dailySlotMain}>
+                <b>{item.name}</b>
+                <small>{item.households} · {item.region}</small>
+                <code className={styles.dailyWorkId}>{item.scaleNote || "초대형단지"}</code>
+              </div>
+              <div className={styles.dailySlotActions}>
+                <button
+                  type="button"
+                  className={selectedId === item.id ? styles.dailyActiveWork : styles.dailyStart}
+                  onClick={() => setSelectedId(item.id)}
+                >
+                  {selectedId === item.id ? "선택됨" : "선택"}
+                </button>
+                <button type="button" className={done ? styles.dailyUndo : styles.dailyComplete} onClick={() => toggleDone(item.id)}>
+                  {done ? "완료 취소" : "완료"}
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       <div className={styles.dailyRule}>
-        세대수 표시는 콘텐츠 후보 선정을 위한 참고값입니다. ‘TOP 순위’로 발행할 때는 단일 관리단지/여러 블록 합산 기준을 동일하게 맞춰 다시 검증합니다.
+        세대수는 후보 선정을 위한 참고값입니다. TOP 순위 콘텐츠는 동일한 기준으로 다시 검증합니다.
       </div>
 
       <section className={styles.actionPanel}>
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {complex.name}</p>
           <h2>{complex.households} 초대형단지 · 34평대 가격과 실제 생활은?</h2>
-          <span>이미지 4장과 본문 요청서 모두 최신 웹 검증 규칙이 포함되어 있습니다.</span>
+          <span>본문과 이미지 요청서 모두 최신 웹 확인 규칙이 포함되어 있습니다.</span>
         </div>
 
         <div className={styles.actionGrid}>
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}>
-            <span className={styles.actionIcon}>🖼️</span>
-            <b>00. 썸네일 챗 열기</b>
-            <small>1254×1254 · 세대수 후킹</small>
-          </button>
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.scale)}>
-            <span className={styles.actionIcon}>🏙️</span>
-            <b>01. 규모 이미지 챗 열기</b>
-            <small>1600×900 · 세대수·동수·주차</small>
-          </button>
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}>
-            <span className={styles.actionIcon}>📈</span>
-            <b>02. 가격 흐름 챗 열기</b>
-            <small>1600×900 · 34평대 가격·거래량</small>
-          </button>
-          <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.location)}>
-            <span className={styles.actionIcon}>🗺️</span>
-            <b>03. 입지 이미지 챗 열기</b>
-            <small>1600×900 · 역·상권·생활권</small>
-          </button>
           <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.body)}>
             <span className={styles.actionIcon}>📝</span>
-            <b>본문 챗 열기</b>
+            <b>본문 만들기</b>
             <small>최신 실거래·전세·거래량까지 확인</small>
+          </button>
+          <button type="button" className={styles.actionButton} onClick={() => void copyAllImages()}>
+            <span className={styles.actionIcon}>🖼️</span>
+            <b>{copied ? "✓ 이미지 요청서 복사됨" : "이미지 4장 요청서 전체복사"}</b>
+            <small>00 썸네일 + 01 규모 + 02 가격 + 03 입지</small>
           </button>
         </div>
 
-        <div className={styles.promptActionsCompact}>
-          <button type="button" onClick={() => void copyAllImages()}>
-            {copied ? "✓ 이미지 4장 요청서 복사 완료" : "이미지 4장 요청서 전체복사"}
-          </button>
-        </div>
+        <details className={styles.advancedDetails}>
+          <summary>이미지 4장 개별 챗 열기</summary>
+          <div className={styles.advancedBody}>
+            <div className={styles.actionGrid}>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}><b>00. 썸네일</b><small>1254×1254</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.scale)}><b>01. 단지 규모</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}><b>02. 가격·거래</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.location)}><b>03. 입지·생활권</b><small>1600×900</small></button>
+            </div>
+          </div>
+        </details>
       </section>
     </section>
   );
