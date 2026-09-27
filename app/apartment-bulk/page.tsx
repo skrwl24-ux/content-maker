@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
 import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
+import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
@@ -2090,6 +2091,8 @@ export default function ApartmentBulkPage() {
       </section>
 
       <SchoolDistrictWorkspace />
+
+      <MegaComplexWorkspace />
 
       {activeWorkId && activeWorkSlot && (
         <section id="active-work" className={styles.activeWorkPanel}>
