@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 
-type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증";
+type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
 type SlotId = "00" | "01" | "02" | "03";
@@ -42,20 +42,20 @@ type Topic = {
 };
 
 const TOPICS: Topic[] = [
-  { id: 1, category: "생활 속 궁금증", title: "라면 면발은 왜 똑바르지 않고 꼬불꼬불하게 만들까?", thumbnailHook: "라면은 왜 꼬불꼬불?", brief: "누구나 자주 먹는 라면의 모양에서 출발해 면발이 꼬불꼬불한 이유를 제조·건조·조리·포장 관점에서 검증해 설명하는 강한 생활 검색형 소재입니다." },
-  { id: 2, category: "신기한 동물이야기", title: "비둘기는 걸을 때 왜 머리를 앞뒤로 까딱거릴까?", thumbnailHook: "비둘기 머리는 왜 저럴까?", brief: "길거리에서 누구나 본 비둘기의 독특한 걸음걸이를 시야 안정과 움직임 인식 관점에서 설명하는 친숙한 동물 호기심형 소재입니다." },
-  { id: 3, category: "생활 속 궁금증", title: "볼펜 뚜껑에는 왜 일부러 작은 구멍을 뚫어 놓았을까?", thumbnailHook: "이 구멍, 왜 있는 걸까?", brief: "너무 익숙해서 지나쳤던 볼펜 뚜껑의 작은 구멍이 어떤 안전 기준과 기능을 갖는지 사실 확인을 거쳐 풀어내는 생활 호기심형 소재입니다." },
-  { id: 4, category: "신비로운 자연", title: "아침에 자동차 유리에 물방울이 맺히는 이유는 뭘까? 비가 온 것도 아닌데", thumbnailHook: "밤새 비 왔나?", brief: "가을철 아침에 쉽게 보는 자동차 유리의 물방울을 표면 온도, 이슬점, 응결과 연결해 설명하는 계절성과 생활성이 함께 있는 자연 소재입니다." },
-  { id: 5, category: "생활 속 궁금증", title: "전자레인지 음식은 왜 가운데보다 가장자리가 먼저 뜨거워질 때가 많을까?", thumbnailHook: "왜 골고루 안 데워질까?", brief: "집에서 자주 겪는 전자레인지의 고르지 않은 가열을 전자기파의 분포, 음식의 형태와 수분 등 실제 원인으로 쉽게 설명하는 검색형 소재입니다." },
-  { id: 6, category: "신기한 동물이야기", title: "강아지는 눕기 전에 왜 빙글빙글 몇 바퀴씩 돌까?", thumbnailHook: "눕기 전에 왜 돌지?", brief: "반려견에서 자주 관찰되는 눕기 전 회전 행동을 본능, 주변 확인, 편안한 자세 만들기 등의 행동학적 설명과 함께 검증하는 친숙한 동물 소재입니다." },
-  { id: 7, category: "생활 속 궁금증", title: "세면대 위쪽에 있는 작은 구멍은 대체 왜 뚫려 있을까?", thumbnailHook: "세면대에 웬 구멍?", brief: "집에서 매일 보면서도 용도를 잘 모르는 세면대 오버플로 구멍의 역할과 한계를 쉽게 설명하는 전형적인 생활 호기심형 소재입니다." },
-  { id: 8, category: "신비로운 자연", title: "같은 오후인데 가을이 되면 그림자가 더 길어 보이는 이유는 뭘까?", thumbnailHook: "요즘 그림자가 길어진다?", brief: "계절에 따라 태양의 고도가 달라지면서 같은 시간대의 그림자 길이가 변하는 원리를 일상 관찰과 연결하는 가을 자연 검색형 소재입니다." },
-  { id: 9, category: "생활 속 궁금증", title: "테이크아웃 커피 뚜껑에는 왜 마시는 구멍 말고 작은 구멍이 하나 더 있을까?", thumbnailHook: "옆에 작은 구멍은 뭐지?", brief: "카페에서 흔히 접하는 컵 뚜껑의 작은 통기구가 음료 흐름과 압력에 어떤 역할을 하는지 설명하는 직관적인 생활 검색형 소재입니다." },
-  { id: 10, category: "신기한 동물이야기", title: "고양이 눈동자는 왜 낮에는 가늘어지고 밤에는 동그랗게 커질까?", thumbnailHook: "고양이 눈이 달라진다?", brief: "낮과 밤에 확연히 달라지는 고양이 동공 모양을 빛의 양, 홍채 움직임, 야간 시각 적응과 연결해 설명하는 사진 후킹이 강한 동물 소재입니다." },
+  { id: 1, category: "신기한 우리 몸", title: "손가락은 왜 물에 오래 있으면 쭈글쭈글해질까?", thumbnailHook: "물에 있으면 왜 쭈글쭈글?", brief: "물에 오래 닿았을 때 손가락과 발가락 피부에 주름이 생기는 현상을 단순히 피부가 물을 먹어서라는 설명에 그치지 않고, 신경계와 혈관 반응을 중심으로 검증해 설명하는 우리 몸 검색형 소재입니다." },
+  { id: 2, category: "생활 속 궁금증", title: "냉장고 문은 왜 닫고 바로 다시 열면 잘 안 열릴까?", thumbnailHook: "방금 닫았는데 왜 안 열리지?", brief: "냉장고 문을 닫은 직후 다시 열 때 유난히 뻑뻑하게 느껴지는 이유를 내부 공기의 온도 변화와 압력 차이를 중심으로 쉽게 설명하는 생활 밀착형 소재입니다." },
+  { id: 3, category: "신기한 동물이야기", title: "고양이는 왜 기분이 좋을 때 골골거릴까?", thumbnailHook: "고양이는 왜 골골거릴까?", brief: "고양이의 골골거림이 편안할 때 자주 나타나는 이유와 함께 스트레스·통증 상황에서도 나타날 수 있다는 점을 구분해 행동학과 생리학 자료로 설명하는 동물 소재입니다." },
+  { id: 4, category: "신비로운 자연", title: "바닷물은 왜 짤까? 소금은 어디서 왔을까?", thumbnailHook: "바닷물의 소금은 어디서 왔을까?", brief: "바다가 짠 이유를 암석의 풍화, 강을 통한 이온 이동, 해저의 지질 활동과 장기간의 순환 과정으로 연결해 설명하는 대표 자연 궁금증 소재입니다." },
+  { id: 5, category: "신기한 우리 몸", title: "멍은 왜 시간이 지나면서 색이 바뀔까?", thumbnailHook: "멍 색깔은 왜 계속 바뀔까?", brief: "부딪힌 뒤 멍이 붉거나 보라색으로 보이다가 녹색·노란색 계열로 변해가는 과정을 혈액 성분의 분해와 회복 과정에 연결해 설명하는 우리 몸 소재입니다." },
+  { id: 6, category: "생활 속 궁금증", title: "탄산음료는 왜 흔들면 거품이 갑자기 넘칠까?", thumbnailHook: "흔든 탄산은 왜 넘칠까?", brief: "탄산음료를 흔든 뒤 열면 거품이 빠르게 솟는 현상을 용해된 이산화탄소, 압력 변화와 기포가 생기는 자리의 증가를 중심으로 설명하는 생활 과학 소재입니다." },
+  { id: 7, category: "신기한 동물이야기", title: "도마뱀은 왜 위험하면 꼬리를 끊고 도망갈까?", thumbnailHook: "꼬리를 버리고 도망간다고?", brief: "일부 도마뱀이 포식자의 공격을 피할 때 꼬리를 스스로 떨어뜨리는 자절 행동을 생존 전략, 꼬리의 움직임과 재생의 한계까지 구분해 설명하는 동물 소재입니다." },
+  { id: 8, category: "신비로운 자연", title: "가을에는 왜 해가 더 빨리 지는 것처럼 느껴질까?", thumbnailHook: "요즘 해가 왜 이렇게 빨리 질까?", brief: "가을로 갈수록 해 지는 시각이 빨라지는 변화를 지구의 자전축 기울기와 계절에 따른 낮 길이 변화로 연결해 설명하는 계절 검색형 자연 소재입니다." },
+  { id: 9, category: "신기한 우리 몸", title: "추우면 왜 닭살이 돋을까?", thumbnailHook: "추우면 왜 닭살이 돋을까?", brief: "추위를 느낄 때 피부의 털세움근이 수축해 오돌토돌한 피부가 나타나는 이유와 사람에게 남아 있는 진화적 흔적을 과장 없이 설명하는 우리 몸 소재입니다." },
+  { id: 10, category: "생활 속 궁금증", title: "거울은 왜 좌우가 바뀐 것처럼 보일까?", thumbnailHook: "거울은 정말 좌우를 바꿀까?", brief: "거울이 실제로 좌우를 뒤집는 것인지, 앞뒤 방향의 반사가 왜 좌우 반전처럼 느껴지는지를 일상적인 동작 비교로 쉽게 풀어내는 생활 궁금증 소재입니다." },
 ]
 
-const STORAGE_KEY = "paramma-publish-queue-v3";
-const DB_NAME = "paramma-blogger-images-v3";
+const STORAGE_KEY = "paramma-publish-queue-v4";
+const DB_NAME = "paramma-blogger-images-v4";
 const DB_STORE = "images";
 const SLOT_IDS: SlotId[] = ["00", "01", "02", "03"];
 const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
@@ -68,12 +68,14 @@ const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; he
 function categoryEmoji(category: Category) {
   if (category === "신기한 동물이야기") return "🐾";
   if (category === "신비로운 자연") return "🌌";
+  if (category === "신기한 우리 몸") return "🧠";
   return "💡";
 }
 
 function categoryClass(category: Category) {
   if (category === "신기한 동물이야기") return styles.animal;
   if (category === "신비로운 자연") return styles.nature;
+  if (category === "신기한 우리 몸") return styles.body;
   return styles.life;
 }
 
@@ -92,6 +94,9 @@ function categoryGuide(category: Category) {
   }
   if (category === "신비로운 자연") {
     return "현상이 왜 생기는지 원인→과정→결과 순서로 쉽게 설명한다. 사진이나 영상에서 강하게 보이는 현상일수록 과장·도시전설·잘못된 설명을 구분해 검증한다.";
+  }
+  if (category === "신기한 우리 몸") {
+    return "우리 몸에서 실제로 일어나는 생리학적 원인을 중심으로 쉽게 설명한다. 질환 진단이나 과장된 건강 효과로 연결하지 말고, 건강·의학 관련 내용은 정부기관·대학병원·의학 학회·논문 등 신뢰할 수 있는 자료를 우선 확인한다. 개인차가 큰 내용은 모든 사람에게 똑같이 나타나는 것처럼 단정하지 않는다.";
   }
   return "독자가 검색한 질문에 초반 3~4문장 안에 핵심 답을 먼저 준다. 생활에서 실제로 체감하는 이유와 과학적 원리를 연결하고, 건강·안전 관련 내용은 공공기관 자료를 우선 확인한다.";
 }
@@ -154,7 +159,7 @@ function parseNaverBlog(raw: string): NaverBlock[] {
 
     const markdownHeading = /^#{2,6}\s+/.test(original);
     const wholeBold = /^(\*\*|__)[\s\S]+\1$/.test(original);
-    const emojiHeading = /^[🐾🌌💡✅📌🔎]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
+    const emojiHeading = /^[🐾🌌💡🧠✅📌🔎]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
 
     if (markdownHeading || wholeBold || emojiHeading) {
       blocks.push({ type: "subheading", text: line });
@@ -209,7 +214,7 @@ function buildArticlePrompt(topic: Topic) {
 ${formatToday()}
 
 [발행 정보]
-이번 묶음: 1차 발행 10개
+이번 묶음: 2차 발행 10개
 발행 순서: ${topic.id}/10
 카테고리: ${topic.category}
 주제: ${topic.title}
@@ -293,7 +298,7 @@ function buildLegacyImagePrompt(topic: Topic, slotId: SlotId) {
 [공통 스타일]
 - 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게
 - 과도한 AI 느낌, 네온, 유리질감, 과한 3D 효과, 불필요한 장식 금지
-- 실제 생물·자연의 형태와 색을 과장하거나 왜곡하지 말 것
+- 실제 생물·자연·인체의 형태와 색을 과장하거나 왜곡하지 말 것
 - 설명형이면 교육용 인포그래픽처럼 구조가 한눈에 보이게
 - 사진형이 적합하면 자연 다큐멘터리 사진처럼 사실적으로
 - 모바일에서도 핵심 피사체가 잘 보이도록 단순한 구도와 여백 사용
@@ -366,7 +371,7 @@ ${topic.thumbnailHook}
 [공통 스타일]
 - 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게
 - 과도한 AI 느낌, 네온, 유리질감, 과한 3D 효과, 불필요한 장식 금지
-- 실제 생물·자연의 형태와 색을 과장하거나 왜곡하지 말 것
+- 실제 생물·자연·인체의 형태와 색을 과장하거나 왜곡하지 말 것
 - 모바일에서도 핵심 피사체가 잘 보이도록 단순한 구도와 여백 사용
 
 ${compositionRules}
@@ -536,9 +541,11 @@ function buildNextTenPrompt() {
 - 신기한 동물이야기
 - 신비로운 자연
 - 생활 속 궁금증
+- 신기한 우리 몸
 
 [운영 방식]
-- 탭별로 따로 추천하지 말고 세 카테고리를 한 개의 발행 큐에 섞을 것.
+- 탭별로 따로 추천하지 말고 네 카테고리를 한 개의 발행 큐에 섞을 것.
+- 신기한 우리 몸은 2~3개 정도 포함해 새 카테고리 반응을 계속 확인할 것.
 - 1번부터 10번까지 실제로 올릴 순서를 정해줄 것.
 - 검색형·생활형 소재를 중심으로 하되 희귀하고 신기한 소재도 일부 섞을 것.
 - 대략 검색형 70%, 희귀·신기형 30% 느낌으로 구성.
