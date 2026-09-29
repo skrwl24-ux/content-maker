@@ -13,6 +13,7 @@ type ScheduleRow = {
   url: string;
   slug?: string;
   relatedIds?: string[];
+  backlinkDoneIds?: string[];
   note: string;
   body?: string;
 };
@@ -111,6 +112,47 @@ function relatedLinkText(row: ScheduleRow, allRows: ScheduleRow[]) {
   return related.map(item => {
     const status = isValidPublishedUrl(item.url) ? "LIVE" : "PLANNED";
     return `- [${status}] ${item.title}\n  ${resolvedUrl(item)}`;
+  }).join("\n");
+}
+
+function reverseLinkRows(row: ScheduleRow, allRows: ScheduleRow[]) {
+  return allRows.filter(item => item.id !== row.id && (item.relatedIds || []).includes(row.id));
+}
+
+function suggestedAnchorText(row: ScheduleRow) {
+  return row.keyword?.trim() || row.title.replace(/\s*[:?].*$/, "").trim();
+}
+
+function buildBacklinkPrompt(source: ScheduleRow, target: ScheduleRow) {
+  return `AI Price Atlas의 기존 Blogger 글에 새 내부링크 1개를 자연스럽게 추가해줘.
+
+[기존 글]
+제목: ${source.title}
+URL: ${source.url}
+
+[새로 연결할 글]
+제목: ${target.title}
+URL: ${target.url}
+추천 앵커텍스트: ${suggestedAnchorText(target)}
+
+[작업 규칙]
+- 먼저 기존 글 URL을 열어 실제 본문 내용을 확인할 것.
+- 새 글과 실제로 관련 있는 문단 1곳에만 내부링크를 추가할 것.
+- 기존 문맥을 해치지 말고, 필요하면 문장 1개를 자연스럽게 보완할 것.
+- 억지로 exact-match 키워드를 반복하지 말고 자연스러운 영어 앵커텍스트를 사용할 것.
+- 이미 같은 새 글 URL이 들어가 있다면 중복 링크를 만들지 말고 \"이미 연결됨\"이라고 알려줄 것.
+- 기존 가격·날짜·사실을 임의로 바꾸지 말 것.
+- Blogger HTML에서 사용할 수 있는 단순한 <a href=\"\"> 링크만 사용할 것.
+- 수정할 위치와 교체/추가할 문장을 먼저 짧게 보여주고, 바로 붙여넣을 HTML 문장도 함께 제공할 것.`;
+}
+
+function backlinkPlanText(row: ScheduleRow, allRows: ScheduleRow[]) {
+  const reverse = reverseLinkRows(row, allRows);
+  if (!reverse.length) return "- 역방향 연결 후보 없음";
+  return reverse.map(item => {
+    const live = isValidPublishedUrl(item.url);
+    const done = (row.backlinkDoneIds || []).includes(item.id);
+    return `- [${done ? "DONE" : live ? "ACTION" : "PLANNED"}] ${item.title}\n  ${resolvedUrl(item)}\n  → ${row.url || plannedUrl(row)}\n  Anchor: ${suggestedAnchorText(row)}`;
   }).join("\n");
 }
 
@@ -341,6 +383,9 @@ export default function GoogleBlogSchedulePage() {
   const selectedPlannedUrl = selected ? plannedUrl(selected) : "";
   const selectedResolvedUrl = selected ? resolvedUrl(selected) : "";
   const selectedRelated = selected ? relatedRows(selected, rows) : [];
+  const selectedReverse = selected ? reverseLinkRows(selected, rows) : [];
+  const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
+  const selectedBacklinkDone = selected?.backlinkDoneIds || [];
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(articlePrompt);
   const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
 
@@ -386,6 +431,16 @@ export default function GoogleBlogSchedulePage() {
       return;
     }
     updateRow(row.id, { status: nextStatus });
+  }
+
+  function toggleBacklinkDone(sourceId: string) {
+    if (!selected) return;
+    const current = selected.backlinkDoneIds || [];
+    const next = current.includes(sourceId)
+      ? current.filter(id => id !== sourceId)
+      : [...current, sourceId];
+    updateRow(selected.id, { backlinkDoneIds: next });
+    setNotice(current.includes(sourceId) ? "역링크 완료 표시를 해제했습니다." : "✅ 역링크 추가 완료로 표시했습니다.");
   }
 
   async function copyBloggerRich() {
@@ -631,6 +686,69 @@ export default function GoogleBlogSchedulePage() {
             >
               관련 URL 목록 한 번에 복사
             </button>
+          </section>
+
+          <section className={styles.backlinkPanel}>
+            <div className={styles.backlinkHead}>
+              <div>
+                <span className={styles.stepNo}>↩</span>
+                <h3>역방향 내부링크</h3>
+                <p>새 글을 발행한 뒤, 기존 글에서 이 새 글로 다시 연결하면 좋은 위치를 관리합니다.</p>
+              </div>
+              <button onClick={() => void copyText(backlinkPlanText(selected, rows), "역방향 내부링크 작업 목록을 복사했습니다.")}>작업 목록 복사</button>
+            </div>
+
+            {!isValidPublishedUrl(selected.url) ? (
+              <div className={styles.backlinkWaiting}>
+                <b>새 글 발행 후 활성화됩니다.</b>
+                <span>실제 Blogger URL을 입력하고 LIVE로 만들면 기존 글 수정 대상이 자동으로 표시됩니다.</span>
+              </div>
+            ) : selectedReverse.length ? (
+              <>
+                <div className={styles.backlinkSummary}>
+                  <div><span>기존 LIVE 글</span><b>{selectedReverseLive.length}</b></div>
+                  <div><span>반영 완료</span><b>{selectedReverseLive.filter(item => selectedBacklinkDone.includes(item.id)).length}</b></div>
+                  <div><span>남은 작업</span><b>{selectedReverseLive.filter(item => !selectedBacklinkDone.includes(item.id)).length}</b></div>
+                </div>
+                <div className={styles.backlinkList}>
+                  {selectedReverse.map(source => {
+                    const live = isValidPublishedUrl(source.url);
+                    const done = selectedBacklinkDone.includes(source.id);
+                    const prompt = live ? buildBacklinkPrompt(source, selected) : "";
+                    const chatUrl = prompt ? "https://chatgpt.com/?q=" + encodeURIComponent(prompt) : "";
+                    return (
+                      <div key={source.id} className={`${styles.backlinkItem} ${done ? styles.backlinkDone : ""}`}>
+                        <div className={styles.backlinkMain}>
+                          <div className={styles.backlinkBadges}>
+                            <span className={live ? styles.liveBadge : styles.plannedBadge}>{live ? "LIVE" : "PLANNED"}</span>
+                            {done && <span className={styles.doneBadge}>DONE</span>}
+                          </div>
+                          <b>{source.title}</b>
+                          <small>{resolvedUrl(source)}</small>
+                          <p>추천 앵커: <strong>{suggestedAnchorText(selected)}</strong></p>
+                        </div>
+                        <div className={styles.backlinkActions}>
+                          {live ? (
+                            <>
+                              <a href={source.url} target="_blank" rel="noopener noreferrer">기존 글 열기 ↗</a>
+                              <a className={styles.gptBacklink} href={chatUrl} target="_blank" rel="noopener noreferrer" onClick={() => void copyText(prompt, "역링크 수정 요청서를 GPT로 열고 복사했습니다.")}>GPT 수정 요청</a>
+                              <button onClick={() => toggleBacklinkDone(source.id)}>{done ? "완료 취소" : "✓ 추가 완료"}</button>
+                            </>
+                          ) : (
+                            <span className={styles.waitBadge}>이 글이 발행되면 수정 가능</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className={styles.backlinkWaiting}>
+                <b>현재 지정된 역링크 후보가 없습니다.</b>
+                <span>관련 글 연결 계획에 이 글을 포함한 기존 글이 생기면 자동으로 표시됩니다.</span>
+              </div>
+            )}
           </section>
 
           <div className={styles.workflowGrid}>
