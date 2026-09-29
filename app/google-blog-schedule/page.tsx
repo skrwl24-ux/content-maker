@@ -600,6 +600,8 @@ export default function GoogleBlogSchedulePage() {
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
+  const selectedUrlValid = selected ? isValidPublishedUrl(selected.url) : false;
+  const selectedBacklinkRemaining = selectedReverseLive.filter(item => !selectedBacklinkDone.includes(item.id)).length;
   const verificationPrompt = selected ? buildVerificationPrompt(selected) : "";
   const verificationChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(verificationPrompt);
   const selectedSimilarTopics = selected ? similarTopics(selected, rows) : [];
@@ -809,8 +811,8 @@ export default function GoogleBlogSchedulePage() {
                 <th>상태</th>
                 <th>글 제목</th>
                 <th>핵심 키워드</th>
-                <th>URL · 슬러그</th>
-                <th>메모</th>
+                <th>검증</th>
+                <th>URL</th>
                 <th>작업</th>
                 <th aria-label="삭제"></th>
               </tr>
@@ -837,26 +839,17 @@ export default function GoogleBlogSchedulePage() {
                     </td>
                     <td><input className={styles.titleInput} value={row.title} placeholder="글 제목" onChange={e => updateRow(row.id, { title: e.target.value })} /></td>
                     <td><input value={row.keyword} placeholder="SEO 키워드" onChange={e => updateRow(row.id, { keyword: e.target.value })} /></td>
-                    <td className={styles.urlCell}>
-                      <input value={row.slug || ""} placeholder="고정 슬러그" onChange={e => updateRow(row.id, { slug: e.target.value.trim().toLowerCase().replace(/\s+/g, "-") })} />
-                      <small>{plannedUrl(row) || "슬러그를 입력하면 예정 URL 생성"}</small>
-                      <input
-                        value={row.url}
-                        placeholder="발행 후 실제 URL (필수)"
-                        onChange={e => {
-                          const url = e.target.value.trim();
-                          updateRow(row.id, {
-                            url,
-                            status: row.status === "발행 완료" && !isValidPublishedUrl(url) ? "작성 중" : row.status,
-                          });
-                        }}
-                      />
-                      <span className={isValidPublishedUrl(row.url) ? styles.urlValid : styles.urlPending}>
-                        {isValidPublishedUrl(row.url) ? "✓ 실제 URL 확인됨 · LIVE 가능" : "발행 완료 전 실제 URL 필요"}
+                    <td className={styles.miniStateCell}>
+                      <span className={verificationResolvedCount(row) === 6 ? styles.miniGood : styles.miniWait}>
+                        {verificationResolvedCount(row)}/6
                       </span>
                     </td>
-                    <td><input value={row.note} placeholder="가격 확인 · 이미지 등" onChange={e => updateRow(row.id, { note: e.target.value })} /></td>
-                    <td><button className={styles.workBtn} onClick={() => { setSelectedId(row.id); setNotice(""); }}>{row.id === selectedId ? "작업 중" : "글 작업"}</button></td>
+                    <td className={styles.miniStateCell}>
+                      <span className={isValidPublishedUrl(row.url) ? styles.miniGood : styles.miniNeutral}>
+                        {isValidPublishedUrl(row.url) ? "LIVE" : "대기"}
+                      </span>
+                    </td>
+                    <td><button className={styles.workBtn} onClick={() => { setSelectedId(row.id); setNotice(""); }}>{row.id === selectedId ? "선택됨" : "열기"}</button></td>
                     <td><button className={styles.deleteBtn} onClick={() => removeRow(row.id)} aria-label="행 삭제">×</button></td>
                   </tr>
                 );
@@ -867,7 +860,7 @@ export default function GoogleBlogSchedulePage() {
 
         <div className={styles.footerNote}>
           <b>운영 팁</b>
-          <span>가격 글은 발행 직전에 최신 웹 가격과 결제 방식을 다시 확인하고, 완료 후 발행 링크를 붙여두면 중복 주제를 피하기 쉽습니다.</span>
+          <span>일정표에서는 핵심 상태만 확인하고, 상세 URL·검증·SEO·내부링크 관리는 아래 선택 글 작업 영역에서 진행합니다.</span>
         </div>
 
 
@@ -879,9 +872,57 @@ export default function GoogleBlogSchedulePage() {
               <p>{selected.date} · {selected.keyword || "SEO 키워드 미입력"}</p>
             </div>
             <span className={styles.workStatus}>{selected.status}</span>
+            <div className={styles.workHealth}>
+              <span className={selectedVerificationResolved === 6 ? styles.healthGood : styles.healthWait}>검증 {selectedVerificationResolved}/6</span>
+              <span className={duplicateCount ? styles.healthDanger : styles.healthGood}>{duplicateCount ? `중복 ${duplicateCount}` : "SEO OK"}</span>
+              <span className={selectedUrlValid ? styles.healthGood : styles.healthNeutral}>{selectedUrlValid ? "LIVE" : "URL 대기"}</span>
+              {selectedBacklinkRemaining > 0 && <span className={styles.healthWait}>역링크 {selectedBacklinkRemaining}</span>}
+            </div>
           </div>
 
-          <section className={styles.verificationPanel}>
+          <section className={styles.publishSetup}>
+            <div className={styles.publishSetupHead}>
+              <div>
+                <span className={styles.stepNo}>SET</span>
+                <h3>발행 설정</h3>
+              </div>
+              <span className={selectedUrlValid ? styles.setupLive : styles.setupDraft}>{selectedUrlValid ? "LIVE" : "DRAFT"}</span>
+            </div>
+            <div className={styles.publishSetupGrid}>
+              <label>
+                <span>고정 슬러그</span>
+                <input value={selected.slug || ""} placeholder="영문-슬러그" onChange={e => updateRow(selected.id, { slug: e.target.value.trim().toLowerCase().replace(/\s+/g, "-") })} />
+                <small>{selectedPlannedUrl || "슬러그를 입력하면 예정 URL이 생성됩니다."}</small>
+              </label>
+              <label>
+                <span>실제 발행 URL</span>
+                <input
+                  value={selected.url}
+                  placeholder="https://aipriceatlas.blogspot.com/...html"
+                  onChange={e => {
+                    const url = e.target.value.trim();
+                    updateRow(selected.id, {
+                      url,
+                      status: selected.status === "발행 완료" && !isValidPublishedUrl(url) ? "작성 중" : selected.status,
+                    });
+                  }}
+                />
+                <small className={selectedUrlValid ? styles.setupOkText : styles.setupWarnText}>{selectedUrlValid ? "✓ 실제 URL 확인됨" : "발행 완료 전에 실제 URL이 필요합니다."}</small>
+              </label>
+              <label className={styles.publishNote}>
+                <span>운영 메모</span>
+                <input value={selected.note} placeholder="이 글에서 확인할 포인트" onChange={e => updateRow(selected.id, { note: e.target.value })} />
+              </label>
+            </div>
+          </section>
+
+          <div className={styles.managementTools}>
+          <details className={styles.toolDetails}>
+            <summary>
+              <div><b>출처 · 가격 검증</b><span>공식 가격·웹·앱·세금·결제수단</span></div>
+              <em>{selectedVerificationResolved}/6</em>
+            </summary>
+            <section className={styles.verificationPanel}>
             <div className={styles.verificationHead}>
               <div>
                 <span className={styles.stepNo}>✓</span>
@@ -935,9 +976,15 @@ export default function GoogleBlogSchedulePage() {
               {selectedVerification.secondarySource && <a href={selectedVerification.secondarySource} target="_blank" rel="noopener noreferrer">보조 출처 열기 ↗</a>}
               <button type="button" onClick={() => void copyText(verificationSummary(selected), "검증 기록을 복사했습니다.")}>검증 기록 복사</button>
             </div>
-          </section>
+            </section>
+          </details>
 
-          <section className={styles.seoCheckPanel}>
+          <details className={styles.toolDetails}>
+            <summary>
+              <div><b>SEO 중복 검사</b><span>비슷한 검색의도·기존 글 충돌 확인</span></div>
+              <em className={duplicateCount ? styles.toolAlert : ""}>{duplicateCount ? `${duplicateCount}건` : "OK"}</em>
+            </summary>
+            <section className={styles.seoCheckPanel}>
             <div className={styles.seoCheckHead}>
               <div>
                 <span className={styles.stepNo}>SEO</span>
@@ -982,9 +1029,15 @@ export default function GoogleBlogSchedulePage() {
             ) : (
               <div className={styles.seoClear}><b>뚜렷하게 겹치는 주제가 없습니다.</b><span>현재 스케줄과 등록된 기존 발행글 기준으로는 새 글을 진행해도 괜찮아 보입니다.</span></div>
             )}
-          </section>
+            </section>
+          </details>
 
-          <section className={styles.linkPanel}>
+          <details className={styles.toolDetails}>
+            <summary>
+              <div><b>내부링크</b><span>관련 글 URL과 연결 후보</span></div>
+              <em>{selectedRelated.length}</em>
+            </summary>
+            <section className={styles.linkPanel}>
             <div className={styles.linkPanelHead}>
               <div>
                 <span className={styles.stepNo}>URL</span>
@@ -1023,9 +1076,15 @@ export default function GoogleBlogSchedulePage() {
             >
               관련 URL 목록 한 번에 복사
             </button>
-          </section>
+            </section>
+          </details>
 
-          <section className={styles.backlinkPanel}>
+          <details className={styles.toolDetails}>
+            <summary>
+              <div><b>역방향 내부링크</b><span>기존 글에서 새 글로 다시 연결</span></div>
+              <em>{selectedUrlValid ? selectedBacklinkRemaining : "발행 후"}</em>
+            </summary>
+            <section className={styles.backlinkPanel}>
             <div className={styles.backlinkHead}>
               <div>
                 <span className={styles.stepNo}>↩</span>
@@ -1086,7 +1145,14 @@ export default function GoogleBlogSchedulePage() {
                 <span>관련 글 연결 계획에 이 글을 포함한 기존 글이 생기면 자동으로 표시됩니다.</span>
               </div>
             )}
-          </section>
+            </section>
+          </details>
+          </div>
+
+          <div className={styles.sectionDivider}>
+            <div><span>CREATE</span><b>콘텐츠 만들기</b></div>
+            <small>관리 도구는 필요할 때만 열고, 아래에서 본문과 이미지를 제작하세요.</small>
+          </div>
 
           <div className={styles.workflowGrid}>
             <section className={styles.requestCard}>
@@ -1144,6 +1210,11 @@ export default function GoogleBlogSchedulePage() {
             </section>
           </div>
 
+          <div className={styles.sectionDivider}>
+            <div><span>WRITE</span><b>완성본 붙여넣기</b></div>
+            <small>GPT 결과를 붙여넣으면 Blogger용 메타와 본문을 자동 분리합니다.</small>
+          </div>
+
           <section className={styles.bodyCard}>
             <div className={styles.bodyHead}>
               <div>
@@ -1166,6 +1237,11 @@ export default function GoogleBlogSchedulePage() {
               onChange={e => updateRow(selected.id, { body: e.target.value, status: selected.status === "발행 완료" ? "발행 완료" : "작성 중" })}
             />
           </section>
+
+          <div className={styles.sectionDivider}>
+            <div><span>PUBLISH</span><b>Blogger 발행</b></div>
+            <small>제목·설명·슬러그·라벨·본문을 확인하고 최종 발행하세요.</small>
+          </div>
 
           <section className={styles.bloggerCard}>
             <div className={styles.bloggerHead}>
