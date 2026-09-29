@@ -32,23 +32,23 @@ const IMAGE_SLOTS = [
   { id: "05", label: "핵심 정리", role: "독자가 마지막에 기억할 핵심 3~4가지를 정리하는 요약 이미지" },
 ] as const;
 
-const STORAGE_KEY = "content-maker-google-blog-schedule-v1";
+const STORAGE_KEY = "content-maker-google-blog-schedule-v2-quality";
 
 const DEFAULT_ROWS: ScheduleRow[] = [
-  { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026", keyword: "Claude Pro Korea price", status: "예정", url: "", note: "한국 가격 · 웹/앱 결제 차이" },
-  { id: "2026-09-30-1", date: "2026-09-30", title: "Gemini AI Subscription Price in South Korea 2026", keyword: "Gemini Korea price", status: "예정", url: "", note: "한국 구독 가격 · 결제 방식" },
-  { id: "2026-10-01-1", date: "2026-10-01", title: "ChatGPT Plus Price in Taiwan 2026", keyword: "ChatGPT Plus Taiwan price", status: "예정", url: "", note: "현지 통화 · 웹/앱 비교" },
-  { id: "2026-10-02-1", date: "2026-10-02", title: "ChatGPT Plus Price in Singapore 2026", keyword: "ChatGPT Plus Singapore price", status: "예정", url: "", note: "SGD 표시 · 세금 확인" },
-  { id: "2026-10-03-1", date: "2026-10-03", title: "ChatGPT Plus Price in Hong Kong 2026", keyword: "ChatGPT Plus Hong Kong price", status: "예정", url: "", note: "HKD 표시 · 결제수단 확인" },
-  { id: "2026-10-04-1", date: "2026-10-04", title: "ChatGPT Plus Price in India 2026", keyword: "ChatGPT Plus India price", status: "예정", url: "", note: "현지 가격 · 앱스토어 차이" },
-  { id: "2026-10-05-1", date: "2026-10-05", title: "ChatGPT Plus Price in Australia 2026", keyword: "ChatGPT Plus Australia price", status: "예정", url: "", note: "AUD 가격 · 세금 포함 여부" },
-  { id: "2026-10-06-1", date: "2026-10-06", title: "ChatGPT Plus Price in Canada 2026", keyword: "ChatGPT Plus Canada price", status: "예정", url: "", note: "CAD 가격 · 지역별 세금 주의" },
-  { id: "2026-10-07-1", date: "2026-10-07", title: "ChatGPT Plus Price in the UK 2026", keyword: "ChatGPT Plus UK price", status: "예정", url: "", note: "GBP 가격 · VAT 확인" },
-  { id: "2026-10-08-1", date: "2026-10-08", title: "ChatGPT Plus Price in Germany 2026", keyword: "ChatGPT Plus Germany price", status: "예정", url: "", note: "EUR 가격 · VAT 확인" },
-  { id: "2026-10-09-1", date: "2026-10-09", title: "Claude Pro Price in Japan 2026", keyword: "Claude Pro Japan price", status: "예정", url: "", note: "JPY 가격 · 웹/앱 비교" },
-  { id: "2026-10-10-1", date: "2026-10-10", title: "Gemini AI Subscription Price in Japan 2026", keyword: "Gemini Japan price", status: "예정", url: "", note: "일본 가격 · Google 결제 확인" },
-  { id: "2026-10-11-1", date: "2026-10-11", title: "Cheapest Countries for AI Subscriptions in 2026", keyword: "cheapest AI subscription countries", status: "예정", url: "", note: "국가별 비교형 파워글" },
-  { id: "2026-10-12-1", date: "2026-10-12", title: "ChatGPT Plus Web vs App Store Price Difference 2026", keyword: "ChatGPT web vs app price", status: "예정", url: "", note: "웹 · iOS · Android 결제 비교" },
+  { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026: Web, App & Billing Guide", keyword: "Claude Pro Korea price", status: "예정", url: "", note: "가격 검증형 · 웹/앱 가격 · 세금 · 실제 결제 단계까지 확인" },
+  { id: "2026-09-30-1", date: "2026-09-30", title: "Gemini AI Subscription Price in South Korea 2026: Plans, Tax & Payment", keyword: "Gemini Korea price", status: "예정", url: "", note: "가격 검증형 · 플랜별 가격 · 세금 · 결제 방식 구분" },
+  { id: "2026-10-01-1", date: "2026-10-01", title: "ChatGPT Plus Web vs App Store Price 2026: Why Mobile Can Cost More", keyword: "ChatGPT web vs app price", status: "예정", url: "", note: "문제 해결형 · 웹/iOS/Android 가격 차이 원인과 확인 방법" },
+  { id: "2026-10-02-1", date: "2026-10-02", title: "ChatGPT vs Claude vs Gemini Price in South Korea 2026", keyword: "AI subscription price Korea", status: "예정", url: "", note: "비교형 · 동일 기준일에 가격·세금·결제 방식·주요 플랜 비교" },
+  { id: "2026-10-03-1", date: "2026-10-03", title: "ChatGPT Plus Price in Taiwan 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Taiwan price", status: "예정", url: "", note: "국가 가격 검증형 · TWD 실제 표시 여부 · 앱 가격 · 세금 확인" },
+  { id: "2026-10-04-1", date: "2026-10-04", title: "ChatGPT Plus Price in Singapore 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Singapore price", status: "예정", url: "", note: "국가 가격 검증형 · SGD · GST · 웹/앱 차이 확인" },
+  { id: "2026-10-05-1", date: "2026-10-05", title: "ChatGPT Plus Price by Country 2026: Live Comparison Table", keyword: "ChatGPT Plus price by country", status: "예정", url: "", note: "대표 기둥글 · 동일 날짜 기준 국가별 가격·통화·세금·플랫폼을 직접 비교하고 계속 업데이트" },
+  { id: "2026-10-06-1", date: "2026-10-06", title: "ChatGPT Plus Payment Failed? Common Causes and Fixes in 2026", keyword: "ChatGPT Plus payment failed", status: "예정", url: "", note: "문제 해결형 · 카드 거절·앱스토어·지역·결제 프로필 등 공식 해결책 중심" },
+  { id: "2026-10-07-1", date: "2026-10-07", title: "Claude Pro Price in Japan 2026: Web, App & Billing Guide", keyword: "Claude Pro Japan price", status: "예정", url: "", note: "국가 가격 검증형 · JPY 실제 가격 · 세금 · 웹/앱 결제 차이" },
+  { id: "2026-10-08-1", date: "2026-10-08", title: "ChatGPT Plus Price History 2025–2026: What Changed?", keyword: "ChatGPT Plus price history", status: "예정", url: "", note: "가격 추적형 · 날짜별 확인 가능한 변화만 연표로 정리 · 과거와 현재 가격 구분" },
+  { id: "2026-10-09-1", date: "2026-10-09", title: "AI Subscription Prices in Japan 2026: ChatGPT vs Claude vs Gemini", keyword: "AI subscription price Japan", status: "예정", url: "", note: "비교형 · JPY 기준 동일 시점 가격·세금·플랜·결제 차이 비교" },
+  { id: "2026-10-10-1", date: "2026-10-10", title: "How to Switch ChatGPT Plus From App Store to Web Billing", keyword: "switch ChatGPT Plus to web billing", status: "예정", url: "", note: "실전 가이드형 · 중복 결제 방지 · 구독 취소/재구독 단계는 공식 안내 기준" },
+  { id: "2026-10-11-1", date: "2026-10-11", title: "Does ChatGPT Plus Include Tax? Country-by-Country Billing Guide 2026", keyword: "ChatGPT Plus tax", status: "예정", url: "", note: "결제 가이드형 · VAT/GST/판매세 포함 여부를 국가별로 확인하고 불확실한 지역은 구분" },
+  { id: "2026-10-12-1", date: "2026-10-12", title: "AI Subscription Price Comparison by Country 2026: ChatGPT, Claude & Gemini", keyword: "AI subscription prices by country", status: "예정", url: "", note: "종합 데이터형 · 국가·서비스별 가격을 동일 기준으로 비교하는 장기 업데이트 페이지" },
 ];
 
 function todayLocal() {
@@ -99,25 +99,38 @@ https://aipriceatlas.blogspot.com/
 - 확인되지 않은 할인, 프로모션, 결제수단을 만들지 말 것.
 - 검색 결과 문장을 복사하지 말고 자연스러운 영어로 재구성할 것.
 
-[SEO 목표]
-- 영어 검색 사용자가 "제품명 + country + price + 2026"을 검색했을 때 바로 답을 얻을 수 있게 작성.
-- 제목은 예정 제목의 검색 의도를 유지하면서 더 자연스러운 SEO 제목으로 다듬을 수 있음.
-- 첫 100단어 안에 핵심 가격과 가장 중요한 결제 차이를 먼저 제시.
+[SEO·품질 목표]
+- 이 글의 검색 의도를 먼저 분류할 것: 국가 가격 검증형 / 비교형 / 문제 해결형 / 결제 가이드형 / 가격 추적형 / 종합 데이터형 중 가장 맞는 1개.
+- 모든 글을 같은 템플릿으로 억지로 작성하지 말고, 검색 의도에 맞춰 섹션 순서와 표를 바꿀 것.
+- 첫 100단어 안에 검색자가 원하는 핵심 답을 먼저 제시.
+- 공식 가격표를 단순히 다시 적는 데 그치지 말고, 독자가 직접 비교·결제·문제 해결에 사용할 수 있는 추가 가치를 만들 것.
+- 비교글은 반드시 같은 기준일·같은 결제 플랫폼·같은 세금 기준을 맞춰 비교할 것.
+- 문제 해결글은 증상 → 가능한 원인 → 확인 순서 → 공식 해결 방법 순으로 실용적으로 작성할 것.
+- 가격 추적글은 확인 가능한 날짜와 출처가 있는 변화만 연표로 정리하고, 추정 과거 가격을 만들지 말 것.
+- 종합 데이터글은 Last checked 날짜와 비교 기준을 눈에 띄게 표시하고 향후 업데이트하기 쉬운 표 구조로 만들 것.
+- 서로 다른 페이지에서 문장을 재사용한 것처럼 보이지 않게 각 주제의 고유 질문·데이터·해석을 중심으로 작성.
 - 과도한 키워드 반복 금지.
-- 독자가 궁금해할 "How much?", "Web vs app?", "Taxes?", "How to pay?", "Is it worth checking the app price?"를 자연스럽게 해결.
 - 사실 확인이 안 된 내용은 단정하지 말 것.
+
+[독창적 가치 — 필수]
+본문에 최소 2개 이상의 고유 가치 요소를 포함할 것.
+- 동일 날짜 기준 자체 비교표
+- 웹 vs 앱 실제 차이 요약
+- 세금 포함/별도 여부 정리
+- 결제 단계 체크리스트
+- 가격 변화 타임라인
+- 국가 간 비교 시 주의할 환율·세금 기준 설명
+- 공식 자료가 서로 다르게 보일 때 왜 그런지 설명
+단, 확인되지 않은 내용을 채우기 위해 억지로 만들지 말 것.
 
 [본문 구조]
 - 별도의 H1은 만들지 말 것. Blogger의 글 제목이 H1 역할을 함.
-- 짧은 도입 2~3문단
-- Key price snapshot
-- Web vs iOS/Android app price
-- Taxes and billing notes
-- Payment methods
-- Step-by-step purchase/checking guide
-- FAQ 4~6개
-- Final takeaway
-- 필요하면 비교표 1개 사용
+- 검색 의도에 맞는 H2 4~7개를 구성.
+- 짧은 도입 2~3문단.
+- 핵심 답 또는 핵심 비교표를 초반에 배치.
+- 독자가 실제로 행동할 수 있는 확인 방법 또는 체크리스트 포함.
+- FAQ는 실제 검색자가 추가로 궁금해할 내용이 있을 때만 3~6개.
+- Final takeaway는 새 내용을 반복하지 말고 핵심 판단 기준을 짧게 정리.
 - 문단은 짧고 모바일에서 읽기 쉽게 작성
 
 [이미지 위치]
