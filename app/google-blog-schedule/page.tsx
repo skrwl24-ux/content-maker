@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 
@@ -75,6 +75,8 @@ const IMAGE_SLOTS = [
 ] as const;
 
 const STORAGE_KEY = "content-maker-google-blog-schedule-v3-links";
+const SYNC_KEY_STORAGE = "content-maker-google-blog-sync-key-v1";
+const LOCAL_UPDATED_KEY = "content-maker-google-blog-local-updated-v1";
 const BLOG_BASE = "https://aipriceatlas.blogspot.com";
 const IMAGE_BUCKET = "content-maker-assets";
 
@@ -630,6 +632,19 @@ function assignFilesToSlots(files: File[]) {
   });
   return assigned;
 }
+function createSyncKey() {
+  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  return Array.from(bytes).map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeScheduleRows(value: unknown): ScheduleRow[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((row): row is ScheduleRow => !!row && typeof row === "object" && typeof (row as ScheduleRow).id === "string")
+    .map(row => row.status === "발행 완료" && !isValidPublishedUrl(row.url || "")
+      ? { ...row, status: "작성 중" as Status }
+      : row);
+}
 function extractImageUrl(value: string) {
   const raw = value.trim();
   if (!raw) return "";
@@ -672,21 +687,31 @@ export default function GoogleBlogSchedulePage() {
   const [copyMessage, setCopyMessage] = useState("");
   const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
   const [batchUploading, setBatchUploading] = useState(false);
+  const [syncKey, setSyncKey] = useState("");
+  const [syncInput, setSyncInput] = useState("");
+  const [syncStatus, setSyncStatus] = useState<"off" | "loading" | "ready" | "saving" | "error">("off");
+  const [syncInitialized, setSyncInitialized] = useState(false);
+  const [cloudUpdatedAt, setCloudUpdatedAt] = useState("");
+  const [localUpdatedAt, setLocalUpdatedAt] = useState("");
+  const localWriteReady = useRef(false);
+  const preferCloudOnConnect = useRef(false);
   const today = todayLocal();
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length) {
-          setRows(parsed.map((row: ScheduleRow) =>
-            row.status === "발행 완료" && !isValidPublishedUrl(row.url)
-              ? { ...row, status: "작성 중" as Status }
-              : row
-          ));
-        }
+        const normalized = normalizeScheduleRows(JSON.parse(saved));
+        if (normalized.length) setRows(normalized);
       }
+      const savedSyncKey = localStorage.getItem(SYNC_KEY_STORAGE) || "";
+      const savedLocalUpdatedAt = localStorage.getItem(LOCAL_UPDATED_KEY) || "";
+      if (savedSyncKey) {
+        setSyncKey(savedSyncKey);
+        setSyncInput(savedSyncKey);
+        setSyncStatus("loading");
+      }
+      if (savedLocalUpdatedAt) setLocalUpdatedAt(savedLocalUpdatedAt);
     } catch {}
     setLoaded(true);
   }, []);
@@ -694,7 +719,27 @@ export default function GoogleBlogSchedulePage() {
   useEffect(() => {
     if (!loaded) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+    if (!localWriteReady.current) {
+      localWriteReady.current = true;
+      return;
+    }
+    const stamp = new Date().toISOString();
+    localStorage.setItem(LOCAL_UPDATED_KEY, stamp);
+    setLocalUpdatedAt(stamp);
   }, [rows, loaded]);
+
+  useEffect(() => {
+    if (!loaded || !syncKey || syncInitialized) return;
+    void hydrateCloudSchedule(syncKey);
+  }, [loaded, syncKey, syncInitialized]);
+
+  useEffect(() => {
+    if (!loaded || !syncKey || !syncInitialized) return;
+    const timer = window.setTimeout(() => {
+      void saveCloudSchedule(syncKey, rows, false);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [rows, loaded, syncKey, syncInitialized]);
 
   const counts = useMemo(() => ({
     total: rows.length,
@@ -727,6 +772,92 @@ export default function GoogleBlogSchedulePage() {
   const finalBloggerHtml = selected ? replaceImagePlaceholders(bloggerOutput.html, selected) : bloggerOutput.html;
   const imageReadyCount = selected ? IMAGE_SLOTS.filter(slot => extractImageUrl(selected.imageUrls?.[slot.id] || "")).length : 0;
   const selectedImageBytes = selected ? Object.values(selected.imageMeta || {}).reduce((sum, meta) => sum + (meta.optimizedBytes || 0), 0) : 0;
+
+  async function saveCloudSchedule(key: string, payload: ScheduleRow[], showNotice = true) {
+    if (!key || key.length < 20) return;
+    try {
+      setSyncStatus("saving");
+      const { supabase } = await ensureAnonymousSession();
+      const { data, error } = await supabase.rpc("google_blog_sync_save", {
+        p_sync_key: key,
+        p_payload: payload,
+      });
+      if (error) throw error;
+      const updatedAt = typeof data === "string" ? data : new Date().toISOString();
+      setCloudUpdatedAt(updatedAt);
+      setSyncStatus("ready");
+      if (showNotice) setNotice("✅ 구글 블로그 스케줄을 클라우드에 저장했습니다.");
+    } catch (error) {
+      setSyncStatus("error");
+      if (showNotice) setNotice(`⚠️ 클라우드 저장 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    }
+  }
+
+  async function hydrateCloudSchedule(key: string) {
+    try {
+      setSyncStatus("loading");
+      const { supabase } = await ensureAnonymousSession();
+      const { data, error } = await supabase.rpc("google_blog_sync_load", { p_sync_key: key });
+      if (error) throw error;
+
+      const remote = Array.isArray(data) ? data[0] : data;
+      const remoteRows = normalizeScheduleRows(remote?.payload);
+      const remoteUpdatedAt = typeof remote?.updated_at === "string" ? remote.updated_at : "";
+      const shouldPreferCloud = preferCloudOnConnect.current ||
+        (!!remoteUpdatedAt && (!localUpdatedAt || Date.parse(remoteUpdatedAt) >= Date.parse(localUpdatedAt)));
+
+      if (remoteRows.length && shouldPreferCloud) {
+        setRows(remoteRows);
+        if (!remoteRows.some(row => row.id === selectedId)) setSelectedId(remoteRows[0].id);
+        setCloudUpdatedAt(remoteUpdatedAt);
+      } else {
+        await saveCloudSchedule(key, rows, false);
+      }
+
+      localStorage.setItem(SYNC_KEY_STORAGE, key);
+      setSyncInput(key);
+      setSyncInitialized(true);
+      setSyncStatus("ready");
+      preferCloudOnConnect.current = false;
+    } catch (error) {
+      setSyncStatus("error");
+      setSyncInitialized(false);
+      setNotice(`⚠️ 클라우드 동기화 실패: ${error instanceof Error ? error.message : "동기화 코드를 확인해주세요."}`);
+    }
+  }
+
+  function startCloudSync() {
+    const key = createSyncKey();
+    preferCloudOnConnect.current = false;
+    setSyncKey(key);
+    setSyncInput(key);
+    setSyncInitialized(false);
+    setSyncStatus("loading");
+    localStorage.setItem(SYNC_KEY_STORAGE, key);
+  }
+
+  function connectCloudSync() {
+    const key = syncInput.trim();
+    if (key.length < 20) {
+      setNotice("⚠️ 동기화 코드는 20자 이상이어야 합니다.");
+      return;
+    }
+    preferCloudOnConnect.current = true;
+    setSyncKey(key);
+    setSyncInitialized(false);
+    setSyncStatus("loading");
+    localStorage.setItem(SYNC_KEY_STORAGE, key);
+  }
+
+  function disconnectCloudSync() {
+    localStorage.removeItem(SYNC_KEY_STORAGE);
+    setSyncKey("");
+    setSyncInput("");
+    setSyncInitialized(false);
+    setSyncStatus("off");
+    setCloudUpdatedAt("");
+    setNotice("이 브라우저의 클라우드 연결을 해제했습니다. 로컬 데이터는 그대로 유지됩니다.");
+  }
 
   function updateRow(id: string, patch: Partial<ScheduleRow>) {
     setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
@@ -1012,6 +1143,41 @@ export default function GoogleBlogSchedulePage() {
         <div><span>예정</span><b>{counts.planned}</b></div>
         <div><span>작성 중</span><b>{counts.writing}</b></div>
         <div><span>발행 완료</span><b>{counts.done}</b></div>
+      </section>
+
+      <section className={styles.syncPanel}>
+        <div className={styles.syncPanelMain}>
+          <div className={styles.syncIcon}>☁</div>
+          <div>
+            <b>클라우드 동기화</b>
+            <span>{syncKey ? "발행 URL·키워드·검증·내부링크 관계를 Supabase에 자동 저장합니다." : "다른 PC나 브라우저에서도 같은 스케줄을 이어서 사용하세요."}</span>
+          </div>
+        </div>
+
+        {syncKey ? (
+          <div className={styles.syncConnected}>
+            <div className={styles.syncState}>
+              <span className={syncStatus === "error" ? styles.syncError : syncStatus === "saving" || syncStatus === "loading" ? styles.syncBusy : styles.syncReady}>
+                {syncStatus === "loading" ? "불러오는 중" : syncStatus === "saving" ? "저장 중" : syncStatus === "error" ? "동기화 오류" : "자동 저장됨"}
+              </span>
+              {cloudUpdatedAt && <small>최근 클라우드 저장 {new Date(cloudUpdatedAt).toLocaleString("ko-KR")}</small>}
+            </div>
+            <div className={styles.syncCodeBox}>
+              <code>{syncKey.slice(0, 6)}••••••••••{syncKey.slice(-6)}</code>
+              <button type="button" onClick={() => void copyText(syncKey, "동기화 코드를 복사했습니다. 다른 브라우저에서 이 코드를 입력하세요.")}>코드 복사</button>
+              <button type="button" onClick={() => void saveCloudSchedule(syncKey, rows)}>지금 저장</button>
+              <button type="button" className={styles.syncDisconnect} onClick={disconnectCloudSync}>연결 해제</button>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.syncSetup}>
+            <button type="button" className={styles.syncStart} onClick={startCloudSync}>클라우드 동기화 시작</button>
+            <span>또는</span>
+            <input value={syncInput} placeholder="다른 브라우저의 동기화 코드" onChange={e => setSyncInput(e.target.value.trim())} />
+            <button type="button" onClick={connectCloudSync}>기존 코드 연결</button>
+          </div>
+        )}
+        <small className={styles.syncHint}>동기화 코드는 비밀번호처럼 보관하세요. 코드 원문은 DB에 저장하지 않고 해시로만 확인합니다.</small>
       </section>
 
       <section className={styles.panel}>
