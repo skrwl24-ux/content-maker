@@ -11,6 +11,8 @@ type ScheduleRow = {
   keyword: string;
   status: Status;
   url: string;
+  slug?: string;
+  relatedIds?: string[];
   note: string;
   body?: string;
 };
@@ -32,23 +34,24 @@ const IMAGE_SLOTS = [
   { id: "05", label: "핵심 정리", role: "독자가 마지막에 기억할 핵심 3~4가지를 정리하는 요약 이미지" },
 ] as const;
 
-const STORAGE_KEY = "content-maker-google-blog-schedule-v2-quality";
+const STORAGE_KEY = "content-maker-google-blog-schedule-v3-links";
+const BLOG_BASE = "https://aipriceatlas.blogspot.com";
 
 const DEFAULT_ROWS: ScheduleRow[] = [
-  { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026: Web, App & Billing Guide", keyword: "Claude Pro Korea price", status: "예정", url: "", note: "가격 검증형 · 웹/앱 가격 · 세금 · 실제 결제 단계까지 확인" },
-  { id: "2026-09-30-1", date: "2026-09-30", title: "Gemini AI Subscription Price in South Korea 2026: Plans, Tax & Payment", keyword: "Gemini Korea price", status: "예정", url: "", note: "가격 검증형 · 플랜별 가격 · 세금 · 결제 방식 구분" },
-  { id: "2026-10-01-1", date: "2026-10-01", title: "ChatGPT Plus Web vs App Store Price 2026: Why Mobile Can Cost More", keyword: "ChatGPT web vs app price", status: "예정", url: "", note: "문제 해결형 · 웹/iOS/Android 가격 차이 원인과 확인 방법" },
-  { id: "2026-10-02-1", date: "2026-10-02", title: "ChatGPT vs Claude vs Gemini Price in South Korea 2026", keyword: "AI subscription price Korea", status: "예정", url: "", note: "비교형 · 동일 기준일에 가격·세금·결제 방식·주요 플랜 비교" },
-  { id: "2026-10-03-1", date: "2026-10-03", title: "ChatGPT Plus Price in Taiwan 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Taiwan price", status: "예정", url: "", note: "국가 가격 검증형 · TWD 실제 표시 여부 · 앱 가격 · 세금 확인" },
-  { id: "2026-10-04-1", date: "2026-10-04", title: "ChatGPT Plus Price in Singapore 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Singapore price", status: "예정", url: "", note: "국가 가격 검증형 · SGD · GST · 웹/앱 차이 확인" },
-  { id: "2026-10-05-1", date: "2026-10-05", title: "ChatGPT Plus Price by Country 2026: Live Comparison Table", keyword: "ChatGPT Plus price by country", status: "예정", url: "", note: "대표 기둥글 · 동일 날짜 기준 국가별 가격·통화·세금·플랫폼을 직접 비교하고 계속 업데이트" },
-  { id: "2026-10-06-1", date: "2026-10-06", title: "ChatGPT Plus Payment Failed? Common Causes and Fixes in 2026", keyword: "ChatGPT Plus payment failed", status: "예정", url: "", note: "문제 해결형 · 카드 거절·앱스토어·지역·결제 프로필 등 공식 해결책 중심" },
-  { id: "2026-10-07-1", date: "2026-10-07", title: "Claude Pro Price in Japan 2026: Web, App & Billing Guide", keyword: "Claude Pro Japan price", status: "예정", url: "", note: "국가 가격 검증형 · JPY 실제 가격 · 세금 · 웹/앱 결제 차이" },
-  { id: "2026-10-08-1", date: "2026-10-08", title: "ChatGPT Plus Price History 2025–2026: What Changed?", keyword: "ChatGPT Plus price history", status: "예정", url: "", note: "가격 추적형 · 날짜별 확인 가능한 변화만 연표로 정리 · 과거와 현재 가격 구분" },
-  { id: "2026-10-09-1", date: "2026-10-09", title: "AI Subscription Prices in Japan 2026: ChatGPT vs Claude vs Gemini", keyword: "AI subscription price Japan", status: "예정", url: "", note: "비교형 · JPY 기준 동일 시점 가격·세금·플랜·결제 차이 비교" },
-  { id: "2026-10-10-1", date: "2026-10-10", title: "How to Switch ChatGPT Plus From App Store to Web Billing", keyword: "switch ChatGPT Plus to web billing", status: "예정", url: "", note: "실전 가이드형 · 중복 결제 방지 · 구독 취소/재구독 단계는 공식 안내 기준" },
-  { id: "2026-10-11-1", date: "2026-10-11", title: "Does ChatGPT Plus Include Tax? Country-by-Country Billing Guide 2026", keyword: "ChatGPT Plus tax", status: "예정", url: "", note: "결제 가이드형 · VAT/GST/판매세 포함 여부를 국가별로 확인하고 불확실한 지역은 구분" },
-  { id: "2026-10-12-1", date: "2026-10-12", title: "AI Subscription Price Comparison by Country 2026: ChatGPT, Claude & Gemini", keyword: "AI subscription prices by country", status: "예정", url: "", note: "종합 데이터형 · 국가·서비스별 가격을 동일 기준으로 비교하는 장기 업데이트 페이지" },
+  { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026: Web, App & Billing Guide", keyword: "Claude Pro Korea price", status: "예정", url: "", slug: "claude-pro-price-south-korea-2026", relatedIds: ["2026-10-02-1","2026-09-30-1","2026-10-12-1"], note: "가격 검증형 · 웹/앱 가격 · 세금 · 실제 결제 단계까지 확인" },
+  { id: "2026-09-30-1", date: "2026-09-30", title: "Gemini AI Subscription Price in South Korea 2026: Plans, Tax & Payment", keyword: "Gemini Korea price", status: "예정", url: "", slug: "gemini-ai-price-south-korea-2026", relatedIds: ["2026-10-02-1","2026-09-29-1","2026-10-12-1"], note: "가격 검증형 · 플랜별 가격 · 세금 · 결제 방식 구분" },
+  { id: "2026-10-01-1", date: "2026-10-01", title: "ChatGPT Plus Web vs App Store Price 2026: Why Mobile Can Cost More", keyword: "ChatGPT web vs app price", status: "예정", url: "", slug: "chatgpt-plus-web-vs-app-store-price-2026", relatedIds: ["2026-10-10-1","2026-10-11-1","2026-10-06-1","2026-10-05-1"], note: "문제 해결형 · 웹/iOS/Android 가격 차이 원인과 확인 방법" },
+  { id: "2026-10-02-1", date: "2026-10-02", title: "ChatGPT vs Claude vs Gemini Price in South Korea 2026", keyword: "AI subscription price Korea", status: "예정", url: "", slug: "chatgpt-claude-gemini-price-south-korea-2026", relatedIds: ["2026-09-29-1","2026-09-30-1","2026-10-12-1"], note: "비교형 · 동일 기준일에 가격·세금·결제 방식·주요 플랜 비교" },
+  { id: "2026-10-03-1", date: "2026-10-03", title: "ChatGPT Plus Price in Taiwan 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Taiwan price", status: "예정", url: "", slug: "chatgpt-plus-price-taiwan-2026", relatedIds: ["2026-10-05-1","2026-10-04-1","2026-10-11-1"], note: "국가 가격 검증형 · TWD 실제 표시 여부 · 앱 가격 · 세금 확인" },
+  { id: "2026-10-04-1", date: "2026-10-04", title: "ChatGPT Plus Price in Singapore 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Singapore price", status: "예정", url: "", slug: "chatgpt-plus-price-singapore-2026", relatedIds: ["2026-10-05-1","2026-10-03-1","2026-10-11-1"], note: "국가 가격 검증형 · SGD · GST · 웹/앱 차이 확인" },
+  { id: "2026-10-05-1", date: "2026-10-05", title: "ChatGPT Plus Price by Country 2026: Live Comparison Table", keyword: "ChatGPT Plus price by country", status: "예정", url: "", slug: "chatgpt-plus-price-by-country-2026", relatedIds: ["2026-10-03-1","2026-10-04-1","2026-10-11-1","2026-10-08-1"], note: "대표 기둥글 · 동일 날짜 기준 국가별 가격·통화·세금·플랫폼을 직접 비교하고 계속 업데이트" },
+  { id: "2026-10-06-1", date: "2026-10-06", title: "ChatGPT Plus Payment Failed? Common Causes and Fixes in 2026", keyword: "ChatGPT Plus payment failed", status: "예정", url: "", slug: "chatgpt-plus-payment-failed-fixes-2026", relatedIds: ["2026-10-01-1","2026-10-10-1","2026-10-11-1"], note: "문제 해결형 · 카드 거절·앱스토어·지역·결제 프로필 등 공식 해결책 중심" },
+  { id: "2026-10-07-1", date: "2026-10-07", title: "Claude Pro Price in Japan 2026: Web, App & Billing Guide", keyword: "Claude Pro Japan price", status: "예정", url: "", slug: "claude-pro-price-japan-2026", relatedIds: ["2026-10-09-1","2026-09-29-1","2026-10-12-1"], note: "국가 가격 검증형 · JPY 실제 가격 · 세금 · 웹/앱 결제 차이" },
+  { id: "2026-10-08-1", date: "2026-10-08", title: "ChatGPT Plus Price History 2025–2026: What Changed?", keyword: "ChatGPT Plus price history", status: "예정", url: "", slug: "chatgpt-plus-price-history-2025-2026", relatedIds: ["2026-10-05-1","2026-10-11-1","2026-10-01-1"], note: "가격 추적형 · 날짜별 확인 가능한 변화만 연표로 정리 · 과거와 현재 가격 구분" },
+  { id: "2026-10-09-1", date: "2026-10-09", title: "AI Subscription Prices in Japan 2026: ChatGPT vs Claude vs Gemini", keyword: "AI subscription price Japan", status: "예정", url: "", slug: "ai-subscription-prices-japan-2026", relatedIds: ["2026-10-07-1","2026-10-12-1","2026-10-05-1"], note: "비교형 · JPY 기준 동일 시점 가격·세금·플랜·결제 차이 비교" },
+  { id: "2026-10-10-1", date: "2026-10-10", title: "How to Switch ChatGPT Plus From App Store to Web Billing", keyword: "switch ChatGPT Plus to web billing", status: "예정", url: "", slug: "switch-chatgpt-plus-app-store-to-web-billing", relatedIds: ["2026-10-01-1","2026-10-06-1","2026-10-11-1"], note: "실전 가이드형 · 중복 결제 방지 · 구독 취소/재구독 단계는 공식 안내 기준" },
+  { id: "2026-10-11-1", date: "2026-10-11", title: "Does ChatGPT Plus Include Tax? Country-by-Country Billing Guide 2026", keyword: "ChatGPT Plus tax", status: "예정", url: "", slug: "does-chatgpt-plus-include-tax-2026", relatedIds: ["2026-10-05-1","2026-10-01-1","2026-10-03-1","2026-10-04-1"], note: "결제 가이드형 · VAT/GST/판매세 포함 여부를 국가별로 확인하고 불확실한 지역은 구분" },
+  { id: "2026-10-12-1", date: "2026-10-12", title: "AI Subscription Price Comparison by Country 2026: ChatGPT, Claude & Gemini", keyword: "AI subscription prices by country", status: "예정", url: "", slug: "ai-subscription-price-comparison-by-country-2026", relatedIds: ["2026-10-05-1","2026-10-02-1","2026-10-09-1","2026-09-29-1"], note: "종합 데이터형 · 국가·서비스별 가격을 동일 기준으로 비교하는 장기 업데이트 페이지" },
 ];
 
 function todayLocal() {
@@ -74,7 +77,32 @@ function dayLabel(value: string) {
 }
 
 
-function buildArticlePrompt(row: ScheduleRow) {
+function plannedUrl(row: ScheduleRow) {
+  if (!row.slug) return "";
+  const [year, month] = row.date.split("-");
+  return `${BLOG_BASE}/${year}/${month}/${row.slug}.html`;
+}
+
+function resolvedUrl(row: ScheduleRow) {
+  return row.url.trim() || plannedUrl(row);
+}
+
+function relatedRows(row: ScheduleRow, allRows: ScheduleRow[]) {
+  const ids = row.relatedIds || [];
+  return ids.map(id => allRows.find(item => item.id === id)).filter(Boolean) as ScheduleRow[];
+}
+
+function relatedLinkText(row: ScheduleRow, allRows: ScheduleRow[]) {
+  const related = relatedRows(row, allRows);
+  if (!related.length) return "- 연결 후보 없음";
+  return related.map(item => {
+    const status = item.url.trim() || item.status === "발행 완료" ? "LIVE" : "PLANNED";
+    return `- [${status}] ${item.title}\n  ${resolvedUrl(item)}`;
+  }).join("\n");
+}
+
+
+function buildArticlePrompt(row: ScheduleRow, allRows: ScheduleRow[]) {
   return `AI Price Atlas용 구글 Blogger 영문 글을 최종 발행본으로 작성해줘.
 
 [작성 기준일]
@@ -88,6 +116,18 @@ https://aipriceatlas.blogspot.com/
 예정 제목: ${row.title || "주제 미입력"}
 핵심 SEO 키워드: ${row.keyword || "키워드 미입력"}
 기획 메모: ${row.note || "없음"}
+고정 슬러그: ${row.slug || "미지정"}
+예정 URL: ${plannedUrl(row) || "미지정"}
+
+[내부링크 연결 계획]
+${relatedLinkText(row, allRows)}
+
+[내부링크 사용 규칙]
+- LIVE로 표시된 관련 글은 내용상 자연스러울 때 본문에 1~3개 실제 내부링크로 연결할 것.
+- PLANNED로 표시된 글은 아직 발행 전일 수 있으므로 본문에 404 링크를 만들지 말 것.
+- 다만 PLANNED 글이 현재 작성 시점에 실제로 이미 공개되어 있는지 웹에서 확인할 수 있다면 해당 URL이 정상 열릴 때만 링크할 수 있음.
+- 내부링크 앵커텍스트는 문맥에 맞게 자연스럽게 작성하고, URL 자체를 앵커텍스트로 노출하지 말 것.
+- 모든 관련 글을 억지로 넣지 말 것.
 
 [가장 중요한 작업 방식]
 - 반드시 웹 검색으로 작성 시점의 최신 가격, 세금, 결제수단, 웹 결제와 iOS/Android 앱 결제 차이를 확인한 뒤 작성할 것.
@@ -168,7 +208,8 @@ https://aipriceatlas.blogspot.com/
 검색 설명용 영문 140~155자 1개
 
 [SLUG]
-영문 소문자 하이픈 슬러그만
+${row.slug || "영문 소문자 하이픈 슬러그만"}
+- 위 고정 슬러그가 있으면 반드시 그대로 사용할 것.
 
 [LABELS]
 쉼표로 구분한 Blogger 라벨 4~7개
@@ -277,7 +318,10 @@ export default function GoogleBlogSchedulePage() {
     done: rows.filter(r => r.status === "발행 완료").length,
   }), [rows]);
   const selected = rows.find(row => row.id === selectedId) || rows[0];
-  const articlePrompt = selected ? buildArticlePrompt(selected) : "";
+  const articlePrompt = selected ? buildArticlePrompt(selected, rows) : "";
+  const selectedPlannedUrl = selected ? plannedUrl(selected) : "";
+  const selectedResolvedUrl = selected ? resolvedUrl(selected) : "";
+  const selectedRelated = selected ? relatedRows(selected, rows) : [];
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(articlePrompt);
   const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
 
@@ -342,6 +386,8 @@ export default function GoogleBlogSchedulePage() {
       keyword: "",
       status: "예정",
       url: "",
+      slug: "",
+      relatedIds: [],
       note: "",
       body: "",
     }]);
@@ -360,6 +406,8 @@ export default function GoogleBlogSchedulePage() {
         keyword: "",
         status: "예정",
         url: "",
+        slug: "",
+        relatedIds: [],
         note: "",
         body: "",
       });
@@ -429,7 +477,7 @@ export default function GoogleBlogSchedulePage() {
                 <th>상태</th>
                 <th>글 제목</th>
                 <th>핵심 키워드</th>
-                <th>발행 링크</th>
+                <th>URL · 슬러그</th>
                 <th>메모</th>
                 <th>작업</th>
                 <th aria-label="삭제"></th>
@@ -457,7 +505,11 @@ export default function GoogleBlogSchedulePage() {
                     </td>
                     <td><input className={styles.titleInput} value={row.title} placeholder="글 제목" onChange={e => updateRow(row.id, { title: e.target.value })} /></td>
                     <td><input value={row.keyword} placeholder="SEO 키워드" onChange={e => updateRow(row.id, { keyword: e.target.value })} /></td>
-                    <td><input value={row.url} placeholder="발행 후 URL" onChange={e => updateRow(row.id, { url: e.target.value })} /></td>
+                    <td className={styles.urlCell}>
+                      <input value={row.slug || ""} placeholder="고정 슬러그" onChange={e => updateRow(row.id, { slug: e.target.value.trim().toLowerCase().replace(/\s+/g, "-") })} />
+                      <small>{plannedUrl(row) || "슬러그를 입력하면 예정 URL 생성"}</small>
+                      <input value={row.url} placeholder="발행 후 실제 URL (선택)" onChange={e => updateRow(row.id, { url: e.target.value })} />
+                    </td>
                     <td><input value={row.note} placeholder="가격 확인 · 이미지 등" onChange={e => updateRow(row.id, { note: e.target.value })} /></td>
                     <td><button className={styles.workBtn} onClick={() => { setSelectedId(row.id); setNotice(""); }}>{row.id === selectedId ? "작업 중" : "글 작업"}</button></td>
                     <td><button className={styles.deleteBtn} onClick={() => removeRow(row.id)} aria-label="행 삭제">×</button></td>
@@ -483,6 +535,46 @@ export default function GoogleBlogSchedulePage() {
             </div>
             <span className={styles.workStatus}>{selected.status}</span>
           </div>
+
+          <section className={styles.linkPanel}>
+            <div className={styles.linkPanelHead}>
+              <div>
+                <span className={styles.stepNo}>URL</span>
+                <h3>예정 URL · 내부링크 연결</h3>
+                <p>슬러그를 미리 고정해두고, 실제 발행 URL이 입력되면 그 주소를 우선 사용합니다.</p>
+              </div>
+              <button onClick={() => void copyText(selectedResolvedUrl, "현재 글 URL을 복사했습니다.")}>현재 URL 복사</button>
+            </div>
+            <div className={styles.currentUrl}>
+              <span>{selected.url.trim() ? "실제 발행 URL" : "예정 URL"}</span>
+              <b>{selectedResolvedUrl || "슬러그를 입력해 주세요."}</b>
+            </div>
+            <div className={styles.relatedList}>
+              {selectedRelated.length ? selectedRelated.map(item => {
+                const url = resolvedUrl(item);
+                const live = !!item.url.trim() || item.status === "발행 완료";
+                return (
+                  <div key={item.id} className={styles.relatedItem}>
+                    <div>
+                      <span className={live ? styles.liveBadge : styles.plannedBadge}>{live ? "LIVE" : "PLANNED"}</span>
+                      <b>{item.title}</b>
+                      <small>{url}</small>
+                    </div>
+                    <div>
+                      <button onClick={() => void copyText(url, "관련 글 URL을 복사했습니다.")}>URL 복사</button>
+                      {live && url && <a href={url} target="_blank" rel="noopener noreferrer">열기 ↗</a>}
+                    </div>
+                  </div>
+                );
+              }) : <div className={styles.noRelated}>관련 글 연결 후보가 없습니다.</div>}
+            </div>
+            <button
+              className={styles.copyLinkPlan}
+              onClick={() => void copyText(relatedLinkText(selected, rows), "내부링크 연결 목록을 복사했습니다.")}
+            >
+              관련 URL 목록 한 번에 복사
+            </button>
+          </section>
 
           <div className={styles.workflowGrid}>
             <section className={styles.requestCard}>
