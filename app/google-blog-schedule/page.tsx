@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 
 type Status = "예정" | "작성 중" | "발행 완료";
@@ -16,6 +17,16 @@ type VerificationState = {
   officialSource: string;
   secondarySource: string;
 };
+type ImageUploadMeta = {
+  path: string;
+  url: string;
+  originalBytes: number;
+  optimizedBytes: number;
+  width: number;
+  height: number;
+  uploadedAt: string;
+};
+
 type ScheduleRow = {
   id: string;
   date: string;
@@ -30,6 +41,7 @@ type ScheduleRow = {
   note: string;
   body?: string;
   imageUrls?: Record<string, string>;
+  imageMeta?: Record<string, ImageUploadMeta>;
 };
 
 type BloggerOutput = {
@@ -64,6 +76,7 @@ const IMAGE_SLOTS = [
 
 const STORAGE_KEY = "content-maker-google-blog-schedule-v3-links";
 const BLOG_BASE = "https://aipriceatlas.blogspot.com";
+const IMAGE_BUCKET = "content-maker-assets";
 
 const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
   {
@@ -554,6 +567,69 @@ function htmlToPlain(html: string) {
     .trim();
 }
 
+function formatBytes(bytes: number) {
+  if (!bytes) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function optimizeImageFile(file: File) {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    throw new Error("PNG, JPG, WebP 이미지만 업로드할 수 있습니다.");
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error("원본 이미지가 20MB를 넘습니다.");
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+      img.src = objectUrl;
+    });
+
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("이미지 최적화 기능을 사용할 수 없습니다.");
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(result => result ? resolve(result) : reject(new Error("WebP 변환에 실패했습니다.")), "image/webp", 0.82);
+    });
+
+    return { blob, width, height, originalBytes: file.size, optimizedBytes: blob.size };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function assignFilesToSlots(files: File[]) {
+  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const assigned = new Map<string, File>();
+  const leftovers: File[] = [];
+
+  for (const file of sorted) {
+    const match = file.name.match(/(?:^|[^0-9])(0[0-5])(?:[^0-9]|$)/);
+    const slotId = match?.[1];
+    if (slotId && !assigned.has(slotId)) assigned.set(slotId, file);
+    else leftovers.push(file);
+  }
+
+  const emptySlots = IMAGE_SLOTS.map(slot => slot.id).filter(id => !assigned.has(id));
+  leftovers.forEach((file, index) => {
+    const slotId = emptySlots[index];
+    if (slotId) assigned.set(slotId, file);
+  });
+  return assigned;
+}
 function extractImageUrl(value: string) {
   const raw = value.trim();
   if (!raw) return "";
@@ -594,6 +670,8 @@ export default function GoogleBlogSchedulePage() {
   const [selectedId, setSelectedId] = useState(DEFAULT_ROWS[0].id);
   const [notice, setNotice] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
+  const [batchUploading, setBatchUploading] = useState(false);
   const today = todayLocal();
 
   useEffect(() => {
@@ -648,6 +726,7 @@ export default function GoogleBlogSchedulePage() {
   const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
   const finalBloggerHtml = selected ? replaceImagePlaceholders(bloggerOutput.html, selected) : bloggerOutput.html;
   const imageReadyCount = selected ? IMAGE_SLOTS.filter(slot => extractImageUrl(selected.imageUrls?.[slot.id] || "")).length : 0;
+  const selectedImageBytes = selected ? Object.values(selected.imageMeta || {}).reduce((sum, meta) => sum + (meta.optimizedBytes || 0), 0) : 0;
 
   function updateRow(id: string, patch: Partial<ScheduleRow>) {
     setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
@@ -718,8 +797,110 @@ export default function GoogleBlogSchedulePage() {
 
   function updateImageUrl(slotId: string, value: string) {
     if (!selected) return;
-    const current = selected.imageUrls || {};
-    updateRow(selected.id, { imageUrls: { ...current, [slotId]: value } });
+    setRows(prev => prev.map(row => row.id === selected.id ? {
+      ...row,
+      imageUrls: { ...(row.imageUrls || {}), [slotId]: value },
+    } : row));
+  }
+
+  async function uploadImageToSlot(slotId: string, file: File, rowId = selected?.id) {
+    if (!rowId) return;
+    setUploadingSlots(prev => ({ ...prev, [slotId]: true }));
+    try {
+      const optimized = await optimizeImageFile(file);
+      const { supabase, session } = await ensureAnonymousSession();
+      const safeRow = rowId.replace(/[^a-zA-Z0-9_-]/g, "-");
+      const path = `${session.user.id}/ai-price-atlas/${safeRow}/${slotId}-${Date.now()}.webp`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(IMAGE_BUCKET)
+        .upload(path, optimized.blob, {
+          contentType: "image/webp",
+          cacheControl: "31536000",
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+      const publicUrl = publicData.publicUrl;
+      const currentRow = rows.find(row => row.id === rowId);
+      const previousPath = currentRow?.imageMeta?.[slotId]?.path;
+
+      const meta: ImageUploadMeta = {
+        path,
+        url: publicUrl,
+        originalBytes: optimized.originalBytes,
+        optimizedBytes: optimized.optimizedBytes,
+        width: optimized.width,
+        height: optimized.height,
+        uploadedAt: new Date().toISOString(),
+      };
+
+      setRows(prev => prev.map(row => row.id === rowId ? {
+        ...row,
+        imageUrls: { ...(row.imageUrls || {}), [slotId]: publicUrl },
+        imageMeta: { ...(row.imageMeta || {}), [slotId]: meta },
+      } : row));
+
+      if (previousPath && previousPath !== path && previousPath.startsWith(`${session.user.id}/`)) {
+        await supabase.storage.from(IMAGE_BUCKET).remove([previousPath]);
+      }
+
+      const saved = Math.max(0, optimized.originalBytes - optimized.optimizedBytes);
+      setNotice(`✅ ${slotId} 이미지 업로드 완료 · ${formatBytes(optimized.originalBytes)} → ${formatBytes(optimized.optimizedBytes)}${saved ? ` · ${Math.round(saved / optimized.originalBytes * 100)}% 절감` : ""}`);
+    } catch (error) {
+      setNotice(`⚠️ 이미지 업로드 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+      throw error;
+    } finally {
+      setUploadingSlots(prev => ({ ...prev, [slotId]: false }));
+    }
+  }
+
+  async function uploadImageBatch(fileList: FileList | null) {
+    if (!selected || !fileList?.length) return;
+    const files = Array.from(fileList).slice(0, 6);
+    const assigned = assignFilesToSlots(files);
+    if (!assigned.size) return;
+    setBatchUploading(true);
+    try {
+      let completed = 0;
+      for (const slot of IMAGE_SLOTS) {
+        const file = assigned.get(slot.id);
+        if (!file) continue;
+        await uploadImageToSlot(slot.id, file, selected.id);
+        completed += 1;
+      }
+      setNotice(`✅ 이미지 ${completed}장 최적화·업로드 완료 · WebP / 최대 1600px`);
+    } catch {
+      // 슬롯별 오류 메시지는 uploadImageToSlot에서 표시합니다.
+    } finally {
+      setBatchUploading(false);
+    }
+  }
+
+  async function removeUploadedImage(slotId: string) {
+    if (!selected) return;
+    const meta = selected.imageMeta?.[slotId];
+    try {
+      if (meta?.path) {
+        const { supabase, session } = await ensureAnonymousSession();
+        if (meta.path.startsWith(`${session.user.id}/`)) {
+          const { error } = await supabase.storage.from(IMAGE_BUCKET).remove([meta.path]);
+          if (error) throw error;
+        }
+      }
+      setRows(prev => prev.map(row => {
+        if (row.id !== selected.id) return row;
+        const imageUrls = { ...(row.imageUrls || {}) };
+        const imageMeta = { ...(row.imageMeta || {}) };
+        delete imageUrls[slotId];
+        delete imageMeta[slotId];
+        return { ...row, imageUrls, imageMeta };
+      }));
+      setNotice(`${slotId} 이미지 연결을 삭제했습니다.`);
+    } catch (error) {
+      setNotice(`⚠️ 이미지 삭제 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    }
   }
 
   async function copyBloggerRich() {
@@ -1285,39 +1466,91 @@ export default function GoogleBlogSchedulePage() {
             <div className={styles.imageLinkHead}>
               <div>
                 <span className={styles.stepNo}>IMG</span>
-                <h3>Blogger 이미지 연결</h3>
-                <p>Blogger에서 이미지를 업로드한 뒤 이미지 주소나 &lt;img&gt; HTML을 슬롯에 붙여넣으세요. 본문의 이미지 위치가 자동으로 치환됩니다.</p>
+                <h3>이미지 최적화 · 업로드</h3>
+                <p>GPT에서 저장한 이미지를 바로 올리세요. 자동으로 최대 1600px WebP(품질 82%)로 줄인 뒤 Supabase Storage에 저장하고 본문 위치까지 연결합니다.</p>
               </div>
-              <span className={imageReadyCount === IMAGE_SLOTS.length ? styles.imageAllReady : styles.imageProgress}>{imageReadyCount}/6 연결</span>
+              <div className={styles.imageTopStats}>
+                <span className={imageReadyCount === IMAGE_SLOTS.length ? styles.imageAllReady : styles.imageProgress}>{imageReadyCount}/6 연결</span>
+                {selectedImageBytes > 0 && <span className={styles.imageSizeBadge}>현재 {formatBytes(selectedImageBytes)}</span>}
+              </div>
             </div>
 
-            <div className={styles.imageUrlGrid}>
+            <label className={`${styles.batchDrop} ${batchUploading ? styles.batchUploading : ""}`}>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                disabled={batchUploading}
+                onChange={e => { void uploadImageBatch(e.target.files); e.currentTarget.value = ""; }}
+              />
+              <b>{batchUploading ? "이미지 최적화·업로드 중…" : "이미지 최대 6장 한 번에 선택"}</b>
+              <span>파일명에 00~05가 있으면 해당 슬롯으로 자동 배치 · 없으면 파일명 순서대로 00→05</span>
+            </label>
+
+            <div className={styles.imageUploadGrid}>
               {IMAGE_SLOTS.map(slot => {
                 const raw = selected.imageUrls?.[slot.id] || "";
                 const src = extractImageUrl(raw);
+                const meta = selected.imageMeta?.[slot.id];
+                const uploading = !!uploadingSlots[slot.id];
                 return (
-                  <label key={slot.id} className={src ? styles.imageUrlReady : styles.imageUrlPending}>
-                    <div>
-                      <b>{slot.id} · {slot.label}</b>
-                      <span>{src ? "✓ 연결됨" : "URL 또는 <img> HTML 붙여넣기"}</span>
+                  <div key={slot.id} className={`${styles.uploadSlot} ${src ? styles.uploadSlotReady : ""}`}>
+                    <div className={styles.uploadSlotHead}>
+                      <div><b>{slot.id} · {slot.label}</b><small>{slot.role}</small></div>
+                      <span>{uploading ? "업로드 중" : src ? "✓ 완료" : "대기"}</span>
                     </div>
-                    <input
-                      value={raw}
-                      placeholder="https://... 또는 <img src=&quot;https://...&quot;>"
-                      onChange={e => updateImageUrl(slot.id, e.target.value)}
-                    />
-                    {src && <small>{src}</small>}
-                  </label>
+
+                    {src ? (
+                      <div className={styles.uploadPreview}>
+                        <img src={src} alt={`${selected.title} — ${slot.label}`} />
+                      </div>
+                    ) : (
+                      <div className={styles.uploadEmpty}>이미지 없음</div>
+                    )}
+
+                    {meta && (
+                      <div className={styles.optimizeInfo}>
+                        <span>{meta.width}×{meta.height}</span>
+                        <span>{formatBytes(meta.originalBytes)} → <b>{formatBytes(meta.optimizedBytes)}</b></span>
+                        <span>{meta.originalBytes > 0 ? Math.max(0, Math.round((1 - meta.optimizedBytes / meta.originalBytes) * 100)) : 0}% 절감</span>
+                      </div>
+                    )}
+
+                    <div className={styles.uploadSlotActions}>
+                      <label className={styles.slotUploadBtn}>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          disabled={uploading || batchUploading}
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) void uploadImageToSlot(slot.id, file);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        {uploading ? "처리 중…" : src ? "이미지 교체" : "이미지 선택"}
+                      </label>
+                      {src && <button type="button" onClick={() => void removeUploadedImage(slot.id)}>삭제</button>}
+                    </div>
+
+                    <details className={styles.manualUrlDetails}>
+                      <summary>URL 직접 입력</summary>
+                      <input
+                        value={raw}
+                        placeholder="Blogger URL 또는 <img> HTML"
+                        onChange={e => updateImageUrl(slot.id, e.target.value)}
+                      />
+                    </details>
+                  </div>
                 );
               })}
             </div>
 
             <div className={styles.imageLinkNote}>
-              <b>자동 치환 방식</b>
-              <span>[IMAGE 00 — Hero] 같은 자리만 이미지 태그로 바꾸며, URL이 없는 슬롯은 원래 표시를 그대로 남겨 누락을 확인할 수 있습니다.</span>
+              <b>저장공간 최적화</b>
+              <span>원본은 저장하지 않고 WebP 결과만 저장합니다. 같은 슬롯을 다시 올리면 이전 업로드 파일을 자동 삭제합니다. Blogger 본문에는 공개 CDN URL만 들어갑니다.</span>
             </div>
           </section>
-
           <div className={styles.sectionDivider}>
             <div><span>PUBLISH</span><b>Blogger 발행</b></div>
             <small>제목·설명·슬러그·라벨·본문을 확인하고 최종 발행하세요.</small>
