@@ -4,6 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 
 type Status = "예정" | "작성 중" | "발행 완료";
+type VerificationValue = "pending" | "checked" | "na";
+type VerificationState = {
+  officialPrice: VerificationValue;
+  webPrice: VerificationValue;
+  iosPrice: VerificationValue;
+  androidPrice: VerificationValue;
+  tax: VerificationValue;
+  payment: VerificationValue;
+  checkedAt: string;
+  officialSource: string;
+  secondarySource: string;
+};
 type ScheduleRow = {
   id: string;
   date: string;
@@ -14,6 +26,7 @@ type ScheduleRow = {
   slug?: string;
   relatedIds?: string[];
   backlinkDoneIds?: string[];
+  verification?: VerificationState;
   note: string;
   body?: string;
 };
@@ -231,6 +244,91 @@ function similarTopics(row: ScheduleRow, allRows: ScheduleRow[]): SimilarTopic[]
     .sort((a, b) => (b as SimilarTopic).score - (a as SimilarTopic).score) as SimilarTopic[];
 }
 
+const VERIFICATION_ITEMS: Array<{ key: keyof Pick<VerificationState, "officialPrice" | "webPrice" | "iosPrice" | "androidPrice" | "tax" | "payment">; label: string; short: string }> = [
+  { key: "officialPrice", label: "공식 가격", short: "Official price" },
+  { key: "webPrice", label: "웹 가격", short: "Web price" },
+  { key: "iosPrice", label: "iOS 가격", short: "iOS price" },
+  { key: "androidPrice", label: "Android 가격", short: "Android price" },
+  { key: "tax", label: "세금·VAT/GST", short: "Tax / VAT / GST" },
+  { key: "payment", label: "결제수단", short: "Payment methods" },
+];
+
+function emptyVerification(): VerificationState {
+  return {
+    officialPrice: "pending",
+    webPrice: "pending",
+    iosPrice: "pending",
+    androidPrice: "pending",
+    tax: "pending",
+    payment: "pending",
+    checkedAt: "",
+    officialSource: "",
+    secondarySource: "",
+  };
+}
+
+function getVerification(row: ScheduleRow): VerificationState {
+  return { ...emptyVerification(), ...(row.verification || {}) };
+}
+
+function verificationResolvedCount(row: ScheduleRow) {
+  const v = getVerification(row);
+  return VERIFICATION_ITEMS.filter(item => v[item.key] !== "pending").length;
+}
+
+function verificationCheckedCount(row: ScheduleRow) {
+  const v = getVerification(row);
+  return VERIFICATION_ITEMS.filter(item => v[item.key] === "checked").length;
+}
+
+function verificationValueLabel(value: VerificationValue) {
+  return value === "checked" ? "확인" : value === "na" ? "해당 없음" : "미확인";
+}
+
+function verificationSummary(row: ScheduleRow) {
+  const v = getVerification(row);
+  return [
+    `마지막 확인일: ${v.checkedAt || "미입력"}`,
+    `공식 출처: ${v.officialSource || "미입력"}`,
+    `보조 출처: ${v.secondarySource || "미입력"}`,
+    ...VERIFICATION_ITEMS.map(item => `${item.short}: ${verificationValueLabel(v[item.key])}`),
+  ].join("\n");
+}
+
+function buildVerificationPrompt(row: ScheduleRow) {
+  return [
+    "AI Price Atlas 글 발행 전 사실 검증을 해줘.",
+    "",
+    "[글]",
+    `제목: ${row.title}`,
+    `핵심 키워드: ${row.keyword}`,
+    `기획 메모: ${row.note}`,
+    "",
+    "[현재 저장된 검증 기록]",
+    verificationSummary(row),
+    "",
+    "[검증할 항목]",
+    "1. 서비스 제공사의 공식 가격 페이지에서 현재 가격 확인",
+    "2. 웹 결제 가격과 표시 통화 확인",
+    "3. iOS 앱스토어 결제 가격 또는 확인 가능 여부",
+    "4. Android/Google Play 결제 가격 또는 확인 가능 여부",
+    "5. 세금/VAT/GST 포함 여부와 국가별 주의사항",
+    "6. 실제 지원 결제수단과 결제 방식",
+    "",
+    "[규칙]",
+    "- 반드시 최신 웹 검색을 사용할 것.",
+    "- OpenAI, Anthropic, Google 및 공식 앱스토어/도움말 등 1차 출처를 우선할 것.",
+    "- 확인할 수 없는 항목은 추정하지 말고 확인 불가 또는 해당 없음으로 구분할 것.",
+    "- 환율 환산값과 실제 현지 청구 가격을 섞지 말 것.",
+    "- 기존 저장값이 틀리거나 오래됐으면 명확히 지적할 것.",
+    "",
+    "[출력]",
+    "- 확인 기준일",
+    "- 6개 항목 각각: 확인 / 해당 없음 / 확인 불가 + 근거",
+    "- 공식 출처 URL 1~3개",
+    "- 글 작성 전에 수정해야 할 숫자나 표현",
+  ].join("\n");
+}
 function buildDifferentiatePrompt(row: ScheduleRow, similar: SimilarTopic[]) {
   const list = similar.slice(0, 5).map(item =>
     `- [${item.level === "high" ? "중복 가능" : "유사 주제"}] ${item.title}\n  Keyword: ${item.keyword}\n  URL: ${item.url || "미발행"}`
@@ -278,6 +376,12 @@ https://aipriceatlas.blogspot.com/
 예정 제목: ${row.title || "주제 미입력"}
 핵심 SEO 키워드: ${row.keyword || "키워드 미입력"}
 기획 메모: ${row.note || "없음"}
+
+[운영자가 저장한 사전 검증 기록]
+${verificationSummary(row)}
+- 위 기록은 참고용이며, 작성 시점에 웹에서 다시 확인할 것.
+- "확인"으로 저장된 항목도 공식 출처가 바뀌었거나 가격이 변경됐으면 최신 값을 우선할 것.
+
 고정 슬러그: ${row.slug || "미지정"}
 예정 URL: ${plannedUrl(row) || "미지정"}
 
@@ -493,6 +597,11 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverse = selected ? reverseLinkRows(selected, rows) : [];
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
+  const selectedVerification = selected ? getVerification(selected) : emptyVerification();
+  const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
+  const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
+  const verificationPrompt = selected ? buildVerificationPrompt(selected) : "";
+  const verificationChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(verificationPrompt);
   const selectedSimilarTopics = selected ? similarTopics(selected, rows) : [];
   const duplicateCount = selectedSimilarTopics.filter(item => item.level === "high").length;
   const similarCount = selectedSimilarTopics.filter(item => item.level === "medium").length;
@@ -545,6 +654,19 @@ export default function GoogleBlogSchedulePage() {
     updateRow(row.id, { status: nextStatus });
   }
 
+  function updateVerification(patch: Partial<VerificationState>) {
+    if (!selected) return;
+    updateRow(selected.id, { verification: { ...getVerification(selected), ...patch } });
+  }
+
+  function cycleVerification(key: keyof Pick<VerificationState, "officialPrice" | "webPrice" | "iosPrice" | "androidPrice" | "tax" | "payment">) {
+    if (!selected) return;
+    const current = getVerification(selected);
+    const next: VerificationValue = current[key] === "pending" ? "checked" : current[key] === "checked" ? "na" : "pending";
+    const patch: Partial<VerificationState> = { [key]: next };
+    if (!current.checkedAt && next === "checked") patch.checkedAt = today;
+    updateRow(selected.id, { verification: { ...current, ...patch } });
+  }
   function toggleBacklinkDone(sourceId: string) {
     if (!selected) return;
     const current = selected.backlinkDoneIds || [];
@@ -758,6 +880,62 @@ export default function GoogleBlogSchedulePage() {
             </div>
             <span className={styles.workStatus}>{selected.status}</span>
           </div>
+
+          <section className={styles.verificationPanel}>
+            <div className={styles.verificationHead}>
+              <div>
+                <span className={styles.stepNo}>✓</span>
+                <h3>출처 · 가격 검증 체크리스트</h3>
+                <p>발행 전에 확인한 내용을 기록합니다. 각 항목을 누르면 미확인 → 확인 → 해당 없음 순으로 바뀝니다.</p>
+              </div>
+              <a className={styles.verificationGpt} href={verificationChatUrl} target="_blank" rel="noopener noreferrer" onClick={() => void copyText(verificationPrompt, "가격·출처 검증 요청서를 GPT로 열고 복사했습니다.")}>GPT 검증 요청</a>
+            </div>
+
+            <div className={styles.verificationSummary}>
+              <div><span>처리</span><b>{selectedVerificationResolved}/6</b></div>
+              <div><span>직접 확인</span><b>{selectedVerificationChecked}/6</b></div>
+              <div className={selectedVerificationResolved === 6 ? styles.verifyReady : styles.verifyPending}>
+                <span>상태</span><b>{selectedVerificationResolved === 6 ? "검증 기록 완료" : "확인 필요"}</b>
+              </div>
+            </div>
+
+            <div className={styles.verificationGrid}>
+              {VERIFICATION_ITEMS.map(item => {
+                const value = selectedVerification[item.key];
+                return (
+                  <button key={item.key} className={`${styles.verifyItem} ${value === "checked" ? styles.verifyChecked : value === "na" ? styles.verifyNa : styles.verifyTodo}`} onClick={() => cycleVerification(item.key)} type="button">
+                    <span>{value === "checked" ? "✓" : value === "na" ? "—" : "○"}</span>
+                    <b>{item.label}</b>
+                    <small>{verificationValueLabel(value)}</small>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className={styles.verificationMeta}>
+              <label>
+                <span>마지막 확인일</span>
+                <div className={styles.dateVerifyRow}>
+                  <input type="date" value={selectedVerification.checkedAt} onChange={e => updateVerification({ checkedAt: e.target.value })} />
+                  <button type="button" onClick={() => updateVerification({ checkedAt: today })}>오늘</button>
+                </div>
+              </label>
+              <label>
+                <span>공식 출처 URL</span>
+                <input type="url" value={selectedVerification.officialSource} placeholder="https://..." onChange={e => updateVerification({ officialSource: e.target.value.trim() })} />
+              </label>
+              <label>
+                <span>보조 출처 URL</span>
+                <input type="url" value={selectedVerification.secondarySource} placeholder="앱스토어·도움말 등 (선택)" onChange={e => updateVerification({ secondarySource: e.target.value.trim() })} />
+              </label>
+            </div>
+
+            <div className={styles.verificationActions}>
+              {selectedVerification.officialSource && <a href={selectedVerification.officialSource} target="_blank" rel="noopener noreferrer">공식 출처 열기 ↗</a>}
+              {selectedVerification.secondarySource && <a href={selectedVerification.secondarySource} target="_blank" rel="noopener noreferrer">보조 출처 열기 ↗</a>}
+              <button type="button" onClick={() => void copyText(verificationSummary(selected), "검증 기록을 복사했습니다.")}>검증 기록 복사</button>
+            </div>
+          </section>
 
           <section className={styles.seoCheckPanel}>
             <div className={styles.seoCheckHead}>
