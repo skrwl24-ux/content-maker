@@ -26,6 +26,19 @@ type BloggerOutput = {
   html: string;
 };
 
+type SeoTopicCandidate = {
+  id: string;
+  title: string;
+  keyword: string;
+  url: string;
+  source: "schedule" | "published";
+};
+
+type SimilarTopic = SeoTopicCandidate & {
+  score: number;
+  level: "high" | "medium";
+};
+
 const IMAGE_SLOTS = [
   { id: "00", label: "대표 이미지", role: "글의 핵심 제품·국가·가격 주제를 한눈에 보여주는 대표 비주얼" },
   { id: "01", label: "가격 요약", role: "현재 확인된 가격과 통화, 기준 시점을 간결하게 보여주는 정보 이미지" },
@@ -37,6 +50,23 @@ const IMAGE_SLOTS = [
 
 const STORAGE_KEY = "content-maker-google-blog-schedule-v3-links";
 const BLOG_BASE = "https://aipriceatlas.blogspot.com";
+
+const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
+  {
+    id: "published-chatgpt-korea-2026",
+    title: "ChatGPT Plus Price in South Korea 2026",
+    keyword: "ChatGPT Plus Korea price",
+    url: "https://aipriceatlas.blogspot.com/2026/09/chatgpt-plus-price-in-south-korea-2026.html",
+    source: "published",
+  },
+  {
+    id: "published-chatgpt-japan-2026",
+    title: "ChatGPT Plus Price in Japan 2026",
+    keyword: "ChatGPT Plus Japan price",
+    url: "https://aipriceatlas.blogspot.com/2026/09/chatgpt-plus-price-in-japan-2026-3000.html",
+    source: "published",
+  },
+];
 
 const DEFAULT_ROWS: ScheduleRow[] = [
   { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026: Web, App & Billing Guide", keyword: "Claude Pro Korea price", status: "예정", url: "", slug: "claude-pro-price-south-korea-2026", relatedIds: ["2026-10-02-1","2026-09-30-1","2026-10-12-1"], note: "가격 검증형 · 웹/앱 가격 · 세금 · 실제 결제 단계까지 확인" },
@@ -154,6 +184,83 @@ function backlinkPlanText(row: ScheduleRow, allRows: ScheduleRow[]) {
     const done = (row.backlinkDoneIds || []).includes(item.id);
     return `- [${done ? "DONE" : live ? "ACTION" : "PLANNED"}] ${item.title}\n  ${resolvedUrl(item)}\n  → ${row.url || plannedUrl(row)}\n  Anchor: ${suggestedAnchorText(row)}`;
   }).join("\n");
+}
+
+function seoTokens(value: string) {
+  const stop = new Set(["in","the","a","an","and","or","to","of","for","with","by","from","is","does","how","what","2025","2026"]);
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(token => token.length > 1 && !stop.has(token));
+}
+
+function topicSimilarity(a: string, b: string) {
+  const aTokens = new Set(seoTokens(a));
+  const bTokens = new Set(seoTokens(b));
+  if (!aTokens.size || !bTokens.size) return 0;
+  const intersection = [...aTokens].filter(token => bTokens.has(token)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  const jaccard = union ? intersection / union : 0;
+  const containment = intersection / Math.min(aTokens.size, bTokens.size);
+  return Math.min(1, jaccard * 0.65 + containment * 0.35);
+}
+
+function similarTopics(row: ScheduleRow, allRows: ScheduleRow[]): SimilarTopic[] {
+  const currentText = `${row.title} ${row.keyword}`.trim();
+  if (!currentText) return [];
+  const scheduleCandidates: SeoTopicCandidate[] = allRows
+    .filter(item => item.id !== row.id)
+    .map(item => ({
+      id: item.id,
+      title: item.title,
+      keyword: item.keyword,
+      url: resolvedUrl(item),
+      source: "schedule" as const,
+    }));
+  return [...KNOWN_PUBLISHED_POSTS, ...scheduleCandidates]
+    .map(item => {
+      const candidateText = `${item.title} ${item.keyword}`.trim();
+      const exactKeyword = !!row.keyword.trim() && row.keyword.trim().toLowerCase() === item.keyword.trim().toLowerCase();
+      const score = exactKeyword ? 1 : topicSimilarity(currentText, candidateText);
+      const level: SimilarTopic["level"] | null = score >= 0.78 ? "high" : score >= 0.56 ? "medium" : null;
+      return level ? { ...item, score, level } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b as SimilarTopic).score - (a as SimilarTopic).score) as SimilarTopic[];
+}
+
+function buildDifferentiatePrompt(row: ScheduleRow, similar: SimilarTopic[]) {
+  const list = similar.slice(0, 5).map(item =>
+    `- [${item.level === "high" ? "중복 가능" : "유사 주제"}] ${item.title}\n  Keyword: ${item.keyword}\n  URL: ${item.url || "미발행"}`
+  ).join("\n");
+  return [
+    "AI Price Atlas의 새 글 주제가 기존 글과 검색 의도가 겹치는지 검토해줘.",
+    "",
+    "[새 글]",
+    `제목: ${row.title}`,
+    `핵심 키워드: ${row.keyword}`,
+    `기획 메모: ${row.note}`,
+    "",
+    "[비슷한 기존/예정 글]",
+    list || "- 없음",
+    "",
+    "[판단 기준]",
+    "- 단순히 단어가 겹친다는 이유만으로 중복이라고 판단하지 말 것.",
+    "- 검색자가 원하는 답이 사실상 같은지 검색 의도 기준으로 볼 것.",
+    "- 국가, 서비스, 결제 플랫폼, 세금, 문제 해결, 가격 이력처럼 명확한 다른 목적이 있으면 차이를 설명할 것.",
+    "- 실제로 같은 검색 의도라면 새 글 추가보다 기존 글 업데이트/확장을 우선 제안할 것.",
+    "- 새 글로 분리할 가치가 있다면 기존 글과 겹치지 않도록 제목, 핵심 키워드, 글의 각도 3가지를 구체적으로 제안할 것.",
+    "- 기존 LIVE 글 URL이 있으면 그 글의 실제 내용을 확인한 뒤 판단할 것.",
+    "",
+    "[출력]",
+    "1. 검색 의도 겹침 정도: 높음 / 중간 / 낮음",
+    "2. 새 글 작성 vs 기존 글 업데이트 중 어떤 방식이 더 자연스러운지",
+    "3. 새 글로 간다면 차별화된 제목 1개",
+    "4. 차별화된 핵심 키워드 1개",
+    "5. 기존 글과 겹치지 않게 반드시 다룰 핵심 포인트 3개",
+  ].join("\n");
 }
 
 
@@ -386,6 +493,11 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverse = selected ? reverseLinkRows(selected, rows) : [];
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
+  const selectedSimilarTopics = selected ? similarTopics(selected, rows) : [];
+  const duplicateCount = selectedSimilarTopics.filter(item => item.level === "high").length;
+  const similarCount = selectedSimilarTopics.filter(item => item.level === "medium").length;
+  const differentiatePrompt = selected ? buildDifferentiatePrompt(selected, selectedSimilarTopics) : "";
+  const differentiateChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(differentiatePrompt);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(articlePrompt);
   const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
 
@@ -646,6 +758,53 @@ export default function GoogleBlogSchedulePage() {
             </div>
             <span className={styles.workStatus}>{selected.status}</span>
           </div>
+
+          <section className={styles.seoCheckPanel}>
+            <div className={styles.seoCheckHead}>
+              <div>
+                <span className={styles.stepNo}>SEO</span>
+                <h3>중복 키워드 · 검색의도 검사</h3>
+                <p>현재 제목과 핵심 키워드를 기존 발행글·예정글과 비교합니다. 단어가 비슷해도 검색 목적이 다르면 유사 주제로만 표시합니다.</p>
+              </div>
+              {selectedSimilarTopics.length > 0 && (
+                <a className={styles.seoGptBtn} href={differentiateChatUrl} target="_blank" rel="noopener noreferrer" onClick={() => void copyText(differentiatePrompt, "중복·차별화 검토 요청서를 GPT로 열고 복사했습니다.")}>GPT 차별화 검토</a>
+              )}
+            </div>
+
+            <div className={styles.seoCheckSummary}>
+              <div className={duplicateCount ? styles.seoDanger : styles.seoSafe}><span>중복 가능</span><b>{duplicateCount}</b></div>
+              <div className={similarCount ? styles.seoWarn : styles.seoSafe}><span>유사 주제</span><b>{similarCount}</b></div>
+              <div className={duplicateCount ? styles.seoDecisionWarn : styles.seoDecisionOk}><span>판단</span><b>{duplicateCount ? "기존 글 우선 검토" : "새 글 진행 가능"}</b></div>
+            </div>
+
+            {selectedSimilarTopics.length ? (
+              <div className={styles.similarTopicList}>
+                {selectedSimilarTopics.slice(0, 6).map(item => (
+                  <div key={item.id} className={`${styles.similarTopicItem} ${item.level === "high" ? styles.similarHigh : styles.similarMedium}`}>
+                    <div>
+                      <div className={styles.similarBadges}>
+                        <span>{item.level === "high" ? "중복 가능" : "유사 주제"}</span>
+                        <em>{Math.round(item.score * 100)}%</em>
+                        <small>{item.source === "published" ? "기존 발행글" : "스케줄 글"}</small>
+                      </div>
+                      <b>{item.title}</b>
+                      <p>{item.keyword || "키워드 없음"}</p>
+                    </div>
+                    <div className={styles.similarActions}>
+                      {item.url && isValidPublishedUrl(item.url) && <a href={item.url} target="_blank" rel="noopener noreferrer">글 열기 ↗</a>}
+                      <button onClick={() => {
+                        const scheduleRow = rows.find(row => row.id === item.id);
+                        if (scheduleRow) setSelectedId(scheduleRow.id);
+                        else void copyText(item.url, "기존 발행글 URL을 복사했습니다.");
+                      }}>{item.source === "schedule" ? "이 글 보기" : "URL 복사"}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.seoClear}><b>뚜렷하게 겹치는 주제가 없습니다.</b><span>현재 스케줄과 등록된 기존 발행글 기준으로는 새 글을 진행해도 괜찮아 보입니다.</span></div>
+            )}
+          </section>
 
           <section className={styles.linkPanel}>
             <div className={styles.linkPanelHead}>
