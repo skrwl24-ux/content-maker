@@ -450,7 +450,10 @@ export default function Home() {
   return <main className="wrap">
     <header className="header">
       <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V7 · 무료 워크플로</span></button>
-      <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
+      <div className="inlineActions">
+        <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
+        <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
+      </div>
     </header>
 
     <section className="hero">
