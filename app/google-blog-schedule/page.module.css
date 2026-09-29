@@ -146,3 +146,33 @@
 .manualUrlDetails input{width:100%;margin-top:6px;min-height:34px;border:1px solid #dce2eb;border-radius:8px;padding:7px 8px;background:#fff;color:#26344d;font-size:9px}
 @media(max-width:1100px){.imageUploadGrid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.imageTopStats{justify-content:flex-start}.imageUploadGrid{grid-template-columns:1fr}}
+
+.syncPanel{display:flex;flex-direction:column;gap:10px;margin:0 0 14px;padding:14px 16px;border:1px solid #dfe5ee;border-radius:16px;background:#fbfcfe}
+.syncPanelMain{display:flex;align-items:center;gap:10px}
+.syncIcon{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:#172033;color:#fff;font-size:16px;flex:0 0 auto}
+.syncPanelMain b,.syncPanelMain span{display:block}
+.syncPanelMain b{font-size:13px;color:#26344d}
+.syncPanelMain span{margin-top:3px;font-size:10px;color:#788396;line-height:1.45}
+.syncConnected{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.syncState{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.syncState>span{display:inline-flex;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900}
+.syncState small{font-size:9px;color:#8690a0}
+.syncReady{background:#e8f7ee;color:#227849}
+.syncBusy{background:#fff3dc;color:#986516}
+.syncError{background:#fdeaea;color:#a43e3e}
+.syncCodeBox{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.syncCodeBox code{padding:7px 9px;border-radius:8px;background:#eef1f5;color:#4f5c70;font-size:10px}
+.syncCodeBox button,.syncSetup button{border:1px solid #d5dce7;background:#fff;color:#334158;border-radius:9px;padding:7px 9px;font-size:10px;font-weight:850}
+.syncCodeBox .syncDisconnect{color:#9a4d4d}
+.syncSetup{display:grid;grid-template-columns:auto auto minmax(220px,1fr) auto;gap:7px;align-items:center}
+.syncSetup>span{font-size:10px;color:#8a94a3;text-align:center}
+.syncSetup input{min-height:36px;border:1px solid #dce2eb;border-radius:9px;padding:8px 10px;background:#fff;color:#26344d;font-size:10px}
+.syncSetup .syncStart{background:#172033;color:#fff;border-color:#172033}
+.syncHint{font-size:9px;color:#8a94a3;line-height:1.45}
+@media(max-width:800px){
+  .syncConnected{flex-direction:column;align-items:flex-start}
+  .syncCodeBox{justify-content:flex-start;width:100%}
+  .syncSetup{grid-template-columns:1fr}
+  .syncSetup>span{display:none}
+  .syncSetup button{width:100%}
+}
