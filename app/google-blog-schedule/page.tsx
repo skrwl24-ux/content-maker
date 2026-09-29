@@ -87,6 +87,19 @@ function resolvedUrl(row: ScheduleRow) {
   return row.url.trim() || plannedUrl(row);
 }
 
+function isValidPublishedUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "aipriceatlas.blogspot.com" &&
+      url.pathname.endsWith(".html")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function relatedRows(row: ScheduleRow, allRows: ScheduleRow[]) {
   const ids = row.relatedIds || [];
   return ids.map(id => allRows.find(item => item.id === id)).filter(Boolean) as ScheduleRow[];
@@ -96,7 +109,7 @@ function relatedLinkText(row: ScheduleRow, allRows: ScheduleRow[]) {
   const related = relatedRows(row, allRows);
   if (!related.length) return "- 연결 후보 없음";
   return related.map(item => {
-    const status = item.url.trim() || item.status === "발행 완료" ? "LIVE" : "PLANNED";
+    const status = isValidPublishedUrl(item.url) ? "LIVE" : "PLANNED";
     return `- [${status}] ${item.title}\n  ${resolvedUrl(item)}`;
   }).join("\n");
 }
@@ -300,7 +313,13 @@ export default function GoogleBlogSchedulePage() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length) setRows(parsed);
+        if (Array.isArray(parsed) && parsed.length) {
+          setRows(parsed.map((row: ScheduleRow) =>
+            row.status === "발행 완료" && !isValidPublishedUrl(row.url)
+              ? { ...row, status: "작성 중" as Status }
+              : row
+          ));
+        }
       }
     } catch {}
     setLoaded(true);
@@ -343,6 +362,30 @@ export default function GoogleBlogSchedulePage() {
   function startWork() {
     if (!selected) return;
     updateRow(selected.id, { status: selected.status === "발행 완료" ? "발행 완료" : "작성 중" });
+  }
+
+  function completeRow(row: ScheduleRow) {
+    if (!row.url.trim()) {
+      setSelectedId(row.id);
+      setNotice("⚠️ 발행 완료 전에 Blogger에서 공개된 실제 URL을 입력해주세요.");
+      return false;
+    }
+    if (!isValidPublishedUrl(row.url)) {
+      setSelectedId(row.id);
+      setNotice("⚠️ URL 형식을 확인해주세요. https://aipriceatlas.blogspot.com/...html 형식의 실제 발행 URL만 LIVE 처리됩니다.");
+      return false;
+    }
+    updateRow(row.id, { status: "발행 완료" });
+    setNotice("✅ 실제 발행 URL 확인 완료 · 이 글을 LIVE로 표시했습니다.");
+    return true;
+  }
+
+  function changeStatus(row: ScheduleRow, nextStatus: Status) {
+    if (nextStatus === "발행 완료") {
+      completeRow(row);
+      return;
+    }
+    updateRow(row.id, { status: nextStatus });
   }
 
   async function copyBloggerRich() {
@@ -496,7 +539,7 @@ export default function GoogleBlogSchedulePage() {
                       <select
                         value={row.status}
                         className={`${styles.status} ${row.status === "발행 완료" ? styles.done : row.status === "작성 중" ? styles.writing : styles.planned}`}
-                        onChange={e => updateRow(row.id, { status: e.target.value as Status })}
+                        onChange={e => changeStatus(row, e.target.value as Status)}
                       >
                         <option>예정</option>
                         <option>작성 중</option>
@@ -508,7 +551,20 @@ export default function GoogleBlogSchedulePage() {
                     <td className={styles.urlCell}>
                       <input value={row.slug || ""} placeholder="고정 슬러그" onChange={e => updateRow(row.id, { slug: e.target.value.trim().toLowerCase().replace(/\s+/g, "-") })} />
                       <small>{plannedUrl(row) || "슬러그를 입력하면 예정 URL 생성"}</small>
-                      <input value={row.url} placeholder="발행 후 실제 URL (선택)" onChange={e => updateRow(row.id, { url: e.target.value })} />
+                      <input
+                        value={row.url}
+                        placeholder="발행 후 실제 URL (필수)"
+                        onChange={e => {
+                          const url = e.target.value.trim();
+                          updateRow(row.id, {
+                            url,
+                            status: row.status === "발행 완료" && !isValidPublishedUrl(url) ? "작성 중" : row.status,
+                          });
+                        }}
+                      />
+                      <span className={isValidPublishedUrl(row.url) ? styles.urlValid : styles.urlPending}>
+                        {isValidPublishedUrl(row.url) ? "✓ 실제 URL 확인됨 · LIVE 가능" : "발행 완료 전 실제 URL 필요"}
+                      </span>
                     </td>
                     <td><input value={row.note} placeholder="가격 확인 · 이미지 등" onChange={e => updateRow(row.id, { note: e.target.value })} /></td>
                     <td><button className={styles.workBtn} onClick={() => { setSelectedId(row.id); setNotice(""); }}>{row.id === selectedId ? "작업 중" : "글 작업"}</button></td>
@@ -546,13 +602,14 @@ export default function GoogleBlogSchedulePage() {
               <button onClick={() => void copyText(selectedResolvedUrl, "현재 글 URL을 복사했습니다.")}>현재 URL 복사</button>
             </div>
             <div className={styles.currentUrl}>
-              <span>{selected.url.trim() ? "실제 발행 URL" : "예정 URL"}</span>
+              <span>{isValidPublishedUrl(selected.url) ? "실제 발행 URL · LIVE" : "예정 URL · 아직 PLANNED"}</span>
               <b>{selectedResolvedUrl || "슬러그를 입력해 주세요."}</b>
+              {!isValidPublishedUrl(selected.url) && <small>발행 완료하려면 공개된 실제 Blogger URL을 위 표에 입력해야 합니다.</small>}
             </div>
             <div className={styles.relatedList}>
               {selectedRelated.length ? selectedRelated.map(item => {
                 const url = resolvedUrl(item);
-                const live = !!item.url.trim() || item.status === "발행 완료";
+                const live = isValidPublishedUrl(item.url);
                 return (
                   <div key={item.id} className={styles.relatedItem}>
                     <div>
@@ -642,7 +699,7 @@ export default function GoogleBlogSchedulePage() {
               <button
                 className={styles.completeBtn}
                 disabled={!selected.body?.trim()}
-                onClick={() => updateRow(selected.id, { status: "발행 완료" })}
+                onClick={() => completeRow(selected)}
               >
                 ✓ 발행 완료 표시
               </button>
