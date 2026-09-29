@@ -774,7 +774,7 @@ export default function GoogleBlogSchedulePage() {
   const selectedImageBytes = selected ? Object.values(selected.imageMeta || {}).reduce((sum, meta) => sum + (meta.optimizedBytes || 0), 0) : 0;
 
   async function saveCloudSchedule(key: string, payload: ScheduleRow[], showNotice = true) {
-    if (!key || key.length < 20) return;
+    if (!/^[0-9a-f]{36}$/.test(key)) return;
     try {
       setSyncStatus("saving");
       const { supabase } = await ensureAnonymousSession();
@@ -838,8 +838,8 @@ export default function GoogleBlogSchedulePage() {
 
   function connectCloudSync() {
     const key = syncInput.trim();
-    if (key.length < 20) {
-      setNotice("⚠️ 동기화 코드는 20자 이상이어야 합니다.");
+    if (!/^[0-9a-f]{36}$/.test(key)) {
+      setNotice("⚠️ 36자리 동기화 코드를 정확히 입력해주세요.");
       return;
     }
     preferCloudOnConnect.current = true;
