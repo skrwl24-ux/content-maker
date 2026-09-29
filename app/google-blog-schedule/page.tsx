@@ -29,6 +29,7 @@ type ScheduleRow = {
   verification?: VerificationState;
   note: string;
   body?: string;
+  imageUrls?: Record<string, string>;
 };
 
 type BloggerOutput = {
@@ -553,6 +554,40 @@ function htmlToPlain(html: string) {
     .trim();
 }
 
+function extractImageUrl(value: string) {
+  const raw = value.trim();
+  if (!raw) return "";
+  const srcMatch = raw.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const candidate = (srcMatch?.[1] || raw).replace(/&amp;/g, "&").trim();
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function escapeHtmlAttr(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function replaceImagePlaceholders(html: string, row: ScheduleRow) {
+  if (!html) return "";
+  let output = html;
+  for (const slot of IMAGE_SLOTS) {
+    const raw = row.imageUrls?.[slot.id] || "";
+    const src = extractImageUrl(raw);
+    if (!src) continue;
+    const alt = escapeHtmlAttr(`${row.title || "AI Price Atlas"} — ${slot.label}`);
+    const loading = slot.id === "00" ? "eager" : "lazy";
+    const imageHtml = `<p><img src="${escapeHtmlAttr(src)}" alt="${alt}" loading="${loading}"></p>`;
+    const placeholder = new RegExp(`\\[IMAGE ${slot.id} — [^\\]]+\\]`, "g");
+    output = output.replace(placeholder, imageHtml);
+  }
+  return output;
+}
+
+
 export default function GoogleBlogSchedulePage() {
   const [rows, setRows] = useState<ScheduleRow[]>(DEFAULT_ROWS);
   const [loaded, setLoaded] = useState(false);
@@ -611,6 +646,8 @@ export default function GoogleBlogSchedulePage() {
   const differentiateChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(differentiatePrompt);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(articlePrompt);
   const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
+  const finalBloggerHtml = selected ? replaceImagePlaceholders(bloggerOutput.html, selected) : bloggerOutput.html;
+  const imageReadyCount = selected ? IMAGE_SLOTS.filter(slot => extractImageUrl(selected.imageUrls?.[slot.id] || "")).length : 0;
 
   function updateRow(id: string, patch: Partial<ScheduleRow>) {
     setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
@@ -679,8 +716,14 @@ export default function GoogleBlogSchedulePage() {
     setNotice(current.includes(sourceId) ? "역링크 완료 표시를 해제했습니다." : "✅ 역링크 추가 완료로 표시했습니다.");
   }
 
+  function updateImageUrl(slotId: string, value: string) {
+    if (!selected) return;
+    const current = selected.imageUrls || {};
+    updateRow(selected.id, { imageUrls: { ...current, [slotId]: value } });
+  }
+
   async function copyBloggerRich() {
-    if (!bloggerOutput.html) {
+    if (!finalBloggerHtml) {
       setCopyMessage("ChatGPT 완성본을 먼저 붙여넣어 주세요.");
       return;
     }
@@ -688,13 +731,13 @@ export default function GoogleBlogSchedulePage() {
       if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
         await navigator.clipboard.write([
           new ClipboardItem({
-            "text/html": new Blob([bloggerOutput.html], { type: "text/html" }),
-            "text/plain": new Blob([htmlToPlain(bloggerOutput.html)], { type: "text/plain" }),
+            "text/html": new Blob([finalBloggerHtml], { type: "text/html" }),
+            "text/plain": new Blob([htmlToPlain(finalBloggerHtml)], { type: "text/plain" }),
           }),
         ]);
         setCopyMessage("✅ Blogger 서식 포함 전체복사 완료 · Blogger 작성 화면에서 Ctrl+V 하세요.");
       } else {
-        await navigator.clipboard.writeText(bloggerOutput.html);
+        await navigator.clipboard.writeText(finalBloggerHtml);
         setCopyMessage("HTML 코드로 복사했습니다. Blogger의 HTML 보기에서 붙여넣으세요.");
       }
     } catch {
@@ -703,11 +746,11 @@ export default function GoogleBlogSchedulePage() {
   }
 
   async function copyHtmlCode() {
-    if (!bloggerOutput.html) {
+    if (!finalBloggerHtml) {
       setCopyMessage("ChatGPT 완성본을 먼저 붙여넣어 주세요.");
       return;
     }
-    await copyText(bloggerOutput.html, "✅ Blogger HTML 코드 복사 완료 · HTML 보기에서 붙여넣으세요.");
+    await copyText(finalBloggerHtml, "✅ 이미지가 반영된 Blogger HTML 코드 복사 완료 · HTML 보기에서 붙여넣으세요.");
   }
 
   function addRow() {
@@ -1238,6 +1281,43 @@ export default function GoogleBlogSchedulePage() {
             />
           </section>
 
+          <section className={styles.imageLinkCard}>
+            <div className={styles.imageLinkHead}>
+              <div>
+                <span className={styles.stepNo}>IMG</span>
+                <h3>Blogger 이미지 연결</h3>
+                <p>Blogger에서 이미지를 업로드한 뒤 이미지 주소나 &lt;img&gt; HTML을 슬롯에 붙여넣으세요. 본문의 이미지 위치가 자동으로 치환됩니다.</p>
+              </div>
+              <span className={imageReadyCount === IMAGE_SLOTS.length ? styles.imageAllReady : styles.imageProgress}>{imageReadyCount}/6 연결</span>
+            </div>
+
+            <div className={styles.imageUrlGrid}>
+              {IMAGE_SLOTS.map(slot => {
+                const raw = selected.imageUrls?.[slot.id] || "";
+                const src = extractImageUrl(raw);
+                return (
+                  <label key={slot.id} className={src ? styles.imageUrlReady : styles.imageUrlPending}>
+                    <div>
+                      <b>{slot.id} · {slot.label}</b>
+                      <span>{src ? "✓ 연결됨" : "URL 또는 <img> HTML 붙여넣기"}</span>
+                    </div>
+                    <input
+                      value={raw}
+                      placeholder="https://... 또는 <img src=&quot;https://...&quot;>"
+                      onChange={e => updateImageUrl(slot.id, e.target.value)}
+                    />
+                    {src && <small>{src}</small>}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className={styles.imageLinkNote}>
+              <b>자동 치환 방식</b>
+              <span>[IMAGE 00 — Hero] 같은 자리만 이미지 태그로 바꾸며, URL이 없는 슬롯은 원래 표시를 그대로 남겨 누락을 확인할 수 있습니다.</span>
+            </div>
+          </section>
+
           <div className={styles.sectionDivider}>
             <div><span>PUBLISH</span><b>Blogger 발행</b></div>
             <small>제목·설명·슬러그·라벨·본문을 확인하고 최종 발행하세요.</small>
@@ -1248,7 +1328,7 @@ export default function GoogleBlogSchedulePage() {
               <div>
                 <span className={styles.stepNo}>04</span>
                 <h3>Blogger 바로 업로드 서식</h3>
-                <p>제목·검색 설명·슬러그·라벨을 따로 복사하고, 본문은 서식 포함 전체복사 또는 HTML 코드 복사를 사용하세요.</p>
+                <p>제목·검색 설명·슬러그·라벨을 복사하고, 입력한 이미지 URL이 반영된 최종 본문을 Blogger에 붙여넣으세요.</p>
               </div>
               <a className={styles.bloggerOpen} href="https://www.blogger.com/" target="_blank" rel="noopener noreferrer">Blogger 열기 ↗</a>
             </div>
@@ -1261,20 +1341,20 @@ export default function GoogleBlogSchedulePage() {
             </div>
 
             <div className={styles.bloggerActions}>
-              <button className={styles.bloggerPrimary} disabled={!bloggerOutput.html} onClick={() => void copyBloggerRich()}>Blogger 서식 포함 전체복사</button>
-              <button disabled={!bloggerOutput.html} onClick={() => void copyHtmlCode()}>HTML 코드 복사</button>
-              <span>작성 화면 붙여넣기 = 서식 복사 · HTML 보기 = HTML 코드 복사</span>
+              <button className={styles.bloggerPrimary} disabled={!finalBloggerHtml} onClick={() => void copyBloggerRich()}>이미지 포함 전체복사</button>
+              <button disabled={!finalBloggerHtml} onClick={() => void copyHtmlCode()}>이미지 포함 HTML 복사</button>
+              <span>이미지 {imageReadyCount}/6 연결 · URL이 없는 슬롯은 자리표시자가 그대로 남습니다.</span>
             </div>
             {copyMessage && <div className={styles.copyMessage}>{copyMessage}</div>}
 
             <div className={styles.previewPane}>
-              <div className={styles.previewHead}><b>Blogger 본문 미리보기</b><span>{bloggerOutput.html ? "HTML 본문 인식 완료" : "완성본 대기"}</span></div>
-              {bloggerOutput.html ? (
+              <div className={styles.previewHead}><b>Blogger 최종 미리보기</b><span>{finalBloggerHtml ? `이미지 ${imageReadyCount}/6 반영` : "완성본 대기"}</span></div>
+              {finalBloggerHtml ? (
                 <iframe
                   title="Blogger preview"
                   sandbox=""
                   className={styles.previewFrame}
-                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#202124;line-height:1.7;padding:24px;max-width:860px;margin:auto}h2{font-size:26px;margin-top:34px}h3{font-size:21px;margin-top:28px}p{font-size:17px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left}a{color:#1769aa}img{max-width:100%}</style></head><body>${bloggerOutput.html}</body></html>`}
+                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#202124;line-height:1.7;padding:24px;max-width:860px;margin:auto}h2{font-size:26px;margin-top:34px}h3{font-size:21px;margin-top:28px}p{font-size:17px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left}a{color:#1769aa}img{max-width:100%}</style></head><body>${finalBloggerHtml}</body></html>`}
                 />
               ) : (
                 <div className={styles.previewEmpty}>ChatGPT 결과를 위에 붙여넣으면 Blogger에 들어갈 본문을 여기서 확인할 수 있습니다.</div>
