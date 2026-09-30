@@ -1317,9 +1317,9 @@ export default function Home() {
         </div>
 
         <div className="box">
-          <div className="miniHead"><h3>⑤ 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "SRT 자막을 복사했습니다.")}>📋 SRT 복사</button>}</div></div>
+          <div className="miniHead"><h3>⑤ 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
           {sceneTimeline.length > 0 ? <div className="timelineSimple">{sceneTimeline.map(item => <div key={item.scene.order}><b>{item.scene.order}. {item.start.toFixed(1)}~{item.end.toFixed(1)}초</b><span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 장면 시간을 자동 배분합니다.</p>}
-          <p className="muted">장면별 내레이션 글자 비중으로 1차 시간을 잡고, 최종 영상에서는 음성에 맞춰 미세 조정하도록 요청합니다.</p>
+          <p className="muted">하단 자막은 요약문이 아니라 해당 장면의 내레이션 전체를 사용합니다. ZIP 생성 시 장면별 완성 프레임과 edit_plan도 함께 만듭니다.</p>
         </div>
 
         <div className="assetChecklist">
@@ -1351,7 +1351,7 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 만들기</h2><p>제작자료를 ZIP으로 묶고 GPT에는 최종 영상 제작 요청만 보내면 됩니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
+        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 조립하기</h2><p>사이트가 완성 프레임·전체대사 SRT·편집표까지 만든 뒤 GPT에는 조립만 맡깁니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
 
         <div className="box finalPackageBox">
           <h3>쇼츠 제작 패키지</h3>
@@ -1362,19 +1362,19 @@ export default function Home() {
             <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
-          <p className="muted">ZIP에는 배경 이미지, 그래프·숫자 카드, 음성, BGM, voice_script.txt, scene_plan.txt, timeline.txt, subtitles.txt, subtitles.srt, shorts_request.txt가 들어갑니다.</p>
-          <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "ZIP 만드는 중..." : "📦 쇼츠 제작 패키지 ZIP 다운로드"}</button>
+          <p className="muted">ZIP에는 01_scene.png부터 장면별 완성 프레임, scene_contact_sheet.png, 전체대사 SRT, edit_plan.txt, audio_plan.txt, 음성·BGM, 원본 배경/그래프가 함께 들어갑니다.</p>
+          <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "완성 프레임 + ZIP 만드는 중..." : "📦 조립형 쇼츠 패키지 ZIP 다운로드"}</button>
         </div>
 
         <div className="box">
           <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
-            <span>음성파일을 타임라인 기준으로 사용</span>
-            <span>배경은 줌/패닝 · 그래프는 안정적으로 표시</span>
-            <span>SRT 타임코드 + 무음 이해 가능한 화면 문구</span>
-            <span>BGM은 음성 아래로 낮게</span>
-            <span>마지막은 “오늘도 집값쓱.” 브랜드 엔딩</span>
+            <span>01_scene.png부터 완성 프레임을 순서대로 조립</span>
+            <span>첫 장면·그래프 장면은 완전 정지</span>
+            <span>전체대사 SRT를 빠짐없이 표시</span>
+            <span>edit_plan.txt 시간표를 최우선 적용</span>
+            <span>BGM은 audio_plan.txt 기준으로 낮게</span>
           </div>
           <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
         </div>
