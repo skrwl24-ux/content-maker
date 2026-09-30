@@ -70,3 +70,5 @@
 .voiceScriptBox{border-color:#dfe7f3;background:#fbfcff}
 .voiceScriptPreview{white-space:pre-wrap;line-height:1.75;font-size:16px;padding:14px;border:1px solid #e1e7f0;border-radius:14px;background:#fff;margin:10px 0}
 .voiceWarning{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#fff4e8;color:#b46512;font-weight:750}
+
+.voiceScriptEditor{min-height:190px;font-size:16px;line-height:1.75;background:#fff;border:1px solid #dfe5ee;border-radius:14px;padding:14px;resize:vertical}
