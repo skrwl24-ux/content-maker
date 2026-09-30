@@ -1127,7 +1127,7 @@ export default function ParammaBulkPage() {
       <header className={styles.topbar}>
         <a href="/" className={styles.homeLink}>← 콘텐츠 메이커</a>
         <div className={styles.brand}>🌿 Paramma 블로거</div>
-        <button type="button" className={styles.resetButton} onClick={resetProgress}>진행 초기화</button>
+        <span className={styles.topbarSpacer} aria-hidden="true" />
       </header>
 
       <section className={styles.hero}>
