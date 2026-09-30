@@ -456,26 +456,30 @@ export default function Home() {
       "",
       "[목표]",
       "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 6~7장면으로 구성",
-      "- 각 장면은 큰 화면 문구, 짧은 하단 자막, 화면 방식으로 설계",
+      "- 완성 대본의 문장을 새로 쓰지 말고 장면별로 자연스럽게 나눌 것",
+      "- 각 장면은 내레이션, 큰 화면 문구, 짧은 하단 자막, 화면 방식으로 설계",
       "- 큰 화면 문구는 1~2줄, 한 줄은 짧고 크게",
       "- 하단 자막은 8~16자 안팎으로 압축",
       "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
-      "- 새 이미지가 필요한 장면은 전체에서 2~3개만 지정",
-      "- 나머지는 반드시 '이미지 재사용', '텍스트 카드', '그래프/숫자 카드', '고정 엔딩' 중 하나 사용",
+      "- 새 배경 이미지는 전체에서 최대 2~3개만 지정",
+      "- 데이터 비교나 추세가 핵심인 장면은 '그래프/숫자 카드'를 사용",
+      "- 나머지는 '이미지 재사용', '텍스트 카드', '고정 엔딩' 중 하나 사용",
       "- 첫 장면은 지역명 + 질문형 후킹",
       "- 마지막 장면은 '[지역명] 집값, 오늘도 집값쓱.' 브랜드 엔딩",
       "- 화면 정보와 하단 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
       "",
       "[출력 형식 - 반드시 그대로]",
       "[장면 1]",
+      "내레이션: ...",
       "큰문구: ...",
       "하단자막: ...",
       "화면방식: 새 이미지",
       "",
       "[장면 2]",
+      "내레이션: ...",
       "큰문구: ...",
       "하단자막: ...",
-      "화면방식: 이미지 재사용",
+      "화면방식: 그래프/숫자 카드",
       "",
       "- 위 형식으로 장면 6~7개만 출력",
       "- 설명, 표, 코드블록, 추가 문장 금지",
@@ -494,32 +498,43 @@ export default function Home() {
     let match: RegExpExecArray | null;
     while ((match = re.exec(text)) !== null) {
       const body = match[2];
+      const narration = body.match(/내레이션\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
       const headline = body.match(/큰\s*문구\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
       const subtitle = body.match(/하단\s*자막\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
       const screenType = body.match(/화면\s*방식\s*[:：]\s*(.+)/)?.[1]?.trim() || "텍스트 카드";
-      if (headline || subtitle) scenes.push({ order: Number(match[1]), headline, subtitle, screenType });
+      if (narration || headline || subtitle) scenes.push({ order: Number(match[1]), narration, headline, subtitle, screenType });
     }
     return scenes.sort((a, b) => a.order - b.order).slice(0, 7);
   }
 
   function buildShortsImageTasks(scenes: ShortsScene[], previous: Task[] = tasks): Task[] {
-    const imageScenes = scenes.filter(s => s.screenType.includes("새 이미지")).slice(0, 3);
-    return imageScenes.map((scene, index) => {
-      const title = `장면 ${scene.order} · 새 이미지`;
+    const selected = scenes.filter(s => s.screenType.includes("새 이미지") || s.screenType.includes("그래프/숫자 카드"));
+    let backgroundSeen = 0;
+    return selected.flatMap((scene) => {
+      const isGraphic = scene.screenType.includes("그래프/숫자 카드");
+      if (!isGraphic) {
+        backgroundSeen += 1;
+        if (backgroundSeen > 3) return [];
+      }
+      const assetKind: "background" | "graphic" = isGraphic ? "graphic" : "background";
+      const title = `장면 ${scene.order} · ${isGraphic ? "그래프/숫자 카드" : "배경 이미지"}`;
       const prev = previous.find(t => t.title === title);
-      return {
-        order: index,
+      return [{
+        order: 0,
         title,
         keyMessage: scene.headline,
-        sourceText: scene.subtitle || scene.headline,
-        imagePrompt: `${scene.headline} 내용을 뒷받침하는 대표 세로 배경 이미지. 정보 텍스트는 사이트에서 별도 합성하므로 이미지 안에는 글자를 넣지 않는다.`,
+        sourceText: scene.narration || scene.subtitle || scene.headline,
+        imagePrompt: isGraphic
+          ? `${scene.headline} 내용을 정확한 그래프 또는 숫자 카드로 정리한다.`
+          : `${scene.headline} 내용을 뒷받침하는 대표 세로 배경 이미지. 이미지 안에는 글자를 넣지 않는다.`,
         done: prev?.done || false,
         imageDataUrl: prev?.imageDataUrl || "",
         imageUrl: prev?.imageUrl || "",
         sourceDataUrl: prev?.sourceDataUrl,
-        replaced: prev?.replaced || false
-      };
-    });
+        replaced: prev?.replaced || false,
+        assetKind
+      }];
+    }).map((task, index) => ({ ...task, order: index }));
   }
 
   function applyShortsSceneText(text: string) {
