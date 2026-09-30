@@ -19,6 +19,7 @@ type ArticleThemeChoice = {
 };
 
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
+type WorkImageSlot = "00" | "01" | "02";
 type ContentMode = "bulk" | "school" | "mega";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
 type WorkAttachment = {
@@ -157,6 +158,12 @@ const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
   },
 };
 
+const WORK_IMAGE_META: Record<WorkImageSlot, { label: string; role: string; width: number; height: number }> = {
+  "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254 },
+  "01": { label: "핵심 정보", role: "본문 핵심 정보 이미지", width: 1600, height: 900 },
+  "02": { label: "원인·흐름", role: "본문 원인·비교 이미지", width: 1600, height: 900 },
+};
+
 const WORK_DB_NAME = "jibssuk-apartment-work-v1";
 const WORK_STORE_NAME = "dailyWorks";
 
@@ -266,6 +273,72 @@ ${topicGuide}
 5. 검수 메모: 사용한 주요 출처와 확인 기준일을 짧게 정리
 
 중요: 일반 상식만으로 작성하지 말고 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
+}
+
+function compactArticleForImagePrompt(body: string) {
+  const text = body.trim();
+  if (text.length <= 9000) return text;
+  return text.slice(0, 6500) + "\n\n[중간 일부 생략]\n\n" + text.slice(-2500);
+}
+
+function makeSavedWorkImagePrompt(slot: WorkImageSlot, topic: string, body: string, imageNotes: string) {
+  const meta = WORK_IMAGE_META[slot];
+  const safeTopic = topic.trim() || "블로그 글";
+  const article = compactArticleForImagePrompt(body);
+  const ratio = meta.width === meta.height ? "1:1 정사각형" : "16:9 가로형";
+
+  const slotGuide = slot === "00"
+    ? `[썸네일 구성]
+- 본문 전체를 대표하는 장면 1개를 중심으로 구성
+- 모바일 목록에서도 바로 이해되는 짧은 한글 후킹 문구 1~2줄
+- 본문 제목 전체를 길게 반복하지 말고 핵심 검색어와 궁금증만 남길 것
+- 숫자·날짜를 넣는다면 아래 본문에서 명확히 확인된 값만 사용할 것`
+    : slot === "01"
+      ? `[핵심 정보 이미지 구성]
+- 본문에서 독자가 가장 먼저 기억해야 할 핵심 정보 하나를 시각화
+- 일정 글이면 달력·타임라인, 가격 글이면 핵심 숫자·시장 구분, 환율 글이면 통화쌍·주요 변수처럼 주제에 맞는 구조를 선택
+- 짧은 라벨 2~5개는 허용하되 긴 설명문은 넣지 말 것
+- 본문에 없는 숫자나 날짜를 새로 만들지 말 것`
+      : `[원인·흐름 이미지 구성]
+- 본문이 설명하는 원인→과정→결과 또는 변수 간 관계를 한눈에 보여줄 것
+- 필요하면 화살표, 단계, 간단한 비교 카드 2~4개를 사용
+- 인과관계가 확정되지 않은 내용은 단정적인 화살표 대신 '영향 요인', '함께 보는 변수'처럼 표현
+- 본문에서 확인되지 않은 수치·예측·투자 결론은 추가하지 말 것`;
+
+  return `네이버 블로그용 이미지를 1장 만들어줘.
+
+[글 주제]
+${safeTopic}
+
+[이미지 역할]
+슬롯 ${slot} · ${meta.label}
+역할: ${meta.role}
+
+[제작 크기]
+${meta.width}×${meta.height}px
+${ratio}
+
+[가장 중요한 기준]
+- 아래에 붙여넣은 완성 글의 내용만 근거로 이미지를 구성할 것.
+- 본문에 없는 숫자, 일정, 정책, 가격, 전망을 새로 만들지 말 것.
+- 재테크 주제는 매수·매도·청약을 권유하는 광고처럼 보이지 않게 정보형으로 제작할 것.
+- 모바일에서도 핵심이 바로 보이도록 단순하고 선명하게 구성할 것.
+- 실제 블로그 운영자가 직접 편집한 것처럼 자연스럽고 신뢰감 있게 만들 것.
+- 과도한 AI 느낌, 네온, 유리질감, 복잡한 3D 효과, 작은 글자를 빽빽하게 채운 구성은 피할 것.
+- 색상은 2~3개 중심으로 절제하고 카드·도표·아이콘은 꼭 필요한 만큼만 사용할 것.
+- 워터마크와 타사 로고는 넣지 말 것.
+- 여러 이미지를 콜라주로 합치지 말고 한 장의 완성 이미지로 만들 것.
+- 한글 문구는 오탈자 없이 표시할 것.
+
+${slotGuide}
+
+[운영자 이미지 메모]
+${imageNotes.trim() || "별도 메모 없음"}
+
+[완성 글]
+${article || "본문이 아직 입력되지 않았습니다."}
+
+중요: 위 글을 바탕으로 설명문을 답하지 말고, 바로 이미지 1장을 제작해줘.`;
 }
 
 function openWorkDb(): Promise<IDBDatabase> {
@@ -1521,6 +1594,7 @@ export default function ApartmentBulkPage() {
   const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
+  const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
@@ -1557,6 +1631,15 @@ export default function ApartmentBulkPage() {
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
     [activeWorkType, workTopic, workMaterials, dailyDateKey]
   );
+  const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
+    () => ({
+      "00": makeSavedWorkImagePrompt("00", workTopic, workBody, workImageNotes),
+      "01": makeSavedWorkImagePrompt("01", workTopic, workBody, workImageNotes),
+      "02": makeSavedWorkImagePrompt("02", workTopic, workBody, workImageNotes),
+    }),
+    [workTopic, workBody, workImageNotes]
+  );
+  const workBodyReadyForImages = workBody.trim().length >= 80;
   const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
@@ -2082,6 +2165,23 @@ export default function ApartmentBulkPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function copyWorkImagePrompt(slot: WorkImageSlot) {
+    if (!workBodyReadyForImages) return;
+    try {
+      await navigator.clipboard.writeText(workImagePrompts[slot]);
+      setWorkImagePromptCopied(slot);
+      window.setTimeout(() => setWorkImagePromptCopied(""), 1800);
+    } catch {
+      setWorkImagePromptCopied("");
+    }
+  }
+
+  function openWorkImagePromptInChatGPT(slot: WorkImageSlot) {
+    if (!workBodyReadyForImages) return;
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(workImagePrompts[slot]);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function openBodyPromptInChatGPT() {
     const nextHistory = [...recentArticleThemes, selectedArticleTheme.id].slice(-6);
     setRecentArticleThemes(nextHistory);
@@ -2387,14 +2487,63 @@ export default function ApartmentBulkPage() {
               </section>
 
               <label className={styles.workField}>
-                <span>본문 초안·구성 메모</span>
+                <span>완성 글 붙여넣기</span>
                 <textarea
                   data-testid="work-body"
                   value={workBody}
                   onChange={(e) => setWorkBody(e.target.value)}
-                  placeholder="본문 초안, 소제목 구성, ChatGPT 결과 등을 임시 저장할 수 있습니다."
+                  placeholder="ChatGPT에서 만든 최종 글 전체를 여기에 붙여넣으세요. 입력하면 아래 이미지 제작 버튼이 활성화됩니다."
                 />
               </label>
+
+              <section className={styles.actionPanel}>
+                <div className={styles.actionHead}>
+                  <p className={styles.eyebrow}>IMAGE REQUESTS</p>
+                  <h2>완성 글을 바탕으로 이미지 3장을 GPT에서 제작합니다.</h2>
+                  <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}</span>
+                </div>
+                <div className={styles.actionGrid}>
+                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("00")}>
+                    <span className={styles.actionIcon}>🖼️</span>
+                    <b>00 · 썸네일 GPT 제작</b>
+                    <small>1254×1254 · 글 전체를 읽고 대표 장면과 짧은 후킹 문구 구성</small>
+                  </button>
+                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
+                    <span className={styles.actionIcon}>📊</span>
+                    <b>01 · 핵심 정보 GPT 제작</b>
+                    <small>1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리</small>
+                  </button>
+                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("02")}>
+                    <span className={styles.actionIcon}>🔗</span>
+                    <b>02 · 원인·흐름 GPT 제작</b>
+                    <small>1600×900 · 원인→과정→결과 또는 주요 변수 관계를 시각화</small>
+                  </button>
+                </div>
+              </section>
+
+              <details className={styles.advancedDetails}>
+                <summary>이미지 제작 요청서 확인 · 복사</summary>
+                <div className={styles.advancedBody}>
+                  {(["00", "01", "02"] as WorkImageSlot[]).map((slot) => (
+                    <section className={styles.promptSection} key={slot}>
+                      <div className={styles.promptHead}>
+                        <div>
+                          <b>{slot} · {WORK_IMAGE_META[slot].label} 요청서</b>
+                          <span>{WORK_IMAGE_META[slot].width}×{WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영</span>
+                        </div>
+                      </div>
+                      <textarea className={styles.promptBoxCompact} value={workImagePrompts[slot]} readOnly />
+                      <div className={styles.promptActionsCompact}>
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(slot)}>ChatGPT에서 열기</button>
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(slot)}>
+                          {workImagePromptCopied === slot ? "✓ 복사 완료" : "요청서 복사"}
+                        </button>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </details>
+
               <label className={styles.workField}>
                 <span>이미지 메모</span>
                 <textarea
