@@ -510,8 +510,8 @@ export default function Home() {
       "- 위 형식으로 장면 6~7개만 출력",
       "- 설명, 표, 코드블록, 추가 문장 금지",
       "",
-      "[AI 음성용 대본]",
-      shortsVoiceScript.trim(),
+      "[완성 대본]",
+      shortsScript.trim(),
       "",
       "[원문 자료]",
       rawContent.trim()
@@ -610,8 +610,8 @@ export default function Home() {
       "- MP3 또는 WAV 파일로 제공",
       "- 대본을 요약하거나 바꾸지 말 것",
       "",
-      "[완성 대본]",
-      shortsScript.trim()
+      "[AI 음성용 대본]",
+      shortsVoiceScript.trim()
     ].join("\n");
   }
 
@@ -1029,7 +1029,7 @@ export default function Home() {
             {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
           </div>
           <p className={shortsVoiceEstimatedSeconds > 33 ? "voiceWarning" : "muted"}>{shortsVoiceEstimatedSeconds > 33 ? "음성용 변환 후 33초를 넘길 가능성이 있습니다. 숫자·단위는 그대로 두고 다른 문장을 압축하는 것을 권장합니다." : "6.93억 → 6억 9천만원, 84㎡ → 84제곱미터처럼 음성에서만 자연스럽게 읽도록 자동 변환합니다."}</p>
-        </div>
+        </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
 
