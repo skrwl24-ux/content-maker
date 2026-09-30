@@ -115,3 +115,30 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+
+export async function DELETE(req: NextRequest) {
+  if (!sameSiteMutation(req)) {
+    return NextResponse.json({ error: "Same-site request required." }, { status: 403 });
+  }
+
+  try {
+    const body: unknown = await req.json().catch(() => ({}));
+    const input = body && typeof body === "object" ? body as HistoryInput : {};
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    if (!title) return NextResponse.json({ error: "삭제할 발행 이력이 없습니다." }, { status: 400 });
+
+    const supabase = adminClient();
+    const { error } = await supabase
+      .from("google_blog_publish_history")
+      .delete()
+      .eq("normalized_key", normalizeKey(title));
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Google Blog 발행 이력을 삭제하지 못했습니다." },
+      { status: 500 }
+    );
+  }
+}
