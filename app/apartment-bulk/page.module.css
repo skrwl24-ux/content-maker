@@ -78,19 +78,19 @@
 .dailySlotNumber{width:30px;height:30px;flex:0 0 30px;display:grid;place-items:center;border-radius:9px;background:#e9eef4;color:#526176;font-size:12px;font-weight:900}
 .dailySlotDone .dailySlotNumber{background:#0f827f;color:#fff}
 .dailyTypeChip{display:inline-flex;align-items:center;min-width:0;padding:5px 8px;border-radius:999px;background:#eef3f7;color:#42536a;font-size:10px;font-weight:900;white-space:nowrap}
-.dailyReroll{margin-left:auto;border:0;background:transparent;color:#7b8797;font-size:10px;font-weight:900;cursor:pointer;padding:5px 3px}
-.dailyReroll:hover{color:#0f827f}
+.dailyDoneLabel{margin-left:auto;padding:5px 8px;border-radius:999px;background:#dff2ed;color:#24746b;font-size:10px;font-weight:900;white-space:nowrap}
 .dailySlotMain{min-width:0;display:flex;flex:1;flex-direction:column;gap:6px}
 .dailySlotTitle{color:#1f2f43;font-size:13px;line-height:1.5;word-break:keep-all}
 .dailySlotMain small{color:#8490a0;font-size:10px;line-height:1.45}
 .dailySlotActions{display:flex;gap:7px}
-.dailyStart,.dailyActiveWork,.dailyComplete,.dailyUndo{border:0;border-radius:10px;padding:9px 10px;font-size:11px;font-weight:900;cursor:pointer}
-.dailyStart,.dailyActiveWork{flex:1}
+.dailyStart,.dailyActiveWork,.dailyComplete,.dailyUndo,.dailyReplace{border:0;border-radius:10px;padding:9px 10px;font-size:11px;font-weight:900;cursor:pointer}
+.dailyStart,.dailyActiveWork,.dailyReplace{flex:1}
 .dailyStart{background:#e9eff5;color:#33465c}
 .dailyActiveWork{background:#163b5b;color:#fff}
 .dailyComplete,.dailyUndo{min-width:48px}
 .dailyComplete{background:#0f827f;color:#fff}
-.dailyUndo{background:#dfece9;color:#34625d}
+.dailyReplace{background:#0f827f;color:#fff}
+.dailyUndo{background:#e9efee;color:#5c716e}
 .dailySettings{margin-top:14px;border-top:1px solid #edf1f4;padding-top:11px}
 .dailySettings>summary{list-style:none;width:max-content;cursor:pointer;color:#7b8795;font-size:11px;font-weight:900}
 .dailySettings>summary::-webkit-details-marker{display:none}
@@ -100,6 +100,7 @@
 .dailySettingsGrid label{display:flex;align-items:center;gap:7px;min-width:0}
 .dailySettingsGrid label>span{flex:0 0 auto;font-size:10px;font-weight:900;color:#7f8b9a}
 .dailySettingsGrid select{min-width:0;width:100%;border:1px solid #dfe6ed;border-radius:9px;background:#fff;padding:8px;color:#425168;font-size:11px;font-weight:800}
+.dailyResetAll{margin-top:12px;border:0;border-radius:9px;padding:8px 10px;background:#f1f3f5;color:#7a8491;font-size:10px;font-weight:800;cursor:pointer}
 @media(max-width:1000px){.dailySlots{grid-template-columns:repeat(2,minmax(0,1fr))}.dailySettingsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.dailyBoard{padding:18px 14px;border-radius:20px}.dailyBoardHead{align-items:flex-start;flex-direction:column}.dailyBoardActions{width:100%;justify-content:space-between}.dailySlots{grid-template-columns:1fr}.dailySlot,.dailySlotDone{min-height:0}.dailyBoardHead h2{font-size:24px}.dailySettingsGrid{grid-template-columns:1fr}}
 
