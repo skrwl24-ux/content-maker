@@ -311,7 +311,7 @@ function makeDailySlots(dateKey: string, publishedTopics: string[] = []) {
   return DEFAULT_DAILY_SLOTS.map((slot) => {
     const planned = plan[slot.id];
     const type = planned?.type || slot.type;
-    const plannedTopic = planned?.topic || "";
+    const plannedTopic = planned?.topic && !isPublishedTopic(planned.topic, publishedTopics) ? planned.topic : "";
     const topic = plannedTopic || getDailyTopicSuggestion(type, dateKey, slot.id, publishedTopics, picked);
     if (topic) picked.push(topic);
     return {
@@ -2146,14 +2146,17 @@ export default function ApartmentBulkPage() {
           const planned = plan[index + 1];
           const savedType = validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type;
           const savedTopic = typeof slot?.topic === "string" ? slot.topic.trim() : "";
-          const resolvedType = savedTopic ? savedType : (planned?.type || savedType);
+          const savedDone = Boolean(slot?.done);
+          const usableSavedTopic = savedTopic && (savedDone || !isPublishedTopic(savedTopic, publishedTopics)) ? savedTopic : "";
+          const resolvedType = usableSavedTopic ? savedType : (planned?.type || savedType);
+          const plannedTopic = planned?.topic && !isPublishedTopic(planned.topic, publishedTopics) ? planned.topic : "";
           const suggested = getDailyTopicSuggestion(resolvedType, dateKey, index + 1, publishedTopics, picked);
-          const topic = savedTopic || planned?.topic || suggested;
+          const topic = usableSavedTopic || plannedTopic || suggested;
           if (topic) picked.push(topic);
           return {
             id: index + 1,
             type: resolvedType,
-            done: Boolean(slot?.done),
+            done: savedDone,
             workId: typeof slot?.workId === "string" && slot.workId
               ? slot.workId
               : createWorkId(dateKey, index + 1),
