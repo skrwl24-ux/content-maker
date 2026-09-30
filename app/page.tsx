@@ -6,9 +6,9 @@ import { ensureAnonymousSession } from "@/lib/supabase-browser";
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
 type Analysis = { recommendedTitle: string; titleCandidates: string[]; keywords: string[]; facts: Fact[]; images: ImagePlan[] };
-type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string; sourceDataUrl?: string; replaced: boolean };
+type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string; sourceDataUrl?: string; replaced: boolean; assetKind?: "background" | "graphic" };
 type Recommendation = { title: string; brief: string };
-type ShortsScene = { order: number; headline: string; subtitle: string; screenType: string };
+type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string };
 type Phase = "home" | "input" | "script" | "analysis" | "images" | "review" | "done";
 
 const TYPES = [
@@ -16,7 +16,7 @@ const TYPES = [
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
-  ["🎬", "집값쓱 쇼츠", "자료·대본·장면표·이미지"],
+  ["🎬", "집값쓱 쇼츠", "AI 제작재료 → 쇼츠 패키지"],
 ] as const;
 
 const PARAMMA_CATEGORIES = [
@@ -215,6 +215,7 @@ export default function Home() {
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
+  const [bgmMemo, setBgmMemo] = useState("");
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -236,6 +237,23 @@ export default function Home() {
   }, [projectTitle, rawContent]);
   const completeCount = useMemo(() => tasks.filter(t => t.done).length, [tasks]);
   const imageCount = useMemo(() => tasks.filter(t => !!t.imageDataUrl).length, [tasks]);
+  const backgroundCount = useMemo(() => tasks.filter(t => t.assetKind !== "graphic").length, [tasks]);
+  const graphicCount = useMemo(() => tasks.filter(t => t.assetKind === "graphic").length, [tasks]);
+  const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
+  const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
+  const sceneTimeline = useMemo(() => {
+    if (!voiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
+    const weights = shortsScenes.map(s => Math.max(1, (s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let cursor = 0;
+    return shortsScenes.map((scene, i) => {
+      const duration = i === shortsScenes.length - 1 ? Math.max(0, voiceDuration - cursor) : voiceDuration * (weights[i] / totalWeight);
+      const start = cursor;
+      const end = i === shortsScenes.length - 1 ? voiceDuration : Math.min(voiceDuration, start + duration);
+      cursor = end;
+      return { scene, start, end, duration: end - start };
+    });
+  }, [shortsScenes, voiceDuration]);
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
     return (analysis?.facts || []).map(f => ({ ...f, used: corpus.includes(String(f.value).toLowerCase()) }));
@@ -253,7 +271,8 @@ export default function Home() {
         setRawContent(String(draft.rawContent || ""));
         setShortsScript(String(draft.shortsScript || ""));
         setShortsSceneText(String(draft.shortsSceneText || ""));
-        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes : []);
+        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any) => ({ ...s, narration: String(s.narration || "") })) : []);
+        setBgmMemo(String(draft.bgmMemo || ""));
         setFinalTitle(String(draft.finalTitle || ""));
         setFinalBody(String(draft.finalBody || ""));
         setAnalysis(draft.analysis || null);
@@ -294,6 +313,7 @@ export default function Home() {
       shortsScript,
       shortsSceneText,
       shortsScenes,
+      bgmMemo,
       finalTitle,
       finalBody,
       analysis,
@@ -303,7 +323,7 @@ export default function Home() {
       savedAt: new Date().toISOString()
     };
     try { window.localStorage.setItem(SHORTS_DRAFT_KEY, JSON.stringify(payload)); } catch {}
-  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, shortsSceneText, shortsScenes, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
+  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, shortsSceneText, shortsScenes, bgmMemo, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
 
   async function refreshSaved() {
     const { supabase } = await ensureAnonymousSession();
@@ -313,7 +333,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
