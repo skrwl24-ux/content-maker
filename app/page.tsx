@@ -239,7 +239,7 @@ export default function Home() {
         if (eok <= 0) return `${tenth}천만원`;
         return `${eok}억 ${tenth}천만원`;
       })
-      .replace(/\s*(?:㎡|m²|m2)\b?/gi, "제곱미터")
+      .replace(/\s*(?:㎡|m²|m2)/gi, "제곱미터")
       .replace(/(\d+(?:\.\d+)?)\s*%/g, "$1퍼센트")
       .replace(/\bTOP\s*3\b/gi, "탑 쓰리")
       .replace(/\bDSR\b/gi, "디에스알")
@@ -267,7 +267,7 @@ export default function Home() {
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
   const sceneTimeline = useMemo(() => {
     if (!voiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
-    const weights = shortsScenes.map(s => Math.max(1, (s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
+    const weights = shortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let cursor = 0;
     return shortsScenes.map((scene, i) => {
@@ -449,6 +449,8 @@ export default function Home() {
       "- 전체 내레이션은 공백 제외 210~225자로 작성",
       "- 6~7장면으로 자연스럽게 나눌 수 있는 흐름",
       "- 숫자·단지명·기간은 아래 원문에 있는 정보만 사용",
+      "- 가격·면적·퍼센트·영문 약어는 원문의 화면용 표기(예: 6.93억, 84㎡, 9.5%, DSR)를 그대로 유지",
+      "- 발음용 변환은 AI 음성 단계에서 별도로 처리하므로 대본에서 임의로 '6억 9천만원', '제곱미터' 등으로 풀어쓰지 말 것",
       "- 과장된 매수·매도 권유 금지",
       "- 짧고 또렷한 구어체로 작성",
       "",
@@ -722,7 +724,8 @@ export default function Home() {
       });
       if (voiceFile) folder.file(`voice_${voiceFile.name}`, voiceFile);
       if (bgmFile) folder.file(`bgm_${bgmFile.name}`, bgmFile);
-      folder.file("voice_script.txt", shortsScript);
+      folder.file("display_script.txt", shortsScript);
+      folder.file("voice_script.txt", shortsVoiceScript);
       folder.file("scene_plan.txt", shortsSceneExport());
       folder.file("timeline.txt", shortsTimelineExport());
       folder.file("subtitles.txt", shortsScenes.map(s => `${s.order}. ${s.subtitle}`).join("\n"));
