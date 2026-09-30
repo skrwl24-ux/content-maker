@@ -761,9 +761,12 @@ export default function GoogleBlogSchedulePage() {
   const [syncInitialized, setSyncInitialized] = useState(false);
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState("");
   const [localUpdatedAt, setLocalUpdatedAt] = useState("");
+  const [publishHistory, setPublishHistory] = useState<GooglePublishHistoryItem[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [today, setToday] = useState(todayLocal());
   const localWriteReady = useRef(false);
   const preferCloudOnConnect = useRef(false);
-  const today = todayLocal();
+  const rollingAppliedRef = useRef("");
 
   useEffect(() => {
     try {
@@ -782,6 +785,18 @@ export default function GoogleBlogSchedulePage() {
       if (savedLocalUpdatedAt) setLocalUpdatedAt(savedLocalUpdatedAt);
     } catch {}
     setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nextToday = todayLocal();
+      setToday(current => current === nextToday ? current : nextToday);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    void loadPublishHistory();
   }, []);
 
   useEffect(() => {
@@ -808,6 +823,14 @@ export default function GoogleBlogSchedulePage() {
     }, 900);
     return () => window.clearTimeout(timer);
   }, [rows, loaded, syncKey, syncInitialized]);
+
+  useEffect(() => {
+    if (!loaded || !historyLoaded) return;
+    if (syncKey && !syncInitialized) return;
+    if (rollingAppliedRef.current === today) return;
+    rollingAppliedRef.current = today;
+    void applyRollingSchedule();
+  }, [loaded, historyLoaded, syncKey, syncInitialized, today]);
 
   const counts = useMemo(() => ({
     total: rows.length,
