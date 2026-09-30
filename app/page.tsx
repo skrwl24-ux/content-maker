@@ -414,6 +414,10 @@ export default function Home() {
         "- 그래프는 가능하면 코드로 정확하게 제작하고 숫자·한글 오타가 없게 확인",
         "- 원문에 데이터가 부족하면 임의로 보간하거나 숫자를 만들지 말고 숫자 카드로 단순화",
         "- 모바일 쇼츠에서 한눈에 읽히도록 큰 숫자와 짧은 라벨 중심",
+        "- 그래프·숫자·핵심 라벨은 화면 상단~중앙 약 70~75% 안에 배치",
+        "- 하단 약 25%는 영상 자막 합성용 안전영역으로 비워둘 것",
+        "- 하단 안전영역에는 축 라벨, 핵심 숫자, 단지명 등 중요한 정보를 두지 말 것",
+        "- 맨 아래 약 150~200px은 쇼츠 UI와 자막 여유를 위해 특히 단순하게 비워둘 것",
         "- 광고 배너처럼 만들지 말고 깔끔한 부동산 정보 카드 스타일",
         "- 원문에 없는 전망·정책·가격·날짜 추가 금지",
         "",
@@ -430,7 +434,13 @@ export default function Home() {
       `${ratio} 이미지 한 장만 생성. 여러 장 합본 금지.`,
       "중요: 이미지 안에 글자, 숫자, 제목, 로고를 넣지 말 것. 무문자 배경 이미지로 제작.",
       "본문에 없는 가격·날짜·단지명·정책·수치를 임의로 시각화하지 말 것.",
-      isShorts ? "핵심 피사체는 중앙과 상단 2/3에 두고 하단 20~25%는 자막 안전영역으로 비워둘 것." : "핵심 피사체는 중앙과 상단 2/3에 두고 하단에는 문구를 합성할 여백을 남길 것."
+      isShorts ? [
+        "핵심 피사체는 화면 상단~중앙 약 70% 안에 배치할 것.",
+        "하단 약 25%는 영상 자막 합성용 안전영역으로 비워둘 것.",
+        "하단 안전영역에는 사람 얼굴, 건물 핵심 부분, 지도 포인트 등 중요한 요소를 두지 말 것.",
+        "하단은 도로·바닥·하늘·벽처럼 단순한 배경으로 자연스럽게 이어지게 하고, 필요하면 아래로 갈수록 살짝 어두워지는 그라데이션은 허용.",
+        "맨 아래 약 150~200px은 쇼츠 UI와 자막 여유를 위해 특히 비워둘 것."
+      ].join("\n") : "핵심 피사체는 중앙과 상단 2/3에 두고 하단에는 문구를 합성할 여백을 남길 것."
     ].filter(Boolean).join("\n");
   }
 
@@ -687,6 +697,10 @@ export default function Home() {
       "- scene_plan.txt와 timeline.txt의 장면 순서·시간을 우선 적용",
       "- 배경 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
       "- 그래프·숫자 카드 이미지는 숫자가 잘 읽히도록 과한 움직임 없이 안정적으로 표시",
+      "- 큰 화면 문구는 상단 또는 중앙 영역에 배치하고, 이미지의 핵심 피사체를 가리지 않게 할 것",
+      "- 하단 자막은 화면 맨 아래에 붙이지 말고 바닥에서 약 250~350px 위에 배치",
+      "- 하단 자막이 배경 이미지·그래프의 핵심 정보와 겹치지 않도록 첨부 이미지의 하단 25% 안전영역을 우선 사용",
+      "- 맨 아래 약 150~200px은 쇼츠 UI 여유 공간으로 남기고 중요한 문구를 두지 말 것",
       "- 큰 화면 문구와 하단 자막은 무음으로 봐도 내용을 이해할 수 있게 표시",
       "- subtitles.srt가 있으면 그 타임코드를 우선 사용하고, 필요할 때만 음성에 맞춰 미세 조정",
       "- BGM은 내레이션을 방해하지 않도록 낮게 깔고, 음성 구간에서는 자동으로 더 낮춤",
@@ -959,7 +973,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V8 · 쇼츠 제작 폼</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V9 · 쇼츠 제작 패키지</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
@@ -967,7 +981,7 @@ export default function Home() {
     </header>
 
     <section className="hero">
-      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본 → 장면표 → 필요한 이미지만 → 제작용 묶음" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
+      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본·AI 음성 → 장면표 → 이미지·그래프·BGM → GPT 제작" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
       <div className="heroPill">{preset.label}</div>
     </section>
 
