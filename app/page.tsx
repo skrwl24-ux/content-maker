@@ -15,7 +15,7 @@ const TYPES = [
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
-  ["🎬", "집값쓱 쇼츠", "세로 장면 6~7개"],
+  ["🎬", "집값쓱 쇼츠", "대본·자막·이미지 요청서"],
 ] as const;
 
 const PARAMMA_CATEGORIES = [
@@ -206,6 +206,7 @@ export default function Home() {
   const [saved, setSaved] = useState<any[]>([]);
   const [finalTitle, setFinalTitle] = useState("");
   const [finalBody, setFinalBody] = useState("");
+  const [shortsScript, setShortsScript] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -213,7 +214,16 @@ export default function Home() {
 
   const current = tasks[currentIndex];
   const effectiveContentType = contentType === "Paramma 블로거" ? parammaCategory : contentType;
+  const isShorts = contentType === "집값쓱 쇼츠";
   const preset = PRESETS[contentType] || PRESETS.default;
+  const shortsCharCount = useMemo(() => shortsScript.replace(/\s/g, "").length, [shortsScript]);
+  const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
+  const shortsBgm = useMemo(() => {
+    const text = `${projectTitle} ${rawContent}`;
+    if (/(하락|급락|주의|부담|위험|감소|실패)/.test(text)) return { label: "B · 긴장형", note: "하락·주의 포인트에 맞는 보컬 없는 긴장감 있는 리듬" };
+    if (/(대출|DSR|LTV|금리|계산|비교|설명|세금)/i.test(text)) return { label: "C · 차분형", note: "대출·금리·설명형에 맞는 차분한 정보형 리듬" };
+    return { label: "A · 기본형", note: "TOP3·거래·가격 흐름에 맞는 밝고 빠른 정보형 리듬" };
+  }, [projectTitle, rawContent]);
   const completeCount = useMemo(() => tasks.filter(t => t.done).length, [tasks]);
   const imageCount = useMemo(() => tasks.filter(t => !!t.imageDataUrl).length, [tasks]);
   const factUsage = useMemo(() => {
@@ -231,7 +241,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -276,6 +286,78 @@ export default function Home() {
   async function copyPrompt(task: Task) {
     try { await navigator.clipboard.writeText(promptFor(task)); alert("무문자 이미지 요청문을 복사했습니다."); }
     catch { setError("클립보드 복사에 실패했습니다."); }
+  }
+
+  async function copyText(text: string, message: string) {
+    try { await navigator.clipboard.writeText(text); alert(message); }
+    catch { setError("클립보드 복사에 실패했습니다."); }
+  }
+
+  function shortsScriptPrompt() {
+    return [
+      "[집값쓱 유튜브 쇼츠 대본 제작]",
+      `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
+      "",
+      "[고정 제작 기준]",
+      "- 음성은 1.5배속으로 사용할 예정",
+      "- 완성 영상 목표 30~33초",
+      "- 전체 내레이션은 공백 제외 210~225자로 작성",
+      "- 6~7장면으로 자연스럽게 나눌 수 있는 흐름",
+      "- 첫 2~3초는 강한 후킹",
+      "- 숫자·단지명·기간은 아래 원문에 있는 정보만 사용",
+      "- 과장된 매수·매도 권유 금지",
+      "- 짧고 또렷한 구어체로 작성",
+      "- 결과에는 설명이나 제목을 붙이지 말고, TTS에 바로 넣을 수 있는 완성 내레이션만 출력",
+      "",
+      "[원문 자료]",
+      rawContent.trim()
+    ].join("\n");
+  }
+
+  function shortsSilentPrompt() {
+    return [
+      "[집값쓱 쇼츠 무음용 화면 문구·자막 설계]",
+      `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
+      "",
+      "[목표]",
+      "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 구성",
+      "- 아래 완성 대본을 6~7장면으로 나눌 것",
+      "- 장면마다 ① 큰 핵심 문구 ② 짧은 하단 자막 ③ 화면 방식 을 작성",
+      "- 큰 핵심 문구는 1~2줄, 한 줄은 짧고 크게",
+      "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
+      "- 하단 자막은 내레이션 전체를 복사하지 말고 8~16자 안팎으로 압축",
+      "- 새 이미지가 필요한 장면은 전체에서 2~3개만 지정",
+      "- 나머지는 '이미지 재사용', '텍스트 카드', '그래프/숫자 카드', '고정 엔딩' 중 하나로 지정",
+      "- 화면 정보와 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
+      "",
+      "[완성 대본]",
+      shortsScript.trim(),
+      "",
+      "[원문 자료]",
+      rawContent.trim()
+    ].join("\n");
+  }
+
+  function shortsUploadPrompt() {
+    return [
+      "[집값쓱 YouTube Shorts 업로드 문구 제작]",
+      `주제: ${projectTitle || "아래 대본의 핵심 주제"}`,
+      "",
+      "[요청]",
+      "- 유튜브 쇼츠 제목 3개",
+      "- 설명문 2~3문장",
+      "- 해시태그 5~8개",
+      "- 고정댓글 1개",
+      "- 검색 키워드는 자연스럽게 포함",
+      "- 과장·낚시성 표현과 매수·매도 권유 금지",
+      "- 원문과 대본에 없는 숫자나 사실 추가 금지",
+      "",
+      "[완성 대본]",
+      shortsScript.trim(),
+      "",
+      "[원문 자료]",
+      rawContent.trim()
+    ].join("\n");
   }
 
   async function copyAllPrompts() {
@@ -354,7 +436,7 @@ export default function Home() {
         content_type: contentType === "Paramma 블로거" ? `Paramma 블로거 · ${parammaCategory}` : contentType,
         project_title: projectTitle || analysis?.recommendedTitle || "새 콘텐츠",
         raw_content: rawContent,
-        memo: "",
+        memo: isShorts ? shortsScript : "",
         recommended_title: analysis?.recommendedTitle || "",
         template_key: "overlay-v7",
         final_title: finalTitle,
@@ -407,7 +489,7 @@ export default function Home() {
       } else {
         setContentType(savedType);
       }
-      setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setAnalysis(p.analysis_json);
+      setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setShortsScript(savedType === "집값쓱 쇼츠" ? (p.memo || "") : ""); setAnalysis(p.analysis_json);
       setTasks((imgs || []).map((x: any) => ({ order: x.order_no, title: x.section_title, keyMessage: x.key_message, sourceText: x.source_text, imagePrompt: x.image_prompt, imageDataUrl: x.image_url, imageUrl: x.image_url, done: x.status === "done", replaced: x.replaced })));
       setCurrentIndex(0); setPhase((imgs || []).length ? "images" : "analysis");
     } catch (e: any) { setError(e.message || "불러오기 실패"); }
@@ -483,15 +565,56 @@ export default function Home() {
         <div className="box"><h3>{contentType === "Paramma 블로거" ? `✨ ${parammaCategory} · 추천 발행 순서 10개` : "✨ 시작용 주제 추천"}</h3>{contentType === "Paramma 블로거" && <p className="muted">1번부터 10번까지 순서대로 진행하고, 모두 끝나면 다음 10개로 교체해서 이어갈 수 있습니다.</p>}<div className="recommendGrid">{(RECOMMENDATIONS[effectiveContentType] || []).map((item, i) => <button key={item.title} className="recommend" onClick={() => applyRecommendation(item)}><span>{i + 1}</span><div><b>{item.title}</b><small>{item.brief}</small></div></button>)}</div></div>
         <label>작업 제목</label><input value={projectTitle} onChange={e => setProjectTitle(e.target.value)} placeholder="예: 송도 아파트 시세" />
         <label>본문</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="본문을 붙여넣으세요. 30자 이상이면 분석할 수 있습니다." />
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><button className="primary" disabled={rawContent.trim().length < 30 || loading} onClick={analyze}>{loading ? "분석 중..." : "본문 분석"}</button></div>
+        {isShorts && <div className="box">
+          <div className="miniHead"><h3>① 쇼츠 대본</h3><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 대본 요청서 복사</button></div>
+          <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.5배속 · 공백 제외 210~225자 · 30~33초입니다.</p>
+          <label>완성 대본</label>
+          <textarea className="smallArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 완성 내레이션을 붙여넣으세요." />
+          <div className="tags">
+            <span>1.5x</span>
+            <span>목표 30~33초</span>
+            <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>공백 제외 {shortsCharCount}/210~225자</span>
+            {shortsCharCount > 0 && <span>글자수 기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
+          </div>
+          <p className="muted">예상 시간은 글자수 기준 참고값입니다. 최종 길이는 실제 1.5배속 TTS 파일을 기준으로 확인합니다.</p>
+        </div>}
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><button className="primary" disabled={rawContent.trim().length < 30 || loading || (isShorts && shortsScript.trim().length < 50)} onClick={analyze}>{loading ? "분석 중..." : isShorts ? "쇼츠 요청서 구성" : "본문 분석"}</button></div>
       </>}
 
-      {phase === "analysis" && analysis && <>
+      {phase === "analysis" && analysis && (isShorts ? <>
+        <div className="sectionHead"><div><h2>집값쓱 쇼츠 제작 요청서</h2><p>각 요청서를 따로 복사해 GPT에 병렬로 요청하고, 새 이미지는 최대 2~3장만 만듭니다.</p></div><span className="counter">대본 {shortsCharCount}자</span></div>
+        <div className="tags">
+          <span>음성 1.5x</span>
+          <span>목표 30~33초</span>
+          <span>6~7장면</span>
+          <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : "warn"}>{shortsCharCount >= 210 && shortsCharCount <= 225 ? "대본 길이 적정" : "대본 길이 조정 권장"}</span>
+        </div>
+        <div className="grid2">
+          <div className="box">
+            <div className="miniHead"><h3>② 무음용 화면 문구·자막</h3><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "무음용 화면 문구·자막 요청서를 복사했습니다.")}>📋 요청서 복사</button></div>
+            <p className="muted">소리 없이 봐도 이해되도록 6~7장면의 큰 핵심 문구와 짧은 하단 자막을 설계합니다. 새 이미지는 2~3장만 쓰도록 요청합니다.</p>
+          </div>
+          <div className="box">
+            <div className="miniHead"><h3>④ TTS 원고</h3><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "1.5배속 TTS용 원고를 복사했습니다.")}>📋 원고 복사</button></div>
+            <div className="recommended">{shortsScript}</div>
+            <p className="muted">음성 프로그램에서는 1.5배속을 기본값으로 사용합니다.</p>
+          </div>
+        </div>
+        <div className="box">
+          <div className="miniHead"><h3>③ 새 이미지 요청서 · 최대 {tasks.length}장</h3><span className="muted">나머지 장면은 재사용·숫자 카드·고정 엔딩</span></div>
+          {tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => copyPrompt(t)}>📋 요청서 복사</button></div>)}
+        </div>
+        <div className="grid2">
+          <div className="box"><h3>⑤ BGM 추천</h3><div className="recommended">{shortsBgm.label}</div><p className="muted">{shortsBgm.note}</p><p className="muted">보컬 없는 BGM을 쓰고, 내레이션 구간에서는 음량을 낮춰 화면 문구와 음성을 방해하지 않게 합니다.</p></div>
+          <div className="box"><div className="miniHead"><h3>⑥ 유튜브 업로드 문구</h3><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 문구 요청서를 복사했습니다.")}>📋 요청서 복사</button></div><p className="muted">제목 3개 · 설명 · 해시태그 · 고정댓글을 한 번에 요청합니다.</p></div>
+        </div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>대본 수정</button><button className="primary" onClick={() => setPhase("images")}>이미지 2~3장 작업</button></div>
+      </> : <>
         <div className="sectionHead"><div><h2>이미지 제작 계획</h2><p>숫자와 문구를 먼저 확정한 뒤 이미지 배경을 준비합니다.</p></div><span className="counter">총 {tasks.length}장</span></div>
         <div className="grid2"><div className="box"><h3>추천 제목</h3><div className="recommended">{analysis.recommendedTitle}</div><div className="candidateList">{analysis.titleCandidates?.slice(0, 5).map(t => <button key={t} onClick={() => setFinalTitle(t)}>{t}</button>)}</div></div><div className="box"><h3>본문에서 찾은 핵심 숫자</h3><div className="tags">{analysis.facts?.length ? analysis.facts.map(f => <span key={f.value}>{f.value}</span>) : <span>숫자 정보 없음</span>}</div><p className="muted">이미지에는 원문에 있는 숫자만 사용하도록 검수합니다.</p></div></div>
         <div className="box"><h3>이미지 구성</h3>{tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div></div>)}</div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>본문 수정</button><button className="primary" onClick={() => setPhase("images")}>이미지 작업 시작</button></div>
-      </>}
+      </>)}
 
       {phase === "images" && current && <>
         <div className="sectionHead"><div><h2>이미지 일괄 정리</h2><p>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
