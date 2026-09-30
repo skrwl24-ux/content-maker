@@ -633,8 +633,12 @@ export default function Home() {
       const next = [...tasks];
       for (let i = 0; i < Math.min(sorted.length, next.length); i++) {
         const src = await fileToDataUrl(sorted[i]);
-        const composed = await composeImage(src, next[i], contentType);
-        next[i] = { ...next[i], sourceDataUrl: src, imageDataUrl: composed, replaced: true, done: true };
+        if (isShorts) {
+          next[i] = { ...next[i], sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true };
+        } else {
+          const composed = await composeImage(src, next[i], contentType);
+          next[i] = { ...next[i], sourceDataUrl: src, imageDataUrl: composed, replaced: true, done: true };
+        }
       }
       setTasks(next);
       setCurrentIndex(0);
@@ -647,8 +651,12 @@ export default function Home() {
     setLoading(true); setError("");
     try {
       const src = await fileToDataUrl(file);
-      const composed = await composeImage(src, current, contentType);
-      updateTask(currentIndex, { sourceDataUrl: src, imageDataUrl: composed, replaced: true, done: true });
+      if (isShorts) {
+        updateTask(currentIndex, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true });
+      } else {
+        const composed = await composeImage(src, current, contentType);
+        updateTask(currentIndex, { sourceDataUrl: src, imageDataUrl: composed, replaced: true, done: true });
+      }
     } catch (e: any) { setError(e.message || "이미지 처리에 실패했습니다."); }
     finally { setLoading(false); }
   }
@@ -806,7 +814,7 @@ export default function Home() {
     {error && <div className="error">{error}</div>}
 
     <section className="panel">
-      <div className="steps">{(isShorts ? ["자료", "대본", "장면표", "이미지", "제작완료"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
+      <div className="steps">{(isShorts ? ["자료", "대본", "장면표", "제작자료", "GPT 제작"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
         const active = isShorts
           ? (((phase === "home" || phase === "input") && i === 0) || (phase === "script" && i === 1) || (phase === "analysis" && i === 2) || (phase === "images" && i === 3) || ((phase === "review" || phase === "done") && i === 4))
           : (((phase === "home" || phase === "input") && i === 0) || (phase === "analysis" && i === 1) || (phase === "images" && i === 2) || (phase === "review" && i === 3) || (phase === "done" && i === 4));
