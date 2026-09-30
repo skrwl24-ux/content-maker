@@ -136,9 +136,9 @@ const SAMPLE: ApartmentData = {
 };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
-  bulk: { label: "아파트 대량발행", short: "대량발행" },
-  top3: { label: "TOP3 유입글", short: "TOP3" },
-  tip: { label: "아파트 꿀팁", short: "꿀팁" },
+  bulk: { label: "아파트 대량발행", short: "단지" },
+  top3: { label: "지역 TOP3", short: "TOP3" },
+  tip: { label: "검색형 콘텐츠", short: "검색형" },
   moving: { label: "이사 체크리스트", short: "이사체크" },
   compare: { label: "지역·단지 비교글", short: "비교글" },
   power: { label: "파워글 · 주력 콘텐츠", short: "파워글" },
@@ -164,6 +164,45 @@ const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
   },
 };
 
+const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
+  top3: [
+    "수원 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "용인 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "성남 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "군포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "광명 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "안양 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "김포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  ],
+  tip: [
+    "달러 환율은 왜 움직일까? 미국 금리와 원화의 관계",
+    "미국 국채금리가 오르면 주식시장은 왜 흔들릴까?",
+    "ETF와 펀드는 뭐가 다를까? 초보자가 알아야 할 차이",
+    "전세가율이 높으면 집값에는 어떤 의미일까?",
+    "실거래가와 호가는 왜 다를까?",
+    "용적률과 건폐율, 아파트 볼 때 왜 중요할까?",
+    "금리 인하가 시작되면 예금·채권·주식은 어떻게 달라질까?",
+  ],
+  power: [
+    "달러 강세가 이어질 때 한국 증시와 원화는 어떻게 움직일까?",
+    "미국 기준금리 변화가 한국 집값과 환율에 미치는 영향",
+    "미국 국채금리와 나스닥은 왜 반대로 움직일 때가 많을까?",
+    "금·달러·채권이 동시에 움직일 때 돈은 어디로 가고 있을까?",
+    "비트코인과 미국 유동성은 어떤 관계가 있을까?",
+    "코스피 상승을 외국인 수급과 환율로 읽는 법",
+  ],
+};
+
+function dailyTopicSeed(dateKey: string, slotId: number) {
+  return (dateKey + "-" + slotId).split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function getDailyTopicSuggestion(type: DailyContentType, dateKey: string, slotId: number) {
+  const pool = DAILY_TOPIC_POOLS[type] || [];
+  if (!pool.length) return "";
+  return pool[dailyTopicSeed(dateKey, slotId) % pool.length];
+}
+
 const WORK_IMAGE_META: Record<WorkImageSlot, { label: string; role: string; width: number; height: number }> = {
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254 },
   "01": { label: "핵심 정보", role: "본문 핵심 정보 이미지", width: 1600, height: 900 },
@@ -185,10 +224,11 @@ function makeDailySlots(dateKey: string) {
   const plan = DAILY_TOPIC_PLANS[dateKey] || {};
   return DEFAULT_DAILY_SLOTS.map((slot) => {
     const planned = plan[slot.id];
+    const type = planned?.type || slot.type;
     return {
       ...slot,
-      type: planned?.type || slot.type,
-      topic: planned?.topic || "",
+      type,
+      topic: planned?.topic || getDailyTopicSuggestion(type, dateKey, slot.id),
       workId: createWorkId(dateKey, slot.id),
     };
   });
@@ -2015,14 +2055,15 @@ export default function ApartmentBulkPage() {
           const planned = plan[index + 1];
           const savedType = validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type;
           const savedTopic = typeof slot?.topic === "string" ? slot.topic.trim() : "";
+          const resolvedType = savedTopic ? savedType : (planned?.type || savedType);
           return {
             id: index + 1,
-            type: savedTopic ? savedType : (planned?.type || savedType),
+            type: resolvedType,
             done: Boolean(slot?.done),
             workId: typeof slot?.workId === "string" && slot.workId
               ? slot.workId
               : createWorkId(dateKey, index + 1),
-            topic: savedTopic || planned?.topic || "",
+            topic: savedTopic || planned?.topic || getDailyTopicSuggestion(resolvedType, dateKey, index + 1),
           };
         });
         setDailySlots(normalized);
@@ -2221,8 +2262,25 @@ export default function ApartmentBulkPage() {
   }
 
   function updateDailyType(id: number, type: DailyContentType) {
-    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, type } : slot));
-    if (activeWorkSlot?.id === id) setActiveWorkType(type);
+    const nextTopic = getDailyTopicSuggestion(type, dailyDateKey || new Date().toISOString().slice(0, 10), id);
+    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, type, topic: nextTopic } : slot));
+    if (activeWorkSlot?.id === id) {
+      setActiveWorkType(type);
+      setWorkTopic(nextTopic);
+    }
+  }
+
+  function recommendAnotherTopic(id: number) {
+    const slot = dailySlots.find((item) => item.id === id);
+    if (!slot) return;
+    const pool = DAILY_TOPIC_POOLS[slot.type] || [];
+    if (!pool.length) return;
+    const currentIndex = pool.indexOf(slot.topic || "");
+    const fallback = dailyTopicSeed(dailyDateKey || "today", id) % pool.length;
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % pool.length : (fallback + 1) % pool.length;
+    const topic = pool[nextIndex];
+    saveDailySlots(dailySlots.map((item) => item.id === id ? { ...item, topic } : item));
+    if (activeWorkSlot?.id === id) setWorkTopic(topic);
   }
 
   function toggleDailyDone(id: number) {
@@ -2677,12 +2735,12 @@ export default function ApartmentBulkPage() {
         <div className={styles.dailyBoardHead}>
           <div>
             <p className={styles.eyebrow}>TODAY · 7 POSTS</p>
-            <h2>오늘 집값쓱 발행 <strong>{dailyDoneCount}/7</strong></h2>
-            <span>{dailyDateKey || "오늘"} · 7개 완료하면 아파트 블로그 작업 종료</span>
+            <h2>오늘의 7개 <strong>{dailyDoneCount}/7</strong></h2>
+            <span>{dailyDateKey || "오늘"} · 단지 4 + TOP3 1 + 검색형 1 + 파워글 1</span>
           </div>
           <div className={styles.dailyBoardActions}>
-            <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "🎉 오늘 할당 완료" : nextDailySlot ? `다음: ${nextDailySlot.id}번 · ${DAILY_TYPE_META[nextDailySlot.type].short}` : "오늘 할당 완료"}</div>
-            <button type="button" onClick={resetDailyBoard}>오늘판 초기화</button>
+            <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "🎉 오늘 발행 완료" : nextDailySlot ? `다음 · ${nextDailySlot.id}번 ${DAILY_TYPE_META[nextDailySlot.type].short}` : "오늘 발행 완료"}</div>
+            <button type="button" onClick={resetDailyBoard}>초기화</button>
           </div>
         </div>
 
@@ -2691,10 +2749,60 @@ export default function ApartmentBulkPage() {
         </div>
 
         <div className={styles.dailySlots}>
-          {dailySlots.map((slot) => (
-            <article key={slot.id} className={slot.done ? styles.dailySlotDone : styles.dailySlot}>
-              <div className={styles.dailySlotNumber}>{slot.done ? "✓" : slot.id}</div>
-              <div className={styles.dailySlotMain}>
+          {dailySlots.map((slot) => {
+            const canRecommend = Boolean((DAILY_TOPIC_POOLS[slot.type] || []).length);
+            const title = slot.type === "bulk"
+              ? "단지 후보를 골라 실거래 흐름 분석"
+              : slot.topic || "주제 직접 입력";
+            const description =
+              slot.type === "bulk" ? "가격·거래 변화가 있는 단지를 선택" :
+              slot.type === "top3" ? "지역 검색 유입을 노리는 순위형 글" :
+              slot.type === "tip" ? "오래 검색되는 부동산·재테크 정보" :
+              slot.type === "power" ? "당일 시장 흐름을 깊게 설명" :
+              DAILY_TYPE_META[slot.type].label;
+
+            return (
+              <article key={slot.id} className={slot.done ? styles.dailySlotDone : styles.dailySlot}>
+                <div className={styles.dailySlotTop}>
+                  <div className={styles.dailySlotNumber}>{slot.done ? "✓" : String(slot.id).padStart(2, "0")}</div>
+                  <span className={styles.dailyTypeChip}>{DAILY_TYPE_META[slot.type].short}</span>
+                  {canRecommend && (
+                    <button type="button" className={styles.dailyReroll} onClick={() => recommendAnotherTopic(slot.id)}>
+                      다른 주제
+                    </button>
+                  )}
+                </div>
+                <div className={styles.dailySlotMain}>
+                  <b className={styles.dailySlotTitle}>{title}</b>
+                  <small>{description}</small>
+                </div>
+                <div className={styles.dailySlotActions}>
+                  <button
+                    type="button"
+                    className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
+                    onClick={() => void openDailyWork(slot)}
+                  >
+                    {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
+                  </button>
+                  <button
+                    type="button"
+                    className={slot.done ? styles.dailyUndo : styles.dailyComplete}
+                    onClick={() => toggleDailyDone(slot.id)}
+                  >
+                    {slot.done ? "취소" : "완료"}
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <details className={styles.dailySettings}>
+          <summary>구성 직접 바꾸기</summary>
+          <div className={styles.dailySettingsGrid}>
+            {dailySlots.map((slot) => (
+              <label key={slot.id}>
+                <span>{slot.id}번</span>
                 <select
                   aria-label={`${slot.id}번 발행 유형`}
                   value={slot.type}
@@ -2704,42 +2812,10 @@ export default function ApartmentBulkPage() {
                     <option key={type} value={type}>{DAILY_TYPE_META[type].label}</option>
                   ))}
                 </select>
-                {slot.topic && <span className={styles.dailyTopic}>{slot.topic}</span>}
-                <small>
-                  {slot.type === "bulk" ? "단지 데이터 기반 자동 주제" :
-                   slot.type === "top3" ? "조회 유입용 지역 TOP3" :
-                   slot.type === "tip" ? "검색형 에버그린 정보" :
-                   slot.type === "moving" ? "이사 전·후 실용 체크" :
-                   slot.type === "compare" ? "지역·단지 차이를 비교" :
-                   "시간을 더 쓰는 주력 콘텐츠"}
-                </small>
-                <code className={styles.dailyWorkId}>{slot.workId || "작업 ID 준비 중"}</code>
-              </div>
-              <div className={styles.dailySlotActions}>
-                <button
-                  type="button"
-                  className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
-                  onClick={() => void openDailyWork(slot)}
-                >
-                  {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
-                </button>
-                <button
-                  type="button"
-                  className={slot.done ? styles.dailyUndo : styles.dailyComplete}
-                  onClick={() => toggleDailyDone(slot.id)}
-                >
-                  {slot.done ? "완료 취소" : "완료"}
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className={dailyBulkCount > 4 ? styles.dailyWarning : styles.dailyRule}>
-          {dailyBulkCount > 4
-            ? `대량발행이 ${dailyBulkCount}개입니다. 4개를 넘으면 꿀팁·비교글·파워글로 바꾸는 걸 권장합니다.`
-            : `현재 대량발행 ${dailyBulkCount}개 · 나머지는 TOP3/꿀팁/비교/파워글로 구성합니다.`}
-        </div>
+              </label>
+            ))}
+          </div>
+        </details>
       </section>
       )}
 
