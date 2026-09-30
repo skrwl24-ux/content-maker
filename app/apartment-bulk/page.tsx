@@ -31,6 +31,7 @@ type DailySlot = {
   type: DailyContentType;
   done: boolean;
   workId: string;
+  topic?: string;
 };
 type DailyWorkSnapshot = {
   top3?: Top3Work;
@@ -146,6 +147,16 @@ const DEFAULT_DAILY_SLOTS: DailySlot[] = [
   { id: 7, type: "power", done: false, workId: "" },
 ];
 
+type DailyTopicPlan = Partial<Record<number, { type: DailyContentType; topic: string }>>;
+
+const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
+  "2026-09-30": {
+    4: { type: "tip", topic: "2026년 10월 공모주 일정 총정리｜청약일·상장일 한눈에 보기" },
+    6: { type: "tip", topic: "금시세 왜 움직일까? 달러와 금리가 금값에 미치는 영향" },
+    7: { type: "power", topic: "엔화 환율 왜 다시 움직이나? 일본 금리와 달러로 보는 엔화 흐름" },
+  },
+};
+
 const WORK_DB_NAME = "jibssuk-apartment-work-v1";
 const WORK_STORE_NAME = "dailyWorks";
 
@@ -158,10 +169,16 @@ function createWorkId(dateKey: string, slotId: number) {
 }
 
 function makeDailySlots(dateKey: string) {
-  return DEFAULT_DAILY_SLOTS.map((slot) => ({
-    ...slot,
-    workId: createWorkId(dateKey, slot.id),
-  }));
+  const plan = DAILY_TOPIC_PLANS[dateKey] || {};
+  return DEFAULT_DAILY_SLOTS.map((slot) => {
+    const planned = plan[slot.id];
+    return {
+      ...slot,
+      type: planned?.type || slot.type,
+      topic: planned?.topic || "",
+      workId: createWorkId(dateKey, slot.id),
+    };
+  });
 }
 
 function openWorkDb(): Promise<IDBDatabase> {
@@ -1471,14 +1488,21 @@ export default function ApartmentBulkPage() {
       const saved = raw ? JSON.parse(raw) : null;
       if (Array.isArray(saved) && saved.length === 7) {
         const validTypes = new Set(Object.keys(DAILY_TYPE_META));
-        const normalized = saved.map((slot, index) => ({
-          id: index + 1,
-          type: validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type,
-          done: Boolean(slot?.done),
-          workId: typeof slot?.workId === "string" && slot.workId
-            ? slot.workId
-            : createWorkId(dateKey, index + 1),
-        }));
+        const plan = DAILY_TOPIC_PLANS[dateKey] || {};
+        const normalized = saved.map((slot, index) => {
+          const planned = plan[index + 1];
+          const savedType = validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type;
+          const savedTopic = typeof slot?.topic === "string" ? slot.topic.trim() : "";
+          return {
+            id: index + 1,
+            type: savedTopic ? savedType : (planned?.type || savedType),
+            done: Boolean(slot?.done),
+            workId: typeof slot?.workId === "string" && slot.workId
+              ? slot.workId
+              : createWorkId(dateKey, index + 1),
+            topic: savedTopic || planned?.topic || "",
+          };
+        });
         setDailySlots(normalized);
         window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(normalized));
       } else {
@@ -1829,7 +1853,7 @@ export default function ApartmentBulkPage() {
         markWorkStarted(slot.workId);
         setWorkSaveMessage("저장된 작업 복원됨");
       } else {
-        setWorkTopic("");
+        setWorkTopic(slot.topic || "");
         setWorkMaterials("");
         setWorkBody("");
         setWorkImageNotes("");
@@ -2120,6 +2144,7 @@ export default function ApartmentBulkPage() {
                     <option key={type} value={type}>{DAILY_TYPE_META[type].label}</option>
                   ))}
                 </select>
+                {slot.topic && <span className={styles.dailyTopic}>{slot.topic}</span>}
                 <small>
                   {slot.type === "bulk" ? "단지 데이터 기반 자동 주제" :
                    slot.type === "top3" ? "조회 유입용 지역 TOP3" :
