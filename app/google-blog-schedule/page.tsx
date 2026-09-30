@@ -65,6 +65,23 @@ type SimilarTopic = SeoTopicCandidate & {
   level: "high" | "medium";
 };
 
+type RollingTopicSeed = {
+  title: string;
+  keyword: string;
+  slug: string;
+  note: string;
+};
+
+type GooglePublishHistoryItem = {
+  normalized_key: string;
+  title: string;
+  keyword: string | null;
+  url: string | null;
+  slug: string | null;
+  scheduled_date: string | null;
+  published_on: string | null;
+};
+
 const IMAGE_SLOTS = [
   { id: "00", label: "대표 이미지", role: "글의 핵심 제품·국가·가격 주제를 한눈에 보여주는 대표 비주얼" },
   { id: "01", label: "가격 요약", role: "현재 확인된 가격과 통화, 기준 시점을 간결하게 보여주는 정보 이미지" },
@@ -114,6 +131,41 @@ const DEFAULT_ROWS: ScheduleRow[] = [
   { id: "2026-10-12-1", date: "2026-10-12", title: "AI Subscription Price Comparison by Country 2026: ChatGPT, Claude & Gemini", keyword: "AI subscription prices by country", status: "예정", url: "", slug: "ai-subscription-price-comparison-by-country-2026", relatedIds: ["2026-10-05-1","2026-10-02-1","2026-10-09-1","2026-09-29-1"], note: "종합 데이터형 · 국가·서비스별 가격을 동일 기준으로 비교하는 장기 업데이트 페이지" },
 ];
 
+const ROLLING_TOPIC_POOL: RollingTopicSeed[] = [
+  { title: "ChatGPT Plus Price in Australia 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Australia price", slug: "chatgpt-plus-price-australia-2026", note: "국가 가격 검증형 · AUD · 웹/앱 가격 · 세금 포함 여부를 최신 공식 자료로 확인" },
+  { title: "ChatGPT Plus Price in Canada 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus Canada price", slug: "chatgpt-plus-price-canada-2026", note: "국가 가격 검증형 · CAD · 웹/앱 · 세금 표시 방식 확인" },
+  { title: "ChatGPT Plus Price in the UK 2026: Web, App & VAT Guide", keyword: "ChatGPT Plus UK price", slug: "chatgpt-plus-price-uk-2026", note: "국가 가격 검증형 · GBP · VAT · 웹/앱 결제 차이 확인" },
+  { title: "ChatGPT Plus Price in Hong Kong 2026: Web, iOS & Android", keyword: "ChatGPT Plus Hong Kong price", slug: "chatgpt-plus-price-hong-kong-2026", note: "국가 가격 검증형 · HKD 표시 여부 · 플랫폼별 결제 차이 확인" },
+  { title: "ChatGPT Plus Price in India 2026: Web, App & Billing Guide", keyword: "ChatGPT Plus India price", slug: "chatgpt-plus-price-india-2026", note: "국가 가격 검증형 · INR · 웹/앱 · 세금·결제수단 최신 확인" },
+  { title: "ChatGPT Plus Price in Indonesia 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus Indonesia price", slug: "chatgpt-plus-price-indonesia-2026", note: "국가 가격 검증형 · IDR · 세금 · 웹/앱 가격 차이 확인" },
+  { title: "ChatGPT Plus Price in Malaysia 2026: Web, App & Billing Guide", keyword: "ChatGPT Plus Malaysia price", slug: "chatgpt-plus-price-malaysia-2026", note: "국가 가격 검증형 · MYR · 웹/앱 · 실제 결제 단계 확인" },
+  { title: "ChatGPT Plus Price in the Philippines 2026: Web, App & Tax", keyword: "ChatGPT Plus Philippines price", slug: "chatgpt-plus-price-philippines-2026", note: "국가 가격 검증형 · PHP · 웹/앱 · 세금 표시 방식 확인" },
+  { title: "ChatGPT Plus Price in Thailand 2026: Web, iOS & Android", keyword: "ChatGPT Plus Thailand price", slug: "chatgpt-plus-price-thailand-2026", note: "국가 가격 검증형 · THB · 플랫폼별 가격과 결제 방식 확인" },
+  { title: "ChatGPT Plus Price in the UAE 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus UAE price", slug: "chatgpt-plus-price-uae-2026", note: "국가 가격 검증형 · AED · VAT · 웹/앱 결제 차이 확인" },
+  { title: "Claude Pro Price in Singapore 2026: Web, App & Billing Guide", keyword: "Claude Pro Singapore price", slug: "claude-pro-price-singapore-2026", note: "국가 가격 검증형 · SGD · 공식 웹 가격 · 앱 결제 가능 여부 최신 확인" },
+  { title: "Claude Pro Price in Taiwan 2026: Web, App & Billing Guide", keyword: "Claude Pro Taiwan price", slug: "claude-pro-price-taiwan-2026", note: "국가 가격 검증형 · TWD · 웹/앱 · 세금 표시 방식 확인" },
+  { title: "Claude Pro Price in Australia 2026: Web, App & Tax Guide", keyword: "Claude Pro Australia price", slug: "claude-pro-price-australia-2026", note: "국가 가격 검증형 · AUD · 웹 가격 · 세금·결제 차이 확인" },
+  { title: "Claude Pro Price in Canada 2026: Web, App & Tax Guide", keyword: "Claude Pro Canada price", slug: "claude-pro-price-canada-2026", note: "국가 가격 검증형 · CAD · 웹/앱 · 세금 최신 확인" },
+  { title: "Claude Pro Price in the UK 2026: Web, App & VAT Guide", keyword: "Claude Pro UK price", slug: "claude-pro-price-uk-2026", note: "국가 가격 검증형 · GBP · VAT · 결제 방식 확인" },
+  { title: "Claude Pro Price in India 2026: Web, App & Billing Guide", keyword: "Claude Pro India price", slug: "claude-pro-price-india-2026", note: "국가 가격 검증형 · INR · 공식 가격과 결제수단 최신 확인" },
+  { title: "Google AI Pro Price in Japan 2026: Plans, Tax & Payment", keyword: "Google AI Pro Japan price", slug: "google-ai-pro-price-japan-2026", note: "Google AI 요금제 검증형 · JPY · 월간/연간 표시 · 세금·결제 방식 확인" },
+  { title: "Google AI Pro Price in Singapore 2026: Plans, Tax & Payment", keyword: "Google AI Pro Singapore price", slug: "google-ai-pro-price-singapore-2026", note: "Google AI 요금제 검증형 · SGD · 플랜 가격 · 세금·결제 방식 확인" },
+  { title: "Google AI Pro Price in Taiwan 2026: Plans, Tax & Payment", keyword: "Google AI Pro Taiwan price", slug: "google-ai-pro-price-taiwan-2026", note: "Google AI 요금제 검증형 · TWD · 플랜 가격과 결제 조건 확인" },
+  { title: "Google AI Pro Price in Australia 2026: Plans, Tax & Payment", keyword: "Google AI Pro Australia price", slug: "google-ai-pro-price-australia-2026", note: "Google AI 요금제 검증형 · AUD · 플랜·세금·결제 방식 확인" },
+  { title: "Google AI Pro Price in Canada 2026: Plans, Tax & Payment", keyword: "Google AI Pro Canada price", slug: "google-ai-pro-price-canada-2026", note: "Google AI 요금제 검증형 · CAD · 플랜·세금·결제 방식 확인" },
+  { title: "Google AI Pro Price in the UK 2026: Plans, VAT & Payment", keyword: "Google AI Pro UK price", slug: "google-ai-pro-price-uk-2026", note: "Google AI 요금제 검증형 · GBP · VAT · 월간/연간 결제 조건 확인" },
+  { title: "Google AI Pro Price in India 2026: Plans, Tax & Payment", keyword: "Google AI Pro India price", slug: "google-ai-pro-price-india-2026", note: "Google AI 요금제 검증형 · INR · 플랜·세금·결제 방식 확인" },
+  { title: "AI Subscription Prices in Singapore 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Singapore", slug: "ai-subscription-prices-singapore-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 SGD 기준으로 비교" },
+  { title: "AI Subscription Prices in Taiwan 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Taiwan", slug: "ai-subscription-prices-taiwan-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 TWD 기준으로 비교" },
+  { title: "AI Subscription Prices in Australia 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Australia", slug: "ai-subscription-prices-australia-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 AUD 기준으로 비교" },
+  { title: "AI Subscription Prices in Canada 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Canada", slug: "ai-subscription-prices-canada-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 CAD 기준으로 비교" },
+  { title: "AI Subscription Prices in the UK 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price UK", slug: "ai-subscription-prices-uk-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·VAT·결제 방식을 GBP 기준으로 비교" },
+  { title: "AI Subscription Prices in India 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price India", slug: "ai-subscription-prices-india-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 INR 기준으로 비교" },
+  { title: "ChatGPT Plus Refund Guide 2026: Web, Apple & Google Play", keyword: "ChatGPT Plus refund", slug: "chatgpt-plus-refund-guide-2026", note: "문제 해결형 · 웹·Apple·Google Play 환불 경로를 공식 도움말 기준으로 구분" },
+  { title: "Claude Pro Billing Guide 2026: Invoice, Tax and Payment Methods", keyword: "Claude Pro billing guide", slug: "claude-pro-billing-guide-2026", note: "결제 가이드형 · 청구서·세금·지원 결제수단을 공식 문서 기준으로 정리" },
+  { title: "Google AI Pro Billing Guide 2026: Monthly, Annual, Tax & Payment", keyword: "Google AI Pro billing guide", slug: "google-ai-pro-billing-guide-2026", note: "결제 가이드형 · 월간/연간 옵션·세금·결제수단을 지역별 차이와 함께 확인" }
+];
+
 function todayLocal() {
   const d = new Date();
   const y = d.getFullYear();
@@ -122,13 +174,29 @@ function todayLocal() {
   return `${y}-${m}-${day}`;
 }
 
-function nextDate(value: string) {
+function shiftDate(value: string, days: number) {
   const d = new Date(`${value}T12:00:00`);
-  d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + days);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function nextDate(value: string) {
+  return shiftDate(value, 1);
+}
+
+function normalizeGoogleTopic(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\b20\d{2}\b/g, "")
+    .replace(/[^a-z0-9가-힣]+/g, "");
+}
+
+function rollingSeed(value: string) {
+  return value.split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
 }
 
 function dayLabel(value: string) {
