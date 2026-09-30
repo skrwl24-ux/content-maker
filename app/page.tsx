@@ -227,8 +227,32 @@ export default function Home() {
   const effectiveContentType = contentType === "Paramma 블로거" ? parammaCategory : contentType;
   const isShorts = contentType === "집값쓱 쇼츠";
   const preset = PRESETS[contentType] || PRESETS.default;
+  function normalizeShortsVoiceText(text: string) {
+    return text
+      .replace(/(\d+(?:\.\d+)?)\s*억(?![가-힣])/g, (full, raw) => {
+        const value = Number(raw);
+        if (!Number.isFinite(value)) return full;
+        const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
+        const eok = Math.floor(rounded + 1e-9);
+        const tenth = Math.round((rounded - eok) * 10);
+        if (tenth <= 0) return `${eok}억원`;
+        if (eok <= 0) return `${tenth}천만원`;
+        return `${eok}억 ${tenth}천만원`;
+      })
+      .replace(/\s*(?:㎡|m²|m2)\b?/gi, "제곱미터")
+      .replace(/(\d+(?:\.\d+)?)\s*%/g, "$1퍼센트")
+      .replace(/\bTOP\s*3\b/gi, "탑 쓰리")
+      .replace(/\bDSR\b/gi, "디에스알")
+      .replace(/\bLTV\b/gi, "엘티브이")
+      .replace(/\bGTX\b/gi, "지티엑스")
+      .replace(/\bAI\b/gi, "에이아이");
+  }
+
   const shortsCharCount = useMemo(() => shortsScript.replace(/\s/g, "").length, [shortsScript]);
   const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
+  const shortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
+  const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
+  const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
   const shortsBgm = useMemo(() => {
     const text = `${projectTitle} ${rawContent}`;
     if (/(하락|급락|주의|부담|위험|감소|실패)/.test(text)) return { label: "B · 긴장형", note: "하락·주의 포인트에 맞는 보컬 없는 긴장감 있는 리듬" };
@@ -484,8 +508,8 @@ export default function Home() {
       "- 위 형식으로 장면 6~7개만 출력",
       "- 설명, 표, 코드블록, 추가 문장 금지",
       "",
-      "[완성 대본]",
-      shortsScript.trim(),
+      "[AI 음성용 대본]",
+      shortsVoiceScript.trim(),
       "",
       "[원문 자료]",
       rawContent.trim()
@@ -575,12 +599,8 @@ export default function Home() {
       "- 아래 대본 그대로 한국어 내레이션 음성으로 제작",
       "- 부동산 정보 쇼츠에 어울리는 자연스럽고 또렷한 톤",
       "- 광고처럼 과하게 흥분된 톤은 피하고 신뢰감 있게",
-      "- 숫자, 금액, 단지명, 지역명은 특히 정확하게 발음",
-      "- ㎡, m², m2는 반드시 '제곱미터'로 읽을 것",
-      "- 억 단위 소수 가격은 음성에서만 소수점 첫째 자리로 반올림한 뒤 한국식 금액으로 읽을 것",
-      "- 예: 6.93억 → 6.9억 → '6억 9천만원', 7.30억 → '7억 3천만원', 5.69억 → 5.7억 → '5억 7천만원'",
-      "- 화면·자막에 쓰는 원래 숫자는 바꾸지 말고, 음성 발음만 위 규칙으로 자연스럽게 변환할 것",
-      "- %는 '퍼센트', TOP3는 '탑 쓰리', DSR은 '디에스알', LTV는 '엘티브이'처럼 한국에서 통상적으로 읽는 발음 사용",
+      "- 아래 'AI 음성용 대본'은 사이트에서 발음용으로 이미 변환한 최종 원고이므로 숫자·단위·금액 표현을 다시 바꾸지 말 것",
+      "- 숫자, 금액, 단지명, 지역명은 적힌 그대로 정확하게 발음",
       "- 짧고 빠른 정보 전달형 템포",
       "- 가능하면 약 1.5배속 체감 속도로 출력",
       "- 속도 설정이 불가능하면 자연스럽게 읽되 불필요한 긴 호흡은 줄일 것",
