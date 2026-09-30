@@ -8,14 +8,15 @@ type ImagePlan = { order: number; title: string; keyMessage: string; sourceText:
 type Analysis = { recommendedTitle: string; titleCandidates: string[]; keywords: string[]; facts: Fact[]; images: ImagePlan[] };
 type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string; sourceDataUrl?: string; replaced: boolean };
 type Recommendation = { title: string; brief: string };
-type Phase = "home" | "input" | "analysis" | "images" | "review" | "done";
+type ShortsScene = { order: number; headline: string; subtitle: string; screenType: string };
+type Phase = "home" | "input" | "script" | "analysis" | "images" | "review" | "done";
 
 const TYPES = [
   ["🏠", "아파트 블로그", "시세·실거래·TOP3"],
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
-  ["🎬", "집값쓱 쇼츠", "대본·자막·이미지 요청서"],
+  ["🎬", "집값쓱 쇼츠", "자료·대본·장면표·이미지"],
 ] as const;
 
 const PARAMMA_CATEGORIES = [
@@ -210,6 +211,8 @@ export default function Home() {
   const [finalTitle, setFinalTitle] = useState("");
   const [finalBody, setFinalBody] = useState("");
   const [shortsScript, setShortsScript] = useState("");
+  const [shortsSceneText, setShortsSceneText] = useState("");
+  const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -246,6 +249,8 @@ export default function Home() {
         setProjectTitle(String(draft.projectTitle || ""));
         setRawContent(String(draft.rawContent || ""));
         setShortsScript(String(draft.shortsScript || ""));
+        setShortsSceneText(String(draft.shortsSceneText || ""));
+        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes : []);
         setFinalTitle(String(draft.finalTitle || ""));
         setFinalBody(String(draft.finalBody || ""));
         setAnalysis(draft.analysis || null);
@@ -255,8 +260,10 @@ export default function Home() {
           : [];
         setTasks(restoredTasks);
         setCurrentIndex(Math.max(0, Math.min(Number(draft.currentIndex || 0), Math.max(0, restoredTasks.length - 1))));
-        const hasPlan = !!draft.analysis && restoredTasks.length > 0;
-        setPhase(hasPlan ? "analysis" : (draft.rawContent || draft.shortsScript ? "input" : "home"));
+        const savedPhase = String(draft.phase || "");
+        const allowedPhases: Phase[] = ["input", "script", "analysis", "images", "review"];
+        const fallbackPhase: Phase = draft.shortsScenes?.length ? "analysis" : draft.shortsScript ? "script" : draft.rawContent ? "input" : "home";
+        setPhase(allowedPhases.includes(savedPhase as Phase) ? savedPhase as Phase : fallbackPhase);
       }
     } catch {
       try { window.localStorage.removeItem(SHORTS_DRAFT_KEY); } catch {}
@@ -282,6 +289,8 @@ export default function Home() {
       projectTitle,
       rawContent,
       shortsScript,
+      shortsSceneText,
+      shortsScenes,
       finalTitle,
       finalBody,
       analysis,
@@ -291,7 +300,7 @@ export default function Home() {
       savedAt: new Date().toISOString()
     };
     try { window.localStorage.setItem(SHORTS_DRAFT_KEY, JSON.stringify(payload)); } catch {}
-  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
+  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, shortsSceneText, shortsScenes, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
 
   async function refreshSaved() {
     const { supabase } = await ensureAnonymousSession();
@@ -301,7 +310,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -353,14 +362,11 @@ export default function Home() {
     catch { setError("클립보드 복사에 실패했습니다."); }
   }
 
-  async function openGPT(text = "") {
+  function openGPT(text = "") {
     const prompt = text.trim();
-    if (prompt) {
-      try { await navigator.clipboard.writeText(prompt); } catch {}
-      window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(prompt)}`, "_blank", "noopener,noreferrer");
-      return;
-    }
-    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    const url = prompt ? `https://chatgpt.com/?prompt=${encodeURIComponent(prompt)}` : "https://chatgpt.com/";
+    window.open(url, "_blank", "noopener,noreferrer");
+    if (prompt) navigator.clipboard.writeText(prompt).catch(() => {});
   }
 
   function shortsScriptPrompt() {
@@ -400,21 +406,34 @@ export default function Home() {
 
   function shortsSilentPrompt() {
     return [
-      "[집값쓱 쇼츠 무음용 화면 문구·자막 설계]",
+      "[집값쓱 쇼츠 장면표 제작]",
       `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
       "",
       "[목표]",
-      "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 구성",
-      "- 아래 완성 대본을 6~7장면으로 나눌 것",
-      "- 장면마다 ① 큰 핵심 문구 ② 짧은 하단 자막 ③ 화면 방식 을 작성",
-      "- 큰 핵심 문구는 1~2줄, 한 줄은 짧고 크게",
+      "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 6~7장면으로 구성",
+      "- 각 장면은 큰 화면 문구, 짧은 하단 자막, 화면 방식으로 설계",
+      "- 큰 화면 문구는 1~2줄, 한 줄은 짧고 크게",
+      "- 하단 자막은 8~16자 안팎으로 압축",
       "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
-      "- 하단 자막은 내레이션 전체를 복사하지 말고 8~16자 안팎으로 압축",
       "- 새 이미지가 필요한 장면은 전체에서 2~3개만 지정",
-      "- 나머지는 '이미지 재사용', '텍스트 카드', '그래프/숫자 카드', '고정 엔딩' 중 하나로 지정",
-      "- 화면 정보와 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
-      "- 첫 장면은 지역명 + 질문형 후킹이 크게 보이게 구성",
-      "- 마지막 장면은 '[지역명] 집값, 오늘도 집값쓱.' 브랜드 문구가 분명히 보이게 구성",
+      "- 나머지는 반드시 '이미지 재사용', '텍스트 카드', '그래프/숫자 카드', '고정 엔딩' 중 하나 사용",
+      "- 첫 장면은 지역명 + 질문형 후킹",
+      "- 마지막 장면은 '[지역명] 집값, 오늘도 집값쓱.' 브랜드 엔딩",
+      "- 화면 정보와 하단 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
+      "",
+      "[출력 형식 - 반드시 그대로]",
+      "[장면 1]",
+      "큰문구: ...",
+      "하단자막: ...",
+      "화면방식: 새 이미지",
+      "",
+      "[장면 2]",
+      "큰문구: ...",
+      "하단자막: ...",
+      "화면방식: 이미지 재사용",
+      "",
+      "- 위 형식으로 장면 6~7개만 출력",
+      "- 설명, 표, 코드블록, 추가 문장 금지",
       "",
       "[완성 대본]",
       shortsScript.trim(),
@@ -422,6 +441,69 @@ export default function Home() {
       "[원문 자료]",
       rawContent.trim()
     ].join("\n");
+  }
+
+  function parseShortsScenes(text: string): ShortsScene[] {
+    const scenes: ShortsScene[] = [];
+    const re = /\[?장면\s*(\d+)\]?\s*([\s\S]*?)(?=(?:\n\s*)?\[?장면\s*\d+\]?|$)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) {
+      const body = match[2];
+      const headline = body.match(/큰\s*문구\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
+      const subtitle = body.match(/하단\s*자막\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
+      const screenType = body.match(/화면\s*방식\s*[:：]\s*(.+)/)?.[1]?.trim() || "텍스트 카드";
+      if (headline || subtitle) scenes.push({ order: Number(match[1]), headline, subtitle, screenType });
+    }
+    return scenes.sort((a, b) => a.order - b.order).slice(0, 7);
+  }
+
+  function buildShortsImageTasks(scenes: ShortsScene[], previous: Task[] = tasks): Task[] {
+    const imageScenes = scenes.filter(s => s.screenType.includes("새 이미지")).slice(0, 3);
+    return imageScenes.map((scene, index) => {
+      const title = `장면 ${scene.order} · 새 이미지`;
+      const prev = previous.find(t => t.title === title);
+      return {
+        order: index,
+        title,
+        keyMessage: scene.headline,
+        sourceText: scene.subtitle || scene.headline,
+        imagePrompt: `${scene.headline} 내용을 뒷받침하는 대표 세로 배경 이미지. 정보 텍스트는 사이트에서 별도 합성하므로 이미지 안에는 글자를 넣지 않는다.`,
+        done: prev?.done || false,
+        imageDataUrl: prev?.imageDataUrl || "",
+        imageUrl: prev?.imageUrl || "",
+        sourceDataUrl: prev?.sourceDataUrl,
+        replaced: prev?.replaced || false
+      };
+    });
+  }
+
+  function applyShortsSceneText(text: string) {
+    setShortsSceneText(text);
+    const parsed = parseShortsScenes(text);
+    setShortsScenes(parsed);
+    if (parsed.length) {
+      const nextTasks = buildShortsImageTasks(parsed);
+      setTasks(nextTasks);
+      setCurrentIndex(0);
+    }
+  }
+
+  function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
+    setShortsScenes(prev => {
+      const next = prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene);
+      setTasks(buildShortsImageTasks(next));
+      return next;
+    });
+  }
+
+  function openShortsScriptMaker() {
+    setPhase("script");
+    openGPT(shortsScriptPrompt());
+  }
+
+  function openShortsSceneMaker() {
+    setPhase("analysis");
+    openGPT(shortsSilentPrompt());
   }
 
   function shortsUploadPrompt() {
