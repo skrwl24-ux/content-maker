@@ -412,6 +412,8 @@ export default function Home() {
         "- 아래 원문에 실제로 있는 숫자·기간·단지명만 사용할 것",
         "- 데이터가 시계열이면 라인차트, 비교값이면 막대그래프 또는 숫자 카드 중 더 읽기 쉬운 방식 선택",
         "- 그래프는 가능하면 코드로 정확하게 제작하고 숫자·한글 오타가 없게 확인",
+        "- 카드만 덩그러니 놓인 PPT 스타일보다, 해당 아파트를 연상시키는 실제 아파트 배경 위에 주식 시세 앱처럼 선명한 차트·숫자를 오버레이한 스타일을 우선",
+        "- 배경은 차트 가독성을 위해 살짝 어둡게 또는 흐리게 처리하고, 차트는 상단~중앙 영역에 배치",
         "- 원문에 데이터가 부족하면 임의로 보간하거나 숫자를 만들지 말고 숫자 카드로 단순화",
         "- 모바일 쇼츠에서 한눈에 읽히도록 큰 숫자와 짧은 라벨 중심",
         "- 그래프·숫자·핵심 라벨은 화면 상단~중앙 약 70~75% 안에 배치",
@@ -506,9 +508,11 @@ export default function Home() {
       "[목표]",
       "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 6~7장면으로 구성",
       "- 완성 대본의 문장을 새로 쓰지 말고 장면별로 자연스럽게 나눌 것",
-      "- 각 장면은 내레이션, 큰 화면 문구, 짧은 하단 자막, 화면 방식으로 설계",
+      "- 각 장면은 내레이션, 큰 화면 문구, 하단 자막, 화면 방식으로 설계",
+      "- 전체 30초 안팎에서 각 장면이 대체로 3~5초가 되도록 내레이션을 6~7장면에 균등하게 나눌 것",
+      "- 한 장면에 긴 문장을 몰아넣지 말고, 6초 이상 같은 화면이 유지되지 않도록 분할할 것",
       "- 큰 화면 문구는 1~2줄, 한 줄은 짧고 크게",
-      "- 하단 자막은 8~16자 안팎으로 압축",
+      "- 하단 자막은 요약하지 말고 해당 장면의 내레이션 전체 문장을 그대로 사용",
       "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
       "- 새 배경 이미지는 전체에서 최대 2~3개만 지정",
       "- 데이터 비교나 추세가 핵심인 장면은 '그래프/숫자 카드'를 사용",
@@ -653,8 +657,43 @@ export default function Home() {
     return sceneTimeline.map((item, i) => [
       String(i + 1),
       `${formatSrtTime(item.start)} --> ${formatSrtTime(item.end)}`,
-      item.scene.subtitle || item.scene.headline
+      (item.scene.narration || item.scene.subtitle || item.scene.headline).trim()
     ].join("\n")).join("\n\n");
+  }
+
+  function sceneFrameFileName(order: number) {
+    return `${String(order).padStart(2, "0")}_scene.png`;
+  }
+
+  function shortsEditPlanExport() {
+    return sceneTimeline.map(item => {
+      const isGraphic = item.scene.screenType.includes("그래프/숫자 카드");
+      const motion = item.scene.order === 1
+        ? "정지 화면 · 줌/패닝 없음"
+        : isGraphic
+          ? "정지 화면 · 차트 가독성 우선 · 줌/패닝 없음"
+          : "기본 정지 컷 · 필요해도 1~2% 이하의 아주 느린 줌만 허용";
+      return [
+        `장면 ${item.scene.order} · ${item.start.toFixed(1)}~${item.end.toFixed(1)}초`,
+        `파일: ${sceneFrameFileName(item.scene.order)}`,
+        `화면: ${motion}`,
+        `큰 문구: ${item.scene.headline}`,
+        `전체 자막: ${item.scene.narration || item.scene.subtitle || item.scene.headline}`,
+        `원래 화면 방식: ${item.scene.screenType}`
+      ].join("\n");
+    }).join("\n\n");
+  }
+
+  function shortsAudioPlanExport() {
+    return [
+      voiceDuration
+        ? `음성 원본: ${voiceDuration.toFixed(1)}초 → 반드시 1.5배속 → 최종 약 ${finalVoiceDuration.toFixed(1)}초`
+        : "음성: 반드시 1.5배속 적용",
+      "BGM: 보컬 없이 사용하고 내레이션이 항상 명확하게 들리도록 낮게 유지",
+      "권장 BGM 레벨: 내레이션보다 약 18~24dB 낮게 시작하고, 말하는 동안 더 낮춰도 됨",
+      "효과음: 기본적으로 사용하지 않음",
+      "영상 전체 길이는 1.5배속 적용된 음성 길이를 기준으로 맞출 것"
+    ].join("\n");
   }
 
   function shortsTimelineExport() {
@@ -682,35 +721,30 @@ export default function Home() {
 
   function shortsVideoPrompt() {
     return [
-      "[집값쓱 유튜브 쇼츠 영상 제작]",
-      `주제: ${projectTitle || "첨부 자료의 주제"}`,
+      "[집값쓱 유튜브 쇼츠 최종 조립]",
+      `주제: ${projectTitle || "첨부 제작 패키지의 주제"}`,
       "",
-      "[첨부 자료]",
-      "- 제작 패키지 ZIP 또는 개별 이미지 파일",
-      "- 완성 음성 파일",
-      "- 자막/장면표 파일",
-      "- BGM 파일(첨부된 경우)",
+      "[가장 중요한 원칙]",
+      "- 새로 기획하거나 디자인하지 말고, ZIP 안의 완성 프레임·SRT·edit_plan을 그대로 조립하는 작업으로 진행",
+      "- 장면 순서와 시간은 edit_plan.txt를 최우선으로 적용",
+      "- 화면은 01_scene.png, 02_scene.png... 순서의 완성 프레임 PNG를 그대로 사용",
+      "- subtitles_full.srt의 모든 대사를 빠짐없이 하단 자막으로 표시하고 요약하거나 생략하지 말 것",
       "",
-      "[제작 기준]",
-      "- 완성 영상은 1080×1920, 9:16 세로형 YouTube Shorts",
-      voiceDuration ? `- 첨부 음성 원본은 약 ${voiceDuration.toFixed(1)}초이며, 반드시 1.5배속 적용 후 약 ${finalVoiceDuration.toFixed(1)}초를 전체 타임라인 기준으로 사용` : "- 첨부 음성은 반드시 1.5배속 적용 후 전체 타임라인 기준으로 사용",
-      "- scene_plan.txt와 timeline.txt의 장면 순서·시간을 우선 적용",
-      "- 배경 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
-      "- 그래프·숫자 카드 이미지는 숫자가 잘 읽히도록 과한 움직임 없이 안정적으로 표시",
-      "- 큰 화면 문구는 상단 또는 중앙 영역에 배치하고, 이미지의 핵심 피사체를 가리지 않게 할 것",
-      "- 하단 자막은 화면 맨 아래에 붙이지 말고 바닥에서 약 250~350px 위에 배치",
-      "- 하단 자막이 배경 이미지·그래프의 핵심 정보와 겹치지 않도록 첨부 이미지의 하단 25% 안전영역을 우선 사용",
-      "- 맨 아래 약 150~200px은 쇼츠 UI 여유 공간으로 남기고 중요한 문구를 두지 말 것",
-      "- 큰 화면 문구와 하단 자막은 무음으로 봐도 내용을 이해할 수 있게 표시",
-      "- subtitles.srt가 있으면 그 타임코드를 우선 사용하고, 필요할 때만 음성에 맞춰 미세 조정",
-      "- BGM은 내레이션을 방해하지 않도록 낮게 깔고, 음성 구간에서는 자동으로 더 낮춤",
-      "- 제공한 이미지·음성·자막·BGM을 우선 사용하고 불필요한 새 이미지는 만들지 말 것",
-      "- 원문에 없는 가격·날짜·단지명·정책·수치를 추가하지 말 것",
-      "- 마지막은 장면표의 '[지역명] 집값, 오늘도 집값쓱.' 브랜드 엔딩으로 마무리",
-      "- 과한 전환·네온·복잡한 효과는 사용하지 말고 부동산 정보 쇼츠처럼 깔끔하게 편집",
+      "[영상 기준]",
+      "- 1080×1920, 9:16 세로형 YouTube Shorts",
+      voiceDuration ? `- 첨부 음성 원본 약 ${voiceDuration.toFixed(1)}초를 반드시 1.5배속 적용해 약 ${finalVoiceDuration.toFixed(1)}초 타임라인으로 사용` : "- 첨부 음성은 반드시 1.5배속 적용 후 타임라인 기준으로 사용",
+      "- 첫 장면은 완전 정지 화면. 줌인·줌아웃·패닝 금지",
+      "- 그래프·숫자 장면도 정지 화면으로 두고 차트와 숫자 가독성을 최우선",
+      "- 다른 장면도 과한 모션은 금지하고 단순 컷 전환을 기본으로 사용",
+      "- 하단 자막은 화면 맨 아래에 붙이지 말고 바닥에서 약 250~350px 위의 안전영역에 배치",
+      "- 맨 아래 약 150~200px은 쇼츠 UI 여유 공간으로 비워둘 것",
+      "- BGM은 audio_plan.txt 기준으로 음성보다 충분히 낮게 사용",
+      "- 불필요한 새 이미지, 새 차트, 새 문구, 새로운 숫자 생성 금지",
+      "- 장면 사이 화려한 전환효과 금지. 빠르고 단순한 컷 위주",
+      "- 최종 출력은 제공된 음성과 자막이 정확히 끝나는 지점에서 종료",
       "",
-      "[장면표]",
-      shortsSceneExport()
+      "[편집표]",
+      shortsEditPlanExport()
     ].join("\n");
   }
 
@@ -973,7 +1007,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V9 · 쇼츠 제작 패키지</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V10 · 조립형 쇼츠 패키지</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
