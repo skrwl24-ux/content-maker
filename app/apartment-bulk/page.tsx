@@ -824,6 +824,34 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
     blocks.push({ type: "body", text: line });
   }
 
+  if (tableMode === "image" && primaryTimeSeriesTable) {
+    const hasThumbnailSlot = blocks.some(
+      (block) => block.type === "image" && /^\[이미지\s*00(?:\s|·|\])/i.test(block.text)
+    );
+    if (!hasThumbnailSlot) {
+      const titleIndex = blocks.findIndex((block) => block.type === "title");
+      if (titleIndex >= 0) {
+        blocks.splice(titleIndex + 1, 0, { type: "image", text: "[이미지 00 · 썸네일]" });
+      }
+    }
+
+    const hasFlowSlot = blocks.some(
+      (block) => block.type === "image" && /^\[이미지\s*02(?:\s|·|\])/i.test(block.text)
+    );
+    if (!hasFlowSlot) {
+      const chartIndex = blocks.findIndex(
+        (block) => block.type === "image" && /^\[이미지\s*01(?:\s|·|\])/i.test(block.text)
+      );
+      if (chartIndex >= 0) {
+        const nextSectionIndex = blocks.findIndex(
+          (block, blockIndex) => blockIndex > chartIndex && block.type === "subheading"
+        );
+        const insertAt = nextSectionIndex >= 0 ? nextSectionIndex : chartIndex + 1;
+        blocks.splice(insertAt, 0, { type: "image", text: "[이미지 02 · 원인·흐름]" });
+      }
+    }
+  }
+
   return blocks;
 }
 
