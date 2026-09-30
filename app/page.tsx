@@ -971,27 +971,33 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. 제작완료</h2><p>실제 편집할 때 필요한 것만 한곳에 모았습니다.</p></div><span className="counter">{shortsScenes.length}장면 · 이미지 {tasks.length}장</span></div>
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>TTS 원고</h3><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 전체 원고 복사</button></div>
-            <div className="productionText">{shortsScript}</div>
-            <div className="tags"><span>1.5x</span><span>{shortsCharCount}자</span><span>목표 30~33초</span></div>
+        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 만들기</h2><p>제작자료를 ZIP으로 묶고 GPT에는 최종 영상 제작 요청만 보내면 됩니다.</p></div><span className="counter">{voiceDuration ? voiceDuration.toFixed(1) + "초" : "음성 기준"}</span></div>
+
+        <div className="box finalPackageBox">
+          <h3>쇼츠 제작 패키지</h3>
+          <div className="packageGrid">
+            <div><span>이미지</span><b>{imageCount}/{tasks.length}장</b></div>
+            <div><span>음성</span><b>{voiceFile ? "준비됨" : "없음"}</b></div>
+            <div><span>자막</span><b>{shortsScenes.length}장면</b></div>
+            <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
-          <div className="box">
-            <div className="miniHead"><h3>화면 문구·자막</h3><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면별 화면 문구를 복사했습니다.")}>📋 장면표 복사</button></div>
-            <div className="productionScenes">{shortsScenes.map(scene => <div key={scene.order}><b>{scene.order}. {scene.headline}</b><span>{scene.subtitle}</span><small>{scene.screenType}</small></div>)}</div>
-          </div>
+          <p className="muted">ZIP에는 이미지, 음성, BGM, voice_script.txt, scene_plan.txt, subtitles.txt, shorts_request.txt가 들어갑니다.</p>
+          <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "ZIP 만드는 중..." : "📦 쇼츠 제작 패키지 ZIP 다운로드"}</button>
         </div>
-        <div className="grid2">
-          <div className="box"><h3>BGM</h3><div className="recommended">{shortsBgm.label}</div><p className="muted">{shortsBgm.note}</p><p className="muted">보컬 없는 곡을 사용하고 내레이션 중에는 BGM을 낮게 유지합니다.</p></div>
-          <div className="box">
-            <div className="miniHead"><h3>YouTube 업로드</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary compact" onClick={() => openGPT(shortsUploadPrompt())}>GPT에서 만들기 ↗</button></div></div>
-            <p className="muted">제목 3개 · 설명문 · 해시태그 · 고정댓글을 만듭니다.</p>
+
+        <div className="box">
+          <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
+          <div className="requestSummary">
+            <b>1080×1920 · 9:16</b>
+            <span>음성파일을 타임라인 기준으로 사용</span>
+            <span>이미지 줌/패닝 + 무음 이해 가능한 자막</span>
+            <span>BGM은 음성 아래로 낮게</span>
+            <span>마지막은 “오늘도 집값쓱.” 브랜드 엔딩</span>
           </div>
+          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
         </div>
-        <div className="box summaryBox"><b>이미지 준비</b><span>새 이미지 {tasks.length}장 중 {imageCount}장 업로드 · 나머지 장면은 재사용/카드 방식</span></div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>이미지 수정</button><div className="inlineActions"><button className="secondary" onClick={saveCloud} disabled={loading}>☁ 저장</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div></div>
+
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>제작자료 수정</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div>
       </> : <>
         <div className="sectionHead"><div><h2>자동 검수</h2><p>OCR 대신 사이트가 직접 합성한 문구와 원문 데이터를 비교합니다.</p></div></div>
         <div className="reviewGrid"><div className="reviewCard"><span>이미지 업로드</span><b className={imageCount === tasks.length ? "ok" : "warn"}>{imageCount}/{tasks.length}</b><small>빠진 이미지 확인</small></div><div className="reviewCard"><span>확정 완료</span><b className={completeCount === tasks.length ? "ok" : "warn"}>{completeCount}/{tasks.length}</b><small>문구 확인 후 확정</small></div><div className="reviewCard"><span>최종 규격</span><b className="ok">{preset.label}</b><small>업로드 시 자동 변환</small></div></div>
