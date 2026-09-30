@@ -1078,6 +1078,7 @@ export default function GoogleBlogSchedulePage() {
 
       if (remoteRows.length && shouldPreferCloud) {
         setRows(remoteRows);
+        rollingAppliedRef.current = "";
         if (!remoteRows.some(row => row.id === selectedId)) setSelectedId(remoteRows[0].id);
         setCloudUpdatedAt(remoteUpdatedAt);
       } else {
@@ -1161,7 +1162,10 @@ export default function GoogleBlogSchedulePage() {
       return false;
     }
     updateRow(row.id, { status: "발행 완료" });
-    setNotice("✅ 실제 발행 URL 확인 완료 · 이 글을 LIVE로 표시했습니다.");
+    void syncPublishHistory({ ...row, status: "발행 완료" }, true).then(ok => {
+      if (ok) void loadPublishHistory();
+    });
+    setNotice("✅ 실제 발행 URL 확인 완료 · LIVE 처리하고 발행 이력에 저장했습니다.");
     return true;
   }
 
@@ -1169,6 +1173,11 @@ export default function GoogleBlogSchedulePage() {
     if (nextStatus === "발행 완료") {
       completeRow(row);
       return;
+    }
+    if (row.status === "발행 완료") {
+      void syncPublishHistory(row, false).then(ok => {
+        if (ok) void loadPublishHistory();
+      });
     }
     updateRow(row.id, { status: nextStatus });
   }
@@ -1400,8 +1409,8 @@ export default function GoogleBlogSchedulePage() {
       <section className={styles.hero}>
         <div>
           <span className={styles.eyebrow}>Google Blog · AI Price Atlas</span>
-          <h1>구글 블로그 글 스케줄</h1>
-          <p>1일 1포스팅 기준으로 제목, 핵심 키워드, 진행 상태와 발행 링크를 한곳에서 관리합니다.</p>
+          <h1>구글 블로그 롤링 스케줄</h1>
+          <p>어제 글 1개는 남기고, 오늘부터 앞으로의 일정은 매일 자동으로 한 칸씩 밀리며 새 주제를 보충합니다.</p>
         </div>
         <div className={styles.heroDate}>오늘 {dayLabel(today)}</div>
       </section>
@@ -1453,13 +1462,11 @@ export default function GoogleBlogSchedulePage() {
       <section className={styles.panel}>
         <div className={styles.panelHead}>
           <div>
-            <h2>발행 일정표</h2>
-            <p>기본안은 2026년 9월 29일부터 14일치입니다. 셀을 클릭해 바로 수정할 수 있습니다.</p>
+            <h2>14일 롤링 일정표</h2>
+            <p>어제 + 오늘 + 앞으로 12일을 기본으로 유지합니다. 오래된 완료 글은 발행 이력으로 이동하고, 미완료 글은 사라지지 않습니다.</p>
           </div>
           <div className={styles.actions}>
-            <button onClick={addRow}>+ 하루 추가</button>
-            <button onClick={addWeek}>+ 7일 추가</button>
-            <button className={styles.reset} onClick={resetRows}>기본안 복원</button>
+            <span className={styles.rollingBadge}>자동 롤링 · 발행 이력 {publishHistory.length}개</span>
           </div>
         </div>
 
@@ -1480,11 +1487,14 @@ export default function GoogleBlogSchedulePage() {
             <tbody>
               {rows.map(row => {
                 const isToday = row.date === today;
+                const yesterday = shiftDate(today, -1);
+                const isYesterday = row.date === yesterday;
+                const isOverdue = row.date < yesterday && row.status !== "발행 완료";
                 return (
-                  <tr key={row.id} className={`${isToday ? styles.todayRow : ""} ${row.id === selectedId ? styles.selectedRow : ""}`}>
+                  <tr key={row.id} className={`${isToday ? styles.todayRow : ""} ${isOverdue ? styles.overdueRow : ""} ${row.id === selectedId ? styles.selectedRow : ""}`}>
                     <td className={styles.dateCell}>
                       <input type="date" value={row.date} onChange={e => updateRow(row.id, { date: e.target.value })} />
-                      <small>{dayLabel(row.date)}{isToday ? " · 오늘" : ""}</small>
+                      <small>{dayLabel(row.date)}{isToday ? " · 오늘" : isYesterday ? " · 어제" : isOverdue ? " · 지연" : ""}</small>
                     </td>
                     <td>
                       <select
@@ -1520,7 +1530,7 @@ export default function GoogleBlogSchedulePage() {
 
         <div className={styles.footerNote}>
           <b>운영 팁</b>
-          <span>일정표에서는 핵심 상태만 확인하고, 상세 URL·검증·SEO·내부링크 관리는 아래 선택 글 작업 영역에서 진행합니다.</span>
+          <span>어제 글은 하루 더 남겨 확인할 수 있습니다. 그보다 오래된 완료 글은 발행 이력으로 이동하며, 미완료 글은 지연 표시로 계속 남습니다.</span>
         </div>
 
 
@@ -1561,6 +1571,11 @@ export default function GoogleBlogSchedulePage() {
                   placeholder="https://aipriceatlas.blogspot.com/...html"
                   onChange={e => {
                     const url = e.target.value.trim();
+                    if (selected.status === "발행 완료" && !isValidPublishedUrl(url)) {
+                      void syncPublishHistory(selected, false).then(ok => {
+                        if (ok) void loadPublishHistory();
+                      });
+                    }
                     updateRow(selected.id, {
                       url,
                       status: selected.status === "발행 완료" && !isValidPublishedUrl(url) ? "작성 중" : selected.status,
