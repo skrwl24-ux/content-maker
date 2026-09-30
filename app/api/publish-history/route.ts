@@ -13,6 +13,18 @@ type HistoryItemInput = {
   source?: unknown;
 };
 
+type HistoryRow = {
+  item_type: "topic" | "complex";
+  normalized_key: string;
+  title: string;
+  content_type: string | null;
+  complex_id: string | null;
+  complex_name: string | null;
+  source: string;
+  published_on?: string;
+  updated_at: string;
+};
+
 function normalizeKey(value: string) {
   return value
     .normalize("NFKC")
@@ -42,8 +54,8 @@ function adminClient() {
   return client;
 }
 
-function normalizeInput(raw: HistoryItemInput) {
-  const itemType = raw.itemType === "topic" || raw.itemType === "complex" ? raw.itemType : "";
+function normalizeInput(raw: HistoryItemInput): HistoryRow | null {
+  const itemType: "topic" | "complex" | "" = raw.itemType === "topic" || raw.itemType === "complex" ? raw.itemType : "";
   const title = typeof raw.title === "string" ? raw.title.trim() : "";
   if (!itemType || !title) return null;
 
@@ -100,11 +112,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const sourceItems = Array.isArray(body.items) ? body.items : [body];
-    const rows = sourceItems
-      .map((item) => normalizeInput((item || {}) as HistoryItemInput))
-      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+    const body: unknown = await req.json().catch(() => ({}));
+    const bodyRecord = body && typeof body === "object" ? body as { items?: unknown } : {};
+    const sourceItems: unknown[] = Array.isArray(bodyRecord.items) ? bodyRecord.items : [body];
+    const rows: HistoryRow[] = sourceItems
+      .map((item: unknown) => normalizeInput((item && typeof item === "object" ? item : {}) as HistoryItemInput))
+      .filter((item: HistoryRow | null): item is HistoryRow => item !== null);
 
     if (!rows.length) return NextResponse.json({ ok: true, count: 0 });
 
@@ -129,10 +142,11 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const itemType = body.itemType === "topic" || body.itemType === "complex" ? body.itemType : "";
-    const title = typeof body.title === "string" ? body.title.trim() : "";
-    const complexName = typeof body.complexName === "string" ? body.complexName.trim() : "";
+    const body: unknown = await req.json().catch(() => ({}));
+    const input = body && typeof body === "object" ? body as HistoryItemInput : {};
+    const itemType = input.itemType === "topic" || input.itemType === "complex" ? input.itemType : "";
+    const title = typeof input.title === "string" ? input.title.trim() : "";
+    const complexName = typeof input.complexName === "string" ? input.complexName.trim() : "";
     if (!itemType || !title) return NextResponse.json({ error: "삭제할 발행 이력이 없습니다." }, { status: 400 });
 
     const normalizedKey = normalizeKey(itemType === "complex" ? (complexName || title) : title);
