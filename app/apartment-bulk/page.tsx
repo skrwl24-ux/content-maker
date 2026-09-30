@@ -290,7 +290,32 @@ function getStoredPublishedTopics() {
   }
 }
 
-function savePublishedTopic(topic: string, published: boolean) {
+async function syncPublishedHistoryRecord(
+  itemType: "topic" | "complex",
+  title: string,
+  published: boolean,
+  options: { contentType?: string; complexId?: string; complexName?: string } = {}
+) {
+  if (typeof window === "undefined" || !title.trim()) return;
+  try {
+    await fetch("/api/publish-history", {
+      method: published ? "POST" : "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        itemType,
+        title: title.trim(),
+        contentType: options.contentType || null,
+        complexId: options.complexId || null,
+        complexName: options.complexName || null,
+        source: "apartment-bulk",
+      }),
+    });
+  } catch {
+    // 서버 동기화 실패 시에도 localStorage 이력으로 중복 방지는 계속 작동합니다.
+  }
+}
+
+function savePublishedTopic(topic: string, published: boolean, contentType?: string) {
   if (typeof window === "undefined" || !topic.trim()) return;
   const current = getStoredPublishedTopics();
   const key = normalizeTopicKey(topic);
@@ -302,6 +327,7 @@ function savePublishedTopic(topic: string, published: boolean) {
   } catch {
     // 발행 이력 저장 실패는 작업 진행을 막지 않습니다.
   }
+  void syncPublishedHistoryRecord("topic", topic, published, { contentType });
 }
 
 function normalizeComplexName(name: string) {
@@ -343,6 +369,11 @@ function savePublishedComplex(id: string, name: string, published: boolean) {
   } catch {
     // 단지 발행 이력 저장 실패는 작업 진행을 막지 않습니다.
   }
+  void syncPublishedHistoryRecord("complex", name, published, {
+    contentType: "bulk",
+    complexId: id,
+    complexName: name,
+  });
 }
 
 function formatDailyApartmentTopic(candidate: DailyApartmentCandidate) {
@@ -2284,6 +2315,68 @@ export default function ApartmentBulkPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function hydratePublishedHistory() {
+      try {
+        const localTopics = getStoredPublishedTopics();
+        const localComplexes = getStoredPublishedComplexes();
+        const localItems = [
+          ...localTopics.map((title) => ({ itemType: "topic", title, source: "local-migration" })),
+          ...localComplexes.map((item) => ({
+            itemType: "complex",
+            title: item.name,
+            complexId: item.id,
+            complexName: item.name,
+            contentType: "bulk",
+            source: "local-migration",
+          })),
+        ];
+
+        if (localItems.length) {
+          await fetch("/api/publish-history", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ items: localItems }),
+          });
+        }
+
+        const res = await fetch("/api/publish-history", { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok || cancelled) return;
+
+        const serverTopics = Array.isArray(json.topics)
+          ? json.topics.filter((item: unknown): item is string => typeof item === "string")
+          : [];
+        const mergedTopics = Array.from(new Set([...localTopics, ...serverTopics]));
+        window.localStorage.setItem(PUBLISHED_TOPIC_STORAGE_KEY, JSON.stringify(mergedTopics));
+
+        const serverComplexes = Array.isArray(json.complexes)
+          ? json.complexes.filter((item: unknown): item is { id: string; name: string } =>
+              Boolean(item && typeof item === "object" && typeof (item as { name?: unknown }).name === "string")
+            )
+          : [];
+        const byName = new Map<string, { id: string; name: string }>();
+        [...localComplexes, ...serverComplexes].forEach((item) => {
+          if (!item?.name) return;
+          const key = normalizeComplexName(item.name);
+          const previous = byName.get(key);
+          byName.set(key, {
+            id: item.id || previous?.id || "",
+            name: item.name,
+          });
+        });
+        window.localStorage.setItem(PUBLISHED_COMPLEX_STORAGE_KEY, JSON.stringify([...byName.values()]));
+      } catch {
+        // DB 동기화가 실패해도 기존 로컬 발행 이력은 그대로 사용합니다.
+      }
+    }
+
+    void hydratePublishedHistory();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     if (!dailyDateKey || dailyApartmentLoadingRef.current || dailyApartmentLoadedDateRef.current === dailyDateKey) return;
     const missingBulkSlots = dailySlots.filter((slot) => slot.type === "bulk" && !slot.done && !slot.complexId);
 
@@ -2568,7 +2661,7 @@ export default function ApartmentBulkPage() {
     const target = dailySlots.find((slot) => slot.id === id);
     if (!target) return;
     const nextDone = !target.done;
-    if (target.topic && target.type !== "bulk") savePublishedTopic(target.topic, nextDone);
+    if (target.topic && target.type !== "bulk") savePublishedTopic(target.topic, nextDone, target.type);
     if (target.type === "bulk" && target.complexId && target.complexName) {
       savePublishedComplex(target.complexId, target.complexName, nextDone);
     }
