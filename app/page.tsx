@@ -96,6 +96,9 @@ const PRESETS: Record<string, { width: number; height: number; label: string }> 
   default: { width: 1600, height: 900, label: "1600×900 · 16:9" },
 };
 
+const SHORTS_DRAFT_KEY = "content-maker-jibssuk-shorts-draft-v1";
+const LAST_CONTENT_TYPE_KEY = "content-maker-last-content-type-v1";
+
 function cleanName(v: string) {
   return v.replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 38) || "image";
 }
@@ -207,6 +210,7 @@ export default function Home() {
   const [finalTitle, setFinalTitle] = useState("");
   const [finalBody, setFinalBody] = useState("");
   const [shortsScript, setShortsScript] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -231,7 +235,63 @@ export default function Home() {
     return (analysis?.facts || []).map(f => ({ ...f, used: corpus.includes(String(f.value).toLowerCase()) }));
   }, [analysis, tasks]);
 
-  useEffect(() => { refreshSaved().catch(() => {}); }, []);
+  useEffect(() => {
+    refreshSaved().catch(() => {});
+    try {
+      const lastType = window.localStorage.getItem(LAST_CONTENT_TYPE_KEY);
+      const raw = window.localStorage.getItem(SHORTS_DRAFT_KEY);
+      if (lastType === "집값쓱 쇼츠" && raw) {
+        const draft = JSON.parse(raw);
+        setContentType("집값쓱 쇼츠");
+        setProjectTitle(String(draft.projectTitle || ""));
+        setRawContent(String(draft.rawContent || ""));
+        setShortsScript(String(draft.shortsScript || ""));
+        setFinalTitle(String(draft.finalTitle || ""));
+        setFinalBody(String(draft.finalBody || ""));
+        setAnalysis(draft.analysis || null);
+        setProjectId(draft.projectId || null);
+        const restoredTasks = Array.isArray(draft.tasks)
+          ? draft.tasks.map((t: Task) => ({ ...t, imageDataUrl: "", sourceDataUrl: undefined, done: false }))
+          : [];
+        setTasks(restoredTasks);
+        setCurrentIndex(Math.max(0, Math.min(Number(draft.currentIndex || 0), Math.max(0, restoredTasks.length - 1))));
+        const hasPlan = !!draft.analysis && restoredTasks.length > 0;
+        setPhase(hasPlan ? "analysis" : (draft.rawContent || draft.shortsScript ? "input" : "home"));
+      }
+    } catch {
+      try { window.localStorage.removeItem(SHORTS_DRAFT_KEY); } catch {}
+    } finally {
+      setDraftReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) return;
+    try { window.localStorage.setItem(LAST_CONTENT_TYPE_KEY, contentType); } catch {}
+  }, [draftReady, contentType]);
+
+  useEffect(() => {
+    if (!draftReady || !isShorts) return;
+    const safeTasks = tasks.map(({ sourceDataUrl, imageDataUrl, ...t }) => ({
+      ...t,
+      imageDataUrl: imageDataUrl?.startsWith("https://") ? imageDataUrl : "",
+      imageUrl: t.imageUrl || (imageDataUrl?.startsWith("https://") ? imageDataUrl : "")
+    }));
+    const payload = {
+      projectId,
+      projectTitle,
+      rawContent,
+      shortsScript,
+      finalTitle,
+      finalBody,
+      analysis,
+      tasks: safeTasks,
+      currentIndex,
+      phase,
+      savedAt: new Date().toISOString()
+    };
+    try { window.localStorage.setItem(SHORTS_DRAFT_KEY, JSON.stringify(payload)); } catch {}
+  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
 
   async function refreshSaved() {
     const { supabase } = await ensureAnonymousSession();
@@ -587,7 +647,7 @@ export default function Home() {
         <label>본문</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="본문을 붙여넣으세요. 30자 이상이면 분석할 수 있습니다." />
         {isShorts && <div className="box">
           <div className="miniHead"><h3>① 쇼츠 대본</h3><div className="inlineActions"><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 대본 요청서 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div>
-          <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.5배속 · 공백 제외 210~225자 · 30~33초입니다.</p>
+          <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.5배속 · 공백 제외 210~225자 · 30~33초입니다. 입력 내용은 이 브라우저에 자동 임시저장됩니다.</p>
           <label>완성 대본</label>
           <textarea className="smallArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 완성 내레이션을 붙여넣으세요." />
           <div className="tags">
