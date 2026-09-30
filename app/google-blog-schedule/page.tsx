@@ -864,6 +864,185 @@ export default function GoogleBlogSchedulePage() {
   const imageReadyCount = selected ? IMAGE_SLOTS.filter(slot => extractImageUrl(selected.imageUrls?.[slot.id] || "")).length : 0;
   const selectedImageBytes = selected ? Object.values(selected.imageMeta || {}).reduce((sum, meta) => sum + (meta.optimizedBytes || 0), 0) : 0;
 
+  async function loadPublishHistory() {
+    try {
+      const res = await fetch("/api/google-blog/publish-history", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "발행 이력 조회 실패");
+      const items = Array.isArray(json.items)
+        ? json.items.filter((item: unknown): item is GooglePublishHistoryItem =>
+            Boolean(item && typeof item === "object" && typeof (item as GooglePublishHistoryItem).title === "string")
+          )
+        : [];
+      setPublishHistory(items);
+    } catch (error) {
+      setNotice(`⚠️ 발행 이력 조회 실패: ${error instanceof Error ? error.message : "알 수 없는 오류"}`);
+    } finally {
+      setHistoryLoaded(true);
+    }
+  }
+
+  async function syncPublishHistory(row: ScheduleRow, published: boolean) {
+    if (!row.title.trim()) return false;
+    try {
+      const res = await fetch("/api/google-blog/publish-history", {
+        method: published ? "POST" : "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: row.title,
+          keyword: row.keyword,
+          url: row.url,
+          slug: row.slug || "",
+          scheduledDate: row.date,
+          publishedOn: row.date,
+          source: "google-blog-schedule",
+        }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "발행 이력 동기화 실패");
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function pickRollingTopic(date: string, currentRows: ScheduleRow[], history: GooglePublishHistoryItem[]) {
+    const usedTexts = [
+      ...currentRows.map(row => `${row.title} ${row.keyword}`.trim()),
+      ...history.map(item => `${item.title} ${item.keyword || ""}`.trim()),
+    ].filter(Boolean);
+    const usedKeys = new Set([
+      ...currentRows.map(row => normalizeGoogleTopic(row.title)),
+      ...history.map(item => item.normalized_key || normalizeGoogleTopic(item.title)),
+    ]);
+
+    const available = ROLLING_TOPIC_POOL.filter(candidate => {
+      const key = normalizeGoogleTopic(candidate.title);
+      if (usedKeys.has(key)) return false;
+      const candidateText = `${candidate.title} ${candidate.keyword}`;
+      return !usedTexts.some(text => topicSimilarity(candidateText, text) >= 0.82);
+    });
+    if (!available.length) return null;
+    return available[rollingSeed(date) % available.length];
+  }
+
+  function makeRollingRow(date: string, currentRows: ScheduleRow[], history: GooglePublishHistoryItem[]): ScheduleRow {
+    const topic = pickRollingTopic(date, currentRows, history);
+    if (!topic) {
+      return {
+        id: `rolling-${date}`,
+        date,
+        title: "",
+        keyword: "",
+        status: "예정",
+        url: "",
+        slug: "",
+        relatedIds: [],
+        note: "자동 주제 풀이 소진되었습니다. ChatGPT에 Google Blog 주제 풀 보충을 요청하세요.",
+        body: "",
+      };
+    }
+
+    const candidateText = `${topic.title} ${topic.keyword}`;
+    const relatedIds = currentRows
+      .filter(row => row.title.trim())
+      .map(row => ({ id: row.id, score: topicSimilarity(candidateText, `${row.title} ${row.keyword}`) }))
+      .filter(item => item.score >= 0.18)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map(item => item.id);
+
+    return {
+      id: `rolling-${date}`,
+      date,
+      title: topic.title,
+      keyword: topic.keyword,
+      status: "예정",
+      url: "",
+      slug: topic.slug,
+      relatedIds,
+      backlinkDoneIds: [],
+      note: topic.note,
+      body: "",
+    };
+  }
+
+  async function applyRollingSchedule() {
+    const yesterday = shiftDate(today, -1);
+    const requiredDates = Array.from({ length: 14 }, (_, index) => shiftDate(yesterday, index));
+    const oldCompleted = rows.filter(row => row.date < yesterday && row.status === "발행 완료");
+
+    let archived = true;
+    if (oldCompleted.length) {
+      try {
+        const res = await fetch("/api/google-blog/publish-history", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            items: oldCompleted.map(row => ({
+              title: row.title,
+              keyword: row.keyword,
+              url: row.url,
+              slug: row.slug || "",
+              scheduledDate: row.date,
+              publishedOn: row.date,
+              source: "google-blog-rollover",
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error("archive failed");
+        await loadPublishHistory();
+      } catch {
+        archived = false;
+      }
+    }
+
+    const baseRows = archived && oldCompleted.length
+      ? rows.filter(row => !(row.date < yesterday && row.status === "발행 완료"))
+      : [...rows];
+    const nextRows = [...baseRows];
+    const existingDates = new Set(nextRows.map(row => row.date));
+    const historyForPick = [
+      ...publishHistory,
+      ...oldCompleted.map(row => ({
+        normalized_key: normalizeGoogleTopic(row.title),
+        title: row.title,
+        keyword: row.keyword || null,
+        url: row.url || null,
+        slug: row.slug || null,
+        scheduled_date: row.date,
+        published_on: row.date,
+      })),
+    ];
+
+    let added = 0;
+    for (const date of requiredDates) {
+      if (existingDates.has(date)) continue;
+      const newRow = makeRollingRow(date, nextRows, historyForPick);
+      nextRows.push(newRow);
+      existingDates.add(date);
+      added += 1;
+    }
+
+    nextRows.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+    const beforeSignature = rows.map(row => `${row.id}:${row.date}:${row.status}`).join("|");
+    const afterSignature = nextRows.map(row => `${row.id}:${row.date}:${row.status}`).join("|");
+    if (beforeSignature !== afterSignature) {
+      setRows(nextRows);
+      if (!nextRows.some(row => row.id === selectedId)) {
+        const nextSelected = nextRows.find(row => row.date === today) || nextRows.find(row => row.date >= yesterday) || nextRows[0];
+        if (nextSelected) setSelectedId(nextSelected.id);
+      }
+      const removed = archived ? oldCompleted.length : 0;
+      if (added || removed) {
+        setNotice(`✅ 롤링 일정 업데이트 · 오래된 완료 글 ${removed}개 정리 · 새 일정 ${added}개 보충`);
+      }
+    }
+  }
+
   async function saveCloudSchedule(key: string, payload: ScheduleRow[], showNotice = true) {
     if (!/^[0-9a-f]{36}$/.test(key)) return;
     try {
