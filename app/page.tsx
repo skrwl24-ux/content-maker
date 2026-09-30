@@ -707,15 +707,17 @@ export default function Home() {
     </header>
 
     <section className="hero">
-      <div><h1>AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서</h1><p>본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP</p></div>
+      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본 → 장면표 → 필요한 이미지만 → 제작용 묶음" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
       <div className="heroPill">{preset.label}</div>
     </section>
 
     {error && <div className="error">{error}</div>}
 
     <section className="panel">
-      <div className="steps">{["자료입력", "분석", "이미지", "검수", "완료"].map((x, i) => {
-        const active = ((phase === "home" || phase === "input") && i === 0) || (phase === "analysis" && i === 1) || (phase === "images" && i === 2) || (phase === "review" && i === 3) || (phase === "done" && i === 4);
+      <div className="steps">{(isShorts ? ["자료", "대본", "장면표", "이미지", "제작완료"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
+        const active = isShorts
+          ? (((phase === "home" || phase === "input") && i === 0) || (phase === "script" && i === 1) || (phase === "analysis" && i === 2) || (phase === "images" && i === 3) || ((phase === "review" || phase === "done") && i === 4))
+          : (((phase === "home" || phase === "input") && i === 0) || (phase === "analysis" && i === 1) || (phase === "images" && i === 2) || (phase === "review" && i === 3) || (phase === "done" && i === 4));
         return <div key={x} className={`step ${active ? "active" : ""}`}>{i + 1} {x}</div>;
       })}</div>
 
@@ -727,7 +729,16 @@ export default function Home() {
         <div className="box"><h3>저장 프로젝트</h3>{saved.length === 0 ? <div className="muted">아직 저장된 작업이 없습니다.</div> : <div className="savedList">{saved.map(p => <div className="savedItem" key={p.id}><div><b>{p.project_title}</b><small>{p.content_type}</small></div><button className="secondary compact" onClick={() => loadProject(p.id)}>불러오기</button></div>)}</div>}</div>
       </>}
 
-      {phase === "input" && <>
+      {phase === "input" && (isShorts ? <>
+        <div className="sectionHead"><div><h2>1. 자료</h2><p>쇼츠로 만들 원문과 주제만 넣습니다. 입력 내용은 자동 임시저장됩니다.</p></div><span className="counter">{rawContent.trim().length}자</span></div>
+        <label>쇼츠 주제</label><input value={projectTitle} onChange={e => setProjectTitle(e.target.value)} placeholder="예: 김포 아파트 8월 거래 TOP3" />
+        <label>원문 자료</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="블로그 글이나 실거래 자료를 붙여넣으세요." />
+        <div className="box">
+          <h3>다음 단계에서 자동으로 지킬 기준</h3>
+          <div className="tags"><span>1.5x 음성</span><span>210~225자</span><span>30~33초</span><span>질문형 시작</span><span>오늘도 집값쓱 엔딩</span></div>
+        </div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><div className="inlineActions"><button className="secondary" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" disabled={rawContent.trim().length < 30} onClick={openShortsScriptMaker}>GPT로 대본 만들기 ↗</button></div></div>
+      </> : <>
         <div className="sectionHead"><div><h2>자료 입력</h2><p>{contentType === "Paramma 블로거" ? `Paramma 블로거 · ${parammaCategory}` : "본문이 있으면 붙여넣고, 없으면 추천 주제로 시작하세요."}</p></div><span className="counter">{rawContent.trim().length}자</span></div>
         {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>카테고리 선택</h3><div className="parammaGrid compactGrid">{PARAMMA_CATEGORIES.map(([ico, name, desc]) => <button key={name} className={`parammaCard ${parammaCategory === name ? "sel" : ""}`} onClick={() => setParammaCategory(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div></div>}
         <div className="box"><h3>{contentType === "Paramma 블로거" ? `✨ ${parammaCategory} · 추천 발행 순서 10개` : "✨ 시작용 주제 추천"}</h3>{contentType === "Paramma 블로거" && <p className="muted">1번부터 10번까지 순서대로 진행하고, 모두 끝나면 다음 10개로 교체해서 이어갈 수 있습니다.</p>}<div className="recommendGrid">{(RECOMMENDATIONS[effectiveContentType] || []).map((item, i) => <button key={item.title} className="recommend" onClick={() => applyRecommendation(item)}><span>{i + 1}</span><div><b>{item.title}</b><small>{item.brief}</small></div></button>)}</div></div>
@@ -747,36 +758,47 @@ export default function Home() {
           <p className="muted">예상 시간은 글자수 기준 참고값입니다. 최종 길이는 실제 1.5배속 TTS 파일을 기준으로 확인합니다.</p>
         </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><button className="primary" disabled={rawContent.trim().length < 30 || loading || (isShorts && shortsScript.trim().length < 50)} onClick={analyze}>{loading ? "분석 중..." : isShorts ? "쇼츠 요청서 구성" : "본문 분석"}</button></div>
+      </>)}
+
+      {phase === "script" && isShorts && <>
+        <div className="sectionHead"><div><h2>2. 대본</h2><p>GPT에서 만든 완성 내레이션만 붙여넣고 길이를 확인합니다.</p></div><span className="counter">{shortsCharCount}/210~225자</span></div>
+        <div className="box">
+          <div className="miniHead"><h3>완성 대본</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 TTS 원고 복사</button></div></div>
+          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요." />
+          <div className="tags">
+            <span>1.5x</span>
+            <span>목표 30~33초</span>
+            <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>공백 제외 {shortsCharCount}자</span>
+            {shortsCharCount > 0 && <span>글자수 기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
+          </div>
+          <p className="muted">시작은 지역명+질문형 후킹, 마무리는 ‘근데 여기서 잠깐.’ → 주의점 → ‘[지역명] 집값, 오늘도 집값쓱.’ 형식입니다.</p>
+        </div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
 
-      {phase === "analysis" && analysis && (isShorts ? <>
-        <div className="sectionHead"><div><h2>집값쓱 쇼츠 제작 요청서</h2><p>각 요청서를 따로 복사해 GPT에 병렬로 요청하고, 새 이미지는 최대 2~3장만 만듭니다.</p></div><span className="counter">대본 {shortsCharCount}자</span></div>
-        <div className="tags">
-          <span>음성 1.5x</span>
-          <span>목표 30~33초</span>
-          <span>6~7장면</span>
-          <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : "warn"}>{shortsCharCount >= 210 && shortsCharCount <= 225 ? "대본 길이 적정" : "대본 길이 조정 권장"}</span>
+      {phase === "analysis" && (isShorts ? <>
+        <div className="sectionHead"><div><h2>3. 장면표</h2><p>이 표가 쇼츠의 중심입니다. 소리를 꺼도 큰 문구와 하단 자막만으로 내용이 이해되어야 합니다.</p></div><span className="counter">{shortsScenes.length || 0}/6~7장면</span></div>
+        <div className="box scenePasteBox">
+          <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
+          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
+          <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span className={tasks.length >= 2 && tasks.length <= 3 ? "ok" : "warn"}>새 이미지 {tasks.length}개</span><span>나머지는 재사용·카드·엔딩</span></div>
         </div>
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>② 무음용 화면 문구·자막</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "무음용 화면 문구·자막 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
-            <p className="muted">소리 없이 봐도 이해되도록 6~7장면의 큰 핵심 문구와 짧은 하단 자막을 설계합니다. 새 이미지는 2~3장만 쓰도록 요청합니다.</p>
-          </div>
-          <div className="box">
-            <div className="miniHead"><h3>④ TTS 원고</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "1.5배속 TTS용 원고를 복사했습니다.")}>📋 원고 복사</button><button className="secondary compact" onClick={() => openGPT(shortsScript.trim())}>↗ GPT 열기</button></div></div>
-            <div className="recommended">{shortsScript}</div>
-            <p className="muted">음성 프로그램에서는 1.5배속을 기본값으로 사용합니다.</p>
-          </div>
-        </div>
+        {shortsScenes.length > 0 && <div className="sceneTable">
+          <div className="sceneTableHead"><span>장면</span><span>큰 화면 문구</span><span>하단 자막</span><span>화면 방식</span></div>
+          {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
+            <b>{scene.order}</b>
+            <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: e.target.value })} />
+            <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
+            <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
+              <option>새 이미지</option><option>이미지 재사용</option><option>텍스트 카드</option><option>그래프/숫자 카드</option><option>고정 엔딩</option>
+            </select>
+          </div>)}
+        </div>}
         <div className="box">
-          <div className="miniHead"><h3>③ 새 이미지 요청서 · 최대 {tasks.length}장</h3><span className="muted">나머지 장면은 재사용·숫자 카드·고정 엔딩</span></div>
-          {tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><div className="inlineActions"><button className="secondary compact" onClick={() => copyPrompt(t)}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>↗ GPT 열기</button></div></div>)}
+          <div className="miniHead"><h3>이미지 제작 대상</h3><span className="muted">장면표에서 ‘새 이미지’인 것만 자동 추림</span></div>
+          {tasks.length === 0 ? <p className="muted">장면표를 붙여넣으면 새 이미지가 필요한 장면만 여기에 나타납니다.</p> : tasks.map(t => <div className="imageRow" key={t.title}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button></div>)}
         </div>
-        <div className="grid2">
-          <div className="box"><h3>⑤ BGM 추천</h3><div className="recommended">{shortsBgm.label}</div><p className="muted">{shortsBgm.note}</p><p className="muted">보컬 없는 BGM을 쓰고, 내레이션 구간에서는 음량을 낮춰 화면 문구와 음성을 방해하지 않게 합니다.</p></div>
-          <div className="box"><div className="miniHead"><h3>⑥ 유튜브 업로드 문구</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 문구 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsUploadPrompt())}>↗ GPT 열기</button></div></div><p className="muted">제목 3개 · 설명 · 해시태그 · 고정댓글을 한 번에 요청합니다.</p></div>
-        </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>대본 수정</button><button className="primary" onClick={() => setPhase("images")}>이미지 2~3장 작업</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6 || tasks.length === 0} onClick={() => setPhase("images")}>필요한 이미지 작업</button></div>
       </> : <>
         <div className="sectionHead"><div><h2>이미지 제작 계획</h2><p>숫자와 문구를 먼저 확정한 뒤 이미지 배경을 준비합니다.</p></div><span className="counter">총 {tasks.length}장</span></div>
         <div className="grid2"><div className="box"><h3>추천 제목</h3><div className="recommended">{analysis.recommendedTitle}</div><div className="candidateList">{analysis.titleCandidates?.slice(0, 5).map(t => <button key={t} onClick={() => setFinalTitle(t)}>{t}</button>)}</div></div><div className="box"><h3>본문에서 찾은 핵심 숫자</h3><div className="tags">{analysis.facts?.length ? analysis.facts.map(f => <span key={f.value}>{f.value}</span>) : <span>숫자 정보 없음</span>}</div><p className="muted">이미지에는 원문에 있는 숫자만 사용하도록 검수합니다.</p></div></div>
