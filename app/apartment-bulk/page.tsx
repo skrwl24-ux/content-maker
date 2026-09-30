@@ -618,7 +618,11 @@ function escapeHtml(text: string) {
 }
 
 function naverPlainText(blocks: NaverBlock[]) {
-  return blocks.map((block) => block.text).join("\r\n \r\n");
+  return blocks.map((block, index) => {
+    const next = blocks[index + 1];
+    const separator = block.type === "card" && next?.type === "card" ? "\r\n" : "\r\n \r\n";
+    return block.text + (index < blocks.length - 1 ? separator : "");
+  }).join("");
 }
 
 function naverRichHtml(blocks: NaverBlock[]) {
@@ -646,7 +650,12 @@ function naverRichHtml(blocks: NaverBlock[]) {
   });
 
   const spacer = `<div style="font-family:${font};font-size:15pt;line-height:1.7;margin:0;"><br></div>`;
-  return `<div>${blockHtml.join(spacer)}</div>`;
+  const merged = blockHtml.map((html, index) => {
+    const next = blocks[index + 1];
+    const separator = blocks[index]?.type === "card" && next?.type === "card" ? "" : spacer;
+    return html + (index < blockHtml.length - 1 ? separator : "");
+  }).join("");
+  return `<div>${merged}</div>`;
 }
 
 function drawBrand(ctx: CanvasRenderingContext2D, x: number, y: number, dark = false) {
@@ -2992,7 +3001,9 @@ export default function ApartmentBulkPage() {
                       >
                         {block.text}
                       </div>
-                      {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
+                      {index < naverBlocks.length - 1 && !(block.type === "card" && naverBlocks[index + 1]?.type === "card") && (
+                        <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>
+                      )}
                     </div>
                   )) : (
                     <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
