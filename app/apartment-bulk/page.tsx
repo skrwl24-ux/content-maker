@@ -82,7 +82,7 @@ type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
 type NaverBlock = {
-  type: "title" | "subheading" | "body" | "image" | "tags";
+  type: "title" | "subheading" | "body" | "image" | "tags" | "card";
   text: string;
 };
 type PhotoCandidate = {
@@ -483,7 +483,53 @@ function cleanNaverLine(line: string) {
     .trim();
 }
 
-function parseNaverBlog(raw: string): NaverBlock[] {
+function splitMarkdownTableRow(line: string) {
+  let value = line.trim();
+  if (!value.includes("|")) return [];
+  if (value.startsWith("|")) value = value.slice(1);
+  if (value.endsWith("|")) value = value.slice(0, -1);
+  return value.split("|").map((cell) => cleanNaverLine(cell.trim()));
+}
+
+function isMarkdownTableDivider(line: string) {
+  const cells = splitMarkdownTableRow(line);
+  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")));
+}
+
+function countMarkdownTables(raw: string) {
+  const lines = raw.replace(/\r\n?/g, "\n").split("\n");
+  let count = 0;
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    if (splitMarkdownTableRow(lines[i]).length >= 2 && isMarkdownTableDivider(lines[i + 1])) {
+      count += 1;
+      i += 1;
+    }
+  }
+  return count;
+}
+
+function makeMarkdownTableCard(headers: string[], row: string[]) {
+  const preferred = /(종목|단지|기업|항목|이름|상품|지역|학교|주제|구분)/;
+  const rankLike = /^(순위|랭킹|번호|no\.?|rank)$/i;
+  let primaryIndex = headers.findIndex((header) => preferred.test(header));
+  if (primaryIndex < 0) primaryIndex = rankLike.test(headers[0] || "") && row.length > 1 ? 1 : 0;
+
+  const primaryValue = row[primaryIndex] || row.find(Boolean) || "항목";
+  const prefix = primaryIndex > 0 && rankLike.test(headers[0] || "") && row[0]
+    ? `${row[0]} · `
+    : "";
+
+  const details = headers
+    .map((header, index) => ({ header, value: row[index] || "", index }))
+    .filter((item) => item.index !== primaryIndex && item.value)
+    .filter((item) => !(item.index === 0 && rankLike.test(item.header)))
+    .map((item) => `${item.header || `항목 ${item.index + 1}`} ${item.value}`)
+    .join(" · ");
+
+  return details ? `${prefix}${primaryValue}\n${details}` : `${prefix}${primaryValue}`;
+}
+
+function parseNaverBlog(raw: string, convertMarkdownTables = true): NaverBlock[] {
   const lines = raw
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -500,7 +546,34 @@ function parseNaverBlog(raw: string): NaverBlock[] {
   const blocks: NaverBlock[] = [];
   let firstContent = true;
 
-  for (const original of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const original = lines[index];
+
+    if (
+      convertMarkdownTables &&
+      index + 1 < lines.length &&
+      splitMarkdownTableRow(original).length >= 2 &&
+      isMarkdownTableDivider(lines[index + 1])
+    ) {
+      const headers = splitMarkdownTableRow(original);
+      index += 2;
+
+      while (index < lines.length) {
+        const row = splitMarkdownTableRow(lines[index]);
+        if (row.length < 2 || isMarkdownTableDivider(lines[index])) {
+          index -= 1;
+          break;
+        }
+
+        blocks.push({ type: "card", text: makeMarkdownTableCard(headers, row) });
+        firstContent = false;
+        index += 1;
+      }
+
+      if (index >= lines.length) break;
+      continue;
+    }
+
     const line = cleanNaverLine(original);
     if (!line) continue;
 
@@ -563,6 +636,11 @@ function naverRichHtml(blocks: NaverBlock[]) {
     }
     if (block.type === "image") {
       return `<div style="font-family:${font};font-size:15pt;line-height:1.6;font-weight:600;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "card") {
+      const [cardTitle, ...cardDetails] = safe.split("\n");
+      const detailHtml = cardDetails.join("<br>");
+      return `<div style="font-family:${font};font-size:15pt;line-height:1.65;font-weight:400;margin:0;padding:10px 12px;border-left:3px solid #8aa99d;"><div style="font-weight:700;margin:0 0 4px;">${cardTitle}</div>${detailHtml ? `<div>${detailHtml}</div>` : ""}</div>`;
     }
     return `<div style="font-family:${font};font-size:15pt;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
   });
@@ -1596,6 +1674,7 @@ export default function ApartmentBulkPage() {
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
+  const [autoConvertTables, setAutoConvertTables] = useState(true);
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const [dailyDateKey, setDailyDateKey] = useState("");
@@ -1640,7 +1719,11 @@ export default function ApartmentBulkPage() {
     [workTopic, workBody, workImageNotes]
   );
   const workBodyReadyForImages = workBody.trim().length >= 80;
-  const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
+  const markdownTableCount = useMemo(() => countMarkdownTables(finalBlogText), [finalBlogText]);
+  const naverBlocks = useMemo(
+    () => parseNaverBlog(finalBlogText, autoConvertTables),
+    [finalBlogText, autoConvertTables]
+  );
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
   const nextDailySlot = useMemo(() => dailySlots.find((slot) => !slot.done) || null, [dailySlots]);
@@ -2853,7 +2936,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 전체복사</h2>
-                <span>ChatGPT 완성글을 붙여넣으면 제목 20pt · 소제목 18pt · 본문 15pt · 태그 13~14pt와 한 줄 띄기를 자동 적용합니다.</span>
+                <span>ChatGPT 완성글을 붙여넣으면 제목·소제목·본문 서식을 자동 적용합니다. 마크다운 표는 모바일 카드형으로 바꿔 복사할 수 있습니다.</span>
               </div>
             </div>
 
@@ -2867,8 +2950,26 @@ export default function ApartmentBulkPage() {
                     setFinalBlogText(e.target.value);
                     setNaverCopyMessage("");
                   }}
-                  placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요."
+                  placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요. 마크다운 표도 그대로 붙여넣어도 됩니다."
                 />
+                <div className={styles.naverInputOptions}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={autoConvertTables}
+                      onChange={(e) => {
+                        setAutoConvertTables(e.target.checked);
+                        setNaverCopyMessage("");
+                      }}
+                    />
+                    <span>표 자동변환</span>
+                  </label>
+                  <small>
+                    {markdownTableCount
+                      ? `마크다운 표 ${markdownTableCount}개 감지 · 네이버 모바일 카드형으로 변환됩니다.`
+                      : "표가 감지되면 각 행을 모바일에서 읽기 좋은 카드형 문장으로 바꿉니다."}
+                  </small>
+                </div>
               </div>
 
               <div className={styles.naverPreviewPane}>
@@ -2885,6 +2986,7 @@ export default function ApartmentBulkPage() {
                           block.type === "subheading" ? styles.naverSubheading :
                           block.type === "tags" ? styles.naverTags :
                           block.type === "image" ? styles.naverImageLine :
+                          block.type === "card" ? styles.naverCard :
                           styles.naverBody
                         }
                       >
