@@ -253,6 +253,9 @@ const PUBLISHED_TOPIC_SEEDS = [
 
 const PUBLISHED_TOPIC_STORAGE_KEY = "apartment-bulk-published-topics-v1";
 const PUBLISHED_COMPLEX_STORAGE_KEY = "apartment-bulk-published-complexes-v1";
+const PUBLISH_QUEUE_STORAGE_KEY = "apartment-bulk-publish-queue-v2";
+const PUBLISH_QUEUE_WORK_INDEX_KEY = "apartment-bulk-publish-queue-work-index-v2";
+const PUBLISH_QUEUE_ACTIVE_WORK_KEY = "apartment-bulk-publish-queue-active-work-v2";
 const PUBLISHED_COMPLEX_NAME_SEEDS = [
   "평촌어바인퍼스트",
   "산성역포레스티아",
@@ -2217,8 +2220,11 @@ export default function ApartmentBulkPage() {
     const dateKey = formatter.format(new Date());
     setDailyDateKey(dateKey);
     try {
-      const raw = window.localStorage.getItem("apartment-bulk-daily-board-v1:" + dateKey);
+      const persistentRaw = window.localStorage.getItem(PUBLISH_QUEUE_STORAGE_KEY);
+      const legacyRaw = window.localStorage.getItem("apartment-bulk-daily-board-v1:" + dateKey);
+      const raw = persistentRaw || legacyRaw;
       const saved = raw ? JSON.parse(raw) : null;
+
       if (Array.isArray(saved) && saved.length === 7) {
         const validTypes = new Set(Object.keys(DAILY_TYPE_META));
         const plan = DAILY_TOPIC_PLANS[dateKey] || {};
@@ -2252,15 +2258,25 @@ export default function ApartmentBulkPage() {
           };
         });
         setDailySlots(normalized);
-        window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(normalized));
+        window.localStorage.setItem(PUBLISH_QUEUE_STORAGE_KEY, JSON.stringify(normalized));
       } else {
         const next = makeDailySlots(dateKey, getStoredPublishedTopics());
         setDailySlots(next);
-        window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(next));
+        window.localStorage.setItem(PUBLISH_QUEUE_STORAGE_KEY, JSON.stringify(next));
       }
-      const indexRaw = window.localStorage.getItem("apartment-bulk-work-index-v1:" + dateKey);
+
+      const persistentIndexRaw = window.localStorage.getItem(PUBLISH_QUEUE_WORK_INDEX_KEY);
+      const legacyIndexRaw = window.localStorage.getItem("apartment-bulk-work-index-v1:" + dateKey);
+      const indexRaw = persistentIndexRaw || legacyIndexRaw;
       const index = indexRaw ? JSON.parse(indexRaw) : [];
-      setStartedWorkIds(Array.isArray(index) ? index.filter((item): item is string => typeof item === "string") : []);
+      const normalizedIndex = Array.isArray(index) ? index.filter((item): item is string => typeof item === "string") : [];
+      setStartedWorkIds(normalizedIndex);
+      window.localStorage.setItem(PUBLISH_QUEUE_WORK_INDEX_KEY, JSON.stringify(normalizedIndex));
+
+      const legacyActive = window.localStorage.getItem("apartment-bulk-active-work-v1:" + dateKey) || "";
+      if (!window.localStorage.getItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY) && legacyActive) {
+        window.localStorage.setItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY, legacyActive);
+      }
     } catch {
       setDailySlots(makeDailySlots(dateKey, getStoredPublishedTopics()));
       setStartedWorkIds([]);
@@ -2270,10 +2286,6 @@ export default function ApartmentBulkPage() {
   useEffect(() => {
     if (!dailyDateKey || dailyApartmentLoadingRef.current || dailyApartmentLoadedDateRef.current === dailyDateKey) return;
     const missingBulkSlots = dailySlots.filter((slot) => slot.type === "bulk" && !slot.done && !slot.complexId);
-    if (!missingBulkSlots.length) {
-      dailyApartmentLoadedDateRef.current = dailyDateKey;
-      return;
-    }
 
     dailyApartmentLoadingRef.current = true;
     fetch("/api/apartment/daily-picks?date=" + encodeURIComponent(dailyDateKey) + "&limit=48", { cache: "no-store" })
@@ -2319,7 +2331,7 @@ export default function ApartmentBulkPage() {
   useEffect(() => {
     if (!dailyDateKey || activeWorkId || !dailySlots.some((slot) => slot.workId)) return;
     try {
-      const lastActive = window.localStorage.getItem("apartment-bulk-active-work-v1:" + dailyDateKey) || "";
+      const lastActive = window.localStorage.getItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY) || "";
       const slot = dailySlots.find((item) => item.workId === lastActive);
       if (slot) void openDailyWork(slot, false);
     } catch {
@@ -2487,9 +2499,8 @@ export default function ApartmentBulkPage() {
 
   function saveDailySlots(next: DailySlot[]) {
     setDailySlots(next);
-    if (!dailyDateKey) return;
     try {
-      window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dailyDateKey, JSON.stringify(next));
+      window.localStorage.setItem(PUBLISH_QUEUE_STORAGE_KEY, JSON.stringify(next));
     } catch {
       // 저장이 막혀 있어도 화면에서는 계속 사용할 수 있습니다.
     }
@@ -2564,6 +2575,96 @@ export default function ApartmentBulkPage() {
     saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: nextDone } : slot));
   }
 
+  function replaceCompletedSlot(id: number) {
+    const slot = dailySlots.find((item) => item.id === id);
+    if (!slot || !slot.done) return;
+
+    const dateKey = dailyDateKey || new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+    let replacement: Partial<DailySlot> | null = null;
+
+    if (slot.type === "bulk") {
+      const published = getStoredPublishedComplexes();
+      const usedIds = new Set(dailySlots.filter((item) => item.id !== id).map((item) => item.complexId || "").filter(Boolean));
+      const usedGroups = new Set(dailySlots.filter((item) => item.id !== id).map((item) => item.candidateRegionGroup || "").filter(Boolean));
+      const available = dailyApartmentCandidates.filter((candidate) =>
+        !isPublishedComplex(candidate, published) &&
+        !usedIds.has(candidate.id)
+      );
+      const pick = available.find((candidate) => !usedGroups.has(candidate.regionGroup)) || available[0];
+      if (!pick) return;
+      replacement = {
+        complexId: pick.id,
+        complexName: pick.name,
+        candidateRegion: pick.regionLabel,
+        candidateRegionGroup: pick.regionGroup,
+        candidateArea: pick.representativeArea || "",
+        candidateAngle: pick.recommendedAngle,
+        topic: formatDailyApartmentTopic(pick),
+      };
+    } else {
+      const pool = DAILY_TOPIC_POOLS[slot.type] || [];
+      const publishedTopics = getStoredPublishedTopics();
+      const usedTopics = dailySlots
+        .filter((item) => item.id !== id)
+        .map((item) => item.topic || "")
+        .filter(Boolean);
+      const available = pool.filter((topic) =>
+        !isPublishedTopic(topic, publishedTopics) &&
+        !usedTopics.some((used) => normalizeTopicKey(used) === normalizeTopicKey(topic))
+      );
+      const topic = available.length ? available[dailyTopicSeed(dateKey, id) % available.length] : "";
+      replacement = {
+        topic,
+        complexId: "",
+        complexName: "",
+        candidateRegion: "",
+        candidateRegionGroup: "",
+        candidateArea: "",
+        candidateAngle: "",
+      };
+    }
+
+    const oldWorkId = slot.workId;
+    const nextWorkId = createWorkId(dateKey, id);
+    const nextSlots = dailySlots.map((item) => item.id === id ? {
+      ...item,
+      ...replacement,
+      done: false,
+      workId: nextWorkId,
+    } : item);
+    saveDailySlots(nextSlots);
+
+    const nextStarted = startedWorkIds.filter((workId) => workId !== oldWorkId);
+    setStartedWorkIds(nextStarted);
+    try {
+      window.localStorage.setItem(PUBLISH_QUEUE_WORK_INDEX_KEY, JSON.stringify(nextStarted));
+      if (window.localStorage.getItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY) === oldWorkId) {
+        window.localStorage.removeItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY);
+      }
+    } catch {
+      // 교체 후 작업 인덱스 정리 실패는 새 작업 생성을 막지 않습니다.
+    }
+
+    if (activeWorkId === oldWorkId) {
+      setActiveWorkId("");
+      setActiveWorkType(null);
+      setWorkTopic("");
+      setWorkMaterials("");
+      setWorkBody("");
+      setWorkImageNotes("");
+      setWorkAttachments([]);
+      setWorkProgress("not_started");
+      setTop3Work(emptyTop3());
+      setWorkSaveMessage("");
+    }
+  }
+
   function resetDailyBoard() {
     const next = makeDailySlots(dailyDateKey || new Date().toISOString().slice(0, 10), getStoredPublishedTopics());
     dailyApartmentLoadedDateRef.current = "";
@@ -2579,23 +2680,21 @@ export default function ApartmentBulkPage() {
     setTop3Work(emptyTop3());
     setWorkSaveMessage("");
     setStartedWorkIds([]);
-    if (dailyDateKey) {
-      try {
-        window.localStorage.removeItem("apartment-bulk-work-index-v1:" + dailyDateKey);
-        window.localStorage.removeItem("apartment-bulk-active-work-v1:" + dailyDateKey);
-      } catch {
-        // 초기화는 화면 기준으로 계속 진행합니다.
-      }
+    try {
+      window.localStorage.removeItem(PUBLISH_QUEUE_WORK_INDEX_KEY);
+      window.localStorage.removeItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY);
+    } catch {
+      // 초기화는 화면 기준으로 계속 진행합니다.
     }
   }
 
   function markWorkStarted(workId: string) {
-    if (!dailyDateKey || !workId) return;
+    if (!workId) return;
     const next = Array.from(new Set([...startedWorkIds, workId]));
     setStartedWorkIds(next);
     try {
-      window.localStorage.setItem("apartment-bulk-work-index-v1:" + dailyDateKey, JSON.stringify(next));
-      window.localStorage.setItem("apartment-bulk-active-work-v1:" + dailyDateKey, workId);
+      window.localStorage.setItem(PUBLISH_QUEUE_WORK_INDEX_KEY, JSON.stringify(next));
+      window.localStorage.setItem(PUBLISH_QUEUE_ACTIVE_WORK_KEY, workId);
     } catch {
       // 인덱스 저장 실패는 본문 작업 저장을 막지 않습니다.
     }
@@ -3024,13 +3123,12 @@ export default function ApartmentBulkPage() {
       <section className={styles.dailyBoard}>
         <div className={styles.dailyBoardHead}>
           <div>
-            <p className={styles.eyebrow}>TODAY · 7 POSTS</p>
-            <h2>오늘의 7개 <strong>{dailyDoneCount}/7</strong></h2>
-            <span>{dailyDateKey || "오늘"} · 단지 4 + TOP3 1 + 검색형 1 + 파워글 1</span>
+            <p className={styles.eyebrow}>PUBLISH QUEUE · 7 POSTS</p>
+            <h2>발행 큐 7개 <strong>{dailyDoneCount}/7 완료</strong></h2>
+            <span>날짜가 바뀌어도 유지 · 완료한 카드만 갈아끼우기</span>
           </div>
           <div className={styles.dailyBoardActions}>
-            <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "🎉 오늘 발행 완료" : nextDailySlot ? `다음 · ${nextDailySlot.id}번 ${DAILY_TYPE_META[nextDailySlot.type].short}` : "오늘 발행 완료"}</div>
-            <button type="button" onClick={resetDailyBoard}>초기화</button>
+            <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "7개 완료 · 갈아끼우기 준비" : nextDailySlot ? `다음 · ${nextDailySlot.id}번 ${DAILY_TYPE_META[nextDailySlot.type].short}` : "발행 큐 완료"}</div>
           </div>
         </div>
 
@@ -3040,8 +3138,6 @@ export default function ApartmentBulkPage() {
 
         <div className={styles.dailySlots}>
           {dailySlots.map((slot) => {
-            const canRecommend = Boolean((DAILY_TOPIC_POOLS[slot.type] || []).length);
-            const canRecommendApartment = slot.type === "bulk" && dailyApartmentCandidates.length > 0 && !slot.done && !startedWorkIds.includes(slot.workId);
             const title = slot.type === "bulk"
               ? (slot.topic || "오늘의 단지 후보를 불러오는 중…")
               : slot.topic || "주제 직접 입력";
@@ -3057,35 +3153,48 @@ export default function ApartmentBulkPage() {
                 <div className={styles.dailySlotTop}>
                   <div className={styles.dailySlotNumber}>{slot.done ? "✓" : String(slot.id).padStart(2, "0")}</div>
                   <span className={styles.dailyTypeChip}>{DAILY_TYPE_META[slot.type].short}</span>
-                  {canRecommendApartment ? (
-                    <button type="button" className={styles.dailyReroll} onClick={() => recommendAnotherApartment(slot.id)}>
-                      다른 단지
-                    </button>
-                  ) : canRecommend ? (
-                    <button type="button" className={styles.dailyReroll} onClick={() => recommendAnotherTopic(slot.id)}>
-                      다른 주제
-                    </button>
-                  ) : null}
+                  {slot.done && <span className={styles.dailyDoneLabel}>발행 완료</span>}
                 </div>
                 <div className={styles.dailySlotMain}>
                   <b className={styles.dailySlotTitle}>{title}</b>
                   <small>{description}</small>
                 </div>
                 <div className={styles.dailySlotActions}>
-                  <button
-                    type="button"
-                    className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
-                    onClick={() => startDailySlot(slot)}
-                  >
-                    {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
-                  </button>
-                  <button
-                    type="button"
-                    className={slot.done ? styles.dailyUndo : styles.dailyComplete}
-                    onClick={() => toggleDailyDone(slot.id)}
-                  >
-                    {slot.done ? "취소" : "완료"}
-                  </button>
+                  {slot.done ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.dailyReplace}
+                        onClick={() => replaceCompletedSlot(slot.id)}
+                      >
+                        갈아끼우기
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.dailyUndo}
+                        onClick={() => toggleDailyDone(slot.id)}
+                      >
+                        완료 취소
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
+                        onClick={() => startDailySlot(slot)}
+                      >
+                        {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.dailyComplete}
+                        onClick={() => toggleDailyDone(slot.id)}
+                      >
+                        완료
+                      </button>
+                    </>
+                  )}
                 </div>
               </article>
             );
@@ -3110,6 +3219,7 @@ export default function ApartmentBulkPage() {
               </label>
             ))}
           </div>
+          <button type="button" className={styles.dailyResetAll} onClick={resetDailyBoard}>발행 큐 전체 새로 구성</button>
         </details>
       </section>
       )}
