@@ -719,6 +719,119 @@ export default function Home() {
     }).join("\n\n");
   }
 
+  function shortsTaskForScene(sceneOrder: number) {
+    return tasks.find(t => t.title.startsWith(`장면 ${sceneOrder} ·`));
+  }
+
+  function shortsVisualForScene(sceneIndex: number) {
+    const exact = shortsTaskForScene(shortsScenes[sceneIndex]?.order);
+    const exactSrc = exact?.sourceDataUrl || exact?.imageDataUrl;
+    if (exactSrc) return { src: exactSrc, task: exact };
+
+    for (let i = sceneIndex - 1; i >= 0; i--) {
+      const previous = shortsTaskForScene(shortsScenes[i]?.order);
+      const previousSrc = previous?.sourceDataUrl || previous?.imageDataUrl;
+      if (previousSrc) return { src: previousSrc, task: previous };
+    }
+
+    const first = tasks.find(t => !!(t.sourceDataUrl || t.imageDataUrl));
+    return first ? { src: first.sourceDataUrl || first.imageDataUrl, task: first } : { src: "", task: undefined };
+  }
+
+  async function composeShortsSceneFrame(scene: ShortsScene, sceneIndex: number) {
+    const w = 1080;
+    const h = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("장면 프레임을 만들 수 없습니다.");
+
+    const visual = shortsVisualForScene(sceneIndex);
+    if (visual.src) {
+      try {
+        const img = await loadImage(visual.src);
+        drawCover(ctx, img, w, h);
+      } catch {
+        ctx.fillStyle = "#10141d";
+        ctx.fillRect(0, 0, w, h);
+      }
+    } else {
+      ctx.fillStyle = "#10141d";
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    const isGraphic = scene.screenType.includes("그래프/숫자 카드") || visual.task?.assetKind === "graphic";
+
+    // Keep the lower quarter visually quiet for full narration subtitles.
+    const bottomGrad = ctx.createLinearGradient(0, h * 0.68, 0, h);
+    bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
+    bottomGrad.addColorStop(0.45, "rgba(0,0,0,.28)");
+    bottomGrad.addColorStop(1, "rgba(0,0,0,.72)");
+    ctx.fillStyle = bottomGrad;
+    ctx.fillRect(0, h * 0.68, w, h * 0.32);
+
+    // Graph assets already contain their own chart/title. Other scenes get one strong headline.
+    if (!isGraphic && scene.headline.trim()) {
+      const pad = 72;
+      const fontSize = scene.order === 1 ? 78 : 68;
+      ctx.font = `800 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+      const lines = wrapLines(ctx, scene.headline, w - pad * 2 - 40, 3);
+      const lineH = fontSize * 1.22;
+      const boxH = Math.max(150, lines.length * lineH + 58);
+      const y = scene.screenType.includes("고정 엔딩") ? 560 : 230;
+      ctx.fillStyle = "rgba(0,0,0,.48)";
+      ctx.fillRect(44, y - 26, w - 88, boxH);
+      ctx.textBaseline = "top";
+      ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.06));
+      ctx.strokeStyle = "rgba(0,0,0,.75)";
+      ctx.fillStyle = "#fff";
+      lines.forEach((line, lineIndex) => {
+        const lineY = y + lineIndex * lineH;
+        ctx.strokeText(line, pad, lineY);
+        ctx.fillText(line, pad, lineY);
+      });
+    }
+
+    return canvas.toDataURL("image/png", 0.96);
+  }
+
+  async function composeShortsContactSheet(frames: Array<{ order: number; dataUrl: string }>) {
+    const cols = 3;
+    const thumbW = 216;
+    const thumbH = 384;
+    const gap = 24;
+    const top = 56;
+    const labelH = 34;
+    const rows = Math.ceil(frames.length / cols);
+    const canvas = document.createElement("canvas");
+    canvas.width = gap + cols * (thumbW + gap);
+    canvas.height = top + rows * (thumbH + labelH + gap);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("콘택트시트를 만들 수 없습니다.");
+
+    ctx.fillStyle = "#f3f4f6";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#111827";
+    ctx.font = '800 24px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText("집값쓱 쇼츠 · 장면 흐름 미리보기", gap, 18);
+
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i];
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = gap + col * (thumbW + gap);
+      const y = top + row * (thumbH + labelH + gap);
+      const img = await loadImage(frame.dataUrl);
+      ctx.drawImage(img, x, y, thumbW, thumbH);
+      ctx.fillStyle = "#111827";
+      ctx.font = '700 18px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.fillText(`장면 ${frame.order}`, x, y + thumbH + 8);
+    }
+
+    return canvas.toDataURL("image/png", 0.92);
+  }
+
   function shortsVideoPrompt() {
     return [
       "[집값쓱 유튜브 쇼츠 최종 조립]",
@@ -774,6 +887,8 @@ export default function Home() {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
+
+      // Keep original source assets for traceability.
       let bgNo = 0;
       let graphNo = 0;
       tasks.forEach((task) => {
@@ -781,28 +896,53 @@ export default function Home() {
         const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
         if (match) {
           const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
-          const prefix = task.assetKind === "graphic" ? `graphic_${String(++graphNo).padStart(2, "0")}` : `background_${String(++bgNo).padStart(2, "0")}`;
+          const prefix = task.assetKind === "graphic" ? `source_graphic_${String(++graphNo).padStart(2, "0")}` : `source_background_${String(++bgNo).padStart(2, "0")}`;
           folder.file(`${prefix}.${ext}`, match[2], { base64: true });
         }
       });
+
+      // Build ready-to-assemble final scene frames.
+      const frames: Array<{ order: number; dataUrl: string }> = [];
+      for (let i = 0; i < shortsScenes.length; i++) {
+        const scene = shortsScenes[i];
+        const dataUrl = await composeShortsSceneFrame(scene, i);
+        const match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
+        if (match) {
+          folder.file(sceneFrameFileName(scene.order), match[1], { base64: true });
+          frames.push({ order: scene.order, dataUrl });
+        }
+      }
+
+      if (frames.length) {
+        const contactSheet = await composeShortsContactSheet(frames);
+        const contactMatch = contactSheet.match(/^data:image\/png;base64,(.+)$/);
+        if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
+      }
+
       if (voiceFile) folder.file(`voice_${voiceFile.name}`, voiceFile);
       if (bgmFile) folder.file(`bgm_${bgmFile.name}`, bgmFile);
       folder.file("display_script.txt", shortsScript);
       folder.file("voice_script.txt", shortsVoiceScript);
       folder.file("scene_plan.txt", shortsSceneExport());
+      folder.file("edit_plan.txt", shortsEditPlanExport());
+      folder.file("audio_plan.txt", shortsAudioPlanExport());
       folder.file("timeline.txt", shortsTimelineExport());
-      folder.file("subtitles.txt", shortsScenes.map(s => `${s.order}. ${s.subtitle}`).join("\n"));
-      if (sceneTimeline.length) folder.file("subtitles.srt", shortsSrt());
+      folder.file("subtitles_full.txt", shortsScenes.map(s => `${s.order}. ${s.narration || s.subtitle || s.headline}`).join("\n"));
+      if (sceneTimeline.length) {
+        folder.file("subtitles_full.srt", shortsSrt());
+        folder.file("subtitles.srt", shortsSrt());
+      }
       if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       folder.file("shorts_request.txt", shortsVideoPrompt());
+
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_shorts_package.zip`;
+      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_assembly_package.zip`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) { setError(e.message || "쇼츠 제작 패키지 ZIP 생성에 실패했습니다."); }
+    } catch (e: any) { setError(e.message || "쇼츠 조립 패키지 ZIP 생성에 실패했습니다."); }
     finally { setLoading(false); }
   }
 
