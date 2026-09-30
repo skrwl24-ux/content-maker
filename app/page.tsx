@@ -1113,13 +1113,14 @@ export default function Home() {
 
         <div className="box finalPackageBox">
           <h3>쇼츠 제작 패키지</h3>
-          <div className="packageGrid">
-            <div><span>이미지</span><b>{imageCount}/{tasks.length}장</b></div>
-            <div><span>음성</span><b>{voiceFile ? "준비됨" : "없음"}</b></div>
-            <div><span>자막</span><b>{shortsScenes.length}장면</b></div>
+          <div className="packageGrid five">
+            <div><span>배경</span><b>{backgroundReady}/{backgroundCount}</b></div>
+            <div><span>그래프</span><b>{graphicReady}/{graphicCount}</b></div>
+            <div><span>음성</span><b>{voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초" : "준비됨") : "없음"}</b></div>
+            <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
-          <p className="muted">ZIP에는 이미지, 음성, BGM, voice_script.txt, scene_plan.txt, subtitles.txt, shorts_request.txt가 들어갑니다.</p>
+          <p className="muted">ZIP에는 배경 이미지, 그래프·숫자 카드, 음성, BGM, voice_script.txt, scene_plan.txt, timeline.txt, subtitles.txt, subtitles.srt, shorts_request.txt가 들어갑니다.</p>
           <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "ZIP 만드는 중..." : "📦 쇼츠 제작 패키지 ZIP 다운로드"}</button>
         </div>
 
@@ -1128,11 +1129,12 @@ export default function Home() {
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>음성파일을 타임라인 기준으로 사용</span>
-            <span>이미지 줌/패닝 + 무음 이해 가능한 자막</span>
+            <span>배경은 줌/패닝 · 그래프는 안정적으로 표시</span>
+            <span>SRT 타임코드 + 무음 이해 가능한 큰 문구</span>
             <span>BGM은 음성 아래로 낮게</span>
             <span>마지막은 “오늘도 집값쓱.” 브랜드 엔딩</span>
           </div>
-          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
+          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. ZIP 안의 그래프·이미지·음성·SRT·BGM을 기준으로 영상 제작을 요청합니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
         </div>
 
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>제작자료 수정</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div>
