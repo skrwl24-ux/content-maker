@@ -642,10 +642,11 @@ export default function Home() {
       "[제작 기준]",
       "- 완성 영상은 1080×1920, 9:16 세로형 YouTube Shorts",
       voiceDuration ? `- 음성 파일 길이 약 ${voiceDuration.toFixed(1)}초를 전체 타임라인 기준으로 사용` : "- 음성 파일 길이를 전체 타임라인 기준으로 사용",
-      "- 장면표 순서대로 이미지를 배치",
-      "- 정지 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
+      "- scene_plan.txt와 timeline.txt의 장면 순서·시간을 우선 적용",
+      "- 배경 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
+      "- 그래프·숫자 카드 이미지는 숫자가 잘 읽히도록 과한 움직임 없이 안정적으로 표시",
       "- 큰 화면 문구와 하단 자막은 무음으로 봐도 내용을 이해할 수 있게 표시",
-      "- 자막은 음성 흐름에 맞춰 자연스럽게 타이밍 조정",
+      "- subtitles.srt가 있으면 그 타임코드를 우선 사용하고, 필요할 때만 음성에 맞춰 미세 조정",
       "- BGM은 내레이션을 방해하지 않도록 낮게 깔고, 음성 구간에서는 자동으로 더 낮춤",
       "- 제공한 이미지·음성·자막·BGM을 우선 사용하고 불필요한 새 이미지는 만들지 말 것",
       "- 원문에 없는 가격·날짜·단지명·정책·수치를 추가하지 말 것",
@@ -683,19 +684,25 @@ export default function Home() {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
-      tasks.forEach((task, i) => {
+      let bgNo = 0;
+      let graphNo = 0;
+      tasks.forEach((task) => {
         const dataUrl = task.sourceDataUrl || task.imageDataUrl;
         const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
         if (match) {
           const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
-          folder.file(`image_${String(i + 1).padStart(2, "0")}.${ext}`, match[2], { base64: true });
+          const prefix = task.assetKind === "graphic" ? `graphic_${String(++graphNo).padStart(2, "0")}` : `background_${String(++bgNo).padStart(2, "0")}`;
+          folder.file(`${prefix}.${ext}`, match[2], { base64: true });
         }
       });
       if (voiceFile) folder.file(`voice_${voiceFile.name}`, voiceFile);
       if (bgmFile) folder.file(`bgm_${bgmFile.name}`, bgmFile);
       folder.file("voice_script.txt", shortsScript);
       folder.file("scene_plan.txt", shortsSceneExport());
+      folder.file("timeline.txt", shortsTimelineExport());
       folder.file("subtitles.txt", shortsScenes.map(s => `${s.order}. ${s.subtitle}`).join("\n"));
+      if (sceneTimeline.length) folder.file("subtitles.srt", shortsSrt());
+      if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       folder.file("shorts_request.txt", shortsVideoPrompt());
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
