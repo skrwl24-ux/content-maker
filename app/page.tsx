@@ -997,7 +997,7 @@ export default function Home() {
         <div className="sectionHead"><div><h2>3. 장면표</h2><p>이 표가 쇼츠의 중심입니다. 소리를 꺼도 큰 문구와 하단 자막만으로 내용이 이해되어야 합니다.</p></div><span className="counter">{shortsScenes.length || 0}/6~7장면</span></div>
         <div className="box scenePasteBox">
           <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
-          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
+          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
           <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span>배경 이미지 {backgroundCount}개</span><span>그래프/숫자 {graphicCount}개</span><span>나머지는 재사용·텍스트·엔딩</span></div>
         </div>
         {shortsScenes.length > 0 && <div className="sceneTable">
@@ -1111,13 +1111,14 @@ export default function Home() {
 
         <div className="box finalPackageBox">
           <h3>쇼츠 제작 패키지</h3>
-          <div className="packageGrid">
-            <div><span>이미지</span><b>{imageCount}/{tasks.length}장</b></div>
-            <div><span>음성</span><b>{voiceFile ? "준비됨" : "없음"}</b></div>
-            <div><span>자막</span><b>{shortsScenes.length}장면</b></div>
+          <div className="packageGrid five">
+            <div><span>배경</span><b>{backgroundReady}/{backgroundCount}</b></div>
+            <div><span>그래프</span><b>{graphicReady}/{graphicCount}</b></div>
+            <div><span>음성</span><b>{voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초" : "준비됨") : "없음"}</b></div>
+            <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
-          <p className="muted">ZIP에는 이미지, 음성, BGM, voice_script.txt, scene_plan.txt, subtitles.txt, shorts_request.txt가 들어갑니다.</p>
+          <p className="muted">ZIP에는 배경 이미지, 그래프·숫자 카드, 음성, BGM, voice_script.txt, scene_plan.txt, timeline.txt, subtitles.txt, subtitles.srt, shorts_request.txt가 들어갑니다.</p>
           <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "ZIP 만드는 중..." : "📦 쇼츠 제작 패키지 ZIP 다운로드"}</button>
         </div>
 
@@ -1126,7 +1127,8 @@ export default function Home() {
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>음성파일을 타임라인 기준으로 사용</span>
-            <span>이미지 줌/패닝 + 무음 이해 가능한 자막</span>
+            <span>배경은 줌/패닝 · 그래프는 안정적으로 표시</span>
+            <span>SRT 타임코드 + 무음 이해 가능한 화면 문구</span>
             <span>BGM은 음성 아래로 낮게</span>
             <span>마지막은 “오늘도 집값쓱.” 브랜드 엔딩</span>
           </div>
