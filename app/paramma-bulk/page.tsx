@@ -682,6 +682,28 @@ export default function ParammaBulkPage() {
   }, []);
 
   useEffect(() => {
+    void loadPublishHistory();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const completed = topics.filter((topic) => statuses[topic.id] === "done");
+    if (!completed.length) return;
+    void fetch("/api/paramma/publish-history", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        items: completed.map((topic) => ({
+          title: topic.title,
+          category: topic.category,
+          thumbnailHook: topic.thumbnailHook,
+          source: "paramma-local-migration",
+        })),
+      }),
+    }).then(() => loadPublishHistory()).catch(() => {});
+  }, [hydrated]);
+
+  useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works }));
@@ -781,11 +803,121 @@ export default function ParammaBulkPage() {
     }
   }
 
+  async function loadPublishHistory() {
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/paramma/publish-history", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "발행 이력 조회 실패");
+      const items = Array.isArray(json.items)
+        ? json.items.filter((item: unknown): item is ParammaHistoryItem =>
+            Boolean(item && typeof item === "object" && typeof (item as ParammaHistoryItem).title === "string")
+          )
+        : [];
+      setHistoryItems(items);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "발행 이력을 불러오지 못했습니다.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function syncHistory(topic: Topic, published: boolean) {
+    try {
+      await fetch("/api/paramma/publish-history", {
+        method: published ? "POST" : "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: topic.title,
+          category: topic.category,
+          thumbnailHook: topic.thumbnailHook,
+          source: "paramma-bulk",
+        }),
+      });
+    } catch {
+      // 서버 동기화 실패 시에도 현재 브라우저의 발행 큐 작업은 계속됩니다.
+    }
+  }
+
   function completeTopic(id: number) {
+    const topic = topics.find((item) => item.id === id);
+    if (!topic) return;
     setStatuses((prev) => ({ ...prev, [id]: "done" }));
-    const next = TOPICS.find((t) => t.id > id && statusOf(t.id) !== "done");
+    setHistoryItems((prev) => {
+      const key = normalizeParammaTopic(topic.title);
+      if (prev.some((item) => item.normalized_key === key)) return prev;
+      return [{
+        normalized_key: key,
+        title: topic.title,
+        category: topic.category,
+        thumbnail_hook: topic.thumbnailHook,
+        published_on: new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date()),
+      }, ...prev];
+    });
+    void syncHistory(topic, true);
+    const next = topics.find((t) => t.id > id && statusOf(t.id) !== "done");
     if (next) setSelectedId(next.id);
-    setNotice(next ? `${id}번 완료. 다음 ${next.id}번으로 이동했습니다.` : "이번 10개가 모두 끝났습니다. 다음 10개를 요청할 차례예요.");
+    setNotice(next ? `${id}번 발행 완료. 완료한 카드는 원할 때 갈아끼우면 됩니다.` : "10칸이 모두 완료됐습니다. 완료 카드의 ‘갈아끼우기’로 새 주제를 채워주세요.");
+  }
+
+  function undoComplete(id: number) {
+    const topic = topics.find((item) => item.id === id);
+    if (!topic) return;
+    setStatuses((prev) => ({ ...prev, [id]: "working" }));
+    setHistoryItems((prev) => prev.filter((item) => item.normalized_key !== normalizeParammaTopic(topic.title)));
+    void syncHistory(topic, false);
+    setSelectedId(id);
+    setNotice(`${id}번 완료 처리를 취소했습니다.`);
+  }
+
+  async function replaceCompletedTopic(id: number) {
+    const current = topics.find((item) => item.id === id);
+    if (!current || statusOf(id) !== "done") return;
+
+    const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
+    const queueKeys = new Set(topics.filter((item) => item.id !== id).map((item) => normalizeParammaTopic(item.title)));
+    const available = TOPIC_POOL.filter((candidate) => {
+      const key = normalizeParammaTopic(candidate.title);
+      return !historyKeys.has(key) && !queueKeys.has(key);
+    });
+
+    if (!available.length) {
+      setNotice("새 주제 후보가 모두 소진됐습니다. 주제 풀 보충이 필요합니다.");
+      return;
+    }
+
+    const position = topics.findIndex((item) => item.id === id);
+    const prevCategory = position > 0 ? topics[position - 1]?.category : null;
+    const nextCategory = position >= 0 && position < topics.length - 1 ? topics[position + 1]?.category : null;
+    const categoryCounts = topics
+      .filter((item) => item.id !== id)
+      .reduce<Record<string, number>>((acc, item) => {
+        acc[item.category] = (acc[item.category] || 0) + 1;
+        return acc;
+      }, {});
+
+    const ranked = [...available].sort((a, b) => {
+      const aAdjacent = Number(a.category === prevCategory) + Number(a.category === nextCategory);
+      const bAdjacent = Number(b.category === prevCategory) + Number(b.category === nextCategory);
+      return aAdjacent - bAdjacent || (categoryCounts[a.category] || 0) - (categoryCounts[b.category] || 0);
+    });
+    const seed = (historyItems.length + id + topics.reduce((sum, topic) => sum + topic.title.length, 0)) % ranked.length;
+    const picked = ranked[seed];
+    const replacement: Topic = { id, ...picked };
+
+    for (const slotId of SLOT_IDS) {
+      try { await idbDelete(id, slotId); } catch {}
+    }
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+    setImages({});
+    setTopics((prev) => prev.map((topic) => topic.id === id ? replacement : topic));
+    setStatuses((prev) => ({ ...prev, [id]: "waiting" }));
+    setWorks((prev) => ({ ...prev, [id]: defaultWork(replacement) }));
+    setSelectedId(id);
+    setNotice(`${id}번을 새 주제로 갈아끼웠습니다: ${replacement.title}`);
   }
 
   async function copyText(text: string, success: string) {
@@ -983,6 +1115,7 @@ export default function ParammaBulkPage() {
 
   function resetProgress() {
     if (!window.confirm("이번 10개의 진행 상태와 본문·요청서 설정을 초기화할까요? 등록 이미지는 별도 삭제하지 않습니다.")) return;
+    setTopics(TOPICS);
     setStatuses({});
     setWorks({});
     setSelectedId(1);
