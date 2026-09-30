@@ -566,13 +566,66 @@ export default function Home() {
     openGPT(shortsSilentPrompt());
   }
 
-  function shortsSceneExport() {
-    return shortsScenes.map(scene => [
-      `장면 ${scene.order}`,
-      `큰 문구: ${scene.headline}`,
-      `하단 자막: ${scene.subtitle}`,
-      `화면: ${scene.screenType}`
+  function shortsVoicePrompt() {
+    return [
+      "[집값쓱 쇼츠 AI 음성 제작]",
+      `주제: ${projectTitle || "아래 대본의 핵심 주제"}`,
+      "",
+      "[음성 기준]",
+      "- 아래 대본 그대로 한국어 내레이션 음성으로 제작",
+      "- 부동산 정보 쇼츠에 어울리는 자연스럽고 또렷한 톤",
+      "- 광고처럼 과하게 흥분된 톤은 피하고 신뢰감 있게",
+      "- 숫자, 금액, 단지명, 지역명은 특히 정확하게 발음",
+      "- 짧고 빠른 정보 전달형 템포",
+      "- 가능하면 약 1.5배속 체감 속도로 출력",
+      "- 속도 설정이 불가능하면 자연스럽게 읽되 불필요한 긴 호흡은 줄일 것",
+      "- BGM, 효과음 없이 내레이션 음성만 출력",
+      "- MP3 또는 WAV 파일로 제공",
+      "- 대본을 요약하거나 바꾸지 말 것",
+      "",
+      "[완성 대본]",
+      shortsScript.trim()
+    ].join("\n");
+  }
+
+  function formatSrtTime(seconds: number) {
+    const ms = Math.max(0, Math.round(seconds * 1000));
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const milli = ms % 1000;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")},${String(milli).padStart(3, "0")}`;
+  }
+
+  function shortsSrt() {
+    return sceneTimeline.map((item, i) => [
+      String(i + 1),
+      `${formatSrtTime(item.start)} --> ${formatSrtTime(item.end)}`,
+      item.scene.subtitle || item.scene.headline
     ].join("\n")).join("\n\n");
+  }
+
+  function shortsTimelineExport() {
+    return sceneTimeline.map(item => [
+      `장면 ${item.scene.order} · ${item.start.toFixed(1)}~${item.end.toFixed(1)}초`,
+      `내레이션: ${item.scene.narration}`,
+      `큰 문구: ${item.scene.headline}`,
+      `하단 자막: ${item.scene.subtitle}`,
+      `화면: ${item.scene.screenType}`
+    ].join("\n")).join("\n\n");
+  }
+
+  function shortsSceneExport() {
+    return shortsScenes.map(scene => {
+      const timing = sceneTimeline.find(t => t.scene.order === scene.order);
+      return [
+        `장면 ${scene.order}${timing ? ` · ${timing.start.toFixed(1)}~${timing.end.toFixed(1)}초` : ""}`,
+        `내레이션: ${scene.narration}`,
+        `큰 문구: ${scene.headline}`,
+        `하단 자막: ${scene.subtitle}`,
+        `화면: ${scene.screenType}`
+      ].join("\n");
+    }).join("\n\n");
   }
 
   function shortsVideoPrompt() {
