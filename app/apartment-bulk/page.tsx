@@ -33,6 +33,28 @@ type DailySlot = {
   done: boolean;
   workId: string;
   topic?: string;
+  complexId?: string;
+  complexName?: string;
+  candidateRegion?: string;
+  candidateRegionGroup?: string;
+  candidateArea?: string;
+  candidateAngle?: string;
+};
+
+type DailyApartmentCandidate = {
+  id: string;
+  name: string;
+  regionCode: string;
+  regionLabel: string;
+  regionGroup: string;
+  representativeArea: string | null;
+  recent30Count: number;
+  sixMonthCount: number;
+  daysSinceLastTrade: number | null;
+  priceChangePct: number | null;
+  marketSignalCount: number;
+  recommendedAngle: string;
+  status: string;
 };
 type DailyWorkSnapshot = {
   top3?: Top3Work;
@@ -230,6 +252,16 @@ const PUBLISHED_TOPIC_SEEDS = [
 ];
 
 const PUBLISHED_TOPIC_STORAGE_KEY = "apartment-bulk-published-topics-v1";
+const PUBLISHED_COMPLEX_STORAGE_KEY = "apartment-bulk-published-complexes-v1";
+const PUBLISHED_COMPLEX_NAME_SEEDS = [
+  "평촌어바인퍼스트",
+  "산성역포레스티아",
+  "광명소하휴먼시아6단지",
+  "은계어반리더스",
+  "e편한세상송도",
+  "동탄2 디에트르 포레",
+  "판교밸리 제일풍경채",
+];
 
 function normalizeTopicKey(topic: string) {
   return topic
@@ -268,6 +300,53 @@ function savePublishedTopic(topic: string, published: boolean) {
     // 발행 이력 저장 실패는 작업 진행을 막지 않습니다.
   }
 }
+
+function normalizeComplexName(name: string) {
+  return String(name || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/아파트/g, "")
+    .replace(/[\s·ㆍ.\-_,()[\]{}]/g, "")
+    .trim();
+}
+
+function getStoredPublishedComplexes() {
+  if (typeof window === "undefined") return [] as Array<{ id: string; name: string }>;
+  try {
+    const raw = window.localStorage.getItem(PUBLISHED_COMPLEX_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is { id: string; name: string } => Boolean(item && typeof item.id === "string" && typeof item.name === "string"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function isPublishedComplex(candidate: DailyApartmentCandidate, published: Array<{ id: string; name: string }>) {
+  const key = normalizeComplexName(candidate.name);
+  return published.some((item) => item.id === candidate.id || normalizeComplexName(item.name) === key)
+    || PUBLISHED_COMPLEX_NAME_SEEDS.some((name) => normalizeComplexName(name) === key);
+}
+
+function savePublishedComplex(id: string, name: string, published: boolean) {
+  if (typeof window === "undefined" || !id || !name.trim()) return;
+  const current = getStoredPublishedComplexes();
+  const next = published
+    ? [...current.filter((item) => item.id !== id), { id, name: name.trim() }]
+    : current.filter((item) => item.id !== id);
+  try {
+    window.localStorage.setItem(PUBLISHED_COMPLEX_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // 단지 발행 이력 저장 실패는 작업 진행을 막지 않습니다.
+  }
+}
+
+function formatDailyApartmentTopic(candidate: DailyApartmentCandidate) {
+  const area = candidate.representativeArea ? " " + candidate.representativeArea : "";
+  return `${candidate.regionLabel} · ${candidate.name}${area} · ${candidate.recommendedAngle}`;
+}
+
 
 function dailyTopicSeed(dateKey: string, slotId: number) {
   return (dateKey + "-" + slotId).split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -2063,6 +2142,9 @@ export default function ApartmentBulkPage() {
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const [dailyDateKey, setDailyDateKey] = useState("");
   const [dailySlots, setDailySlots] = useState<DailySlot[]>(DEFAULT_DAILY_SLOTS);
+  const [dailyApartmentCandidates, setDailyApartmentCandidates] = useState<DailyApartmentCandidate[]>([]);
+  const dailyApartmentLoadingRef = useRef(false);
+  const dailyApartmentLoadedDateRef = useRef("");
   const [activeWorkId, setActiveWorkId] = useState("");
   const [activeWorkType, setActiveWorkType] = useState<DailyContentType | null>(null);
   const [workTopic, setWorkTopic] = useState("");
@@ -2161,6 +2243,12 @@ export default function ApartmentBulkPage() {
               ? slot.workId
               : createWorkId(dateKey, index + 1),
             topic,
+            complexId: typeof slot?.complexId === "string" ? slot.complexId : "",
+            complexName: typeof slot?.complexName === "string" ? slot.complexName : "",
+            candidateRegion: typeof slot?.candidateRegion === "string" ? slot.candidateRegion : "",
+            candidateRegionGroup: typeof slot?.candidateRegionGroup === "string" ? slot.candidateRegionGroup : "",
+            candidateArea: typeof slot?.candidateArea === "string" ? slot.candidateArea : "",
+            candidateAngle: typeof slot?.candidateAngle === "string" ? slot.candidateAngle : "",
           };
         });
         setDailySlots(normalized);
@@ -2178,6 +2266,55 @@ export default function ApartmentBulkPage() {
       setStartedWorkIds([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!dailyDateKey || dailyApartmentLoadingRef.current || dailyApartmentLoadedDateRef.current === dailyDateKey) return;
+    const missingBulkSlots = dailySlots.filter((slot) => slot.type === "bulk" && !slot.done && !slot.complexId);
+    if (!missingBulkSlots.length) {
+      dailyApartmentLoadedDateRef.current = dailyDateKey;
+      return;
+    }
+
+    dailyApartmentLoadingRef.current = true;
+    fetch("/api/apartment/daily-picks?date=" + encodeURIComponent(dailyDateKey) + "&limit=48", { cache: "no-store" })
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "오늘의 단지 후보 조회 실패");
+        return (json.candidates || []) as DailyApartmentCandidate[];
+      })
+      .then((candidates) => {
+        setDailyApartmentCandidates(candidates);
+        const published = getStoredPublishedComplexes();
+        const existingIds = new Set(dailySlots.map((slot) => slot.complexId || "").filter(Boolean));
+        const existingGroups = new Set(dailySlots.map((slot) => slot.candidateRegionGroup || "").filter(Boolean));
+        const available = candidates.filter((candidate) => !isPublishedComplex(candidate, published) && !existingIds.has(candidate.id));
+        const next = dailySlots.map((slot) => ({ ...slot }));
+
+        for (const slot of next) {
+          if (slot.type !== "bulk" || slot.done || slot.complexId) continue;
+          let pick = available.find((candidate) => !existingIds.has(candidate.id) && !existingGroups.has(candidate.regionGroup));
+          if (!pick) pick = available.find((candidate) => !existingIds.has(candidate.id));
+          if (!pick) break;
+          slot.complexId = pick.id;
+          slot.complexName = pick.name;
+          slot.candidateRegion = pick.regionLabel;
+          slot.candidateRegionGroup = pick.regionGroup;
+          slot.candidateArea = pick.representativeArea || "";
+          slot.candidateAngle = pick.recommendedAngle;
+          slot.topic = formatDailyApartmentTopic(pick);
+          existingIds.add(pick.id);
+          existingGroups.add(pick.regionGroup);
+        }
+        saveDailySlots(next);
+        dailyApartmentLoadedDateRef.current = dailyDateKey;
+      })
+      .catch(() => {
+        dailyApartmentLoadedDateRef.current = dailyDateKey;
+      })
+      .finally(() => {
+        dailyApartmentLoadingRef.current = false;
+      });
+  }, [dailyDateKey, dailySlots]);
 
   useEffect(() => {
     if (!dailyDateKey || activeWorkId || !dailySlots.some((slot) => slot.workId)) return;
@@ -2374,6 +2511,31 @@ export default function ApartmentBulkPage() {
     }
   }
 
+  function recommendAnotherApartment(id: number) {
+    const slot = dailySlots.find((item) => item.id === id);
+    if (!slot || slot.type !== "bulk" || !dailyApartmentCandidates.length) return;
+    const published = getStoredPublishedComplexes();
+    const usedIds = new Set(dailySlots.filter((item) => item.id !== id).map((item) => item.complexId || "").filter(Boolean));
+    const usedGroups = new Set(dailySlots.filter((item) => item.id !== id).map((item) => item.candidateRegionGroup || "").filter(Boolean));
+    const available = dailyApartmentCandidates.filter((candidate) =>
+      !isPublishedComplex(candidate, published) &&
+      !usedIds.has(candidate.id) &&
+      candidate.id !== slot.complexId
+    );
+    const pick = available.find((candidate) => !usedGroups.has(candidate.regionGroup)) || available[0];
+    if (!pick) return;
+    saveDailySlots(dailySlots.map((item) => item.id === id ? {
+      ...item,
+      complexId: pick.id,
+      complexName: pick.name,
+      candidateRegion: pick.regionLabel,
+      candidateRegionGroup: pick.regionGroup,
+      candidateArea: pick.representativeArea || "",
+      candidateAngle: pick.recommendedAngle,
+      topic: formatDailyApartmentTopic(pick),
+    } : item));
+  }
+
   function recommendAnotherTopic(id: number) {
     const slot = dailySlots.find((item) => item.id === id);
     if (!slot) return;
@@ -2395,12 +2557,16 @@ export default function ApartmentBulkPage() {
     const target = dailySlots.find((slot) => slot.id === id);
     if (!target) return;
     const nextDone = !target.done;
-    if (target.topic) savePublishedTopic(target.topic, nextDone);
+    if (target.topic && target.type !== "bulk") savePublishedTopic(target.topic, nextDone);
+    if (target.type === "bulk" && target.complexId && target.complexName) {
+      savePublishedComplex(target.complexId, target.complexName, nextDone);
+    }
     saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: nextDone } : slot));
   }
 
   function resetDailyBoard() {
     const next = makeDailySlots(dailyDateKey || new Date().toISOString().slice(0, 10), getStoredPublishedTopics());
+    dailyApartmentLoadedDateRef.current = "";
     saveDailySlots(next);
     setActiveWorkId("");
     setActiveWorkType(null);
@@ -2433,6 +2599,15 @@ export default function ApartmentBulkPage() {
     } catch {
       // 인덱스 저장 실패는 본문 작업 저장을 막지 않습니다.
     }
+  }
+
+  function startDailySlot(slot: DailySlot) {
+    if (slot.type === "bulk" && slot.complexId && !startedWorkIds.includes(slot.workId)) {
+      markWorkStarted(slot.workId);
+      window.location.assign("/apartment-bulk?complexId=" + encodeURIComponent(slot.complexId));
+      return;
+    }
+    void openDailyWork(slot);
   }
 
   function buildActiveWorkSnapshot(): DailyWorkSnapshot | null {
@@ -2558,7 +2733,10 @@ export default function ApartmentBulkPage() {
         setWorkAttachments([]);
         setWorkProgress("preparing");
         setTop3Work(emptyTop3());
-        if (slot.type === "bulk") resetBulkWorkspace();
+        if (slot.type === "bulk") {
+          const queryComplexId = new URLSearchParams(window.location.search).get("complexId");
+          if (!queryComplexId || queryComplexId !== slot.complexId) resetBulkWorkspace();
+        }
         markWorkStarted(slot.workId);
         setWorkSaveMessage("새 작업 시작");
       }
@@ -2863,11 +3041,12 @@ export default function ApartmentBulkPage() {
         <div className={styles.dailySlots}>
           {dailySlots.map((slot) => {
             const canRecommend = Boolean((DAILY_TOPIC_POOLS[slot.type] || []).length);
+            const canRecommendApartment = slot.type === "bulk" && dailyApartmentCandidates.length > 0 && !slot.done && !startedWorkIds.includes(slot.workId);
             const title = slot.type === "bulk"
-              ? "단지 후보를 골라 실거래 흐름 분석"
+              ? (slot.topic || "오늘의 단지 후보를 불러오는 중…")
               : slot.topic || "주제 직접 입력";
             const description =
-              slot.type === "bulk" ? "가격·거래 변화가 있는 단지를 선택" :
+              slot.type === "bulk" ? (slot.complexId ? "실거래 후보 데이터로 자동 선정" : "후보 데이터 확인 중") :
               slot.type === "top3" ? "지역 검색 유입을 노리는 순위형 글" :
               slot.type === "tip" ? "오래 검색되는 부동산·재테크 정보" :
               slot.type === "power" ? "당일 시장 흐름을 깊게 설명" :
@@ -2878,11 +3057,15 @@ export default function ApartmentBulkPage() {
                 <div className={styles.dailySlotTop}>
                   <div className={styles.dailySlotNumber}>{slot.done ? "✓" : String(slot.id).padStart(2, "0")}</div>
                   <span className={styles.dailyTypeChip}>{DAILY_TYPE_META[slot.type].short}</span>
-                  {canRecommend && (
+                  {canRecommendApartment ? (
+                    <button type="button" className={styles.dailyReroll} onClick={() => recommendAnotherApartment(slot.id)}>
+                      다른 단지
+                    </button>
+                  ) : canRecommend ? (
                     <button type="button" className={styles.dailyReroll} onClick={() => recommendAnotherTopic(slot.id)}>
                       다른 주제
                     </button>
-                  )}
+                  ) : null}
                 </div>
                 <div className={styles.dailySlotMain}>
                   <b className={styles.dailySlotTitle}>{title}</b>
@@ -2892,7 +3075,7 @@ export default function ApartmentBulkPage() {
                   <button
                     type="button"
                     className={slot.workId && activeWorkId === slot.workId ? styles.dailyActiveWork : styles.dailyStart}
-                    onClick={() => void openDailyWork(slot)}
+                    onClick={() => startDailySlot(slot)}
                   >
                     {slot.workId && activeWorkId === slot.workId ? "작업 중" : slot.workId && startedWorkIds.includes(slot.workId) ? "이어하기" : "작업 시작"}
                   </button>
