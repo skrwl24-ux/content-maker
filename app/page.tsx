@@ -1008,15 +1008,27 @@ export default function Home() {
       {phase === "script" && isShorts && <>
         <div className="sectionHead"><div><h2>2. 대본</h2><p>GPT에서 만든 완성 내레이션만 붙여넣고 길이를 확인합니다.</p></div><span className="counter">{shortsCharCount}/210~225자</span></div>
         <div className="box">
-          <div className="miniHead"><h3>완성 대본</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="primary compact" disabled={!shortsScript.trim()} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 원고 복사</button></div></div>
-          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요." />
+          <div className="miniHead"><h3>기준 대본 · 화면/자막용</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "기준 대본을 복사했습니다.")}>📋 기준 대본 복사</button></div></div>
+          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
           <div className="tags">
-            <span>1.5x</span>
-            <span>목표 30~33초</span>
-            <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>공백 제외 {shortsCharCount}자</span>
-            {shortsCharCount > 0 && <span>글자수 기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
+            <span>화면 숫자 원문 유지</span>
+            <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>기준 대본 {shortsCharCount}자</span>
+            {shortsCharCount > 0 && <span>기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
           </div>
-          <p className="muted">시작은 지역명+질문형 후킹, 마무리는 ‘근데 여기서 잠깐.’ → 주의점 → ‘[지역명] 집값, 오늘도 집값쓱.’ 형식입니다. AI 음성은 BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
+          <p className="muted">이 대본이 장면표·화면 문구·자막의 데이터 기준입니다. 6.93억, 84㎡ 같은 표기를 여기서는 바꾸지 않습니다.</p>
+        </div>
+
+        {shortsScript.trim() && <div className="box voiceScriptBox">
+          <div className="miniHead"><h3>AI 음성용 자동 변환</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
+          <div className="voiceScriptPreview">{shortsVoiceScript}</div>
+          <div className="tags">
+            <span>1.5x 기준</span>
+            <span>목표 30~33초</span>
+            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>음성용 {shortsVoiceCharCount}자</span>
+            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
+            {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
+          </div>
+          <p className={shortsVoiceEstimatedSeconds > 33 ? "voiceWarning" : "muted"}>{shortsVoiceEstimatedSeconds > 33 ? "음성용 변환 후 33초를 넘길 가능성이 있습니다. 숫자·단위는 그대로 두고 다른 문장을 압축하는 것을 권장합니다." : "6.93억 → 6억 9천만원, 84㎡ → 84제곱미터처럼 음성에서만 자연스럽게 읽도록 자동 변환합니다."}</p>
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
