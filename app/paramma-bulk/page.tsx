@@ -1133,8 +1133,8 @@ export default function ParammaBulkPage() {
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>PARAMMA PUBLISH QUEUE</p>
-          <h1>이번 발행 10개</h1>
-          <p>본문·이미지 기획 확정 → 여러 ChatGPT 창에 이미지 요청서 전달 → 본문 검수 → 이미지 등록 → 최종 검수·ZIP 순서로 진행합니다.</p>
+          <h1>상시 발행 큐 10개</h1>
+          <p>날짜가 바뀌어도 10칸은 유지됩니다. 글을 발행 완료한 뒤 그 카드만 새 주제로 갈아끼우며 계속 운영합니다.</p>
         </div>
         <div className={styles.progressCard}>
           <div><b>{doneCount}</b><span>/ 10 완료</span></div>
@@ -1149,46 +1149,92 @@ export default function ParammaBulkPage() {
         <div className={styles.queuePanel}>
           <div className={styles.sectionHead}>
             <div>
-              <p className={styles.eyebrow}>PUBLISH ORDER</p>
-              <h2>1번부터 순서대로</h2>
+              <p className={styles.eyebrow}>PUBLISH QUEUE</p>
+              <h2>완료한 자리만 갈아끼우기</h2>
             </div>
-            <span>카테고리는 배지로만 표시</span>
+            <span>새 주제 후보 {availablePoolCount}개</span>
           </div>
 
           <div className={styles.queue}>
-            {TOPICS.map((topic) => {
+            {topics.map((topic) => {
               const status = statusOf(topic.id);
               const selectedNow = selected.id === topic.id;
               return (
-                <button
-                  type="button"
+                <article
                   key={topic.id}
                   className={`${styles.topicCard} ${selectedNow ? styles.selected : ""} ${status === "done" ? styles.done : ""}`}
-                  onClick={() => selectTopic(topic.id)}
                 >
-                  <span className={styles.number}>{String(topic.id).padStart(2, "0")}</span>
-                  <div className={styles.topicMain}>
-                    <span className={`${styles.category} ${categoryClass(topic.category)}`}>
-                      {categoryEmoji(topic.category)} {topic.category}
+                  <button type="button" className={styles.topicSelect} onClick={() => selectTopic(topic.id)}>
+                    <span className={styles.number}>{status === "done" ? "✓" : String(topic.id).padStart(2, "0")}</span>
+                    <div className={styles.topicMain}>
+                      <span className={`${styles.category} ${categoryClass(topic.category)}`}>
+                        {categoryEmoji(topic.category)} {topic.category}
+                      </span>
+                      <b>{topic.title}</b>
+                      <small>{topic.brief}</small>
+                    </div>
+                  </button>
+                  <div className={styles.topicCardSide}>
+                    <span className={`${styles.status} ${styles[status]}`}>
+                      {status === "done" ? "발행 완료" : status === "working" ? "진행 중" : "대기"}
                     </span>
-                    <b>{topic.title}</b>
-                    <small>{topic.brief}</small>
+                    {status === "done" && (
+                      <div className={styles.topicDoneActions}>
+                        <button type="button" onClick={() => void replaceCompletedTopic(topic.id)}>갈아끼우기</button>
+                        <button type="button" onClick={() => undoComplete(topic.id)}>완료 취소</button>
+                      </div>
+                    )}
                   </div>
-                  <span className={`${styles.status} ${styles[status]}`}>
-                    {status === "done" ? "완료" : status === "working" ? "진행 중" : "대기"}
-                  </span>
-                </button>
+                </article>
               );
             })}
           </div>
 
           <div className={styles.nextBatch}>
             <div>
-              <b>10개가 끝났나요?</b>
-              <span>현재 10개와 겹치지 않도록 다음 발행 10개를 ChatGPT에 요청합니다.</span>
+              <b>한꺼번에 다음 10개를 바꾸지 않습니다.</b>
+              <span>발행 완료 → 갈아끼우기 순서로 한 자리씩 교체합니다. 후보가 5개 이하로 줄면 주제 풀 보충을 요청하면 됩니다.</span>
             </div>
-            <button type="button" onClick={() => void requestNextTen()}>다음 10개 요청하기</button>
+            <strong>남은 후보 {availablePoolCount}개</strong>
           </div>
+
+          <details className={styles.historyPanel}>
+            <summary>
+              <span>발행 이력</span>
+              <small>{historyItems.length}개 저장됨</small>
+            </summary>
+            <div className={styles.historyBody}>
+              <div className={styles.historyToolbar}>
+                <input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="발행 주제 검색" />
+                <button type="button" onClick={() => void loadPublishHistory()} disabled={historyLoading}>
+                  {historyLoading ? "불러오는 중…" : "새로고침"}
+                </button>
+              </div>
+              <div className={styles.historyFilters}>
+                {(["전체", "신기한 동물이야기", "신비로운 자연", "생활 속 궁금증", "신기한 우리 몸"] as const).map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    className={historyFilter === category ? styles.historyFilterActive : ""}
+                    onClick={() => setHistoryFilter(category)}
+                  >
+                    {category === "전체" ? "전체" : category === "신기한 동물이야기" ? "동물" : category === "신비로운 자연" ? "자연" : category === "생활 속 궁금증" ? "생활" : "우리 몸"}
+                    <span>{category === "전체" ? historyItems.length : historyItems.filter((item) => item.category === category).length}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={styles.historyList}>
+                {filteredHistory.slice(0, 120).map((item) => (
+                  <div className={styles.historyRow} key={item.normalized_key}>
+                    <span className={`${styles.category} ${categoryClass(item.category)}`}>{categoryEmoji(item.category)} {item.category}</span>
+                    <b>{item.title}</b>
+                    <time>{item.published_on}</time>
+                  </div>
+                ))}
+              </div>
+              {!filteredHistory.length && !historyLoading && <p className={styles.historyEmpty}>조건에 맞는 발행 이력이 없습니다.</p>}
+            </div>
+          </details>
         </div>
 
         <div className={styles.workColumn}>
