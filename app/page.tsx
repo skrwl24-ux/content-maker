@@ -506,6 +506,15 @@ export default function Home() {
     openGPT(shortsSilentPrompt());
   }
 
+  function shortsSceneExport() {
+    return shortsScenes.map(scene => [
+      `장면 ${scene.order}`,
+      `큰 문구: ${scene.headline}`,
+      `하단 자막: ${scene.subtitle}`,
+      `화면: ${scene.screenType}`
+    ].join("\n")).join("\n\n");
+  }
+
   function shortsUploadPrompt() {
     return [
       "[집값쓱 YouTube Shorts 업로드 문구 제작]",
@@ -804,10 +813,10 @@ export default function Home() {
         <div className="grid2"><div className="box"><h3>추천 제목</h3><div className="recommended">{analysis.recommendedTitle}</div><div className="candidateList">{analysis.titleCandidates?.slice(0, 5).map(t => <button key={t} onClick={() => setFinalTitle(t)}>{t}</button>)}</div></div><div className="box"><h3>본문에서 찾은 핵심 숫자</h3><div className="tags">{analysis.facts?.length ? analysis.facts.map(f => <span key={f.value}>{f.value}</span>) : <span>숫자 정보 없음</span>}</div><p className="muted">이미지에는 원문에 있는 숫자만 사용하도록 검수합니다.</p></div></div>
         <div className="box"><h3>이미지 구성</h3>{tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div></div>)}</div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>본문 수정</button><button className="primary" onClick={() => setPhase("images")}>이미지 작업 시작</button></div>
-      </>)}
+      </> : null)}
 
       {phase === "images" && current && <>
-        <div className="sectionHead"><div><h2>이미지 일괄 정리</h2><p>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
+        <div className="sectionHead"><div><h2>{isShorts ? "4. 이미지" : "이미지 일괄 정리"}</h2><p>{isShorts ? <>장면표에서 <b>새 이미지</b>로 정한 장면만 작업합니다. 나머지 장면은 재사용·텍스트 카드·숫자 카드로 처리합니다.</> : <>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</>}</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
         <div className="toolbar box"><input ref={bulkRef} type="file" accept="image/*" multiple onChange={e => handleBulk(e.target.files)} /><button className="secondary" onClick={copyAllPrompts}>📋 전체 이미지 요청서 복사</button><span className="muted">파일명 00, 01, 02… 순으로 저장해두면 자동 정렬이 가장 정확합니다.</span></div>
 
         <div className="workspace">
@@ -816,25 +825,47 @@ export default function Home() {
           <div className="previewArea">
             <div className={`previewCard ${contentType === "집값쓱 쇼츠" ? "vertical" : ""}`}>{current.imageDataUrl ? <img src={current.imageDataUrl} alt={current.title} /> : <div className="placeholder"><b>{String(current.order).padStart(2, "0")} {current.title}</b><span>배경 이미지를 업로드하면<br />{preset.label}로 자동 맞춤 + 문구 합성</span></div>}</div>
             <div className="box editorBox">
-              <div className="miniHead"><h3>{String(current.order).padStart(2, "0")} · {current.title}</h3><button className="secondary compact" onClick={() => copyPrompt(current)}>📋 요청문 복사</button></div>
+              <div className="miniHead"><h3>{String(current.order).padStart(2, "0")} · {current.title}</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyPrompt(current)}>📋 요청문 복사</button>{isShorts && <button className="secondary compact" onClick={() => openGPT(promptFor(current))}>↗ GPT에서 만들기</button>}</div></div>
               <label>사이트가 정확하게 합성할 문구</label><textarea className="smallArea" value={current.keyMessage} onChange={e => updateTask(currentIndex, { keyMessage: e.target.value, done: false })} />
               <div className="inlineActions"><label className="fileBtn">이미지 1장 교체<input type="file" accept="image/*" onChange={e => { const f = e.target.files?.[0]; if (f) replaceOne(f); }} /></label><button className="secondary" disabled={!current.sourceDataUrl || loading} onClick={recomposeCurrent}>문구 다시 합성</button><button className="primary" disabled={!current.imageDataUrl} onClick={() => updateTask(currentIndex, { done: true })}>확정 ✓</button></div>
               <div className="muted">이미지 AI가 글자를 쓰는 방식이 아니라, 업로드한 배경 위에 사이트가 문구를 직접 그립니다. 그래서 한글·숫자 오타를 줄일 수 있습니다.</div>
             </div>
           </div>
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>구성으로 돌아가기</button><button className="primary" onClick={() => setPhase("review")}>자동 검수</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>{isShorts ? "장면표로 돌아가기" : "구성으로 돌아가기"}</button><button className="primary" onClick={() => setPhase("review")}>{isShorts ? "제작용 묶음 보기" : "자동 검수"}</button></div>
       </>}
 
-      {phase === "review" && <>
+      {phase === "review" && (isShorts ? <>
+        <div className="sectionHead"><div><h2>5. 제작완료</h2><p>실제 편집할 때 필요한 것만 한곳에 모았습니다.</p></div><span className="counter">{shortsScenes.length}장면 · 이미지 {tasks.length}장</span></div>
+        <div className="grid2">
+          <div className="box">
+            <div className="miniHead"><h3>TTS 원고</h3><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 전체 원고 복사</button></div>
+            <div className="productionText">{shortsScript}</div>
+            <div className="tags"><span>1.5x</span><span>{shortsCharCount}자</span><span>목표 30~33초</span></div>
+          </div>
+          <div className="box">
+            <div className="miniHead"><h3>화면 문구·자막</h3><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면별 화면 문구를 복사했습니다.")}>📋 장면표 복사</button></div>
+            <div className="productionScenes">{shortsScenes.map(scene => <div key={scene.order}><b>{scene.order}. {scene.headline}</b><span>{scene.subtitle}</span><small>{scene.screenType}</small></div>)}</div>
+          </div>
+        </div>
+        <div className="grid2">
+          <div className="box"><h3>BGM</h3><div className="recommended">{shortsBgm.label}</div><p className="muted">{shortsBgm.note}</p><p className="muted">보컬 없는 곡을 사용하고 내레이션 중에는 BGM을 낮게 유지합니다.</p></div>
+          <div className="box">
+            <div className="miniHead"><h3>YouTube 업로드</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary compact" onClick={() => openGPT(shortsUploadPrompt())}>GPT에서 만들기 ↗</button></div></div>
+            <p className="muted">제목 3개 · 설명문 · 해시태그 · 고정댓글을 만듭니다.</p>
+          </div>
+        </div>
+        <div className="box summaryBox"><b>이미지 준비</b><span>새 이미지 {tasks.length}장 중 {imageCount}장 업로드 · 나머지 장면은 재사용/카드 방식</span></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>이미지 수정</button><div className="inlineActions"><button className="secondary" onClick={saveCloud} disabled={loading}>☁ 저장</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div></div>
+      </> : <>
         <div className="sectionHead"><div><h2>자동 검수</h2><p>OCR 대신 사이트가 직접 합성한 문구와 원문 데이터를 비교합니다.</p></div></div>
         <div className="reviewGrid"><div className="reviewCard"><span>이미지 업로드</span><b className={imageCount === tasks.length ? "ok" : "warn"}>{imageCount}/{tasks.length}</b><small>빠진 이미지 확인</small></div><div className="reviewCard"><span>확정 완료</span><b className={completeCount === tasks.length ? "ok" : "warn"}>{completeCount}/{tasks.length}</b><small>문구 확인 후 확정</small></div><div className="reviewCard"><span>최종 규격</span><b className="ok">{preset.label}</b><small>업로드 시 자동 변환</small></div></div>
         <div className="box"><h3>본문 숫자 사용 확인</h3>{factUsage.length === 0 ? <p className="muted">본문에서 별도 숫자를 찾지 못했습니다.</p> : <div className="factList">{factUsage.map(f => <div key={f.value} className="factItem"><span>{f.value}</span><b className={f.used ? "ok" : "neutral"}>{f.used ? "이미지 문구에 사용" : "미사용 (문제 아님)"}</b></div>)}</div>}<p className="muted">미사용은 오류가 아닙니다. 사이트가 본문에 없는 숫자를 새로 만들어내지 않는지가 핵심입니다.</p></div>
         <div className="box"><h3>최종 파일명 미리보기</h3>{tasks.map(t => <div className="filename" key={t.order}>{String(t.order).padStart(2, "0")}_{cleanName(t.title)}.png</div>)}</div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>이미지 수정</button><button className="primary" disabled={imageCount === 0} onClick={prepareFinal}>최종 본문 + ZIP 준비</button></div>
-      </>}
+      </>)}
 
-      {phase === "done" && <>
+      {phase === "done" && !isShorts && <>
         <div className="sectionHead"><div><h2>완료</h2><p>이미지 위치 표시가 들어간 본문과 정리된 이미지 ZIP을 받을 수 있습니다.</p></div></div>
         <label>최종 제목</label><input value={finalTitle} onChange={e => setFinalTitle(e.target.value)} />
         <label>최종 본문</label><textarea className="finalEditor" value={finalBody} onChange={e => setFinalBody(e.target.value)} />
