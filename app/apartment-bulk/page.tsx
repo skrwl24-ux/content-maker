@@ -213,6 +213,8 @@ function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string
 - 국제 금 가격, 국내 원화 기준 금값, KRX 금시장 가격을 같은 숫자처럼 섞지 말 것.
 - 달러 가치, 미국 실질금리·국채금리, 중앙은행 수요, 위험회피 심리, 원/달러 환율을 금 가격의 주요 변수로 구분해 설명할 것.
 - 최신 가격을 언급하면 기준 시각·시장·단위를 함께 표시할 것.
+- 최근 1년 흐름을 보여줄 수 있는 신뢰 가능한 월별 자료가 확보되면 국제 금 가격(USD/트로이온스) 기준의 시세표를 별도 소제목 아래 포함할 것.
+- 1년 시세표는 월별 대표값의 기준을 통일하고, 확인되지 않은 월을 임의 보간하거나 추정해서 채우지 말 것.
 - 단기 등락 원인을 하나로 단정하지 말고 확인 가능한 배경을 여러 변수로 나눠 설명할 것.`;
   } else if (safeTopic.includes("엔화") || safeTopic.includes("환율")) {
     topicGuide = `
@@ -220,6 +222,8 @@ function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string
 - 달러/엔(USD/JPY)과 원/엔(KRW/JPY 또는 100엔당 원화)을 혼동하지 말 것.
 - 일본은행 정책금리·발언, 미국 연준과 미일 금리차, 달러 흐름, 원화 움직임을 나눠 설명할 것.
 - 환율 숫자를 제시할 때 기준 시각과 통화쌍을 분명히 표시할 것.
+- 최근 1년 흐름을 보여줄 수 있는 신뢰 가능한 월별 자료가 확보되면 통화쌍과 단위를 통일한 시세표를 별도 소제목 아래 포함할 것.
+- 1년 시세표는 확인되지 않은 월을 임의 보간하거나 추정해서 채우지 말 것.
 - '엔화가 오른 이유'를 단일 원인으로 확정하지 말고 최신 정책·시장 자료와 함께 설명할 것.`;
   } else if (financeTopic) {
     topicGuide = `
@@ -294,6 +298,11 @@ function makeSavedWorkImagePrompt(slot: WorkImageSlot, topic: string, body: stri
   const article = compactArticleForImagePrompt(body);
   const ratio = meta.width === meta.height ? "1:1 정사각형" : "16:9 가로형";
   const tables = extractMarkdownTables(body);
+  const timeSeriesTable = tables.find(isTimeSeriesTable);
+
+  if (slot === "01" && timeSeriesTable) {
+    return makeTimeSeriesChartPrompt(safeTopic, timeSeriesTable, imageNotes);
+  }
 
   if (slot === "01" && tables.length > 0) {
     return makeTableImagePrompt(safeTopic, tables[0], imageNotes);
@@ -555,6 +564,21 @@ function markdownTableToText(table: MarkdownTable) {
   ].join("\n");
 }
 
+function isTimeSeriesTable(table: MarkdownTable) {
+  if (table.rows.length < 4) return false;
+
+  const heading = table.heading.replace(/\s+/g, " ").trim();
+  const headers = table.headers.join(" ");
+  const combined = `${heading} ${headers}`;
+
+  const timeSeriesHeading = /(최근\s*(?:1년|12개월|6개월)|1년\s*(?:시세|가격|환율|흐름|추이)|12개월\s*(?:시세|가격|환율|흐름|추이)|월별\s*(?:시세|가격|환율|흐름|추이)|시세\s*(?:흐름|추이)|가격\s*(?:흐름|추이)|환율\s*(?:흐름|추이)|지수\s*(?:흐름|추이)|연간\s*(?:흐름|추이)|price\s*trend|exchange\s*rate\s*trend)/i.test(heading);
+  const hasTimeAxis = /(시점|날짜|일자|월|월말|기간|연도|년월|date|month|period)/i.test(headers);
+  const hasMarketValue = /(가격|금값|금시세|시세|환율|지수|종가|대표값|금액|수치|price|rate|index|close)/i.test(headers);
+  const looksLikeSchedule = /(일정|청약|상장|공모|예정|주관사|발표일|배당일|실적\s*발표)/i.test(combined);
+
+  return timeSeriesHeading && hasTimeAxis && hasMarketValue && !looksLikeSchedule;
+}
+
 function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string) {
   const safeTopic = topic.trim() || table.heading || "블로그 글";
   const tableTitle = table.heading || safeTopic;
@@ -600,6 +624,48 @@ ${imageNotes.trim() || "별도 메모 없음"}
 ${markdownTableToText(table)}
 
 중요: 설명문을 답하지 말고 위 표 데이터를 그대로 반영한 이미지 1장을 바로 제작해줘.`;
+}
+
+function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+  const safeTopic = topic.trim() || table.heading || "블로그 글";
+  const chartTitle = table.heading || "최근 시세 흐름";
+
+  return `네이버 블로그용 시세 그래프 이미지를 1장 만들어줘.
+
+[글 주제]
+${safeTopic}
+
+[이미지 역할]
+슬롯 01 · 최근 시세 그래프
+역할: 본문의 기간별 시세 데이터를 주식 시세 앱처럼 한눈에 보여주는 라인차트
+
+[그래프 제목]
+${chartTitle}
+
+[제작 크기]
+1600×900px
+16:9 가로형
+
+[가장 중요한 기준]
+- 아래 표 데이터만 사용하고 숫자, 날짜, 단위, 월을 임의로 추가하거나 바꾸지 말 것.
+- 가로축은 날짜·월·시점을 원문 순서 그대로 배치할 것.
+- 가격·시세·환율·지수·종가·대표값처럼 주된 시장값 열을 하나의 시세선으로 연결할 것.
+- 등락률, 비고, 흐름 같은 보조 열은 별도의 두 번째 선으로 만들지 말고 필요하면 작은 주석으로만 활용할 것.
+- 값이 없는 기간을 임의로 보간하거나 추정해 연결하지 말 것.
+- 시가·고가·저가·종가 4개가 모두 제공된 데이터가 아니라면 캔들차트를 만들지 말고 라인차트로 제작할 것.
+- 증권앱의 1년 시세 차트처럼 깔끔하고 전문적인 금융 차트 느낌으로 구성할 것.
+- 차트의 시장·단위가 모바일에서도 바로 보이도록 명확히 표시할 것.
+- 매수·매도 신호, 목표가, 전망 화살표처럼 투자 권유로 보이는 요소는 넣지 말 것.
+- 과도한 네온, 유리질감, 복잡한 3D 효과, 작은 글자 남발을 피할 것.
+- 워터마크와 타사 로고를 넣지 말 것.
+
+[운영자 이미지 메모]
+${imageNotes.trim() || "별도 메모 없음"}
+
+[반드시 반영할 시계열 데이터]
+${markdownTableToText(table)}
+
+중요: 설명문을 답하지 말고 위 데이터를 정확히 반영한 라인차트 이미지 1장을 바로 제작해줘.`;
 }
 
 function makeMarkdownTableCard(headers: string[], row: string[]) {
@@ -1843,6 +1909,8 @@ export default function ApartmentBulkPage() {
   );
   const workBodyReadyForImages = workBody.trim().length >= 80;
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
+  const workTimeSeriesTable = useMemo(() => workTables.find(isTimeSeriesTable) || null, [workTables]);
+  const workPrimaryTable = workTimeSeriesTable || workTables[0] || null;
   const workTableCount = workTables.length;
   const markdownTableCount = useMemo(() => countMarkdownTables(finalBlogText), [finalBlogText]);
   const naverBlocks = useMemo(
@@ -2707,14 +2775,15 @@ export default function ApartmentBulkPage() {
               {workTableCount > 0 && (
                 <div className={styles.tableImageNotice}>
                   <div>
-                    <b>📊 표 {workTableCount}개 감지됨</b>
+                    <b>{workTimeSeriesTable ? "📈 시계열 표 감지됨" : `📊 표 ${workTableCount}개 감지됨`}</b>
                     <span>
-                      첫 번째 표 · {workTables[0]?.rows.length || 0}행 × {workTables[0]?.headers.length || 0}열 ·
-                      01 이미지 요청서가 표 전용으로 자동 변경됩니다.
+                      {workTimeSeriesTable
+                        ? `${workTimeSeriesTable.heading || "시계열 데이터"} · ${workTimeSeriesTable.rows.length}개 시점 · 01 이미지 요청서가 증권앱형 라인차트로 자동 변경됩니다.`
+                        : `첫 번째 표 · ${workPrimaryTable?.rows.length || 0}행 × ${workPrimaryTable?.headers.length || 0}열 · 01 이미지 요청서가 표 전용으로 자동 변경됩니다.`}
                     </span>
                   </div>
                   <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
-                    표 이미지 GPT 제작
+                    {workTimeSeriesTable ? "시세 그래프 GPT 제작" : "표 이미지 GPT 제작"}
                   </button>
                 </div>
               )}
@@ -2733,11 +2802,13 @@ export default function ApartmentBulkPage() {
                   </button>
                   <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
                     <span className={styles.actionIcon}>📊</span>
-                    <b>{workTableCount ? "01 · 표 이미지 GPT 제작" : "01 · 핵심 정보 GPT 제작"}</b>
+                    <b>{workTimeSeriesTable ? "01 · 시세 그래프 GPT 제작" : workTableCount ? "01 · 표 이미지 GPT 제작" : "01 · 핵심 정보 GPT 제작"}</b>
                     <small>
-                      {workTableCount
-                        ? `표 ${workTableCount}개 감지 · 첫 번째 표 ${workTables[0]?.rows.length || 0}행을 1600×900 이미지로 자동 반영`
-                        : "1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리"}
+                      {workTimeSeriesTable
+                        ? `시계열 표 ${workTimeSeriesTable.rows.length}개 시점 감지 · 1600×900 증권앱형 라인차트로 자동 반영`
+                        : workTableCount
+                          ? `표 ${workTableCount}개 감지 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행을 1600×900 이미지로 자동 반영`
+                          : "1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리"}
                     </small>
                   </button>
                   <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("02")}>
@@ -2755,11 +2826,13 @@ export default function ApartmentBulkPage() {
                     <section className={styles.promptSection} key={slot}>
                       <div className={styles.promptHead}>
                         <div>
-                          <b>{slot} · {slot === "01" && workTableCount ? "표 이미지" : WORK_IMAGE_META[slot].label} 요청서</b>
+                          <b>{slot} · {slot === "01" && workTimeSeriesTable ? "시세 그래프" : slot === "01" && workTableCount ? "표 이미지" : WORK_IMAGE_META[slot].label} 요청서</b>
                           <span>
-                            {slot === "01" && workTableCount
-                              ? `1600×900 · 첫 번째 표 ${workTables[0]?.rows.length || 0}행 데이터 자동 반영`
-                              : `${WORK_IMAGE_META[slot].width}×${WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영`}
+                            {slot === "01" && workTimeSeriesTable
+                              ? `1600×900 · 시계열 ${workTimeSeriesTable.rows.length}개 시점 라인차트 자동 반영`
+                              : slot === "01" && workTableCount
+                                ? `1600×900 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행 데이터 자동 반영`
+                                : `${WORK_IMAGE_META[slot].width}×${WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영`}
                           </span>
                         </div>
                       </div>
