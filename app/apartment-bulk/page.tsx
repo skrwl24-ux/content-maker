@@ -90,6 +90,7 @@ type MarkdownTable = {
   headers: string[];
   rows: string[][];
 };
+type TableHandlingMode = "image" | "card" | "original";
 type PhotoCandidate = {
   title: string;
   imageUrl: string;
@@ -622,7 +623,7 @@ function makeMarkdownTableCard(headers: string[], row: string[]) {
   return details ? `${prefix}${primaryValue}\n${details}` : `${prefix}${primaryValue}`;
 }
 
-function parseNaverBlog(raw: string, convertMarkdownTables = true): NaverBlock[] {
+function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): NaverBlock[] {
   const lines = raw
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -643,26 +644,46 @@ function parseNaverBlog(raw: string, convertMarkdownTables = true): NaverBlock[]
     const original = lines[index];
 
     if (
-      convertMarkdownTables &&
+      tableMode !== "original" &&
       index + 1 < lines.length &&
       splitMarkdownTableRow(original).length >= 2 &&
       isMarkdownTableDivider(lines[index + 1])
     ) {
       const headers = splitMarkdownTableRow(original);
-      index += 2;
+      const tableHeading = (() => {
+        for (let h = index - 1; h >= 0; h -= 1) {
+          const candidate = cleanNaverLine(lines[h]);
+          if (!candidate) continue;
+          return candidate;
+        }
+        return "표 정보";
+      })();
 
+      index += 2;
+      const rows: string[][] = [];
       while (index < lines.length) {
         const row = splitMarkdownTableRow(lines[index]);
         if (row.length < 2 || isMarkdownTableDivider(lines[index])) {
           index -= 1;
           break;
         }
-
-        blocks.push({ type: "card", text: makeMarkdownTableCard(headers, row) });
-        firstContent = false;
+        rows.push(row);
         index += 1;
       }
 
+      if (tableMode === "image") {
+        const priorTableImages = blocks.filter(
+          (block) => block.type === "image" && /^\[이미지 01(?:-|\s|·)/.test(block.text)
+        ).length;
+        const slotLabel = priorTableImages === 0 ? "01" : `01-${priorTableImages + 1}`;
+        blocks.push({ type: "image", text: `[이미지 ${slotLabel} · ${tableHeading}]` });
+      } else {
+        rows.forEach((row) => {
+          blocks.push({ type: "card", text: makeMarkdownTableCard(headers, row) });
+        });
+      }
+
+      firstContent = false;
       if (index >= lines.length) break;
       continue;
     }
@@ -1776,7 +1797,7 @@ export default function ApartmentBulkPage() {
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
-  const [autoConvertTables, setAutoConvertTables] = useState(true);
+  const [tableHandlingMode, setTableHandlingMode] = useState<TableHandlingMode>("image");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const [dailyDateKey, setDailyDateKey] = useState("");
@@ -1825,8 +1846,8 @@ export default function ApartmentBulkPage() {
   const workTableCount = workTables.length;
   const markdownTableCount = useMemo(() => countMarkdownTables(finalBlogText), [finalBlogText]);
   const naverBlocks = useMemo(
-    () => parseNaverBlog(finalBlogText, autoConvertTables),
-    [finalBlogText, autoConvertTables]
+    () => parseNaverBlog(finalBlogText, tableHandlingMode),
+    [finalBlogText, tableHandlingMode]
   );
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
@@ -3063,7 +3084,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 전체복사</h2>
-                <span>ChatGPT 완성글을 붙여넣으면 제목·소제목·본문 서식을 자동 적용합니다. 마크다운 표는 모바일 카드형으로 바꿔 복사할 수 있습니다.</span>
+                <span>ChatGPT 완성글을 붙여넣으면 제목·소제목·본문 서식을 자동 적용합니다. 표는 이미지 대체·모바일 카드형·원문 유지 중에서 선택할 수 있습니다.</span>
               </div>
             </div>
 
@@ -3079,23 +3100,56 @@ export default function ApartmentBulkPage() {
                   }}
                   placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요. 마크다운 표도 그대로 붙여넣어도 됩니다."
                 />
-                <div className={styles.naverInputOptions}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={autoConvertTables}
-                      onChange={(e) => {
-                        setAutoConvertTables(e.target.checked);
-                        setNaverCopyMessage("");
-                      }}
-                    />
-                    <span>표 자동변환</span>
-                  </label>
-                  <small>
-                    {markdownTableCount
-                      ? `마크다운 표 ${markdownTableCount}개 감지 · 네이버 모바일 카드형으로 변환됩니다.`
-                      : "표가 감지되면 각 행을 모바일에서 읽기 좋은 카드형 문장으로 바꿉니다."}
-                  </small>
+                <div className={styles.naverTableModeBox}>
+                  <div className={styles.naverTableModeHead}>
+                    <b>표 처리 방식</b>
+                    <small>
+                      {markdownTableCount
+                        ? `마크다운 표 ${markdownTableCount}개 감지됨`
+                        : "표가 감지되면 아래 방식으로 처리합니다."}
+                    </small>
+                  </div>
+                  <div className={styles.naverTableModes}>
+                    <label className={tableHandlingMode === "image" ? styles.naverTableModeActive : styles.naverTableMode}>
+                      <input
+                        type="radio"
+                        name="table-handling-mode"
+                        value="image"
+                        checked={tableHandlingMode === "image"}
+                        onChange={() => {
+                          setTableHandlingMode("image");
+                          setNaverCopyMessage("");
+                        }}
+                      />
+                      <span><b>이미지로 대체</b><small>추천 · 표 행은 빼고 [이미지 01 · 표 제목]만 남김</small></span>
+                    </label>
+                    <label className={tableHandlingMode === "card" ? styles.naverTableModeActive : styles.naverTableMode}>
+                      <input
+                        type="radio"
+                        name="table-handling-mode"
+                        value="card"
+                        checked={tableHandlingMode === "card"}
+                        onChange={() => {
+                          setTableHandlingMode("card");
+                          setNaverCopyMessage("");
+                        }}
+                      />
+                      <span><b>모바일 카드형</b><small>짧은 표를 네이버용 카드 문장으로 변환</small></span>
+                    </label>
+                    <label className={tableHandlingMode === "original" ? styles.naverTableModeActive : styles.naverTableMode}>
+                      <input
+                        type="radio"
+                        name="table-handling-mode"
+                        value="original"
+                        checked={tableHandlingMode === "original"}
+                        onChange={() => {
+                          setTableHandlingMode("original");
+                          setNaverCopyMessage("");
+                        }}
+                      />
+                      <span><b>원문 유지</b><small>마크다운 표 문자를 그대로 유지</small></span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
