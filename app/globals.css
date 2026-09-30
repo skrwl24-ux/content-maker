@@ -52,3 +52,17 @@
 .packageGrid.five{grid-template-columns:repeat(5,1fr)}
 @media(max-width:900px){.timelineRow{grid-template-columns:38px 90px 1fr}.timelineRow em{grid-column:3}.packageGrid.five{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.timelineRow{grid-template-columns:36px 1fr}.timelineRow span,.timelineRow div,.timelineRow em{grid-column:2}.packageGrid.five{grid-template-columns:1fr}}
+
+.assetRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #edf0f4}
+.assetRow:first-of-type{border-top:0}
+.assetRow>div:first-child{min-width:0;flex:1}
+.assetRow p{margin:4px 0 0;color:#6f7888}
+.timelineSimple{display:flex;flex-direction:column;gap:0;border:1px solid #e5e9f0;border-radius:14px;overflow:hidden;margin-top:12px}
+.timelineSimple>div{padding:10px 12px;border-top:1px solid #edf0f4;background:#fff}
+.timelineSimple>div:first-child{border-top:0}
+.timelineSimple b,.timelineSimple span,.timelineSimple small{display:block}
+.timelineSimple span{margin-top:4px}
+.timelineSimple small{margin-top:3px;color:#7a8495}
+.packageGrid.five{grid-template-columns:repeat(5,1fr)}
+@media(max-width:900px){.assetRow{align-items:flex-start;flex-direction:column}.packageGrid.five{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.packageGrid.five{grid-template-columns:1fr}}
