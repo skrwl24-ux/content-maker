@@ -627,9 +627,14 @@ ${previous}
 }
 
 export default function ParammaBulkPage() {
+  const [topics, setTopics] = useState<Topic[]>(TOPICS);
   const [selectedId, setSelectedId] = useState(1);
   const [statuses, setStatuses] = useState<Record<number, Status>>({});
   const [works, setWorks] = useState<Record<number, TopicWork>>({});
+  const [historyItems, setHistoryItems] = useState<ParammaHistoryItem[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<"전체" | Category>("전체");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [images, setImages] = useState<Partial<Record<SlotId, LoadedImage>>>({});
   const [notice, setNotice] = useState("");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
@@ -638,20 +643,35 @@ export default function ParammaBulkPage() {
   const [hydrated, setHydrated] = useState(false);
   const previewUrls = useRef<string[]>([]);
 
-  const selected = TOPICS.find((t) => t.id === selectedId) || TOPICS[0];
+  const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(work.articlePrompt);
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
-  const doneCount = useMemo(() => TOPICS.filter((t) => statuses[t.id] === "done").length, [statuses]);
-  const progress = Math.round((doneCount / TOPICS.length) * 100);
+  const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
+  const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
+  const availablePoolCount = useMemo(() => {
+    const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
+    const queueKeys = new Set(topics.map((topic) => normalizeParammaTopic(topic.title)));
+    return TOPIC_POOL.filter((topic) => !historyKeys.has(normalizeParammaTopic(topic.title)) && !queueKeys.has(normalizeParammaTopic(topic.title))).length;
+  }, [historyItems, topics]);
+  const filteredHistory = useMemo(() => {
+    const keyword = historySearch.trim().toLowerCase();
+    return historyItems.filter((item) => {
+      const categoryMatch = historyFilter === "전체" || item.category === historyFilter;
+      const textMatch = !keyword || [item.title, item.category, item.published_on].join(" ").toLowerCase().includes(keyword);
+      return categoryMatch && textMatch;
+    });
+  }, [historyItems, historyFilter, historySearch]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        const savedTopics = Array.isArray(parsed?.topics) && parsed.topics.length === 10 ? parsed.topics as Topic[] : TOPICS;
+        setTopics(savedTopics);
         if (parsed?.statuses) setStatuses(parsed.statuses);
-        if (parsed?.selectedId && TOPICS.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
+        if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
         if (parsed?.works) setWorks(refreshLegacyImagePrompts(parsed.works));
       }
     } catch {
@@ -664,11 +684,11 @@ export default function ParammaBulkPage() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ statuses, selectedId, works }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works }));
     } catch {
       setNotice("작업 상태 저장에 실패했습니다. 브라우저 저장공간을 확인해주세요.");
     }
-  }, [hydrated, statuses, selectedId, works]);
+  }, [hydrated, topics, statuses, selectedId, works]);
 
   useEffect(() => {
     let cancelled = false;
@@ -717,13 +737,13 @@ export default function ParammaBulkPage() {
   }, []);
 
   function ensureWork(topicId = selected.id) {
-    const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+    const topic = topics.find((t) => t.id === topicId) || topics[0] || TOPICS[0];
     return works[topicId] || defaultWork(topic);
   }
 
   function patchWork(patch: Partial<TopicWork>, topicId = selected.id) {
     setWorks((prev) => {
-      const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+      const topic = topics.find((t) => t.id === topicId) || topics[0] || TOPICS[0];
       const base = prev[topicId] || defaultWork(topic);
       return { ...prev, [topicId]: { ...base, ...patch } };
     });
@@ -731,7 +751,7 @@ export default function ParammaBulkPage() {
 
   function patchSlot(slotId: SlotId, patch: Partial<SlotMeta>, topicId = selected.id) {
     setWorks((prev) => {
-      const topic = TOPICS.find((t) => t.id === topicId) || TOPICS[0];
+      const topic = topics.find((t) => t.id === topicId) || topics[0] || TOPICS[0];
       const base = prev[topicId] || defaultWork(topic);
       return {
         ...prev,
@@ -756,7 +776,7 @@ export default function ParammaBulkPage() {
     setSelectedId(id);
     setStatuses((prev) => ({ ...prev, [id]: prev[id] === "done" ? "done" : "working" }));
     if (!works[id]) {
-      const topic = TOPICS.find((t) => t.id === id) || TOPICS[0];
+      const topic = topics.find((t) => t.id === id) || topics[0] || TOPICS[0];
       setWorks((prev) => ({ ...prev, [id]: defaultWork(topic) }));
     }
   }
