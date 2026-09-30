@@ -980,7 +980,7 @@ export default function Home() {
       {phase === "script" && isShorts && <>
         <div className="sectionHead"><div><h2>2. 대본</h2><p>GPT에서 만든 완성 내레이션만 붙여넣고 길이를 확인합니다.</p></div><span className="counter">{shortsCharCount}/210~225자</span></div>
         <div className="box">
-          <div className="miniHead"><h3>완성 대본</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 TTS 원고 복사</button></div></div>
+          <div className="miniHead"><h3>완성 대본</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="primary compact" disabled={!shortsScript.trim()} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "TTS 원고를 복사했습니다.")}>📋 원고 복사</button></div></div>
           <textarea className="shortsScriptArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요." />
           <div className="tags">
             <span>1.5x</span>
@@ -988,7 +988,7 @@ export default function Home() {
             <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>공백 제외 {shortsCharCount}자</span>
             {shortsCharCount > 0 && <span>글자수 기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
           </div>
-          <p className="muted">시작은 지역명+질문형 후킹, 마무리는 ‘근데 여기서 잠깐.’ → 주의점 → ‘[지역명] 집값, 오늘도 집값쓱.’ 형식입니다.</p>
+          <p className="muted">시작은 지역명+질문형 후킹, 마무리는 ‘근데 여기서 잠깐.’ → 주의점 → ‘[지역명] 집값, 오늘도 집값쓱.’ 형식입니다. AI 음성은 BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
@@ -998,12 +998,13 @@ export default function Home() {
         <div className="box scenePasteBox">
           <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
           <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
-          <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span className={tasks.length >= 2 && tasks.length <= 3 ? "ok" : "warn"}>새 이미지 {tasks.length}개</span><span>나머지는 재사용·카드·엔딩</span></div>
+          <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span>배경 이미지 {backgroundCount}개</span><span>그래프/숫자 {graphicCount}개</span><span>나머지는 재사용·텍스트·엔딩</span></div>
         </div>
         {shortsScenes.length > 0 && <div className="sceneTable">
-          <div className="sceneTableHead"><span>장면</span><span>큰 화면 문구</span><span>하단 자막</span><span>화면 방식</span></div>
+          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 화면 문구</span><span>하단 자막</span><span>화면 방식</span></div>
           {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
             <b>{scene.order}</b>
+            <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
             <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: e.target.value })} />
             <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
             <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
@@ -1011,11 +1012,17 @@ export default function Home() {
             </select>
           </div>)}
         </div>}
-        <div className="box">
-          <div className="miniHead"><h3>이미지 제작 대상</h3><span className="muted">장면표에서 ‘새 이미지’인 것만 자동 추림</span></div>
-          {tasks.length === 0 ? <p className="muted">장면표를 붙여넣으면 새 이미지가 필요한 장면만 여기에 나타납니다.</p> : tasks.map(t => <div className="imageRow" key={t.title}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button></div>)}
+        <div className="grid2">
+          <div className="box">
+            <div className="miniHead"><h3>배경 이미지</h3><span className="muted">{backgroundCount}개</span></div>
+            {backgroundCount === 0 ? <p className="muted">새 배경 이미지가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind !== "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button></div> : null)}
+          </div>
+          <div className="box">
+            <div className="miniHead"><h3>그래프·숫자 카드</h3><span className="muted">{graphicCount}개</span></div>
+            {graphicCount === 0 ? <p className="muted">그래프가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind === "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>그래프 만들기 ↗</button></div> : null)}
+          </div>
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6 || tasks.length === 0} onClick={() => setPhase("images")}>필요한 이미지 작업</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6} onClick={() => setPhase("images")}>제작자료 준비</button></div>
       </> : analysis ? <>
         <div className="sectionHead"><div><h2>이미지 제작 계획</h2><p>숫자와 문구를 먼저 확정한 뒤 이미지 배경을 준비합니다.</p></div><span className="counter">총 {tasks.length}장</span></div>
         <div className="grid2"><div className="box"><h3>추천 제목</h3><div className="recommended">{analysis.recommendedTitle}</div><div className="candidateList">{analysis.titleCandidates?.slice(0, 5).map(t => <button key={t} onClick={() => setFinalTitle(t)}>{t}</button>)}</div></div><div className="box"><h3>본문에서 찾은 핵심 숫자</h3><div className="tags">{analysis.facts?.length ? analysis.facts.map(f => <span key={f.value}>{f.value}</span>) : <span>숫자 정보 없음</span>}</div><p className="muted">이미지에는 원문에 있는 숫자만 사용하도록 검수합니다.</p></div></div>
