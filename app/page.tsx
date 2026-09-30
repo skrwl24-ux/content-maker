@@ -213,6 +213,9 @@ export default function Home() {
   const [shortsScript, setShortsScript] = useState("");
   const [shortsSceneText, setShortsSceneText] = useState("");
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
+  const [voiceFile, setVoiceFile] = useState<File | null>(null);
+  const [bgmFile, setBgmFile] = useState<File | null>(null);
+  const [voiceDuration, setVoiceDuration] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -310,7 +313,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -513,6 +516,86 @@ export default function Home() {
       `하단 자막: ${scene.subtitle}`,
       `화면: ${scene.screenType}`
     ].join("\n")).join("\n\n");
+  }
+
+  function shortsVideoPrompt() {
+    return [
+      "[집값쓱 유튜브 쇼츠 영상 제작]",
+      `주제: ${projectTitle || "첨부 자료의 주제"}`,
+      "",
+      "[첨부 자료]",
+      "- 제작 패키지 ZIP 또는 개별 이미지 파일",
+      "- 완성 음성 파일",
+      "- 자막/장면표 파일",
+      "- BGM 파일(첨부된 경우)",
+      "",
+      "[제작 기준]",
+      "- 완성 영상은 1080×1920, 9:16 세로형 YouTube Shorts",
+      voiceDuration ? `- 음성 파일 길이 약 ${voiceDuration.toFixed(1)}초를 전체 타임라인 기준으로 사용` : "- 음성 파일 길이를 전체 타임라인 기준으로 사용",
+      "- 장면표 순서대로 이미지를 배치",
+      "- 정지 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
+      "- 큰 화면 문구와 하단 자막은 무음으로 봐도 내용을 이해할 수 있게 표시",
+      "- 자막은 음성 흐름에 맞춰 자연스럽게 타이밍 조정",
+      "- BGM은 내레이션을 방해하지 않도록 낮게 깔고, 음성 구간에서는 자동으로 더 낮춤",
+      "- 제공한 이미지·음성·자막·BGM을 우선 사용하고 불필요한 새 이미지는 만들지 말 것",
+      "- 원문에 없는 가격·날짜·단지명·정책·수치를 추가하지 말 것",
+      "- 마지막은 장면표의 '[지역명] 집값, 오늘도 집값쓱.' 브랜드 엔딩으로 마무리",
+      "- 과한 전환·네온·복잡한 효과는 사용하지 말고 부동산 정보 쇼츠처럼 깔끔하게 편집",
+      "",
+      "[장면표]",
+      shortsSceneExport()
+    ].join("\n");
+  }
+
+  async function readAudioDuration(file: File) {
+    return await new Promise<number>((resolve) => {
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => {
+        const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+        URL.revokeObjectURL(url);
+        resolve(duration);
+      };
+      audio.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+      audio.src = url;
+    });
+  }
+
+  async function handleVoiceFile(file: File | null) {
+    setVoiceFile(file);
+    setVoiceDuration(file ? await readAudioDuration(file) : 0);
+  }
+
+  async function exportShortsPackage() {
+    setLoading(true); setError("");
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
+      tasks.forEach((task, i) => {
+        const dataUrl = task.sourceDataUrl || task.imageDataUrl;
+        const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (match) {
+          const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
+          folder.file(`image_${String(i + 1).padStart(2, "0")}.${ext}`, match[2], { base64: true });
+        }
+      });
+      if (voiceFile) folder.file(`voice_${voiceFile.name}`, voiceFile);
+      if (bgmFile) folder.file(`bgm_${bgmFile.name}`, bgmFile);
+      folder.file("voice_script.txt", shortsScript);
+      folder.file("scene_plan.txt", shortsSceneExport());
+      folder.file("subtitles.txt", shortsScenes.map(s => `${s.order}. ${s.subtitle}`).join("\n"));
+      folder.file("shorts_request.txt", shortsVideoPrompt());
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_shorts_package.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) { setError(e.message || "쇼츠 제작 패키지 ZIP 생성에 실패했습니다."); }
+    finally { setLoading(false); }
   }
 
   function shortsUploadPrompt() {
