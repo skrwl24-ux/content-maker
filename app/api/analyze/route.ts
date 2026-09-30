@@ -20,7 +20,7 @@ function localAnalyze(contentType: string, projectTitle: string, rawContent: str
   const facts = values.slice(0,12).map((value,i)=>({label:`핵심 ${i+1}`,value,sourceText:value}));
 
   const sections = contentType === "집값쓱 쇼츠"
-    ? ["강한 훅","핵심 숫자","비교/계산","두 번째 핵심","주의점","한 줄 요약","브랜드 엔딩"]
+    ? ["대표 배경","핵심 비교 배경","결론 배경"]
     : contentType === "아파트 블로그"
     ? ["썸네일","최근 흐름","대표 단지 비교","실거래 핵심","가격 차이 이유","앞으로 체크"]
     : contentType === "AI Price Atlas"
@@ -38,7 +38,9 @@ function localAnalyze(contentType: string, projectTitle: string, rawContent: str
     title: section,
     keyMessage: idx === 0 ? title : (facts[idx-1]?.value || keywords[idx] || section),
     sourceText: idx === 0 ? title : (facts[idx-1]?.sourceText || ""),
-    imagePrompt: `${section} 내용을 한 장의 카드 이미지로 정리. 원문에 없는 숫자나 사실은 추가하지 않는다.`
+    imagePrompt: contentType === "집값쓱 쇼츠"
+      ? `${section}용 세로 배경 이미지. 정보 텍스트는 사이트에서 별도로 합성하므로 이미지 안에는 글자를 넣지 않는다. 한 장면만 표현하고 원문에 없는 숫자나 사실은 추가하지 않는다.`
+      : `${section} 내용을 한 장의 카드 이미지로 정리. 원문에 없는 숫자나 사실은 추가하지 않는다.`
   }));
 
   const isParamma = ["신기한 동물이야기","신비로운 자연","생활 속 궁금증","동물·자연"].includes(contentType);
