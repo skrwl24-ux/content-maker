@@ -668,6 +668,20 @@ ${markdownTableToText(table)}
 중요: 설명문을 답하지 말고 위 데이터를 정확히 반영한 라인차트 이미지 1장을 바로 제작해줘.`;
 }
 
+function markdownTableSignature(table: MarkdownTable) {
+  return [
+    table.heading,
+    table.headers.join("\u001f"),
+    ...table.rows.map((row) => row.join("\u001f")),
+  ].join("\u001e");
+}
+
+function makeTimeSeriesNaverLabel(table: MarkdownTable) {
+  const heading = table.heading.trim() || "최근 시세";
+  const title = /그래프/.test(heading) ? heading : `${heading} 그래프`;
+  return `[이미지 01 · ${title}]`;
+}
+
 function makeMarkdownTableCard(headers: string[], row: string[]) {
   const preferred = /(종목|단지|기업|항목|이름|상품|지역|학교|주제|구분)/;
   const rankLike = /^(순위|랭킹|번호|no\.?|rank)$/i;
@@ -690,6 +704,12 @@ function makeMarkdownTableCard(headers: string[], row: string[]) {
 }
 
 function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): NaverBlock[] {
+  const sourceTables = extractMarkdownTables(raw);
+  const primaryTimeSeriesTable = sourceTables.find(isTimeSeriesTable) || null;
+  const primaryTimeSeriesSignature = primaryTimeSeriesTable
+    ? markdownTableSignature(primaryTimeSeriesTable)
+    : "";
+
   const lines = raw
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -705,6 +725,7 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
 
   const blocks: NaverBlock[] = [];
   let firstContent = true;
+  let timeSeriesImageInserted = false;
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index];
@@ -737,12 +758,29 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
         index += 1;
       }
 
+      const currentTable: MarkdownTable = { heading: tableHeading, headers, rows };
+
       if (tableMode === "image") {
-        const priorTableImages = blocks.filter(
-          (block) => block.type === "image" && /^\[이미지 01(?:-|\s|·)/.test(block.text)
-        ).length;
-        const slotLabel = priorTableImages === 0 ? "01" : `01-${priorTableImages + 1}`;
-        blocks.push({ type: "image", text: `[이미지 ${slotLabel} · ${tableHeading}]` });
+        if (primaryTimeSeriesTable) {
+          const isPrimaryTimeSeries =
+            !timeSeriesImageInserted &&
+            markdownTableSignature(currentTable) === primaryTimeSeriesSignature;
+
+          if (isPrimaryTimeSeries) {
+            blocks.push({ type: "image", text: makeTimeSeriesNaverLabel(currentTable) });
+            timeSeriesImageInserted = true;
+          } else {
+            rows.forEach((row) => {
+              blocks.push({ type: "card", text: makeMarkdownTableCard(headers, row) });
+            });
+          }
+        } else {
+          const priorTableImages = blocks.filter(
+            (block) => block.type === "image" && /^\[이미지 01(?:-|\s|·)/.test(block.text)
+          ).length;
+          const slotLabel = priorTableImages === 0 ? "01" : `01-${priorTableImages + 1}`;
+          blocks.push({ type: "image", text: `[이미지 ${slotLabel} · ${tableHeading}]` });
+        }
       } else {
         rows.forEach((row) => {
           blocks.push({ type: "card", text: makeMarkdownTableCard(headers, row) });
@@ -1912,7 +1950,12 @@ export default function ApartmentBulkPage() {
   const workTimeSeriesTable = useMemo(() => workTables.find(isTimeSeriesTable) || null, [workTables]);
   const workPrimaryTable = workTimeSeriesTable || workTables[0] || null;
   const workTableCount = workTables.length;
-  const markdownTableCount = useMemo(() => countMarkdownTables(finalBlogText), [finalBlogText]);
+  const naverTables = useMemo(() => extractMarkdownTables(finalBlogText), [finalBlogText]);
+  const markdownTableCount = naverTables.length;
+  const naverTimeSeriesTable = useMemo(
+    () => naverTables.find(isTimeSeriesTable) || null,
+    [naverTables]
+  );
   const naverBlocks = useMemo(
     () => parseNaverBlog(finalBlogText, tableHandlingMode),
     [finalBlogText, tableHandlingMode]
@@ -2279,6 +2322,9 @@ export default function ApartmentBulkPage() {
         setWorkTopic(saved.topic || "");
         setWorkMaterials(saved.materials || "");
         setWorkBody(saved.body || "");
+        if (slot.type !== "bulk" && slot.type !== "top3") {
+          setFinalBlogText(saved.body || "");
+        }
         setWorkImageNotes(saved.imageNotes || "");
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
         setWorkProgress(saved.progress || "preparing");
@@ -2307,6 +2353,9 @@ export default function ApartmentBulkPage() {
         setWorkTopic(slot.topic || "");
         setWorkMaterials("");
         setWorkBody("");
+        if (slot.type !== "bulk" && slot.type !== "top3") {
+          setFinalBlogText("");
+        }
         setWorkImageNotes("");
         setWorkAttachments([]);
         setWorkProgress("preparing");
@@ -2767,8 +2816,13 @@ export default function ApartmentBulkPage() {
                 <textarea
                   data-testid="work-body"
                   value={workBody}
-                  onChange={(e) => setWorkBody(e.target.value)}
-                  placeholder="ChatGPT에서 만든 최종 글 전체를 여기에 붙여넣으세요. 입력하면 아래 이미지 제작 버튼이 활성화됩니다."
+                  onChange={(e) => {
+                    const nextBody = e.target.value;
+                    setWorkBody(nextBody);
+                    setFinalBlogText(nextBody);
+                    setNaverCopyMessage("");
+                  }}
+                  placeholder="ChatGPT에서 만든 최종 글 전체를 여기에 한 번만 붙여넣으세요. 이미지 요청서와 네이버 최종편집에 동시에 반영됩니다."
                 />
               </label>
 
@@ -3157,7 +3211,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 전체복사</h2>
-                <span>ChatGPT 완성글을 붙여넣으면 제목·소제목·본문 서식을 자동 적용합니다. 표는 이미지 대체·모바일 카드형·원문 유지 중에서 선택할 수 있습니다.</span>
+                <span>완성글을 작업 화면에 한 번 붙여넣으면 여기에도 자동 반영됩니다. 시계열 표는 최근 시세 그래프 자리로, 일반 표는 선택한 방식에 맞춰 자동 정리합니다.</span>
               </div>
             </div>
 
@@ -3177,9 +3231,11 @@ export default function ApartmentBulkPage() {
                   <div className={styles.naverTableModeHead}>
                     <b>표 처리 방식</b>
                     <small>
-                      {markdownTableCount
-                        ? `마크다운 표 ${markdownTableCount}개 감지됨`
-                        : "표가 감지되면 아래 방식으로 처리합니다."}
+                      {naverTimeSeriesTable
+                        ? `표 ${markdownTableCount}개 · 시계열 표 자동 감지: ${naverTimeSeriesTable.heading || "최근 시세"}`
+                        : markdownTableCount
+                          ? `마크다운 표 ${markdownTableCount}개 감지됨`
+                          : "표가 감지되면 아래 방식으로 처리합니다."}
                     </small>
                   </div>
                   <div className={styles.naverTableModes}>
@@ -3194,7 +3250,14 @@ export default function ApartmentBulkPage() {
                           setNaverCopyMessage("");
                         }}
                       />
-                      <span><b>이미지로 대체</b><small>추천 · 표 행은 빼고 [이미지 01 · 표 제목]만 남김</small></span>
+                      <span>
+                        <b>이미지로 대체</b>
+                        <small>
+                          {naverTimeSeriesTable
+                            ? "추천 · 시계열 표는 [이미지 01 · 최근 시세 그래프]로, 나머지 표는 모바일 카드형으로 자동 정리"
+                            : "추천 · 표 행은 빼고 [이미지 01 · 표 제목]만 남김"}
+                        </small>
+                      </span>
                     </label>
                     <label className={tableHandlingMode === "card" ? styles.naverTableModeActive : styles.naverTableMode}>
                       <input
