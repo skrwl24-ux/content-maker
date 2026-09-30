@@ -229,7 +229,7 @@ export default function Home() {
   const preset = PRESETS[contentType] || PRESETS.default;
   function normalizeShortsVoiceText(text: string) {
     return text
-      .replace(/(\d+(?:\.\d+)?)\s*억(?![가-힣])/g, (full, raw) => {
+      .replace(/(\d+(?:\.\d+)?)\s*억(?:원)?/g, (full, raw) => {
         const value = Number(raw);
         if (!Number.isFinite(value)) return full;
         const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
