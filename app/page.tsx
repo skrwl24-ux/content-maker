@@ -99,6 +99,7 @@ const PRESETS: Record<string, { width: number; height: number; label: string }> 
 
 const SHORTS_DRAFT_KEY = "content-maker-jibssuk-shorts-draft-v1";
 const LAST_CONTENT_TYPE_KEY = "content-maker-last-content-type-v1";
+const SHORTS_PLAYBACK_RATE = 1.5;
 
 function cleanName(v: string) {
   return v.replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 38) || "image";
@@ -216,6 +217,7 @@ export default function Home() {
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmMemo, setBgmMemo] = useState("");
+  const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -229,7 +231,7 @@ export default function Home() {
   const preset = PRESETS[contentType] || PRESETS.default;
   function normalizeShortsVoiceText(text: string) {
     return text
-      .replace(/(\d+(?:\.\d+)?)\s*억(?:원)?/g, (full, raw) => {
+      .replace(/(\d+\.\d+)\s*억(?:원)?/g, (full, raw) => {
         const value = Number(raw);
         if (!Number.isFinite(value)) return full;
         const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
@@ -239,20 +241,29 @@ export default function Home() {
         if (eok <= 0) return `${tenth}천만원`;
         return `${eok}억 ${tenth}천만원`;
       })
-      .replace(/\s*(?:㎡|m²|m2)/gi, "제곱미터")
+      .replace(/(\d+(?:\.\d+)?)\s*(?:㎡|m²|m2)\s*(대)?/gi, (_full, num, dae) => `${num}제곱미터${dae ? "대" : ""}`)
       .replace(/(\d+(?:\.\d+)?)\s*%/g, "$1퍼센트")
       .replace(/\bTOP\s*3\b/gi, "탑 쓰리")
       .replace(/\bDSR\b/gi, "디에스알")
       .replace(/\bLTV\b/gi, "엘티브이")
       .replace(/\bGTX\b/gi, "지티엑스")
-      .replace(/\bAI\b/gi, "에이아이");
+      .replace(/\bAI\b/gi, "에이아이")
+      .replace(/([가-힣])앤([가-힣])/g, "$1 앤 $2")
+      .replace(/([가-힣])(\d+단지)/g, "$1 $2")
+      .replace(/([가-힣])(푸르지오|래미안|힐스테이트|아이파크|롯데캐슬|더샵|센트럴푸르지오|어바인퍼스트|포레스티아|메가트리아|디에트르|제일풍경채|휴먼시아)/g, "$1 $2")
+      .replace(/각각\s+(?=\d)/g, "각각, ")
+      .replace(/오늘도\s*,?\s*집\.값\.쓱\./g, "오늘도, 집.값.쓱.")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
   }
 
   const shortsCharCount = useMemo(() => shortsScript.replace(/\s/g, "").length, [shortsScript]);
   const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
-  const shortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
+  const autoShortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
+  const shortsVoiceScript = shortsVoiceOverride ?? autoShortsVoiceScript;
   const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
   const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
+  const finalVoiceDuration = voiceDuration ? voiceDuration / SHORTS_PLAYBACK_RATE : 0;
   const shortsBgm = useMemo(() => {
     const text = `${projectTitle} ${rawContent}`;
     if (/(하락|급락|주의|부담|위험|감소|실패)/.test(text)) return { label: "B · 긴장형", note: "하락·주의 포인트에 맞는 보컬 없는 긴장감 있는 리듬" };
@@ -266,18 +277,18 @@ export default function Home() {
   const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
   const sceneTimeline = useMemo(() => {
-    if (!voiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
+    if (!finalVoiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
     const weights = shortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let cursor = 0;
     return shortsScenes.map((scene, i) => {
-      const duration = i === shortsScenes.length - 1 ? Math.max(0, voiceDuration - cursor) : voiceDuration * (weights[i] / totalWeight);
+      const duration = i === shortsScenes.length - 1 ? Math.max(0, finalVoiceDuration - cursor) : finalVoiceDuration * (weights[i] / totalWeight);
       const start = cursor;
-      const end = i === shortsScenes.length - 1 ? voiceDuration : Math.min(voiceDuration, start + duration);
+      const end = i === shortsScenes.length - 1 ? finalVoiceDuration : Math.min(finalVoiceDuration, start + duration);
       cursor = end;
       return { scene, start, end, duration: end - start };
     });
-  }, [shortsScenes, voiceDuration]);
+  }, [shortsScenes, finalVoiceDuration]);
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
     return (analysis?.facts || []).map(f => ({ ...f, used: corpus.includes(String(f.value).toLowerCase()) }));
@@ -297,6 +308,7 @@ export default function Home() {
         setShortsSceneText(String(draft.shortsSceneText || ""));
         setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any) => ({ ...s, narration: String(s.narration || "") })) : []);
         setBgmMemo(String(draft.bgmMemo || ""));
+        setShortsVoiceOverride(typeof draft.shortsVoiceOverride === "string" ? draft.shortsVoiceOverride : null);
         setFinalTitle(String(draft.finalTitle || ""));
         setFinalBody(String(draft.finalBody || ""));
         setAnalysis(draft.analysis || null);
@@ -338,6 +350,7 @@ export default function Home() {
       shortsSceneText,
       shortsScenes,
       bgmMemo,
+      shortsVoiceOverride,
       finalTitle,
       finalBody,
       analysis,
@@ -347,7 +360,7 @@ export default function Home() {
       savedAt: new Date().toISOString()
     };
     try { window.localStorage.setItem(SHORTS_DRAFT_KEY, JSON.stringify(payload)); } catch {}
-  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, shortsSceneText, shortsScenes, bgmMemo, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
+  }, [draftReady, isShorts, projectId, projectTitle, rawContent, shortsScript, shortsSceneText, shortsScenes, bgmMemo, shortsVoiceOverride, finalTitle, finalBody, analysis, tasks, currentIndex, phase]);
 
   async function refreshSaved() {
     const { supabase } = await ensureAnonymousSession();
@@ -357,7 +370,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
