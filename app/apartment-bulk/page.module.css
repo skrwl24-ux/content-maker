@@ -101,8 +101,35 @@
 .dailySettingsGrid label>span{flex:0 0 auto;font-size:10px;font-weight:900;color:#7f8b9a}
 .dailySettingsGrid select{min-width:0;width:100%;border:1px solid #dfe6ed;border-radius:9px;background:#fff;padding:8px;color:#425168;font-size:11px;font-weight:800}
 .dailyResetAll{margin-top:12px;border:0;border-radius:9px;padding:8px 10px;background:#f1f3f5;color:#7a8491;font-size:10px;font-weight:800;cursor:pointer}
+
+.publishHistory{margin-top:10px;border-top:1px solid #edf1f4;padding-top:11px}
+.publishHistory>summary{list-style:none;display:flex;align-items:center;gap:8px;width:max-content;max-width:100%;cursor:pointer;color:#506073;font-size:11px;font-weight:900}
+.publishHistory>summary::-webkit-details-marker{display:none}
+.publishHistory>summary::after{content:" +";color:#a0a9b5}
+.publishHistory[open]>summary::after{content:" −"}
+.publishHistory>summary small{font-size:10px;font-weight:700;color:#98a3b1}
+.publishHistoryBody{margin-top:12px;padding:12px;border:1px solid #e7edf2;border-radius:14px;background:#fbfcfd}
+.publishHistoryToolbar{display:flex;gap:8px}
+.publishHistoryToolbar input{flex:1;min-width:0;border:1px solid #dfe6ed;border-radius:10px;background:#fff;padding:9px 11px;color:#34465b;font-size:11px;outline:none}
+.publishHistoryToolbar input:focus{border-color:#8dbcb8;box-shadow:0 0 0 2px rgba(15,130,127,.08)}
+.publishHistoryToolbar button{border:0;border-radius:10px;padding:9px 11px;background:#e8efef;color:#3d6562;font-size:10px;font-weight:900;cursor:pointer}
+.publishHistoryToolbar button:disabled{opacity:.55;cursor:default}
+.publishHistoryFilters{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.publishHistoryFilters button{border:1px solid #e0e7ed;border-radius:999px;padding:6px 9px;background:#fff;color:#6d7988;font-size:10px;font-weight:900;cursor:pointer}
+.publishHistoryFilters button span{margin-left:3px;color:#9aa5b2}
+.publishHistoryFilters .publishHistoryFilterActive{border-color:#b9d9d6;background:#e6f3f1;color:#226e68}
+.publishHistoryFilters .publishHistoryFilterActive span{color:#4f8b86}
+.publishHistoryMeta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:11px 2px 7px;color:#6f7c8c;font-size:10px}
+.publishHistoryMeta small{color:#a0a9b4;font-size:10px}
+.publishHistoryList{display:flex;flex-direction:column;border-top:1px solid #edf1f4}
+.publishHistoryRow{display:grid;grid-template-columns:54px minmax(0,1fr) 78px;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid #edf1f4}
+.publishHistoryRow b{min-width:0;color:#2b3a4e;font-size:11px;line-height:1.45;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.publishHistoryRow time{color:#98a3b1;font-size:10px;text-align:right;white-space:nowrap}
+.publishHistoryType{display:inline-flex;justify-content:center;padding:4px 6px;border-radius:999px;background:#eef3f7;color:#617083;font-size:9px;font-weight:900;white-space:nowrap}
+.publishHistoryMessage{margin:10px 2px 0;color:#8c97a5;font-size:10px;line-height:1.5}
+
 @media(max-width:1000px){.dailySlots{grid-template-columns:repeat(2,minmax(0,1fr))}.dailySettingsGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:640px){.dailyBoard{padding:18px 14px;border-radius:20px}.dailyBoardHead{align-items:flex-start;flex-direction:column}.dailyBoardActions{width:100%;justify-content:space-between}.dailySlots{grid-template-columns:1fr}.dailySlot,.dailySlotDone{min-height:0}.dailyBoardHead h2{font-size:24px}.dailySettingsGrid{grid-template-columns:1fr}}
+@media(max-width:640px){.dailyBoard{padding:18px 14px;border-radius:20px}.dailyBoardHead{align-items:flex-start;flex-direction:column}.dailyBoardActions{width:100%;justify-content:space-between}.dailySlots{grid-template-columns:1fr}.dailySlot,.dailySlotDone{min-height:0}.dailyBoardHead h2{font-size:24px}.dailySettingsGrid{grid-template-columns:1fr}.publishHistoryToolbar{flex-direction:column}.publishHistoryMeta{align-items:flex-start;flex-direction:column;gap:3px}.publishHistoryRow{grid-template-columns:48px minmax(0,1fr)}.publishHistoryRow time{grid-column:2;text-align:left}.publishHistoryRow b{white-space:normal}}
 
 .activeWorkPanel{width:min(1180px,100%);margin:18px auto 0;background:#fff;border:1px solid #dce5ee;border-radius:24px;padding:22px 24px;box-shadow:0 10px 28px rgba(26,42,66,.06)}
 .activeWorkHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:16px;border-bottom:1px solid #edf1f5}
