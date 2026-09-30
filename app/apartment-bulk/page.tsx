@@ -85,6 +85,11 @@ type NaverBlock = {
   type: "title" | "subheading" | "body" | "image" | "tags" | "card";
   text: string;
 };
+type MarkdownTable = {
+  heading: string;
+  headers: string[];
+  rows: string[][];
+};
 type PhotoCandidate = {
   title: string;
   imageUrl: string;
@@ -254,7 +259,8 @@ ${topicGuide}
 - 제목 후보는 내부적으로 5개 정도 비교한 뒤 최종 제목 1개만 출력할 것.
 - 제목에는 핵심 검색어를 자연스럽게 앞쪽에 배치하고 과장형 낚시 표현은 피할 것.
 - 소제목 4~6개 정도로 구성하고 모바일에서 읽기 좋게 짧은 문단으로 작성할 것.
-- 핵심 숫자나 일정이 있으면 표 또는 짧은 정리 구간을 활용하되, 검증된 값만 사용할 것.
+- 핵심 숫자나 일정이 여러 개면 마크다운 표를 우선 활용하되, 검증된 값만 사용할 것.
+- 표를 사용할 때는 첫 행을 항목명 헤더로 만들고 표 바로 위에 내용을 설명하는 소제목을 둘 것. 콘텐츠메이커가 이 표를 자동 감지해 이미지 요청서로 활용한다.
 - 글 마지막에는 앞으로 확인할 변수 2~4개와 핵심 요약 3줄을 넣을 것.
 - 네이버 태그는 핵심 검색어 중심으로 8~12개를 마지막 한 줄에 작성할 것.
 
@@ -286,6 +292,11 @@ function makeSavedWorkImagePrompt(slot: WorkImageSlot, topic: string, body: stri
   const safeTopic = topic.trim() || "블로그 글";
   const article = compactArticleForImagePrompt(body);
   const ratio = meta.width === meta.height ? "1:1 정사각형" : "16:9 가로형";
+  const tables = extractMarkdownTables(body);
+
+  if (slot === "01" && tables.length > 0) {
+    return makeTableImagePrompt(safeTopic, tables[0], imageNotes);
+  }
 
   const slotGuide = slot === "00"
     ? `[썸네일 구성]
@@ -496,16 +507,98 @@ function isMarkdownTableDivider(line: string) {
   return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")));
 }
 
-function countMarkdownTables(raw: string) {
+function extractMarkdownTables(raw: string): MarkdownTable[] {
   const lines = raw.replace(/\r\n?/g, "\n").split("\n");
-  let count = 0;
+  const tables: MarkdownTable[] = [];
+
   for (let i = 0; i < lines.length - 1; i += 1) {
-    if (splitMarkdownTableRow(lines[i]).length >= 2 && isMarkdownTableDivider(lines[i + 1])) {
-      count += 1;
+    const headers = splitMarkdownTableRow(lines[i]);
+    if (headers.length < 2 || !isMarkdownTableDivider(lines[i + 1])) continue;
+
+    let heading = "";
+    for (let h = i - 1; h >= 0; h -= 1) {
+      const candidate = cleanNaverLine(lines[h]);
+      if (!candidate) continue;
+      heading = candidate;
+      break;
+    }
+
+    const rows: string[][] = [];
+    i += 2;
+    while (i < lines.length) {
+      const row = splitMarkdownTableRow(lines[i]);
+      if (row.length < 2 || isMarkdownTableDivider(lines[i])) {
+        i -= 1;
+        break;
+      }
+      rows.push(row);
       i += 1;
     }
+
+    tables.push({ heading, headers, rows });
+    if (i >= lines.length) break;
   }
-  return count;
+
+  return tables;
+}
+
+function countMarkdownTables(raw: string) {
+  return extractMarkdownTables(raw).length;
+}
+
+function markdownTableToText(table: MarkdownTable) {
+  return [
+    `| ${table.headers.join(" | ")} |`,
+    `| ${table.headers.map(() => "---").join(" | ")} |`,
+    ...table.rows.map((row) => `| ${row.join(" | ")} |`),
+  ].join("\n");
+}
+
+function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+  const safeTopic = topic.trim() || table.heading || "블로그 글";
+  const tableTitle = table.heading || safeTopic;
+  const rowCount = table.rows.length;
+  const layoutGuide = rowCount >= 14
+    ? "- 행이 많으므로 한 장 안에서 좌우 2단 또는 명확한 구획으로 나눠 글자 크기를 확보할 것."
+    : rowCount >= 8
+      ? "- 행 수가 많은 편이므로 여백을 줄이고 행 높이를 균일하게 잡아 모바일 가독성을 확보할 것."
+      : "- 표 전체가 한눈에 들어오도록 단순한 단일 표 레이아웃을 우선할 것.";
+
+  return `네이버 블로그용 표 이미지를 1장 만들어줘.
+
+[글 주제]
+${safeTopic}
+
+[이미지 역할]
+슬롯 01 · 핵심 정보
+역할: 본문 표 데이터를 한눈에 보여주는 정보 이미지
+
+[표 제목]
+${tableTitle}
+
+[제작 크기]
+1600×900px
+16:9 가로형
+
+[가장 중요한 기준]
+- 아래 표 데이터를 한 글자도 임의로 바꾸거나 새로 만들지 말 것.
+- 숫자, 날짜, 종목명, 단지명, 가격, 주관사 등 표의 원문 정보를 그대로 사용할 것.
+- 표의 행을 누락하지 말 것.
+- 네이버 블로그 모바일에서도 읽을 수 있도록 글자 크기와 행 간격을 충분히 확보할 것.
+- 광고 배너가 아니라 정보 정리 이미지처럼 자연스럽고 신뢰감 있게 제작할 것.
+- 과도한 AI 느낌, 네온, 유리질감, 복잡한 3D 효과를 사용하지 말 것.
+- 색상은 2~3개 중심으로 절제하고 헤더와 핵심 구간만 약하게 강조할 것.
+- 워터마크와 타사 로고를 넣지 말 것.
+- 여러 이미지를 콜라주로 합치지 말고 한 장의 완성 이미지로 만들 것.
+${layoutGuide}
+
+[운영자 이미지 메모]
+${imageNotes.trim() || "별도 메모 없음"}
+
+[반드시 포함할 표 데이터]
+${markdownTableToText(table)}
+
+중요: 설명문을 답하지 말고 위 표 데이터를 그대로 반영한 이미지 1장을 바로 제작해줘.`;
 }
 
 function makeMarkdownTableCard(headers: string[], row: string[]) {
@@ -1728,6 +1821,8 @@ export default function ApartmentBulkPage() {
     [workTopic, workBody, workImageNotes]
   );
   const workBodyReadyForImages = workBody.trim().length >= 80;
+  const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
+  const workTableCount = workTables.length;
   const markdownTableCount = useMemo(() => countMarkdownTables(finalBlogText), [finalBlogText]);
   const naverBlocks = useMemo(
     () => parseNaverBlog(finalBlogText, autoConvertTables),
@@ -2588,6 +2683,21 @@ export default function ApartmentBulkPage() {
                 />
               </label>
 
+              {workTableCount > 0 && (
+                <div className={styles.tableImageNotice}>
+                  <div>
+                    <b>📊 표 {workTableCount}개 감지됨</b>
+                    <span>
+                      첫 번째 표 · {workTables[0]?.rows.length || 0}행 × {workTables[0]?.headers.length || 0}열 ·
+                      01 이미지 요청서가 표 전용으로 자동 변경됩니다.
+                    </span>
+                  </div>
+                  <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
+                    표 이미지 GPT 제작
+                  </button>
+                </div>
+              )}
+
               <section className={styles.actionPanel}>
                 <div className={styles.actionHead}>
                   <p className={styles.eyebrow}>IMAGE REQUESTS</p>
@@ -2602,8 +2712,12 @@ export default function ApartmentBulkPage() {
                   </button>
                   <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
                     <span className={styles.actionIcon}>📊</span>
-                    <b>01 · 핵심 정보 GPT 제작</b>
-                    <small>1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리</small>
+                    <b>{workTableCount ? "01 · 표 이미지 GPT 제작" : "01 · 핵심 정보 GPT 제작"}</b>
+                    <small>
+                      {workTableCount
+                        ? `표 ${workTableCount}개 감지 · 첫 번째 표 ${workTables[0]?.rows.length || 0}행을 1600×900 이미지로 자동 반영`
+                        : "1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리"}
+                    </small>
                   </button>
                   <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("02")}>
                     <span className={styles.actionIcon}>🔗</span>
@@ -2620,8 +2734,12 @@ export default function ApartmentBulkPage() {
                     <section className={styles.promptSection} key={slot}>
                       <div className={styles.promptHead}>
                         <div>
-                          <b>{slot} · {WORK_IMAGE_META[slot].label} 요청서</b>
-                          <span>{WORK_IMAGE_META[slot].width}×{WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영</span>
+                          <b>{slot} · {slot === "01" && workTableCount ? "표 이미지" : WORK_IMAGE_META[slot].label} 요청서</b>
+                          <span>
+                            {slot === "01" && workTableCount
+                              ? `1600×900 · 첫 번째 표 ${workTables[0]?.rows.length || 0}행 데이터 자동 반영`
+                              : `${WORK_IMAGE_META[slot].width}×${WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영`}
+                          </span>
                         </div>
                       </div>
                       <textarea className={styles.promptBoxCompact} value={workImagePrompts[slot]} readOnly />
