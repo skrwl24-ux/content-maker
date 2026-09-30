@@ -1377,16 +1377,32 @@ export default function Home() {
         <div className="sectionHead"><div><h2>5. GPT로 쇼츠 조립하기</h2><p>사이트가 완성 프레임·전체대사 SRT·편집표까지 만든 뒤 GPT에는 조립만 맡깁니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
 
         <div className="box finalPackageBox">
-          <h3>쇼츠 제작 패키지</h3>
-          <div className="packageGrid five">
-            <div><span>배경</span><b>{backgroundReady}/{backgroundCount}</b></div>
-            <div><span>그래프</span><b>{graphicReady}/{graphicCount}</b></div>
-            <div><span>음성</span><b>{voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "준비됨") : "없음"}</b></div>
-            <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
-            <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
+          <div className="miniHead"><h3>자동 최종검사</h3><span className={shortsAssemblyReady ? "ok" : "warn"}>{shortsAssemblyReady ? "빠른 조립 준비 완료" : "수정 필요"}</span></div>
+          <div className="assetChecklist">
+            <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/6~7 {shortsSceneCountReady ? "✓" : ""}</span>
+            <span className={shortsCaptionReady ? "ready" : ""}>전체대사 자막 {shortsCaptionReady ? "✓" : "확인"}</span>
+            <span className={shortsVisualReady ? "ready" : ""}>이미지 {imageCount}/{tasks.length} {shortsVisualReady ? "✓" : ""}</span>
+            <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
+            <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
+            <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>6초 초과 {shortsLongScenes.length ? shortsLongScenes.map(x => "장면" + x.scene.order).join(", ") : sceneTimeline.length ? "없음 ✓" : "미확인"}</span>
+            <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
           </div>
-          <p className="muted">ZIP에는 01_scene.png부터 장면별 완성 프레임, scene_contact_sheet.png, 전체대사 SRT, edit_plan.txt, audio_plan.txt, 음성·BGM, 원본 배경/그래프가 함께 들어갑니다.</p>
-          <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "완성 프레임 + ZIP 만드는 중..." : "📦 조립형 쇼츠 패키지 ZIP 다운로드"}</button>
+          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 해당 내레이션을 둘로 나누거나 다른 장면으로 분산하면 쇼츠 리듬이 좋아집니다.</p>}
+          {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
+
+          <h3>빠른 조립 패키지</h3>
+          <div className="packageGrid five">
+            <div><span>완성 프레임</span><b>{shortsScenes.length}장</b></div>
+            <div><span>음성</span><b>{voiceFile ? packageAudioFileName("voice", voiceFile) : "없음"}</b></div>
+            <div><span>SRT</span><b>{sceneTimeline.length ? "전체대사" : "없음"}</b></div>
+            <div><span>BGM</span><b>{bgmFile ? packageAudioFileName("bgm", bgmFile) : "선택"}</b></div>
+            <div><span>편집표</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
+          </div>
+          <p className="muted">빠른 ZIP에는 완성 프레임, 콘택트시트, voice, bgm, subtitles_full.srt, edit_plan.txt, audio_plan.txt, shorts_request.txt만 넣습니다. 원본 이미지는 빼서 GPT가 다시 판단할 자료를 최소화합니다.</p>
+          <div className="inlineActions">
+            <button className="primary" onClick={() => exportShortsPackage(false)} disabled={loading || !shortsAssemblyReady}>{loading ? "ZIP 만드는 중..." : "⚡ 빠른 조립 ZIP 다운로드"}</button>
+            <button className="secondary" onClick={() => exportShortsPackage(true)} disabled={loading}>{loading ? "준비 중..." : "🗂 원본 포함 백업 ZIP"}</button>
+          </div>
         </div>
 
         <div className="box">
