@@ -181,6 +181,93 @@ function makeDailySlots(dateKey: string) {
   });
 }
 
+function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string, materials: string, dateKey: string) {
+  const safeTopic = topic.trim() || "작업 주제 미정";
+  const typeLabel = contentType ? DAILY_TYPE_META[contentType].label : "블로그 콘텐츠";
+  const financeTopic = /(공모주|금시세|금값|엔화|환율|ISA|적금|주식|ETF|채권|비트코인|코인|달러|금리)/.test(safeTopic);
+
+  let topicGuide = "";
+  if (safeTopic.includes("공모주")) {
+    topicGuide = `
+[주제별 검증 포인트]
+- 2026년 10월 국내 공모주 청약 일정을 최신 기준으로 확인할 것.
+- 청약일, 상장 예정일, 주관사 등 일정 정보는 거래소·DART·증권사 등 신뢰 가능한 출처와 교차 확인할 것.
+- 일정은 변경될 수 있으므로 확정/예정 여부를 구분하고, 확인되지 않은 종목이나 날짜를 만들지 말 것.
+- 종목 추천이나 청약 권유보다 '언제 무엇을 확인해야 하는지' 중심의 일정형 정보글로 구성할 것.`;
+  } else if (safeTopic.includes("금시세") || safeTopic.includes("금값")) {
+    topicGuide = `
+[주제별 검증 포인트]
+- 국제 금 가격, 국내 원화 기준 금값, KRX 금시장 가격을 같은 숫자처럼 섞지 말 것.
+- 달러 가치, 미국 실질금리·국채금리, 중앙은행 수요, 위험회피 심리, 원/달러 환율을 금 가격의 주요 변수로 구분해 설명할 것.
+- 최신 가격을 언급하면 기준 시각·시장·단위를 함께 표시할 것.
+- 단기 등락 원인을 하나로 단정하지 말고 확인 가능한 배경을 여러 변수로 나눠 설명할 것.`;
+  } else if (safeTopic.includes("엔화") || safeTopic.includes("환율")) {
+    topicGuide = `
+[주제별 검증 포인트]
+- 달러/엔(USD/JPY)과 원/엔(KRW/JPY 또는 100엔당 원화)을 혼동하지 말 것.
+- 일본은행 정책금리·발언, 미국 연준과 미일 금리차, 달러 흐름, 원화 움직임을 나눠 설명할 것.
+- 환율 숫자를 제시할 때 기준 시각과 통화쌍을 분명히 표시할 것.
+- '엔화가 오른 이유'를 단일 원인으로 확정하지 말고 최신 정책·시장 자료와 함께 설명할 것.`;
+  } else if (financeTopic) {
+    topicGuide = `
+[재테크 글 추가 원칙]
+- 가격·금리·환율·지수는 작성 기준일의 최신 수치를 확인하고 기준 시각과 단위를 명확히 할 것.
+- 단순 시세 나열보다 '왜 움직였는가'를 독자가 이해하도록 원인과 연결 구조를 설명할 것.
+- 매수·매도·가입을 권유하거나 수익을 확정적으로 표현하지 말 것.`;
+  }
+
+  return `재테크·생활정보 네이버 블로그용 글을 최종 발행본으로 작성해줘.
+
+[작성 기준일]
+${dateKey || "작성일 기준 최신"}
+
+[콘텐츠 유형]
+${typeLabel}
+
+[주제]
+${safeTopic}
+
+[운영자 메모]
+${materials.trim() || "별도 메모 없음"}
+
+[가장 중요한 작업 방식]
+- 먼저 웹 검색으로 최신 사실을 확인한 뒤 작성할 것.
+- 현재 가격·일정·정책·금리처럼 바뀔 수 있는 내용은 작성 기준일과 맞는 최신 자료를 우선할 것.
+- 정부기관, 거래소, 중앙은행, 공시, 공식 증권사 자료 등 1차 출처를 우선하고 보조 출처로 교차 확인할 것.
+- 숫자, 날짜, 비율, 일정은 임의로 만들지 말 것.
+- 확인되지 않은 원인은 사실처럼 단정하지 말고 '배경 중 하나', '함께 볼 변수'처럼 구분할 것.
+- 검색 결과를 그대로 베끼지 말고 한국 독자가 이해하기 쉬운 말로 재구성할 것.
+- 투자 권유가 아니라 정보 제공과 흐름 설명을 목적으로 작성할 것.
+${topicGuide}
+
+[글 방향]
+- 단순히 '얼마다'를 나열하기보다 '왜 움직이는가 / 무엇을 확인해야 하는가'를 중심으로 설명할 것.
+- 초보 투자자도 이해할 수 있게 전문 용어는 바로 풀어서 설명할 것.
+- 첫 3문장 안에 이 글에서 얻을 핵심 답을 먼저 보여줄 것.
+- 제목 후보는 내부적으로 5개 정도 비교한 뒤 최종 제목 1개만 출력할 것.
+- 제목에는 핵심 검색어를 자연스럽게 앞쪽에 배치하고 과장형 낚시 표현은 피할 것.
+- 소제목 4~6개 정도로 구성하고 모바일에서 읽기 좋게 짧은 문단으로 작성할 것.
+- 핵심 숫자나 일정이 있으면 표 또는 짧은 정리 구간을 활용하되, 검증된 값만 사용할 것.
+- 글 마지막에는 앞으로 확인할 변수 2~4개와 핵심 요약 3줄을 넣을 것.
+- 네이버 태그는 핵심 검색어 중심으로 8~12개를 마지막 한 줄에 작성할 것.
+
+[이미지 기획]
+본문 마지막에 이미지 제작 메모도 함께 정리할 것.
+- 이미지 00 · 썸네일: 모바일 목록에서 주제를 1초 안에 이해할 수 있는 짧은 후킹 문구
+- 이미지 01 · 핵심 정보: 일정·가격·환율·구조 중 가장 중요한 내용을 한눈에 보여주는 16:9 이미지
+- 이미지 02 · 원인·흐름: 가격이나 환율이 움직이는 연결 구조 또는 비교를 보여주는 16:9 이미지
+- 실제 이미지 생성 프롬프트는 길게 쓰지 말고 각 이미지가 무엇을 보여줄지 1~2문장 기획 메모만 작성할 것.
+
+[최종 출력 순서]
+1. 최종 제목
+2. 네이버 발행용 본문
+3. 태그
+4. 이미지 00~02 기획 메모
+5. 검수 메모: 사용한 주요 출처와 확인 기준일을 짧게 정리
+
+중요: 일반 상식만으로 작성하지 말고 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
+}
+
 function openWorkDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(WORK_DB_NAME, 1);
@@ -1433,6 +1520,7 @@ export default function ApartmentBulkPage() {
   const [pricePromptCopied, setPricePromptCopied] = useState(false);
   const [locationPromptCopied, setLocationPromptCopied] = useState(false);
   const [bodyPromptCopied, setBodyPromptCopied] = useState(false);
+  const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [finalBlogText, setFinalBlogText] = useState("");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
@@ -1464,6 +1552,10 @@ export default function ApartmentBulkPage() {
   const bodyPrompt = useMemo(
     () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme),
     [data, monthlyStats, recommendedAngle, selectedArticleTheme]
+  );
+  const workGptPrompt = useMemo(
+    () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
+    [activeWorkType, workTopic, workMaterials, dailyDateKey]
   );
   const naverBlocks = useMemo(() => parseNaverBlog(finalBlogText), [finalBlogText]);
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
@@ -1975,6 +2067,21 @@ export default function ApartmentBulkPage() {
     }
   }
 
+  async function copyWorkGptPrompt() {
+    try {
+      await navigator.clipboard.writeText(workGptPrompt);
+      setWorkPromptCopied(true);
+      window.setTimeout(() => setWorkPromptCopied(false), 1800);
+    } catch {
+      setWorkPromptCopied(false);
+    }
+  }
+
+  function openWorkGptPromptInChatGPT() {
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(workGptPrompt);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function openBodyPromptInChatGPT() {
     const nextHistory = [...recentArticleThemes, selectedArticleTheme.id].slice(-6);
     setRecentArticleThemes(nextHistory);
@@ -2260,8 +2367,25 @@ export default function ApartmentBulkPage() {
             <div className={styles.prepOnlyPanel}>
               <div className={styles.prepOnlyNotice}>
                 <b>{DAILY_TYPE_META[activeWorkType || activeWorkSlot.type].label} 준비 화면</b>
-                <span>이번 단계에서는 분석·자동 생성 기능을 추가하지 않고, 주제와 자료를 작업별로 저장합니다.</span>
+                <span>주제와 자료 메모를 반영한 GPT 요청서를 바로 복사하거나 ChatGPT에서 열 수 있습니다.</span>
               </div>
+
+              <section className={styles.promptSection}>
+                <div className={styles.promptHead}>
+                  <div>
+                    <b>🤖 GPT 요청서</b>
+                    <span>현재 주제 · 작성일 · 자료 메모가 자동으로 반영됩니다.</span>
+                  </div>
+                </div>
+                <textarea className={styles.promptBoxCompact} value={workGptPrompt} readOnly />
+                <div className={styles.promptActionsCompact}>
+                  <button type="button" onClick={openWorkGptPromptInChatGPT}>ChatGPT에서 열기</button>
+                  <button type="button" onClick={() => void copyWorkGptPrompt()}>
+                    {workPromptCopied ? "✓ 복사 완료" : "GPT 요청서 복사"}
+                  </button>
+                </div>
+              </section>
+
               <label className={styles.workField}>
                 <span>본문 초안·구성 메모</span>
                 <textarea
