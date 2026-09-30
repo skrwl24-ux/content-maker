@@ -293,6 +293,10 @@ export default function Home() {
     catch { setError("클립보드 복사에 실패했습니다."); }
   }
 
+  function openGPT() {
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+  }
+
   function shortsScriptPrompt() {
     return [
       "[집값쓱 유튜브 쇼츠 대본 제작]",
@@ -582,7 +586,7 @@ export default function Home() {
         <label>작업 제목</label><input value={projectTitle} onChange={e => setProjectTitle(e.target.value)} placeholder="예: 송도 아파트 시세" />
         <label>본문</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="본문을 붙여넣으세요. 30자 이상이면 분석할 수 있습니다." />
         {isShorts && <div className="box">
-          <div className="miniHead"><h3>① 쇼츠 대본</h3><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 대본 요청서 복사</button></div>
+          <div className="miniHead"><h3>① 쇼츠 대본</h3><div className="inlineActions"><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 대본 요청서 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div>
           <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.5배속 · 공백 제외 210~225자 · 30~33초입니다.</p>
           <label>완성 대본</label>
           <textarea className="smallArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 완성 내레이션을 붙여넣으세요." />
@@ -607,22 +611,22 @@ export default function Home() {
         </div>
         <div className="grid2">
           <div className="box">
-            <div className="miniHead"><h3>② 무음용 화면 문구·자막</h3><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "무음용 화면 문구·자막 요청서를 복사했습니다.")}>📋 요청서 복사</button></div>
+            <div className="miniHead"><h3>② 무음용 화면 문구·자막</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "무음용 화면 문구·자막 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div>
             <p className="muted">소리 없이 봐도 이해되도록 6~7장면의 큰 핵심 문구와 짧은 하단 자막을 설계합니다. 새 이미지는 2~3장만 쓰도록 요청합니다.</p>
           </div>
           <div className="box">
-            <div className="miniHead"><h3>④ TTS 원고</h3><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "1.5배속 TTS용 원고를 복사했습니다.")}>📋 원고 복사</button></div>
+            <div className="miniHead"><h3>④ TTS 원고</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsScript.trim(), "1.5배속 TTS용 원고를 복사했습니다.")}>📋 원고 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div>
             <div className="recommended">{shortsScript}</div>
             <p className="muted">음성 프로그램에서는 1.5배속을 기본값으로 사용합니다.</p>
           </div>
         </div>
         <div className="box">
           <div className="miniHead"><h3>③ 새 이미지 요청서 · 최대 {tasks.length}장</h3><span className="muted">나머지 장면은 재사용·숫자 카드·고정 엔딩</span></div>
-          {tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => copyPrompt(t)}>📋 요청서 복사</button></div>)}
+          {tasks.map(t => <div className="imageRow" key={`${t.order}-${t.title}`}><span>{String(t.order + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><div className="inlineActions"><button className="secondary compact" onClick={() => copyPrompt(t)}>📋 요청서 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div>)}
         </div>
         <div className="grid2">
           <div className="box"><h3>⑤ BGM 추천</h3><div className="recommended">{shortsBgm.label}</div><p className="muted">{shortsBgm.note}</p><p className="muted">보컬 없는 BGM을 쓰고, 내레이션 구간에서는 음량을 낮춰 화면 문구와 음성을 방해하지 않게 합니다.</p></div>
-          <div className="box"><div className="miniHead"><h3>⑥ 유튜브 업로드 문구</h3><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 문구 요청서를 복사했습니다.")}>📋 요청서 복사</button></div><p className="muted">제목 3개 · 설명 · 해시태그 · 고정댓글을 한 번에 요청합니다.</p></div>
+          <div className="box"><div className="miniHead"><h3>⑥ 유튜브 업로드 문구</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 문구 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={openGPT}>↗ GPT 열기</button></div></div><p className="muted">제목 3개 · 설명 · 해시태그 · 고정댓글을 한 번에 요청합니다.</p></div>
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>대본 수정</button><button className="primary" onClick={() => setPhase("images")}>이미지 2~3장 작업</button></div>
       </> : <>
