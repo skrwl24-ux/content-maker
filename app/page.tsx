@@ -1170,7 +1170,7 @@ export default function Home() {
           <div className="packageGrid five">
             <div><span>배경</span><b>{backgroundReady}/{backgroundCount}</b></div>
             <div><span>그래프</span><b>{graphicReady}/{graphicCount}</b></div>
-            <div><span>음성</span><b>{voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초" : "준비됨") : "없음"}</b></div>
+            <div><span>음성</span><b>{voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "준비됨") : "없음"}</b></div>
             <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
