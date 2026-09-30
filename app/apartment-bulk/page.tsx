@@ -56,6 +56,17 @@ type DailyApartmentCandidate = {
   recommendedAngle: string;
   status: string;
 };
+
+type PublishHistoryFilter = "all" | "bulk" | "top3" | "tip" | "power";
+type PublishHistoryItem = {
+  item_type: "topic" | "complex";
+  normalized_key: string;
+  title: string;
+  content_type: string | null;
+  complex_id: string | null;
+  complex_name: string | null;
+  published_on: string;
+};
 type DailyWorkSnapshot = {
   top3?: Top3Work;
   workId: string;
@@ -2177,6 +2188,11 @@ export default function ApartmentBulkPage() {
   const [dailyDateKey, setDailyDateKey] = useState("");
   const [dailySlots, setDailySlots] = useState<DailySlot[]>(DEFAULT_DAILY_SLOTS);
   const [dailyApartmentCandidates, setDailyApartmentCandidates] = useState<DailyApartmentCandidate[]>([]);
+  const [publishHistoryItems, setPublishHistoryItems] = useState<PublishHistoryItem[]>([]);
+  const [publishHistoryFilter, setPublishHistoryFilter] = useState<PublishHistoryFilter>("all");
+  const [publishHistorySearch, setPublishHistorySearch] = useState("");
+  const [publishHistoryLoading, setPublishHistoryLoading] = useState(false);
+  const [publishHistoryMessage, setPublishHistoryMessage] = useState("");
   const dailyApartmentLoadingRef = useRef(false);
   const dailyApartmentLoadedDateRef = useRef("");
   const [activeWorkId, setActiveWorkId] = useState("");
@@ -2240,6 +2256,35 @@ export default function ApartmentBulkPage() {
     () => dailySlots.find((slot) => slot.workId && slot.workId === activeWorkId) || null,
     [dailySlots, activeWorkId]
   );
+  const filteredPublishHistory = useMemo(() => {
+    const keyword = publishHistorySearch.trim().toLowerCase();
+    return publishHistoryItems.filter((item) => {
+      const typeMatch = publishHistoryFilter === "all" || item.content_type === publishHistoryFilter;
+      const searchTarget = [item.title, item.complex_name || "", item.published_on].join(" ").toLowerCase();
+      return typeMatch && (!keyword || searchTarget.includes(keyword));
+    });
+  }, [publishHistoryItems, publishHistoryFilter, publishHistorySearch]);
+
+  async function loadPublishHistory() {
+    setPublishHistoryLoading(true);
+    setPublishHistoryMessage("");
+    try {
+      const res = await fetch("/api/publish-history", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "발행 이력 조회 실패");
+      const items = Array.isArray(json.items)
+        ? json.items.filter((item: unknown): item is PublishHistoryItem =>
+            Boolean(item && typeof item === "object" && typeof (item as PublishHistoryItem).title === "string")
+          )
+        : [];
+      setPublishHistoryItems(items);
+      setPublishHistoryMessage(items.length ? "" : "저장된 발행 이력이 없습니다.");
+    } catch (error) {
+      setPublishHistoryMessage(error instanceof Error ? error.message : "발행 이력을 불러오지 못했습니다.");
+    } finally {
+      setPublishHistoryLoading(false);
+    }
+  }
 
   useEffect(() => {
     const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -2666,6 +2711,9 @@ export default function ApartmentBulkPage() {
       savePublishedComplex(target.complexId, target.complexName, nextDone);
     }
     saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: nextDone } : slot));
+    if (publishHistoryItems.length) {
+      window.setTimeout(() => { void loadPublishHistory(); }, 250);
+    }
   }
 
   function replaceCompletedSlot(id: number) {
@@ -3313,6 +3361,84 @@ export default function ApartmentBulkPage() {
             ))}
           </div>
           <button type="button" className={styles.dailyResetAll} onClick={resetDailyBoard}>발행 큐 전체 새로 구성</button>
+        </details>
+
+        <details
+          className={styles.publishHistory}
+          onToggle={(e) => {
+            if (e.currentTarget.open && !publishHistoryLoading) void loadPublishHistory();
+          }}
+        >
+          <summary>
+            <span>발행 이력</span>
+            <small>{publishHistoryItems.length ? `${publishHistoryItems.length}개 저장됨` : "Supabase에서 보기"}</small>
+          </summary>
+
+          <div className={styles.publishHistoryBody}>
+            <div className={styles.publishHistoryToolbar}>
+              <input
+                value={publishHistorySearch}
+                onChange={(e) => setPublishHistorySearch(e.target.value)}
+                placeholder="제목·단지명 검색"
+                aria-label="발행 이력 검색"
+              />
+              <button type="button" onClick={() => void loadPublishHistory()} disabled={publishHistoryLoading}>
+                {publishHistoryLoading ? "불러오는 중…" : "새로고침"}
+              </button>
+            </div>
+
+            <div className={styles.publishHistoryFilters}>
+              {([
+                ["all", "전체"],
+                ["bulk", "단지"],
+                ["top3", "TOP3"],
+                ["tip", "검색형"],
+                ["power", "파워글"],
+              ] as Array<[PublishHistoryFilter, string]>).map(([value, label]) => {
+                const count = value === "all"
+                  ? publishHistoryItems.length
+                  : publishHistoryItems.filter((item) => item.content_type === value).length;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={publishHistoryFilter === value ? styles.publishHistoryFilterActive : ""}
+                    onClick={() => setPublishHistoryFilter(value)}
+                  >
+                    {label} <span>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className={styles.publishHistoryMeta}>
+              <span>검색 결과 {filteredPublishHistory.length}개</span>
+              <small>완료 처리한 글은 자동으로 여기에 쌓입니다.</small>
+            </div>
+
+            {publishHistoryMessage && <p className={styles.publishHistoryMessage}>{publishHistoryMessage}</p>}
+
+            <div className={styles.publishHistoryList}>
+              {filteredPublishHistory.slice(0, 120).map((item) => {
+                const label = item.content_type === "bulk" ? "단지"
+                  : item.content_type === "top3" ? "TOP3"
+                  : item.content_type === "tip" ? "검색형"
+                  : item.content_type === "power" ? "파워글"
+                  : "기타";
+                return (
+                  <div className={styles.publishHistoryRow} key={item.item_type + ":" + item.normalized_key}>
+                    <span className={styles.publishHistoryType}>{label}</span>
+                    <b>{item.title}</b>
+                    <time>{item.published_on}</time>
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredPublishHistory.length > 120 && (
+              <p className={styles.publishHistoryMessage}>최근 120개까지만 표시합니다. 검색하면 이전 항목도 찾을 수 있습니다.</p>
+            )}
+          </div>
         </details>
       </section>
       )}
