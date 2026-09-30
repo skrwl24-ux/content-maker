@@ -166,41 +166,126 @@ const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
 
 const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
   top3: [
-    "수원 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "용인 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "성남 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "군포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "광명 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "안양 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
-    "김포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+    "의왕 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "시흥 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "평택 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "오산 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "양주 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "의정부 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "인천 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "고양 덕양 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
+    "노원 10억 이하 아파트 거래 활발 TOP3",
+    "강동 15억 이하 아파트 거래 활발 TOP3",
   ],
   tip: [
-    "달러 환율은 왜 움직일까? 미국 금리와 원화의 관계",
-    "미국 국채금리가 오르면 주식시장은 왜 흔들릴까?",
-    "ETF와 펀드는 뭐가 다를까? 초보자가 알아야 할 차이",
-    "전세가율이 높으면 집값에는 어떤 의미일까?",
-    "실거래가와 호가는 왜 다를까?",
-    "용적률과 건폐율, 아파트 볼 때 왜 중요할까?",
-    "금리 인하가 시작되면 예금·채권·주식은 어떻게 달라질까?",
+    "채권 가격은 금리가 내리면 왜 오를까?",
+    "금 ETF와 KRX 금시장은 뭐가 다를까?",
+    "환헤지 ETF와 환노출 ETF, 환율 영향은 어떻게 다를까?",
+    "배당락일에는 왜 주가가 내려갈까?",
+    "미국채 10년물 금리와 기준금리는 왜 다르게 움직일까?",
+    "달러예금과 달러 ETF는 뭐가 다를까?",
+    "아파트 실거래가는 신고 후 언제 반영될까?",
+    "전세가율은 어떻게 계산하고 어디에 써먹을까?",
+    "LTV와 DSR은 뭐가 다를까? 주택대출 핵심 용어 정리",
+    "아파트 관리비에서 장기수선충당금은 무엇일까?",
   ],
   power: [
-    "달러 강세가 이어질 때 한국 증시와 원화는 어떻게 움직일까?",
-    "미국 기준금리 변화가 한국 집값과 환율에 미치는 영향",
-    "미국 국채금리와 나스닥은 왜 반대로 움직일 때가 많을까?",
-    "금·달러·채권이 동시에 움직일 때 돈은 어디로 가고 있을까?",
-    "비트코인과 미국 유동성은 어떤 관계가 있을까?",
-    "코스피 상승을 외국인 수급과 환율로 읽는 법",
+    "미국채 10년물 금리가 오르면 성장주는 왜 흔들릴까?",
+    "원달러 환율과 외국인 코스피 수급은 왜 같이 움직일까?",
+    "한국은행과 연준의 금리차는 환율에 어떤 영향을 줄까?",
+    "달러가 약해질 때 금과 신흥국 자산이 움직이는 이유",
+    "유가 상승은 물가·금리·환율에 어떻게 번질까?",
+    "미국 고용지표가 금리 기대와 주식시장을 움직이는 이유",
+    "미국 CPI 발표에 주식·채권·환율이 동시에 반응하는 이유",
+    "장단기 금리차는 경기 흐름을 어떻게 보여줄까?",
+    "엔캐리 트레이드 청산이 글로벌 시장을 흔드는 과정",
   ],
 };
+
+const PUBLISHED_TOPIC_SEEDS = [
+  "2026년 10월 공모주 일정 총정리｜청약일·상장일 한눈에 보기",
+  "금시세 왜 움직일까? 달러와 금리가 금값에 미치는 영향",
+  "엔화 환율 왜 다시 움직이나? 일본 금리와 달러로 보는 엔화 흐름",
+  "수원 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "용인 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "성남 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "군포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "광명 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "안양 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "김포 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+  "달러 환율은 왜 움직일까? 미국 금리와 원화의 관계",
+  "미국 국채금리가 오르면 주식시장은 왜 흔들릴까?",
+  "ETF와 펀드는 뭐가 다를까? 초보자가 알아야 할 차이",
+  "전세가율이 높으면 집값에는 어떤 의미일까?",
+  "실거래가와 호가는 왜 다를까?",
+  "용적률과 건폐율, 아파트 볼 때 왜 중요할까?",
+  "금리 인하가 시작되면 예금·채권·주식은 어떻게 달라질까?",
+  "달러 강세가 이어질 때 한국 증시와 원화는 어떻게 움직일까?",
+  "미국 기준금리 변화가 한국 집값과 환율에 미치는 영향",
+  "미국 국채금리와 나스닥은 왜 반대로 움직일 때가 많을까?",
+  "금·달러·채권이 동시에 움직일 때 돈은 어디로 가고 있을까?",
+  "비트코인과 미국 유동성은 어떤 관계가 있을까?",
+  "코스피 상승을 외국인 수급과 환율로 읽는 법",
+  "남양주 아파트 어디가 많이 팔렸나? 최근 거래 TOP3",
+];
+
+const PUBLISHED_TOPIC_STORAGE_KEY = "apartment-bulk-published-topics-v1";
+
+function normalizeTopicKey(topic: string) {
+  return topic
+    .toLowerCase()
+    .replace(/\d{4}년|\d{1,2}월|\d{1,2}일/g, "")
+    .replace(/[\s·｜|?？!！,.'\"“”‘’()\[\]{}:;~_-]/g, "");
+}
+
+function isPublishedTopic(topic: string, publishedTopics: string[]) {
+  const key = normalizeTopicKey(topic);
+  if (!key) return false;
+  return [...PUBLISHED_TOPIC_SEEDS, ...publishedTopics].some((published) => normalizeTopicKey(published) === key);
+}
+
+function getStoredPublishedTopics() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PUBLISHED_TOPIC_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePublishedTopic(topic: string, published: boolean) {
+  if (typeof window === "undefined" || !topic.trim()) return;
+  const current = getStoredPublishedTopics();
+  const key = normalizeTopicKey(topic);
+  const next = published
+    ? Array.from(new Set([...current, topic.trim()]))
+    : current.filter((item) => normalizeTopicKey(item) !== key);
+  try {
+    window.localStorage.setItem(PUBLISHED_TOPIC_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // 발행 이력 저장 실패는 작업 진행을 막지 않습니다.
+  }
+}
 
 function dailyTopicSeed(dateKey: string, slotId: number) {
   return (dateKey + "-" + slotId).split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
-function getDailyTopicSuggestion(type: DailyContentType, dateKey: string, slotId: number) {
+function getDailyTopicSuggestion(
+  type: DailyContentType,
+  dateKey: string,
+  slotId: number,
+  publishedTopics: string[] = [],
+  excludedTopics: string[] = []
+) {
   const pool = DAILY_TOPIC_POOLS[type] || [];
   if (!pool.length) return "";
-  return pool[dailyTopicSeed(dateKey, slotId) % pool.length];
+  const excludedKeys = new Set(excludedTopics.map(normalizeTopicKey));
+  const available = pool.filter((topic) => !isPublishedTopic(topic, publishedTopics) && !excludedKeys.has(normalizeTopicKey(topic)));
+  if (!available.length) return "";
+  return available[dailyTopicSeed(dateKey, slotId) % available.length];
 }
 
 const WORK_IMAGE_META: Record<WorkImageSlot, { label: string; role: string; width: number; height: number }> = {
@@ -220,15 +305,19 @@ function createWorkId(dateKey: string, slotId: number) {
   return `jibssuk-${compact}-${String(slotId).padStart(2, "0")}-${suffix}`;
 }
 
-function makeDailySlots(dateKey: string) {
+function makeDailySlots(dateKey: string, publishedTopics: string[] = []) {
   const plan = DAILY_TOPIC_PLANS[dateKey] || {};
+  const picked: string[] = [];
   return DEFAULT_DAILY_SLOTS.map((slot) => {
     const planned = plan[slot.id];
     const type = planned?.type || slot.type;
+    const plannedTopic = planned?.topic || "";
+    const topic = plannedTopic || getDailyTopicSuggestion(type, dateKey, slot.id, publishedTopics, picked);
+    if (topic) picked.push(topic);
     return {
       ...slot,
       type,
-      topic: planned?.topic || getDailyTopicSuggestion(type, dateKey, slot.id),
+      topic,
       workId: createWorkId(dateKey, slot.id),
     };
   });
@@ -2051,11 +2140,16 @@ export default function ApartmentBulkPage() {
       if (Array.isArray(saved) && saved.length === 7) {
         const validTypes = new Set(Object.keys(DAILY_TYPE_META));
         const plan = DAILY_TOPIC_PLANS[dateKey] || {};
+        const publishedTopics = getStoredPublishedTopics();
+        const picked: string[] = [];
         const normalized = saved.map((slot, index) => {
           const planned = plan[index + 1];
           const savedType = validTypes.has(slot?.type) ? slot.type as DailyContentType : DEFAULT_DAILY_SLOTS[index].type;
           const savedTopic = typeof slot?.topic === "string" ? slot.topic.trim() : "";
           const resolvedType = savedTopic ? savedType : (planned?.type || savedType);
+          const suggested = getDailyTopicSuggestion(resolvedType, dateKey, index + 1, publishedTopics, picked);
+          const topic = savedTopic || planned?.topic || suggested;
+          if (topic) picked.push(topic);
           return {
             id: index + 1,
             type: resolvedType,
@@ -2063,13 +2157,13 @@ export default function ApartmentBulkPage() {
             workId: typeof slot?.workId === "string" && slot.workId
               ? slot.workId
               : createWorkId(dateKey, index + 1),
-            topic: savedTopic || planned?.topic || getDailyTopicSuggestion(resolvedType, dateKey, index + 1),
+            topic,
           };
         });
         setDailySlots(normalized);
         window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(normalized));
       } else {
-        const next = makeDailySlots(dateKey);
+        const next = makeDailySlots(dateKey, getStoredPublishedTopics());
         setDailySlots(next);
         window.localStorage.setItem("apartment-bulk-daily-board-v1:" + dateKey, JSON.stringify(next));
       }
@@ -2077,7 +2171,7 @@ export default function ApartmentBulkPage() {
       const index = indexRaw ? JSON.parse(indexRaw) : [];
       setStartedWorkIds(Array.isArray(index) ? index.filter((item): item is string => typeof item === "string") : []);
     } catch {
-      setDailySlots(makeDailySlots(dateKey));
+      setDailySlots(makeDailySlots(dateKey, getStoredPublishedTopics()));
       setStartedWorkIds([]);
     }
   }, []);
@@ -2262,7 +2356,14 @@ export default function ApartmentBulkPage() {
   }
 
   function updateDailyType(id: number, type: DailyContentType) {
-    const nextTopic = getDailyTopicSuggestion(type, dailyDateKey || new Date().toISOString().slice(0, 10), id);
+    const excluded = dailySlots.filter((slot) => slot.id !== id).map((slot) => slot.topic || "").filter(Boolean);
+    const nextTopic = getDailyTopicSuggestion(
+      type,
+      dailyDateKey || new Date().toISOString().slice(0, 10),
+      id,
+      getStoredPublishedTopics(),
+      excluded
+    );
     saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, type, topic: nextTopic } : slot));
     if (activeWorkSlot?.id === id) {
       setActiveWorkType(type);
@@ -2275,20 +2376,28 @@ export default function ApartmentBulkPage() {
     if (!slot) return;
     const pool = DAILY_TOPIC_POOLS[slot.type] || [];
     if (!pool.length) return;
-    const currentIndex = pool.indexOf(slot.topic || "");
-    const fallback = dailyTopicSeed(dailyDateKey || "today", id) % pool.length;
-    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % pool.length : (fallback + 1) % pool.length;
-    const topic = pool[nextIndex];
+    const publishedTopics = getStoredPublishedTopics();
+    const usedToday = dailySlots.filter((item) => item.id !== id).map((item) => item.topic || "").filter(Boolean);
+    const available = pool.filter((topic) => !isPublishedTopic(topic, publishedTopics) && !usedToday.some((used) => normalizeTopicKey(used) === normalizeTopicKey(topic)));
+    if (!available.length) return;
+    const currentIndex = available.findIndex((topic) => normalizeTopicKey(topic) === normalizeTopicKey(slot.topic || ""));
+    const fallback = dailyTopicSeed(dailyDateKey || "today", id) % available.length;
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % available.length : fallback;
+    const topic = available[nextIndex];
     saveDailySlots(dailySlots.map((item) => item.id === id ? { ...item, topic } : item));
     if (activeWorkSlot?.id === id) setWorkTopic(topic);
   }
 
   function toggleDailyDone(id: number) {
-    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: !slot.done } : slot));
+    const target = dailySlots.find((slot) => slot.id === id);
+    if (!target) return;
+    const nextDone = !target.done;
+    if (target.topic) savePublishedTopic(target.topic, nextDone);
+    saveDailySlots(dailySlots.map((slot) => slot.id === id ? { ...slot, done: nextDone } : slot));
   }
 
   function resetDailyBoard() {
-    const next = makeDailySlots(dailyDateKey || new Date().toISOString().slice(0, 10));
+    const next = makeDailySlots(dailyDateKey || new Date().toISOString().slice(0, 10), getStoredPublishedTopics());
     saveDailySlots(next);
     setActiveWorkId("");
     setActiveWorkType(null);
