@@ -1031,63 +1031,49 @@ export default function Home() {
       </> : null)}
 
       {phase === "images" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>4. 제작자료</h2><p>장면표가 요구한 재료를 각각 AI로 만들고, 완성 파일을 여기에 모읍니다.</p></div><span className="counter">재료 {imageCount}/{tasks.length}</span></div>
+        <div className="sectionHead"><div><h2>4. 제작자료</h2><p>GPT에 넘길 이미지·음성·자막·BGM을 한곳에 모읍니다.</p></div><span className="counter">이미지 {imageCount}/{tasks.length}</span></div>
 
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>① 배경 이미지</h3><span className="muted">{backgroundReady}/{backgroundCount} 준비</span></div>
-            <div className="assetImageGrid singleColumn">{tasks.map((t, i) => t.assetKind !== "graphic" ? <div className="assetImageCard" key={t.title}>
-              <div className="assetImagePreview">{t.imageDataUrl ? <img src={t.imageDataUrl} alt={t.title} /> : <div><b>{t.title}</b><span>이미지 대기</span></div>}</div>
-              <b>{t.keyMessage}</b>
-              <div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button><label className="fileBtn compact">파일 넣기<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; fileToDataUrl(file).then(src => updateTask(i, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true })).catch(() => setError("이미지 처리에 실패했습니다.")); }} /></label></div>
-            </div> : null) </div>
-            {backgroundCount === 0 && <p className="muted">새 배경 이미지가 필요한 장면이 없습니다.</p>} 
-          </div>
-
-          <div className="box">
-            <div className="miniHead"><h3>② 그래프·숫자 카드</h3><span className="muted">{graphicReady}/{graphicCount} 준비</span></div>
-            <div className="assetImageGrid singleColumn">{tasks.map((t, i) => t.assetKind === "graphic" ? <div className="assetImageCard graphicCard" key={t.title}>
-              <div className="assetImagePreview">{t.imageDataUrl ? <img src={t.imageDataUrl} alt={t.title} /> : <div><b>{t.title}</b><span>그래프 대기</span></div>}</div>
-              <b>{t.keyMessage}</b>
-              <div className="inlineActions"><button className="primary compact" onClick={() => openGPT(promptFor(t))}>그래프 만들기 ↗</button><label className="fileBtn compact">파일 넣기<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; fileToDataUrl(file).then(src => updateTask(i, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true })).catch(() => setError("그래프 처리에 실패했습니다.")); }} /></label></div>
-            </div> : null) </div>
-            {graphicCount === 0 && <p className="muted">그래프·숫자 카드가 필요한 장면이 없습니다.</p>} 
-          </div>
+        <div className="box">
+          <div className="miniHead"><h3>① 쇼츠 이미지</h3><span className="muted">장면표에서 ‘새 이미지’로 정한 것만</span></div>
+          <div className="assetImageGrid">{tasks.map((t, i) => <div className="assetImageCard" key={t.title}>
+            <div className="assetImagePreview">{t.imageDataUrl ? <img src={t.imageDataUrl} alt={t.title} /> : <div><b>이미지 {i + 1}</b><span>대기</span></div>}</div>
+            <b>{t.keyMessage}</b>
+            <div className="inlineActions">
+              <button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button>
+              <label className="fileBtn compact">이미지 넣기<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; fileToDataUrl(file).then(src => updateTask(i, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true })).catch(() => setError("이미지 처리에 실패했습니다.")); }} /></label>
+            </div>
+          </div>)}</div>
+          <p className="muted">사이트가 문구를 합성하지 않습니다. 깨끗한 원본 이미지를 그대로 GPT 영상 제작에 넘깁니다.</p>
         </div>
 
         <div className="grid2">
           <div className="box assetUploadBox">
-            <div className="miniHead"><h3>③ AI 음성</h3><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
-            <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
-            <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
-            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? voiceDuration.toFixed(1) + "초" : "길이 확인 중"}</span></div> : <p className="muted">음성파일을 넣으면 실제 길이로 장면 타임라인과 SRT를 자동 생성합니다.</p>} 
+            <h3>② 완성 음성파일</h3>
+            <label className="assetDrop">MP3 / WAV 선택<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
+            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? voiceDuration.toFixed(1) + "초" : "음성 길이 확인 중"}</span></div> : <p className="muted">1.5배속으로 만든 최종 음성파일을 넣으세요.</p>}
           </div>
-
           <div className="box assetUploadBox">
-            <h3>④ BGM</h3>
+            <h3>③ BGM 파일</h3>
             <div className="recommended">{shortsBgm.label}</div>
             <p className="muted">{shortsBgm.note}</p>
-            <label className="assetDrop">BGM MP3 / WAV 넣기<input type="file" accept="audio/*" onChange={e => setBgmFile(e.target.files?.[0] || null)} /></label>
-            {bgmFile && <div className="assetReady"><b>✓ {bgmFile.name}</b><span>BGM 준비 완료</span></div>} 
-            <label>BGM 출처·사용권 메모</label>
-            <input value={bgmMemo} onChange={e => setBgmMemo(e.target.value)} placeholder="예: YouTube Audio Library · 사용 가능 확인" />
+            <label className="assetDrop">MP3 / WAV 선택<input type="file" accept="audio/*" onChange={e => setBgmFile(e.target.files?.[0] || null)} /></label>
+            {bgmFile && <div className="assetReady"><b>✓ {bgmFile.name}</b><span>BGM 준비 완료</span></div>}
           </div>
         </div>
 
         <div className="box">
-          <div className="miniHead"><h3>⑤ 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "SRT 자막을 복사했습니다.")}>📋 SRT 복사</button>} </div></div>
-          {sceneTimeline.length > 0 ? <div className="timelineTable">{sceneTimeline.map(item => <div className="timelineRow" key={item.scene.order}><b>{item.scene.order}</b><span>{item.start.toFixed(1)}~{item.end.toFixed(1)}초</span><div><strong>{item.scene.headline}</strong><small>{item.scene.subtitle}</small></div><em>{item.scene.screenType}</em></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 6~7장면 시간을 자동 배분합니다.</p>} 
-          <p className="muted">장면별 내레이션 글자 비중으로 1차 시간을 배분하고, 최종 영상 제작 시 음성에 맞춰 미세 조정하도록 요청합니다.</p>
+          <div className="miniHead"><h3>④ 자막·장면표</h3><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "자막·장면표를 복사했습니다.")}>📋 복사</button></div>
+          <div className="productionScenes">{shortsScenes.map(scene => <div key={scene.order}><b>{scene.order}. {scene.headline}</b><span>{scene.subtitle}</span><small>{scene.screenType}</small></div>)}</div>
+          <p className="muted">ZIP을 만들면 scene_plan.txt와 subtitles.txt가 자동으로 포함됩니다.</p>
         </div>
 
         <div className="assetChecklist">
-          <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
-          <span className={graphicReady === graphicCount ? "ready" : ""}>그래프 {graphicReady}/{graphicCount}</span>
-          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초 ✓" : "✓") : "대기"}</span>
-          <span className={sceneTimeline.length >= 6 ? "ready" : ""}>SRT {sceneTimeline.length ? "✓" : "대기"}</span>
+          <span className={imageCount === tasks.length && tasks.length > 0 ? "ready" : ""}>이미지 {imageCount}/{tasks.length}</span>
+          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "대기"}</span>
+          <span className={shortsScenes.length >= 6 ? "ready" : ""}>자막 {shortsScenes.length}장면</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={!voiceFile || shortsScenes.length < 6 || (tasks.length > 0 && imageCount < tasks.length)} onClick={() => setPhase("review")}>GPT 제작 단계로</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={imageCount === 0 || !voiceFile || shortsScenes.length < 6} onClick={() => setPhase("review")}>GPT 제작 단계로</button></div>
       </> : current ? <>
         <div className="sectionHead"><div><h2>{isShorts ? "4. 이미지" : "이미지 일괄 정리"}</h2><p>{isShorts ? <>장면표에서 <b>새 이미지</b>로 정한 장면만 작업합니다. 나머지 장면은 재사용·텍스트 카드·숫자 카드로 처리합니다.</> : <>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</>}</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
         <div className="toolbar box"><input ref={bulkRef} type="file" accept="image/*" multiple onChange={e => handleBulk(e.target.files)} /><button className="secondary" onClick={copyAllPrompts}>📋 전체 이미지 요청서 복사</button><span className="muted">파일명 00, 01, 02… 순으로 저장해두면 자동 정렬이 가장 정확합니다.</span></div>
@@ -1113,14 +1099,13 @@ export default function Home() {
 
         <div className="box finalPackageBox">
           <h3>쇼츠 제작 패키지</h3>
-          <div className="packageGrid five">
-            <div><span>배경</span><b>{backgroundReady}/{backgroundCount}</b></div>
-            <div><span>그래프</span><b>{graphicReady}/{graphicCount}</b></div>
-            <div><span>음성</span><b>{voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초" : "준비됨") : "없음"}</b></div>
-            <div><span>SRT</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
+          <div className="packageGrid">
+            <div><span>이미지</span><b>{imageCount}/{tasks.length}장</b></div>
+            <div><span>음성</span><b>{voiceFile ? "준비됨" : "없음"}</b></div>
+            <div><span>자막</span><b>{shortsScenes.length}장면</b></div>
             <div><span>BGM</span><b>{bgmFile ? "준비됨" : "미첨부"}</b></div>
           </div>
-          <p className="muted">ZIP에는 배경 이미지, 그래프·숫자 카드, 음성, BGM, voice_script.txt, scene_plan.txt, timeline.txt, subtitles.txt, subtitles.srt, shorts_request.txt가 들어갑니다.</p>
+          <p className="muted">ZIP에는 이미지, 음성, BGM, voice_script.txt, scene_plan.txt, subtitles.txt, shorts_request.txt가 들어갑니다.</p>
           <button className="secondary" onClick={exportShortsPackage} disabled={loading}>{loading ? "ZIP 만드는 중..." : "📦 쇼츠 제작 패키지 ZIP 다운로드"}</button>
         </div>
 
@@ -1129,12 +1114,11 @@ export default function Home() {
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>음성파일을 타임라인 기준으로 사용</span>
-            <span>배경은 줌/패닝 · 그래프는 안정적으로 표시</span>
-            <span>SRT 타임코드 + 무음 이해 가능한 큰 문구</span>
+            <span>이미지 줌/패닝 + 무음 이해 가능한 자막</span>
             <span>BGM은 음성 아래로 낮게</span>
             <span>마지막은 “오늘도 집값쓱.” 브랜드 엔딩</span>
           </div>
-          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. ZIP 안의 그래프·이미지·음성·SRT·BGM을 기준으로 영상 제작을 요청합니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
+          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
         </div>
 
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>제작자료 수정</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div>
