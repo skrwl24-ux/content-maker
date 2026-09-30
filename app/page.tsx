@@ -289,6 +289,14 @@ export default function Home() {
       return { scene, start, end, duration: end - start };
     });
   }, [shortsScenes, finalVoiceDuration]);
+
+  const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
+  const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
+  const shortsVisualReady = tasks.length === 0 || imageCount === tasks.length;
+  const shortsSceneCountReady = shortsScenes.length >= 6 && shortsScenes.length <= 7;
+  const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
     return (analysis?.facts || []).map(f => ({ ...f, used: corpus.includes(String(f.value).toLowerCase()) }));
@@ -839,6 +847,7 @@ export default function Home() {
       "",
       "[가장 중요한 원칙]",
       "- 새로 기획하거나 디자인하지 말고, ZIP 안의 완성 프레임·SRT·edit_plan을 그대로 조립하는 작업으로 진행",
+      "- 음성 파일은 voice.mp3 또는 voice.wav, BGM은 bgm.mp3 또는 bgm.wav 이름으로 제공됨",
       "- 장면 순서와 시간은 edit_plan.txt를 최우선으로 적용",
       "- 화면은 01_scene.png, 02_scene.png... 순서의 완성 프레임 PNG를 그대로 사용",
       "- subtitles_full.srt의 모든 대사를 빠짐없이 하단 자막으로 표시하고 요약하거나 생략하지 말 것",
@@ -881,27 +890,37 @@ export default function Home() {
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
 
-  async function exportShortsPackage() {
+  function packageAudioFileName(kind: "voice" | "bgm", file: File) {
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".wav") || file.type.includes("wav")) return `${kind}.wav`;
+    return `${kind}.mp3`;
+  }
+
+  async function exportShortsPackage(includeSources = false) {
     setLoading(true); setError("");
     try {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
 
-      // Keep original source assets for traceability.
-      let bgNo = 0;
-      let graphNo = 0;
-      tasks.forEach((task) => {
-        const dataUrl = task.sourceDataUrl || task.imageDataUrl;
-        const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-        if (match) {
-          const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
-          const prefix = task.assetKind === "graphic" ? `source_graphic_${String(++graphNo).padStart(2, "0")}` : `source_background_${String(++bgNo).padStart(2, "0")}`;
-          folder.file(`${prefix}.${ext}`, match[2], { base64: true });
-        }
-      });
+      // Quick assembly package intentionally excludes original image assets.
+      // Backup mode retains them for later re-editing.
+      if (includeSources) {
+        let bgNo = 0;
+        let graphNo = 0;
+        tasks.forEach((task) => {
+          const dataUrl = task.sourceDataUrl || task.imageDataUrl;
+          const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+          if (match) {
+            const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
+            const prefix = task.assetKind === "graphic"
+              ? `source_graphic_${String(++graphNo).padStart(2, "0")}`
+              : `source_background_${String(++bgNo).padStart(2, "0")}`;
+            folder.file(`${prefix}.${ext}`, match[2], { base64: true });
+          }
+        });
+      }
 
-      // Build ready-to-assemble final scene frames.
       const frames: Array<{ order: number; dataUrl: string }> = [];
       for (let i = 0; i < shortsScenes.length; i++) {
         const scene = shortsScenes[i];
@@ -919,31 +938,35 @@ export default function Home() {
         if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
       }
 
-      if (voiceFile) folder.file(`voice_${voiceFile.name}`, voiceFile);
-      if (bgmFile) folder.file(`bgm_${bgmFile.name}`, bgmFile);
-      folder.file("display_script.txt", shortsScript);
-      folder.file("voice_script.txt", shortsVoiceScript);
-      folder.file("scene_plan.txt", shortsSceneExport());
+      if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
+      if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
+
       folder.file("edit_plan.txt", shortsEditPlanExport());
       folder.file("audio_plan.txt", shortsAudioPlanExport());
-      folder.file("timeline.txt", shortsTimelineExport());
-      folder.file("subtitles_full.txt", shortsScenes.map(s => `${s.order}. ${s.narration || s.subtitle || s.headline}`).join("\n"));
-      if (sceneTimeline.length) {
-        folder.file("subtitles_full.srt", shortsSrt());
-        folder.file("subtitles.srt", shortsSrt());
-      }
-      if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
+      folder.file("subtitles_full.srt", shortsSrt());
       folder.file("shorts_request.txt", shortsVideoPrompt());
+
+      if (includeSources) {
+        folder.file("display_script.txt", shortsScript);
+        folder.file("voice_script.txt", shortsVoiceScript);
+        folder.file("scene_plan.txt", shortsSceneExport());
+        folder.file("timeline.txt", shortsTimelineExport());
+        folder.file("subtitles_full.txt", shortsScenes.map(s => `${s.order}. ${s.narration || s.subtitle || s.headline}`).join("\n"));
+        if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
+      }
 
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_assembly_package.zip`;
+      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_${includeSources ? "backup_package" : "quick_assembly"}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e: any) { setError(e.message || "쇼츠 조립 패키지 ZIP 생성에 실패했습니다."); }
-    finally { setLoading(false); }
+    } catch (e: any) {
+      setError(e.message || (includeSources ? "백업 ZIP 생성에 실패했습니다." : "빠른 조립 ZIP 생성에 실패했습니다."));
+    } finally {
+      setLoading(false);
+    }
   }
 
   function shortsUploadPrompt() {
@@ -1147,7 +1170,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V10 · 조립형 쇼츠 패키지</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V11 · 빠른 조립 쇼츠</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
