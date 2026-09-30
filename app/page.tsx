@@ -616,9 +616,11 @@ export default function Home() {
       "- 광고처럼 과하게 흥분된 톤은 피하고 신뢰감 있게",
       "- 아래 'AI 음성용 대본'은 사이트에서 발음용으로 이미 변환한 최종 원고이므로 숫자·단위·금액 표현을 다시 바꾸지 말 것",
       "- 숫자, 금액, 단지명, 지역명은 적힌 그대로 정확하게 발음",
+      "- 대본의 띄어쓰기는 고유명사 발음 단위이므로 최대한 그대로 반영",
+      "- 쉼표에서는 아주 짧게 쉬고, 마침표에서는 한 호흡 쉬어 자연스럽게 연결",
+      "- '집.값.쓱.'처럼 마침표로 나눈 표현은 각 음절을 또렷하게 끊어 읽을 것",
       "- 짧고 빠른 정보 전달형 템포",
-      "- 가능하면 약 1.5배속 체감 속도로 출력",
-      "- 속도 설정이 불가능하면 자연스럽게 읽되 불필요한 긴 호흡은 줄일 것",
+      "- 음성 파일 자체는 원본 속도로 생성해도 됨. 최종 쇼츠 편집 단계에서 정확히 1.5배속 적용 예정",
       "- BGM, 효과음 없이 내레이션 음성만 출력",
       "- MP3 또는 WAV 파일로 제공",
       "- 대본을 요약하거나 바꾸지 말 것",
@@ -681,7 +683,7 @@ export default function Home() {
       "",
       "[제작 기준]",
       "- 완성 영상은 1080×1920, 9:16 세로형 YouTube Shorts",
-      voiceDuration ? `- 음성 파일 길이 약 ${voiceDuration.toFixed(1)}초를 전체 타임라인 기준으로 사용` : "- 음성 파일 길이를 전체 타임라인 기준으로 사용",
+      voiceDuration ? `- 첨부 음성 원본은 약 ${voiceDuration.toFixed(1)}초이며, 반드시 1.5배속 적용 후 약 ${finalVoiceDuration.toFixed(1)}초를 전체 타임라인 기준으로 사용` : "- 첨부 음성은 반드시 1.5배속 적용 후 전체 타임라인 기준으로 사용",
       "- scene_plan.txt와 timeline.txt의 장면 순서·시간을 우선 적용",
       "- 배경 이미지는 과하지 않은 줌인·줌아웃·슬로우 패닝으로 자연스럽게 움직임 추가",
       "- 그래프·숫자 카드 이미지는 숫자가 잘 읽히도록 과한 움직임 없이 안정적으로 표시",
@@ -1022,7 +1024,7 @@ export default function Home() {
         <div className="sectionHead"><div><h2>2. 대본</h2><p>GPT에서 만든 완성 내레이션만 붙여넣고 길이를 확인합니다.</p></div><span className="counter">{shortsCharCount}/210~225자</span></div>
         <div className="box">
           <div className="miniHead"><h3>기준 대본 · 화면/자막용</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "기준 대본을 복사했습니다.")}>📋 기준 대본 복사</button></div></div>
-          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
+          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => { setShortsScript(e.target.value); setShortsVoiceOverride(null); }} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
           <div className="tags">
             <span>화면 숫자 원문 유지</span>
             <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>기준 대본 {shortsCharCount}자</span>
@@ -1032,8 +1034,9 @@ export default function Home() {
         </div>
 
         {shortsScript.trim() && <div className="box voiceScriptBox">
-          <div className="miniHead"><h3>AI 음성용 자동 변환</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
-          <div className="voiceScriptPreview">{shortsVoiceScript}</div>
+          <div className="miniHead"><h3>AI 음성용 발음·호흡 보정</h3><div className="inlineActions"><button className="secondary compact" onClick={() => setShortsVoiceOverride(null)}>↻ 자동 보정 다시 적용</button><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
+          <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => setShortsVoiceOverride(e.target.value)} />
+          <p className="muted">숫자·단위 변환과 기본 호흡은 자동으로 넣습니다. 단지명 띄어쓰기나 쉼표가 어색하면 이 원고만 직접 손보면 됩니다. 화면용 대본과 자막 숫자는 바뀌지 않습니다.</p>
           <div className="tags">
             <span>1.5x 기준</span>
             <span>목표 30~33초</span>
@@ -1111,7 +1114,7 @@ export default function Home() {
             <div className="miniHead"><h3>③ AI 음성</h3><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
             <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
-            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? voiceDuration.toFixed(1) + "초" : "길이 확인 중"}</span></div> : <p className="muted">음성을 넣으면 실제 길이를 기준으로 타임라인과 SRT를 자동 생성합니다.</p>}
+            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.5x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.5배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
           </div>
 
           <div className="box assetUploadBox">
@@ -1134,7 +1137,7 @@ export default function Home() {
         <div className="assetChecklist">
           <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
           <span className={graphicReady === graphicCount ? "ready" : ""}>그래프 {graphicReady}/{graphicCount}</span>
-          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (voiceDuration ? voiceDuration.toFixed(1) + "초 ✓" : "✓") : "대기"}</span>
+          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.5x) ✓" : "✓") : "대기"}</span>
           <span className={sceneTimeline.length >= 6 ? "ready" : ""}>SRT {sceneTimeline.length ? "✓" : "대기"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
@@ -1160,7 +1163,7 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 만들기</h2><p>제작자료를 ZIP으로 묶고 GPT에는 최종 영상 제작 요청만 보내면 됩니다.</p></div><span className="counter">{voiceDuration ? voiceDuration.toFixed(1) + "초" : "음성 기준"}</span></div>
+        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 만들기</h2><p>제작자료를 ZIP으로 묶고 GPT에는 최종 영상 제작 요청만 보내면 됩니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
 
         <div className="box finalPackageBox">
           <h3>쇼츠 제작 패키지</h3>
