@@ -18,7 +18,7 @@ test("real estate money is read as complete Korean amounts", () => {
 
 test("years months counters and square metres use appropriate readings", () => {
   assert.equal(convert("2026년 4월 26건, 6월 5건, 7월 15건, 8월 3건, 9월 1건"),
-    "이천이십육년 사월 스물여섯 건, 유월 다섯 건, 칠월 열다섯 건, 팔월 세 건, 구월 한 건");
+    "이천이십육 년 사월 스물여섯 건, 유월 다섯 건, 칠월 열다섯 건, 팔월 세 건, 구월 한 건");
   assert.equal(convert("34평대 전용 84㎡대"), "삼십사 평대 전용 팔십사 제곱미터대");
   assert.equal(convert("6~7월"), "유월부터 칠월까지");
   assert.equal(convert("1.4배속"), "일 점 사 배속");
