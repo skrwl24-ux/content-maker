@@ -129,7 +129,7 @@ function formatSrtTime(seconds: number): string {
   return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":") + "," + String(ms % 1000).padStart(3, "0");
 }
 
-export function oneLineSrt(timeline: TimedScene[]): string {
+export function oneLineSrt(timeline: TimedScene[], spokenLength: (text: string) => number = captionVisualUnits): string {
   let id = 0;
   const entries: string[] = [];
   for (const item of timeline) {
@@ -148,7 +148,7 @@ export function oneLineSrt(timeline: TimedScene[]): string {
       lines.splice(best, 2, lines[best] + " " + lines[best + 1]);
     }
     if (!lines.length) continue;
-    const weights = lines.map(x => Math.max(1, captionVisualUnits(x))
+    const weights = lines.map(x => Math.max(1, spokenLength(x))
       + (/[.!?。！？]$/.test(x) ? 1 : 0));
     const total = weights.reduce((sum, x) => sum + x, 0);
     const base = Math.min(0.62, item.duration / lines.length * 0.75);
