@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
+import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions } from "@/lib/jibssuk-v3";
 
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
 type Analysis = { recommendedTitle: string; titleCandidates: string[]; keywords: string[]; facts: Fact[]; images: ImagePlan[] };
 type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string; sourceDataUrl?: string; replaced: boolean; assetKind?: "background" | "graphic" };
 type Recommendation = { title: string; brief: string };
-type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string };
+type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string; dataRows?: string };
 type Phase = "home" | "input" | "script" | "analysis" | "images" | "review" | "done";
 
 const TYPES = [
@@ -16,7 +17,7 @@ const TYPES = [
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
-  ["🎬", "집값쓱 쇼츠", "AI 제작재료 → 쇼츠 패키지"],
+  ["🎬", "집값쓱 쇼츠", "배경 1장 + 코드 정보판 7장"],
 ] as const;
 
 const PARAMMA_CATEGORIES = [
@@ -213,6 +214,7 @@ export default function Home() {
   const [finalBody, setFinalBody] = useState("");
   const [shortsScript, setShortsScript] = useState("");
   const [shortsSceneText, setShortsSceneText] = useState("");
+  const [shortsPreview, setShortsPreview] = useState("");
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
@@ -292,10 +294,18 @@ export default function Home() {
 
   const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
   const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
-  const shortsVisualReady = tasks.length === 0 || imageCount === tasks.length;
-  const shortsSceneCountReady = shortsScenes.length >= 6 && shortsScenes.length <= 7;
+  const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
+  const shortsSceneCountReady = shortsScenes.length === 7;
   const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
-  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+  const shortsDataIssues = shortsScenes.flatMap(s => {
+    const kind = sceneKind(s);
+    const rows = parseOverlayRows(s.dataRows || "");
+    const issues = (kind === "bar" || kind === "price") && rows.length < 2 ? ["장면 " + s.order + ": 데이터행을 두 개 이상 입력하세요."] : [];
+    return issues.concat(unsupportedRowValues(s, rawContent + "\n" + shortsScript).map(v => "장면 " + s.order + ": 원문에 없는 값 " + v));
+  });
+  const normalizeCheck = (v: string) => v.replace(/[\s.,!?。·:：]/g, "");
+  const shortsScriptReady = !!shortsScript.trim() && normalizeCheck(shortsScenes.map(s => s.narration).join("")) === normalizeCheck(shortsScript);
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
@@ -314,16 +324,20 @@ export default function Home() {
         setRawContent(String(draft.rawContent || ""));
         setShortsScript(String(draft.shortsScript || ""));
         setShortsSceneText(String(draft.shortsSceneText || ""));
-        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any) => ({ ...s, narration: String(s.narration || "") })) : []);
+        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any, i: number) => ({ ...s, narration: String(s.narration || ""), screenType: SCENE_TYPES[i] || s.screenType, dataRows: String(s.dataRows || "") })) : []);
         setBgmMemo(String(draft.bgmMemo || ""));
         setShortsVoiceOverride(typeof draft.shortsVoiceOverride === "string" ? draft.shortsVoiceOverride : null);
         setFinalTitle(String(draft.finalTitle || ""));
         setFinalBody(String(draft.finalBody || ""));
         setAnalysis(draft.analysis || null);
         setProjectId(draft.projectId || null);
-        const restoredTasks = Array.isArray(draft.tasks)
-          ? draft.tasks.map((t: Task) => ({ ...t, imageDataUrl: "", sourceDataUrl: undefined, done: false }))
-          : [];
+        const oldBackground = Array.isArray(draft.tasks) ? draft.tasks.find((t: Task) => t.assetKind !== "graphic") : null;
+        const restoredTasks: Task[] = draft.shortsScenes?.length ? [{
+          order: 0, title: "공통 아파트 배경", keyMessage: "무문자 배경 한 장",
+          sourceText: "", imagePrompt: "한 장의 아파트 배경을 전체 영상에 고정 사용.",
+          done: false, imageDataUrl: "", sourceDataUrl: undefined, replaced: false,
+          assetKind: "background", imageUrl: oldBackground?.imageUrl || ""
+        }] : [];
         setTasks(restoredTasks);
         setCurrentIndex(Math.max(0, Math.min(Number(draft.currentIndex || 0), Math.max(0, restoredTasks.length - 1))));
         const savedPhase = String(draft.phase || "");
@@ -520,96 +534,71 @@ export default function Home() {
 
   function shortsSilentPrompt() {
     return [
-      "[집값쓱 쇼츠 장면표 제작]",
-      `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
+      "[집값쓱 쇼츠 V3 · 고정 배경 + 투명 정보판 장면표 제작]",
+      "주제: " + (projectTitle || "아래 자료의 핵심 주제"), "",
+      "[기본 원칙]",
+      "- 동일한 아파트 배경 한 장을 모든 장면에서 사용. 배경에는 정보를 넣지 않는다.",
+      "- 완성 대본을 문장 하나도 누락·중복·수정하지 않고 순서대로 정확히 7장면에 나눈다.",
+      "- 큰문구는 한눈에 읽히는 짧은 제목만 작성한다. 다른 필드 지시문을 절대 포함하지 말 것.",
+      "- 전체대사 자막은 사이트가 자동으로 한 줄씩 분할하므로 장면 하단자막만 대본 그대로 작성한다.",
+      "- 화면방식은 정확히 다음 순서: 질문 카드 / 기준 카드 / 거래량 그래프 / 가격 비교표 / 핵심 숫자 카드 / 비교 기준 카드 / 고정 엔딩.",
+      "- 3번·4번의 데이터행에는 원문 수치를 라벨 | 값 ; 라벨 | 값 형식으로 기입한다.",
+      "- 다른 장면에서 표가 필요하면 데이터행을 같은 형식으로 넣고, 아니면 비워 둔다.",
+      "- 그래프·표 숫자는 원문에 존재하는 값만 사용한다. 전체 평형 거래량과 84㎡대 가격을 섞지 말 것.",
+      "- 정확한 5개 필드를 각기 다른 줄에 출력. 필드 값을 한 줄에 이어 쓰거나 제작 지시문을 섞지 말 것.",
       "",
-      "[목표]",
-      "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 6~7장면으로 구성",
-      "- 완성 대본의 문장을 새로 쓰지 말고 장면별로 자연스럽게 나눌 것",
-      "- 각 장면은 내레이션, 큰 화면 문구, 하단 자막, 화면 방식으로 설계",
-      "- 전체 30초 안팎에서 각 장면이 대체로 3~5초가 되도록 내레이션을 6~7장면에 균등하게 나눌 것",
-      "- 한 장면에 긴 문장을 몰아넣지 말고, 6초 이상 같은 화면이 유지되지 않도록 분할할 것",
-      "- 큰 화면 문구는 1~2줄, 한 줄은 짧고 크게",
-      "- 하단 자막은 요약하지 말고 해당 장면의 내레이션 전체 문장을 그대로 사용",
-      "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
-      "- 새 배경 이미지는 전체에서 최대 2~3개만 지정",
-      "- 데이터 비교나 추세가 핵심인 장면은 '그래프/숫자 카드'를 사용",
-      "- 나머지는 '이미지 재사용', '텍스트 카드', '고정 엔딩' 중 하나 사용",
-      "- 첫 장면은 지역명 + 질문형 후킹",
-      "- 마지막 장면은 완성 대본의 '[대표 지역명] 집값, 오늘도. 집.값.쓱.' 멘트를 그대로 사용하는 브랜드 엔딩",
-      "- 화면 정보와 하단 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
-      "",
-      "[출력 형식 - 반드시 그대로]",
-      "[장면 1]",
-      "내레이션: ...",
-      "큰문구: ...",
-      "하단자막: ...",
-      "화면방식: 새 이미지",
-      "",
-      "[장면 2]",
-      "내레이션: ...",
-      "큰문구: ...",
-      "하단자막: ...",
-      "화면방식: 그래프/숫자 카드",
-      "",
-      "- 위 형식으로 장면 6~7개만 출력",
-      "- 설명, 표, 코드블록, 추가 문장 금지",
-      "",
-      "[완성 대본]",
-      shortsScript.trim(),
-      "",
-      "[원문 자료]",
-      rawContent.trim()
+      "[출력 형식: 총 7장면, 다른 설명 없이 아래 형식 반복]",
+      "[장면 1]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 질문 카드", "데이터행:", "",
+      "[장면 2]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 기준 카드", "데이터행:", "",
+      "[장면 3]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 거래량 그래프", "데이터행: 실제단지명1 | 원문거래건수1 ; 실제단지명2 | 원문거래건수2 ; 실제단지명3 | 원문거래건수3", "",
+      "[장면 4]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 가격 비교표", "데이터행: 실제단지명1 | 원문가격1 ; 실제단지명2 | 원문가격2 ; 실제단지명3 | 원문가격3", "",
+      "[장면 5]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 핵심 숫자 카드", "데이터행:", "",
+      "[장면 6]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 비교 기준 카드", "데이터행:", "",
+      "[장면 7]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 고정 엔딩", "데이터행:", "",
+      "주의: 위 데이터행 예시는 출력값이 아니다. 반드시 주어진 원문 실제값으로 치환할 것.",
+      "", "[완성 대본]", shortsScript.trim(), "", "[원문 자료]", rawContent.trim()
     ].join("\n");
   }
 
-  function parseShortsScenes(text: string): ShortsScene[] {
+  function parseShortsScenes(value: string): ShortsScene[] {
     const scenes: ShortsScene[] = [];
-    const re = /\[?장면\s*(\d+)\]?\s*([\s\S]*?)(?=(?:\n\s*)?\[?장면\s*\d+\]?|$)/g;
+    const re = /\[장면\s*(\d+)\]\s*([\s\S]*?)(?=\n\s*\[장면\s*\d+\]|$)/g;
     let match: RegExpExecArray | null;
-    while ((match = re.exec(text)) !== null) {
+    while ((match = re.exec(value)) !== null) {
       const body = match[2];
-      const narration = body.match(/내레이션\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const headline = body.match(/큰\s*문구\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const subtitle = body.match(/하단\s*자막\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const screenType = body.match(/화면\s*방식\s*[:：]\s*(.+)/)?.[1]?.trim() || "텍스트 카드";
-      if (narration || headline || subtitle) scenes.push({ order: Number(match[1]), narration, headline, subtitle, screenType });
+      const field = (label: RegExp) => cleanSceneField(body.match(label)?.[1] || "");
+      const narration = field(/^\s*내레이션\s*[:：]\s*(.*)$/m);
+      const headline = field(/^\s*큰\s*문구\s*[:：]\s*(.*)$/m);
+      const subtitle = field(/^\s*하단\s*자막\s*[:：]\s*(.*)$/m);
+      const screenType = field(/^\s*화면\s*방식\s*[:：]\s*(.*)$/m);
+      const dataRows = field(/^\s*데이터행\s*[:：]\s*(.*)$/m);
+      if (narration || headline) scenes.push({ order: Number(match[1]), narration, headline, subtitle, screenType: screenType || SCENE_TYPES[Math.min(scenes.length, 6)], dataRows });
     }
-    return scenes.sort((a, b) => a.order - b.order).slice(0, 7);
+    return scenes.sort((x, y) => x.order - y.order).slice(0, 7);
   }
 
   function buildShortsImageTasks(scenes: ShortsScene[], previous: Task[] = tasks): Task[] {
-    const selected = scenes.filter(s => s.screenType.includes("새 이미지") || s.screenType.includes("그래프/숫자 카드"));
-    let backgroundSeen = 0;
-    return selected.flatMap((scene) => {
-      const isGraphic = scene.screenType.includes("그래프/숫자 카드");
-      if (!isGraphic) {
-        backgroundSeen += 1;
-        if (backgroundSeen > 3) return [];
-      }
-      const assetKind: "background" | "graphic" = isGraphic ? "graphic" : "background";
-      const title = `장면 ${scene.order} · ${isGraphic ? "그래프/숫자 카드" : "배경 이미지"}`;
-      const prev = previous.find(t => t.title === title);
-      return [{
-        order: 0,
-        title,
-        keyMessage: scene.headline,
-        sourceText: scene.narration || scene.subtitle || scene.headline,
-        imagePrompt: isGraphic
-          ? `${scene.headline} 내용을 정확한 그래프 또는 숫자 카드로 정리한다.`
-          : `${scene.headline} 내용을 뒷받침하는 대표 세로 배경 이미지. 이미지 안에는 글자를 넣지 않는다.`,
-        done: prev?.done || false,
-        imageDataUrl: prev?.imageDataUrl || "",
-        imageUrl: prev?.imageUrl || "",
-        sourceDataUrl: prev?.sourceDataUrl,
-        replaced: prev?.replaced || false,
-        assetKind
-      }];
-    }).map((task, index) => ({ ...task, order: index }));
+    if (!scenes.length) return [];
+    const existing = previous.find(t => t.title === "공통 아파트 배경");
+    return [{
+      order: 0, title: "공통 아파트 배경", keyMessage: "글자 없는 공통 배경 한 장",
+      sourceText: projectTitle, imagePrompt: "고화질 한국 아파트 전경. 영상 전체에 고정으로 사용. 문자와 차트 금지.",
+      done: !!existing?.imageDataUrl, imageDataUrl: existing?.imageDataUrl || "",
+      imageUrl: existing?.imageUrl || "", sourceDataUrl: existing?.sourceDataUrl,
+      replaced: existing?.replaced || false, assetKind: "background"
+    }];
   }
 
   function applyShortsSceneText(text: string) {
     setShortsSceneText(text);
+    setShortsPreview("");
     const parsed = parseShortsScenes(text);
     setShortsScenes(parsed);
     if (parsed.length) {
@@ -620,6 +609,7 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
+    setShortsPreview("");
     setShortsScenes(prev => {
       const next = prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene);
       setTasks(buildShortsImageTasks(next));
@@ -672,34 +662,30 @@ export default function Home() {
   }
 
   function shortsSrt() {
-    return sceneTimeline.map((item, i) => [
-      String(i + 1),
-      `${formatSrtTime(item.start)} --> ${formatSrtTime(item.end)}`,
-      (item.scene.narration || item.scene.subtitle || item.scene.headline).trim()
-    ].join("\n")).join("\n\n");
+    return oneLineSrt(sceneTimeline);
   }
 
-  function sceneFrameFileName(order: number) {
-    return `${String(order).padStart(2, "0")}_scene.png`;
+  function overlayFileName(order: number) {
+    return String(order).padStart(2, "0") + "_overlay.png";
   }
 
   function shortsEditPlanExport() {
-    return sceneTimeline.map(item => {
-      const isGraphic = item.scene.screenType.includes("그래프/숫자 카드");
-      const motion = item.scene.order === 1
-        ? "정지 화면 · 줌/패닝 없음"
-        : isGraphic
-          ? "정지 화면 · 차트 가독성 우선 · 줌/패닝 없음"
-          : "기본 정지 컷 · 필요해도 1~2% 이하의 아주 느린 줌만 허용";
-      return [
-        `장면 ${item.scene.order} · ${item.start.toFixed(1)}~${item.end.toFixed(1)}초`,
-        `파일: ${sceneFrameFileName(item.scene.order)}`,
-        `화면: ${motion}`,
-        `큰 문구: ${item.scene.headline}`,
-        `전체 자막: ${item.scene.narration || item.scene.subtitle || item.scene.headline}`,
-        `원래 화면 방식: ${item.scene.screenType}`
-      ].join("\n");
-    }).join("\n\n");
+    return [
+      "방식: 하나의 background.png를 영상 전 구간에 정지 상태로 표시.",
+      "배경 줌, 패닝, 새 배경 생성 금지. 1080×1920, 9:16.",
+      "투명 PNG는 overlays 폴더의 각 파일을 순서대로 합성. 정보판만 단순 컷 또는 0.2초 페이드.",
+      "자막은 투명 정보판에 포함되지 않음. subtitles_full.srt를 영상 상단 기준 Y 1450~1660에 1줄만 표시.",
+      "Y 1720~1920은 쇼츠 UI 여유 공간으로 비워둘 것.", "",
+      ...sceneTimeline.map(item => [
+        "장면 " + item.scene.order + " · " + item.start.toFixed(3) + "~" + item.end.toFixed(3) + "초",
+        "공통 배경: background.png",
+        "정보판: overlays/" + overlayFileName(item.scene.order),
+        "종류: " + item.scene.screenType,
+        "큰 문구: " + cleanSceneField(item.scene.headline),
+        "내레이션: " + item.scene.narration,
+        "데이터행: " + (item.scene.dataRows || "")
+      ].join("\n"))
+    ].join("\n\n");
   }
 
   function shortsAudioPlanExport() {
@@ -732,86 +718,48 @@ export default function Home() {
         `내레이션: ${scene.narration}`,
         `큰 문구: ${scene.headline}`,
         `하단 자막: ${scene.subtitle}`,
-        `화면: ${scene.screenType}`
+        `화면: ${scene.screenType}`,
+        `데이터행: ${scene.dataRows || ""}`
       ].join("\n");
     }).join("\n\n");
   }
 
-  function shortsTaskForScene(sceneOrder: number) {
-    return tasks.find(t => t.title.startsWith(`장면 ${sceneOrder} ·`));
+  function shortsBackgroundDataUrl() {
+    const image = tasks.find(t => t.assetKind !== "graphic");
+    return image?.sourceDataUrl || image?.imageDataUrl || "";
   }
 
-  function shortsVisualForScene(sceneIndex: number) {
-    const exact = shortsTaskForScene(shortsScenes[sceneIndex]?.order);
-    const exactSrc = exact?.sourceDataUrl || exact?.imageDataUrl;
-    if (exactSrc) return { src: exactSrc, task: exact };
-
-    for (let i = sceneIndex - 1; i >= 0; i--) {
-      const previous = shortsTaskForScene(shortsScenes[i]?.order);
-      const previousSrc = previous?.sourceDataUrl || previous?.imageDataUrl;
-      if (previousSrc) return { src: previousSrc, task: previous };
-    }
-
-    const first = tasks.find(t => !!(t.sourceDataUrl || t.imageDataUrl));
-    return first ? { src: first.sourceDataUrl || first.imageDataUrl, task: first } : { src: "", task: undefined };
-  }
-
-  async function composeShortsSceneFrame(scene: ShortsScene, sceneIndex: number) {
-    const w = 1080;
-    const h = 1920;
+  async function composeShortsBackground() {
+    const source = shortsBackgroundDataUrl();
+    if (!source) throw new Error("공통 아파트 배경 한 장을 업로드하세요.");
+    const image = await loadImage(source);
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = 1080; canvas.height = 1920;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("장면 프레임을 만들 수 없습니다.");
+    if (!ctx) throw new Error("배경 캔버스를 생성할 수 없습니다.");
+    drawCover(ctx, image, 1080, 1920);
+    return canvas.toDataURL("image/png");
+  }
 
-    const visual = shortsVisualForScene(sceneIndex);
-    if (visual.src) {
-      try {
-        const img = await loadImage(visual.src);
-        drawCover(ctx, img, w, h);
-      } catch {
-        ctx.fillStyle = "#10141d";
-        ctx.fillRect(0, 0, w, h);
-      }
-    } else {
-      ctx.fillStyle = "#10141d";
-      ctx.fillRect(0, 0, w, h);
+  async function composeShortsSceneFrame(scene: ShortsScene, background: string) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("장면 미리보기를 만들 수 없습니다.");
+    const base = await loadImage(background);
+    ctx.drawImage(base, 0, 0, 1080, 1920);
+    const overlay = await loadImage(await renderShortsOverlay(scene));
+    ctx.drawImage(overlay, 0, 0, 1080, 1920);
+    const caption = splitOneLineCaptions(scene.narration || scene.subtitle, 20)[0] || "";
+    if (caption) {
+      ctx.font = '700 47px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      const x = 540; const y = 1510;
+      ctx.fillStyle = "rgba(0,0,0,.78)";
+      ctx.beginPath(); ctx.roundRect(65, 1478, 950, 115, 25); ctx.fill();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffffff";
+      ctx.fillText(caption, x, y + 28, 870);
     }
-
-    const isGraphic = scene.screenType.includes("그래프/숫자 카드") || visual.task?.assetKind === "graphic";
-
-    // Keep the lower quarter visually quiet for full narration subtitles.
-    const bottomGrad = ctx.createLinearGradient(0, h * 0.68, 0, h);
-    bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
-    bottomGrad.addColorStop(0.45, "rgba(0,0,0,.28)");
-    bottomGrad.addColorStop(1, "rgba(0,0,0,.72)");
-    ctx.fillStyle = bottomGrad;
-    ctx.fillRect(0, h * 0.68, w, h * 0.32);
-
-    // Graph assets already contain their own chart/title. Other scenes get one strong headline.
-    if (!isGraphic && scene.headline.trim()) {
-      const pad = 72;
-      const fontSize = scene.order === 1 ? 78 : 68;
-      ctx.font = `800 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-      const lines = wrapLines(ctx, scene.headline, w - pad * 2 - 40, 3);
-      const lineH = fontSize * 1.22;
-      const boxH = Math.max(150, lines.length * lineH + 58);
-      const y = scene.screenType.includes("고정 엔딩") ? 560 : 230;
-      ctx.fillStyle = "rgba(0,0,0,.48)";
-      ctx.fillRect(44, y - 26, w - 88, boxH);
-      ctx.textBaseline = "top";
-      ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.06));
-      ctx.strokeStyle = "rgba(0,0,0,.75)";
-      ctx.fillStyle = "#fff";
-      lines.forEach((line, lineIndex) => {
-        const lineY = y + lineIndex * lineH;
-        ctx.strokeText(line, pad, lineY);
-        ctx.fillText(line, pad, lineY);
-      });
-    }
-
-    return canvas.toDataURL("image/png", 0.96);
+    return canvas.toDataURL("image/png");
   }
 
   async function composeShortsContactSheet(frames: Array<{ order: number; dataUrl: string }>) {
@@ -850,33 +798,34 @@ export default function Home() {
     return canvas.toDataURL("image/png", 0.92);
   }
 
+  async function previewShortsCards() {
+    setLoading(true); setError("");
+    try {
+      if (!shortsVisualReady || shortsScenes.length !== 7) throw new Error("공통 배경과 7장면을 먼저 준비해주세요.");
+      const background = await composeShortsBackground();
+      const frames: Array<{ order: number; dataUrl: string }> = [];
+      for (const scene of shortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      setShortsPreview(await composeShortsContactSheet(frames));
+    } catch (e: any) { setError(e.message || "정보판 미리보기 생성에 실패했습니다."); }
+    finally { setLoading(false); }
+  }
+
   function shortsVideoPrompt() {
     return [
-      "[집값쓱 유튜브 쇼츠 최종 조립]",
-      `주제: ${projectTitle || "첨부 제작 패키지의 주제"}`,
-      "",
-      "[가장 중요한 원칙]",
-      "- 새로 기획하거나 디자인하지 말고, ZIP 안의 완성 프레임·SRT·edit_plan을 그대로 조립하는 작업으로 진행",
-      "- 음성 파일은 voice.mp3 또는 voice.wav, BGM은 bgm.mp3 또는 bgm.wav 이름으로 제공됨",
-      "- 장면 순서와 시간은 edit_plan.txt를 최우선으로 적용",
-      "- 화면은 01_scene.png, 02_scene.png... 순서의 완성 프레임 PNG를 그대로 사용",
-      "- subtitles_full.srt의 모든 대사를 빠짐없이 하단 자막으로 표시하고 요약하거나 생략하지 말 것",
-      "",
-      "[영상 기준]",
-      "- 1080×1920, 9:16 세로형 YouTube Shorts",
-      voiceDuration ? `- 첨부 음성 원본 약 ${voiceDuration.toFixed(1)}초를 반드시 1.5배속 적용해 약 ${finalVoiceDuration.toFixed(1)}초 타임라인으로 사용` : "- 첨부 음성은 반드시 1.5배속 적용 후 타임라인 기준으로 사용",
-      "- 첫 장면은 완전 정지 화면. 줌인·줌아웃·패닝 금지",
-      "- 그래프·숫자 장면도 정지 화면으로 두고 차트와 숫자 가독성을 최우선",
-      "- 다른 장면도 과한 모션은 금지하고 단순 컷 전환을 기본으로 사용",
-      "- 하단 자막은 화면 맨 아래에 붙이지 말고 바닥에서 약 250~350px 위의 안전영역에 배치",
-      "- 맨 아래 약 150~200px은 쇼츠 UI 여유 공간으로 비워둘 것",
-      "- BGM은 audio_plan.txt 기준으로 음성보다 충분히 낮게 사용",
-      "- 불필요한 새 이미지, 새 차트, 새 문구, 새로운 숫자 생성 금지",
-      "- 장면 사이 화려한 전환효과 금지. 빠르고 단순한 컷 위주",
-      "- 최종 출력은 제공된 음성과 자막이 정확히 끝나는 지점에서 종료",
-      "",
-      "[편집표]",
-      shortsEditPlanExport()
+      "[집값쓱 쇼츠 V3 · 고정 배경 + 정보판 최종 조립]",
+      "주제: " + (projectTitle || "첨부 패키지의 주제"), "",
+      "[ZIP 내용만 정확하게 조립할 것]",
+      "- background.png는 영상 시작부터 종료까지 한 장으로 고정. 절대 움직이거나 다른 배경으로 교체하지 말 것.",
+      "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
+      "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
+      "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
+      "- subtitles_full.srt는 최종 1.5배속 타임라인으로 이미 변환된 1줄 자막. 한 줄씩 빠짐없이 정확하게 표시.",
+      "- 하단 자막은 Y 1450~1660 범위(1080×1920 기준)에 중앙 정렬, 짙은 반투명 배경으로 정보 카드와 겹치지 않게 합성.",
+      "- Y 1720~1920은 쇼츠 UI 영역이므로 비워두기.",
+      "- voice.mp3 또는 voice.wav는 정확히 1.5배속 적용. SRT 속도를 다시 바꾸지 않기.",
+      "- bgm.mp3 또는 bgm.wav는 audio_plan.txt 기준으로 음성보다 충분히 낮게 재생.",
+      "- 모든 레이어는 마지막 음성과 마지막 자막이 끝나는 지점에서 동시에 종료.",
+      "", "[편집표]", shortsEditPlanExport()
     ].join("\n");
   }
 
@@ -897,6 +846,7 @@ export default function Home() {
 
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
+    setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
 
@@ -909,71 +859,73 @@ export default function Home() {
   async function exportShortsPackage(includeSources = false) {
     setLoading(true); setError("");
     try {
+      if (!shortsAssemblyReady) {
+        const problems = [
+          !shortsSceneCountReady && "정확히 7장면이 필요합니다.",
+          !shortsScriptReady && "장면 내레이션 전체와 원본 대본이 일치하지 않습니다.",
+          !shortsVisualReady && "공통 배경을 업로드하세요.",
+          !shortsCaptionReady && "내레이션이 비어 있습니다.",
+          !voiceFile && "음성 파일을 첨부하세요.",
+          ...shortsDataIssues
+        ].filter(Boolean);
+        throw new Error(problems.join(" / ") || "제작 패키지 검수가 완료되지 않았습니다.");
+      }
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
-
-      // Quick assembly package intentionally excludes original image assets.
-      // Backup mode retains them for later re-editing.
-      if (includeSources) {
-        let bgNo = 0;
-        let graphNo = 0;
-        tasks.forEach((task) => {
-          const dataUrl = task.sourceDataUrl || task.imageDataUrl;
-          const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-          if (match) {
-            const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
-            const prefix = task.assetKind === "graphic"
-              ? `source_graphic_${String(++graphNo).padStart(2, "0")}`
-              : `source_background_${String(++bgNo).padStart(2, "0")}`;
-            folder.file(`${prefix}.${ext}`, match[2], { base64: true });
-          }
-        });
-      }
+      const background = await composeShortsBackground();
+      const backgroundMatch = background.match(/^data:image\/png;base64,(.+)$/);
+      if (!backgroundMatch) throw new Error("공통 배경 PNG 변환에 실패했습니다.");
+      folder.file("background.png", backgroundMatch[1], { base64: true });
 
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (let i = 0; i < shortsScenes.length; i++) {
-        const scene = shortsScenes[i];
-        const dataUrl = await composeShortsSceneFrame(scene, i);
-        const match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
-        if (match) {
-          folder.file(sceneFrameFileName(scene.order), match[1], { base64: true });
-          frames.push({ order: scene.order, dataUrl });
-        }
+      for (const scene of shortsScenes) {
+        const overlay = await renderShortsOverlay(scene);
+        const match = overlay.match(/^data:image\/png;base64,(.+)$/);
+        if (!match) throw new Error("장면 " + scene.order + " 정보판 PNG 출력에 실패했습니다.");
+        folder.file("overlays/" + overlayFileName(scene.order), match[1], { base64: true });
+        frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
       }
-
-      if (frames.length) {
-        const contactSheet = await composeShortsContactSheet(frames);
-        const contactMatch = contactSheet.match(/^data:image\/png;base64,(.+)$/);
-        if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
-      }
-
-      if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
-      if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
-
-      folder.file("edit_plan.txt", shortsEditPlanExport());
-      folder.file("audio_plan.txt", shortsAudioPlanExport());
-      folder.file("subtitles_full.srt", shortsSrt());
-      folder.file("shorts_request.txt", shortsVideoPrompt());
+      const contactSheet = await composeShortsContactSheet(frames);
+      const contactMatch = contactSheet.match(/^data:image\/png;base64,(.+)$/);
+      if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
 
       if (includeSources) {
+        const original = tasks[0]?.sourceDataUrl || tasks[0]?.imageDataUrl || "";
+        const originalMatch = original.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (originalMatch) folder.file("source_background." + (originalMatch[1].includes("jpeg") ? "jpg" : "png"), originalMatch[2], { base64: true });
         folder.file("display_script.txt", shortsScript);
         folder.file("voice_script.txt", shortsVoiceScript);
         folder.file("scene_plan.txt", shortsSceneExport());
         folder.file("timeline.txt", shortsTimelineExport());
-        folder.file("subtitles_full.txt", shortsScenes.map(s => `${s.order}. ${s.narration || s.subtitle || s.headline}`).join("\n"));
         if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       }
+      folder.file("overlay_data.json", JSON.stringify(shortsScenes.map(s => ({
+        order: s.order, headline: cleanSceneField(s.headline), screenType: s.screenType,
+        dataRows: parseOverlayRows(s.dataRows || "").map(r => ({ label: r.label, value: r.value }))
+      })), null, 2));
+      folder.file("README.txt", [
+        "집값쓱 V3: 공통 background.png + 투명 overlays 7장.",
+        "scene_contact_sheet.png는 자막 위치를 포함한 확인용이며 영상 소재로 사용하지 마세요.",
+        "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
+        "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
+        "Y 1350 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
+      ].join("\n"));
+      if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
+      if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
+      folder.file("subtitles_full.srt", shortsSrt());
+      folder.file("edit_plan.txt", shortsEditPlanExport());
+      folder.file("audio_plan.txt", shortsAudioPlanExport());
+      folder.file("shorts_request.txt", shortsVideoPrompt());
 
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_${includeSources ? "backup_package" : "quick_assembly"}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = cleanName(projectTitle || "jibssuk-shorts") + (includeSources ? "_backup_package" : "_quick_assembly") + "_v3.zip";
+      link.click(); URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e.message || (includeSources ? "백업 ZIP 생성에 실패했습니다." : "빠른 조립 ZIP 생성에 실패했습니다."));
+      setError(e.message || "V3 조립용 ZIP 생성에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -1180,7 +1132,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V11 · 빠른 조립 쇼츠</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V12 · 고정 배경 쇼츠 V3</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
@@ -1188,7 +1140,7 @@ export default function Home() {
     </header>
 
     <section className="hero">
-      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본·AI 음성 → 장면표 → 이미지·그래프·BGM → GPT 제작" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
+      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본 → 정보판 7장 → 배경·음성 → 고정 배경 조립" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
       <div className="heroPill">{preset.label}</div>
     </section>
 
@@ -1271,33 +1223,30 @@ export default function Home() {
       </>}
 
       {phase === "analysis" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>3. 장면표</h2><p>이 표가 쇼츠의 중심입니다. 소리를 꺼도 큰 문구와 하단 자막만으로 내용이 이해되어야 합니다.</p></div><span className="counter">{shortsScenes.length || 0}/6~7장면</span></div>
+        <div className="sectionHead"><div><h2>3. 정보판 7장 설계</h2><p>배경은 한 장만 사용합니다. 거래량과 가격은 데이터행으로 입력하면 사이트가 직접 그립니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면</span></div>
         <div className="box scenePasteBox">
           <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
-          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
-          <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span>배경 이미지 {backgroundCount}개</span><span>그래프/숫자 {graphicCount}개</span><span>나머지는 재사용·텍스트·엔딩</span></div>
+          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 질문 카드\n데이터행:"} />
+          <div className="tags"><span className={shortsSceneCountReady ? "ok" : "warn"}>{shortsScenes.length}/7장면</span><span>공통 배경 1개</span><span>투명 정보판은 코드 자동 생성</span><span className={shortsDataIssues.length ? "warn" : "ok"}>숫자 검수 {shortsDataIssues.length ? shortsDataIssues.length + "건 확인 필요" : "✓"}</span></div>
         </div>
         {shortsScenes.length > 0 && <div className="sceneTable">
-          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 화면 문구</span><span>하단 자막</span><span>화면 방식</span></div>
+          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 문구 + 데이터행</span><span>하단 대사</span><span>정보판 종류</span></div>
           {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
             <b>{scene.order}</b>
             <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
-            <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: e.target.value })} />
+            <div style={{display:"grid",gap:6}}><input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} /><textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 14건 ; 단지명 | 13건 (원문값만)" style={{width:"100%",minWidth:0}} /></div>
             <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
             <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
-              <option>새 이미지</option><option>이미지 재사용</option><option>텍스트 카드</option><option>그래프/숫자 카드</option><option>고정 엔딩</option>
+              {SCENE_TYPES.map(type => <option key={type}>{type}</option>)}
             </select>
           </div>)}
         </div>}
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>배경 이미지</h3><span className="muted">{backgroundCount}개</span></div>
-            {backgroundCount === 0 ? <p className="muted">새 배경 이미지가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind !== "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button></div> : null)}
-          </div>
-          <div className="box">
-            <div className="miniHead"><h3>그래프·숫자 카드</h3><span className="muted">{graphicCount}개</span></div>
-            {graphicCount === 0 ? <p className="muted">그래프가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind === "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>그래프 만들기 ↗</button></div> : null)}
-          </div>
+        <div className="box">
+          <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
+          {tasks.map(t => <div className="imageRow" key={t.title}><span>BG</span><div><b>{t.title}</b><p>투명 오버레이 7장 아래에서 계속 고정됩니다.</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>배경 만들기 ↗</button></div>)}
+          <p className="muted">데이터행 형식: 풍무푸르지오센트레빌 | 14건 ; 풍무센트럴푸르지오 | 14건. 원문에 없는 숫자는 ZIP 검수에서 차단됩니다.</p>
+          {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
+          {!shortsScriptReady && shortsScenes.length > 0 && <p className="voiceWarning">장면 내레이션 합본과 기준 대본이 다릅니다. 누락·중복된 문장을 수정해주세요.</p>}
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6} onClick={() => setPhase("images")}>제작자료 준비</button></div>
       </> : analysis ? <>
@@ -1308,38 +1257,31 @@ export default function Home() {
       </> : null)}
 
       {phase === "images" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>4. 제작자료</h2><p>장면표가 요구한 재료를 각각 AI로 만들고 완성 파일을 모읍니다.</p></div><span className="counter">재료 {imageCount}/{tasks.length}</span></div>
+        <div className="sectionHead"><div><h2>4. 공통 배경 · 음성 준비</h2><p>배경 한 장만 업로드하면 정보판 7장은 사이트가 직접 렌더링합니다.</p></div><span className="counter">공통 배경 {backgroundReady}/1</span></div>
 
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>① 배경 이미지</h3><span className="muted">{backgroundReady}/{backgroundCount} 준비</span></div>
-            {tasks.map((t, i) => t.assetKind !== "graphic" ? <div className="assetRow" key={t.title}>
-              <div><b>{t.title}</b><p>{t.keyMessage}</p></div>
-              <div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button><label className="fileBtn compact">{t.imageDataUrl ? "✓ 파일 교체" : "파일 넣기"}<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; fileToDataUrl(file).then(src => updateTask(i, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true })).catch(() => setError("이미지 처리에 실패했습니다.")); }} /></label></div>
-            </div> : null)}
-            {backgroundCount === 0 && <p className="muted">새 배경 이미지가 필요한 장면이 없습니다.</p>}
-          </div>
-
-          <div className="box">
-            <div className="miniHead"><h3>② 그래프·숫자 카드</h3><span className="muted">{graphicReady}/{graphicCount} 준비</span></div>
-            {tasks.map((t, i) => t.assetKind === "graphic" ? <div className="assetRow" key={t.title}>
-              <div><b>{t.title}</b><p>{t.keyMessage}</p></div>
-              <div className="inlineActions"><button className="primary compact" onClick={() => openGPT(promptFor(t))}>그래프 만들기 ↗</button><label className="fileBtn compact">{t.imageDataUrl ? "✓ 파일 교체" : "파일 넣기"}<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0]; if (!file) return; fileToDataUrl(file).then(src => updateTask(i, { sourceDataUrl: src, imageDataUrl: src, replaced: true, done: true })).catch(() => setError("그래프 처리에 실패했습니다.")); }} /></label></div>
-            </div> : null)}
-            {graphicCount === 0 && <p className="muted">그래프·숫자 카드가 필요한 장면이 없습니다.</p>}
-          </div>
+        <div className="box">
+          <div className="miniHead"><h3>① 공통 아파트 배경 (1장)</h3><span className="muted">{backgroundReady}/1 업로드</span></div>
+          <p className="muted">이 사진이 영상 시작부터 끝까지 고정됩니다. 제목·가격·그래프·자막은 배경 이미지에 넣지 마세요.</p>
+          {tasks.map((t, i) => <div className="assetRow" key={t.title}>
+            <div><b>{t.title}</b><p>9:16 무문자 아파트 전경</p></div>
+            <div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT 배경 요청서 ↗</button>
+              <label className="fileBtn compact">{t.imageDataUrl ? "✓ 배경 교체" : "배경 PNG/JPG 넣기"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => { const f = e.target.files?.[0]; if (!f) return; fileToDataUrl(f).then(src => {updateTask(i,{sourceDataUrl:src,imageDataUrl:src,replaced:true,done:true});setShortsPreview("");}).catch(()=>setError("배경 업로드 실패")); }} /></label>
+            </div>
+          </div>)}
+          <p className="muted">② 정보판 7개는 장면표의 큰 문구와 데이터행을 바탕으로 자동으로 만듭니다. 별도의 그래프 AI 이미지 업로드는 필요 없습니다.</p>
+          {shortsDataIssues.map(issue => <p className="voiceWarning" key={issue}>{issue}</p>)}
         </div>
 
         <div className="grid2">
           <div className="box assetUploadBox">
-            <div className="miniHead"><h3>③ AI 음성</h3><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
+            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
             <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
             {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.5x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.5배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
           </div>
 
           <div className="box assetUploadBox">
-            <h3>④ BGM</h3>
+            <h3>③ BGM</h3>
             <div className="recommended">{shortsBgm.label}</div>
             <p className="muted">{shortsBgm.note}</p>
             <label className="assetDrop">BGM MP3 / WAV 넣기<input type="file" accept="audio/*" onChange={e => setBgmFile(e.target.files?.[0] || null)} /></label>
@@ -1350,19 +1292,19 @@ export default function Home() {
         </div>
 
         <div className="box">
-          <div className="miniHead"><h3>⑤ 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
+          <div className="miniHead"><h3>④ 한 줄 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
           {sceneTimeline.length > 0 ? <div className="timelineSimple">{sceneTimeline.map(item => <div key={item.scene.order}><b>{item.scene.order}. {item.start.toFixed(1)}~{item.end.toFixed(1)}초</b><span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 장면 시간을 자동 배분합니다.</p>}
-          <p className="muted">하단 자막은 요약문이 아니라 해당 장면의 내레이션 전체를 사용합니다. ZIP 생성 시 장면별 완성 프레임과 edit_plan도 함께 만듭니다.</p>
+          <p className="muted">SRT는 원문 내레이션을 빠짐없이 보존하면서 20자 안팎의 한 줄 큐로 나누고, 1.5배속 최종 타임라인에 배치합니다. 배경·투명 정보판·자막은 서로 별도 레이어입니다.</p>
         </div>
 
         <div className="assetChecklist">
           <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
-          <span className={graphicReady === graphicCount ? "ready" : ""}>그래프 {graphicReady}/{graphicCount}</span>
+          <span className={shortsDataIssues.length===0 ? "ready" : ""}>코드 정보판 {shortsDataIssues.length ? "데이터 수정 필요" : "7장 자동 생성 ✓"}</span>
           <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.5x) ✓" : "✓") : "대기"}</span>
-          <span className={sceneTimeline.length >= 6 ? "ready" : ""}>SRT {sceneTimeline.length ? "✓" : "대기"}</span>
+          <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>한 줄 SRT {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 확인"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={!voiceFile || shortsScenes.length < 6 || (tasks.length > 0 && imageCount < tasks.length)} onClick={() => setPhase("review")}>GPT 제작 단계로</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={!voiceFile || !shortsSceneCountReady || !shortsVisualReady} onClick={() => setPhase("review")}>GPT 제작 단계로</button></div>
       </> : current ? <>
         <div className="sectionHead"><div><h2>{isShorts ? "4. 이미지" : "이미지 일괄 정리"}</h2><p>{isShorts ? <>장면표에서 <b>새 이미지</b>로 정한 장면만 작업합니다. 나머지 장면은 재사용·텍스트 카드·숫자 카드로 처리합니다.</> : <>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</>}</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
         <div className="toolbar box"><input ref={bulkRef} type="file" accept="image/*" multiple onChange={e => handleBulk(e.target.files)} /><button className="secondary" onClick={copyAllPrompts}>📋 전체 이미지 요청서 복사</button><span className="muted">파일명 00, 01, 02… 순으로 저장해두면 자동 정렬이 가장 정확합니다.</span></div>
@@ -1384,31 +1326,36 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 조립하기</h2><p>사이트가 완성 프레임·전체대사 SRT·편집표까지 만든 뒤 GPT에는 조립만 맡깁니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
+        <div className="sectionHead"><div><h2>5. 집값쓱 V3 조립 패키지</h2><p>공통 배경 1장과 코드로 만든 투명 정보판 7장, 한 줄 SRT를 ZIP으로 출력합니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
 
         <div className="box finalPackageBox">
           <div className="miniHead"><h3>자동 최종검사</h3><span className={shortsAssemblyReady ? "ok" : "warn"}>{shortsAssemblyReady ? "빠른 조립 준비 완료" : "수정 필요"}</span></div>
           <div className="assetChecklist">
-            <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/6~7 {shortsSceneCountReady ? "✓" : ""}</span>
-            <span className={shortsCaptionReady ? "ready" : ""}>전체대사 자막 {shortsCaptionReady ? "✓" : "확인"}</span>
-            <span className={shortsVisualReady ? "ready" : ""}>이미지 {imageCount}/{tasks.length} {shortsVisualReady ? "✓" : ""}</span>
+            <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/7 {shortsSceneCountReady ? "✓" : ""}</span>
+            <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>원문과 일치하는 한 줄 자막 {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 재확인"}</span>
+            <span className={shortsVisualReady ? "ready" : ""}>공통 배경 {backgroundReady}/1 {shortsVisualReady ? "✓" : ""}</span>
+            <span className={shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
             <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
             <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>6초 초과 {shortsLongScenes.length ? shortsLongScenes.map(x => "장면" + x.scene.order).join(", ") : sceneTimeline.length ? "없음 ✓" : "미확인"}</span>
             <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
           </div>
-          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 해당 내레이션을 둘로 나누거나 다른 장면으로 분산하면 쇼츠 리듬이 좋아집니다.</p>}
+          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 내레이션을 분산해주세요.</p>}
+          {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
+          {!shortsScriptReady && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
 
           <h3>빠른 조립 패키지</h3>
           <div className="packageGrid five">
-            <div><span>완성 프레임</span><b>{shortsScenes.length}장</b></div>
+            <div><span>배경 + 정보판</span><b>1 + {shortsScenes.length}장</b></div>
             <div><span>음성</span><b>{voiceFile ? packageAudioFileName("voice", voiceFile) : "없음"}</b></div>
             <div><span>SRT</span><b>{sceneTimeline.length ? "전체대사" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? packageAudioFileName("bgm", bgmFile) : "선택"}</b></div>
             <div><span>편집표</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
           </div>
-          <p className="muted">빠른 ZIP에는 완성 프레임, 콘택트시트, voice, bgm, subtitles_full.srt, edit_plan.txt, audio_plan.txt, shorts_request.txt만 넣습니다. 원본 이미지는 빼서 GPT가 다시 판단할 자료를 최소화합니다.</p>
+          <p className="muted">빠른 ZIP에는 background.png, overlays/01~07_overlay.png, 미리보기, voice, bgm, 한 줄 subtitles_full.srt, 편집표, 검수용 overlay_data.json을 담습니다. 정보판 PNG에는 자막이 새겨지지 않습니다.</p>
+          <div className="inlineActions"><button className="secondary compact" disabled={loading || !shortsVisualReady || !shortsSceneCountReady} onClick={previewShortsCards}>👁 배경 + 정보판 7장 미리보기</button></div>
+          {shortsPreview && <div className="box" style={{marginTop:12}}><img src={shortsPreview} alt="공통 배경 + 투명 정보판 7장 및 한 줄 자막 미리보기" style={{width:"100%",height:"auto",maxWidth:780}} /></div>}
           <div className="inlineActions">
             <button className="primary" onClick={() => exportShortsPackage(false)} disabled={loading || !shortsAssemblyReady}>{loading ? "ZIP 만드는 중..." : "⚡ 빠른 조립 ZIP 다운로드"}</button>
             <button className="secondary" onClick={() => exportShortsPackage(true)} disabled={loading}>{loading ? "준비 중..." : "🗂 원본 포함 백업 ZIP"}</button>
@@ -1419,9 +1366,9 @@ export default function Home() {
           <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
-            <span>01_scene.png부터 완성 프레임을 순서대로 조립</span>
-            <span>첫 장면·그래프 장면은 완전 정지</span>
-            <span>전체대사 SRT를 빠짐없이 표시</span>
+            <span>background.png 한 장을 영상 끝까지 고정 + overlays/01~07 정보판만 교체</span>
+            <span>배경 완전 정지, 정보판만 단순 컷 또는 0.2초 페이드</span>
+            <span>전체 대사를 한 줄씩 Y 1450~1660 안전영역에 표시</span>
             <span>edit_plan.txt 시간표를 최우선 적용</span>
             <span>BGM은 audio_plan.txt 기준으로 낮게</span>
           </div>
