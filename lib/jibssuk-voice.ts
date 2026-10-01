@@ -1,3 +1,4 @@
+// @ts-nocheck — isolated pure-JS pronunciation rules are also exercised with node:test.
 // Only the audio narration is rewritten. The display script, overlays and SRT
 // must continue using the original numerical spellings.
 const DIGITS = ["영", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
@@ -87,6 +88,7 @@ export function toKoreanVoiceScript(source) {
       (_all, value, unit) => readNativeCounter(value) + " " + unit)
     .replace(/(\d[\d,]*(?:\.\d+)?)\s*(평대|평형|평|세대|개동|호선|층|위)/g,
       (_all, value, unit) => readDecimal(value) + " " + unit)
+    .replace(/(\d[\d,]*)\s*년/g, (_all, value) => readSino(value) + " 년")
     .replace(/\d[\d,]*(?:\.\d+)?/g, value => readDecimal(value))
     .replace(/([가-힣])앤([가-힣])/g, "$1 앤 $2")
     .replace(/([가-힣])(푸르지오|래미안|힐스테이트|아이파크|롯데캐슬|더샵|센트럴푸르지오|어바인퍼스트|포레스티아|메가트리아|디에트르|제일풍경채|휴먼시아)/g, "$1 $2")
