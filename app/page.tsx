@@ -324,7 +324,7 @@ export default function Home() {
         setRawContent(String(draft.rawContent || ""));
         setShortsScript(String(draft.shortsScript || ""));
         setShortsSceneText(String(draft.shortsSceneText || ""));
-        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any) => ({ ...s, narration: String(s.narration || "") })) : []);
+        setShortsScenes(Array.isArray(draft.shortsScenes) ? draft.shortsScenes.map((s: any, i: number) => ({ ...s, narration: String(s.narration || ""), screenType: SCENE_TYPES[i] || s.screenType, dataRows: String(s.dataRows || "") })) : []);
         setBgmMemo(String(draft.bgmMemo || ""));
         setShortsVoiceOverride(typeof draft.shortsVoiceOverride === "string" ? draft.shortsVoiceOverride : null);
         setFinalTitle(String(draft.finalTitle || ""));
@@ -718,7 +718,8 @@ export default function Home() {
         `내레이션: ${scene.narration}`,
         `큰 문구: ${scene.headline}`,
         `하단 자막: ${scene.subtitle}`,
-        `화면: ${scene.screenType}`
+        `화면: ${scene.screenType}`,
+        `데이터행: ${scene.dataRows || ""}`
       ].join("\n");
     }).join("\n\n");
   }
@@ -1222,33 +1223,30 @@ export default function Home() {
       </>}
 
       {phase === "analysis" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>3. 장면표</h2><p>이 표가 쇼츠의 중심입니다. 소리를 꺼도 큰 문구와 하단 자막만으로 내용이 이해되어야 합니다.</p></div><span className="counter">{shortsScenes.length || 0}/6~7장면</span></div>
+        <div className="sectionHead"><div><h2>3. 정보판 7장 설계</h2><p>배경은 한 장만 사용합니다. 거래량과 가격은 데이터행으로 입력하면 사이트가 직접 그립니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면</span></div>
         <div className="box scenePasteBox">
           <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
-          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 새 이미지"} />
-          <div className="tags"><span className={shortsScenes.length >= 6 && shortsScenes.length <= 7 ? "ok" : "warn"}>{shortsScenes.length}개 장면 인식</span><span>배경 이미지 {backgroundCount}개</span><span>그래프/숫자 {graphicCount}개</span><span>나머지는 재사용·텍스트·엔딩</span></div>
+          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 질문 카드\n데이터행:"} />
+          <div className="tags"><span className={shortsSceneCountReady ? "ok" : "warn"}>{shortsScenes.length}/7장면</span><span>공통 배경 1개</span><span>투명 정보판은 코드 자동 생성</span><span className={shortsDataIssues.length ? "warn" : "ok"}>숫자 검수 {shortsDataIssues.length ? shortsDataIssues.length + "건 확인 필요" : "✓"}</span></div>
         </div>
         {shortsScenes.length > 0 && <div className="sceneTable">
-          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 화면 문구</span><span>하단 자막</span><span>화면 방식</span></div>
+          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 문구 + 데이터행</span><span>하단 대사</span><span>정보판 종류</span></div>
           {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
             <b>{scene.order}</b>
             <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
-            <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: e.target.value })} />
+            <div style={{display:"grid",gap:6}}><input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} /><textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 14건 ; 단지명 | 13건 (원문값만)" style={{width:"100%",minWidth:0}} /></div>
             <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
             <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
-              <option>새 이미지</option><option>이미지 재사용</option><option>텍스트 카드</option><option>그래프/숫자 카드</option><option>고정 엔딩</option>
+              {SCENE_TYPES.map(type => <option key={type}>{type}</option>)}
             </select>
           </div>)}
         </div>}
-        <div className="grid2">
-          <div className="box">
-            <div className="miniHead"><h3>배경 이미지</h3><span className="muted">{backgroundCount}개</span></div>
-            {backgroundCount === 0 ? <p className="muted">새 배경 이미지가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind !== "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT에서 만들기 ↗</button></div> : null)}
-          </div>
-          <div className="box">
-            <div className="miniHead"><h3>그래프·숫자 카드</h3><span className="muted">{graphicCount}개</span></div>
-            {graphicCount === 0 ? <p className="muted">그래프가 필요한 장면이 없습니다.</p> : tasks.map((t, i) => t.assetKind === "graphic" ? <div className="imageRow" key={t.title}><span>{String(i + 1).padStart(2, "0")}</span><div><b>{t.title}</b><p>{t.keyMessage}</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>그래프 만들기 ↗</button></div> : null)}
-          </div>
+        <div className="box">
+          <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
+          {tasks.map(t => <div className="imageRow" key={t.title}><span>BG</span><div><b>{t.title}</b><p>투명 오버레이 7장 아래에서 계속 고정됩니다.</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>배경 만들기 ↗</button></div>)}
+          <p className="muted">데이터행 형식: 풍무푸르지오센트레빌 | 14건 ; 풍무센트럴푸르지오 | 14건. 원문에 없는 숫자는 ZIP 검수에서 차단됩니다.</p>
+          {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
+          {!shortsScriptReady && shortsScenes.length > 0 && <p className="voiceWarning">장면 내레이션 합본과 기준 대본이 다릅니다. 누락·중복된 문장을 수정해주세요.</p>}
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6} onClick={() => setPhase("images")}>제작자료 준비</button></div>
       </> : analysis ? <>
