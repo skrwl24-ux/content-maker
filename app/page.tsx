@@ -11,6 +11,7 @@ type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string
 type Recommendation = { title: string; brief: string };
 type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string; dataRows?: string };
 type Phase = "home" | "input" | "script" | "analysis" | "images" | "review" | "done";
+const SHORTS_NAV_PHASES: Phase[] = ["input", "script", "analysis", "images", "review"];
 
 const TYPES = [
   ["🏠", "아파트 블로그", "시세·실거래·TOP3"],
@@ -1152,8 +1153,11 @@ export default function Home() {
         const active = isShorts
           ? (((phase === "home" || phase === "input") && i === 0) || (phase === "script" && i === 1) || (phase === "analysis" && i === 2) || (phase === "images" && i === 3) || ((phase === "review" || phase === "done") && i === 4))
           : (((phase === "home" || phase === "input") && i === 0) || (phase === "analysis" && i === 1) || (phase === "images" && i === 2) || (phase === "review" && i === 3) || (phase === "done" && i === 4));
-        return <div key={x} className={`step ${active ? "active" : ""}`}>{i + 1} {x}</div>;
+        return isShorts && phase !== "home"
+          ? <button key={x} type="button" className={`step stepLink ${active ? "active" : ""}`} aria-current={active ? "step" : undefined} onClick={() => { setError(""); setPhase(SHORTS_NAV_PHASES[i]); }} title={`${x} 단계 열기`}>{i + 1} {x}</button>
+          : <div key={x} className={`step ${active ? "active" : ""}`}>{i + 1} {x}</div>;
       })}</div>
+      {isShorts && phase !== "home" && <p className="stageHint">단계 메뉴를 누르면 자료를 아직 넣지 않아도 다음 작업을 미리 볼 수 있습니다. 실제 생성·조립은 필요한 입력이 준비된 후 가능합니다.</p>}
 
       {phase === "home" && <>
         <div className="sectionHead"><div><h2>무엇을 만들까요?</h2><p>카테고리를 고르면 그 작업에 맞게 이미지 구성과 규격을 준비합니다.</p></div></div>
@@ -1196,8 +1200,9 @@ export default function Home() {
 
       {phase === "script" && isShorts && <>
         <div className="sectionHead"><div><h2>2. 대본</h2><p>GPT에서 만든 완성 내레이션만 붙여넣고 길이를 확인합니다.</p></div><span className="counter">{shortsCharCount}/210~225자</span></div>
+        {rawContent.trim().length < 30 && <p className="stagePreviewNote">미리보기: 1. 자료 단계에 원문을 입력하면 GPT 대본 요청서에 자동 포함됩니다.</p>}
         <div className="box">
-          <div className="miniHead"><h3>기준 대본 · 화면/자막용</h3><div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "기준 대본을 복사했습니다.")}>📋 기준 대본 복사</button></div></div>
+          <div className="miniHead"><h3>기준 대본 · 화면/자막용</h3><div className="inlineActions"><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "기준 대본을 복사했습니다.")}>📋 기준 대본 복사</button></div></div>
           <textarea className="shortsScriptArea" value={shortsScript} onChange={e => { setShortsScript(e.target.value); setShortsVoiceOverride(null); }} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
           <div className="tags">
             <span>화면 숫자 원문 유지</span>
@@ -1225,8 +1230,9 @@ export default function Home() {
 
       {phase === "analysis" && (isShorts ? <>
         <div className="sectionHead"><div><h2>3. 정보판 7장 설계</h2><p>배경은 한 장만 사용합니다. 거래량과 가격은 데이터행으로 입력하면 사이트가 직접 그립니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면</span></div>
+        {shortsScript.trim().length < 50 && <p className="stagePreviewNote">미리보기: 2. 대본 단계에 완성 대본을 넣으면 이 단계의 GPT 장면표 요청서에 자동 포함됩니다.</p>}
         <div className="box scenePasteBox">
-          <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
+          <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
           <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 질문 카드\n데이터행:"} />
           <div className="tags"><span className={shortsSceneCountReady ? "ok" : "warn"}>{shortsScenes.length}/7장면</span><span>공통 배경 1개</span><span>투명 정보판은 코드 자동 생성</span><span className={shortsDataIssues.length ? "warn" : "ok"}>숫자 검수 {shortsDataIssues.length ? shortsDataIssues.length + "건 확인 필요" : "✓"}</span></div>
         </div>
@@ -1267,10 +1273,12 @@ export default function Home() {
 
       {phase === "images" && (isShorts ? <>
         <div className="sectionHead"><div><h2>4. 공통 배경 · 음성 준비</h2><p>배경 한 장만 업로드하면 정보판 7장은 사이트가 직접 렌더링합니다.</p></div><span className="counter">공통 배경 {backgroundReady}/1</span></div>
+        {!shortsSceneCountReady && <p className="stagePreviewNote">미리보기: 장면표 7개를 붙여넣으면 공통 배경 업로드 칸과 자동 정보판 제작이 준비됩니다.</p>}
 
         <div className="box">
           <div className="miniHead"><h3>① 공통 아파트 배경 (1장)</h3><span className="muted">{backgroundReady}/1 업로드</span></div>
           <p className="muted">이 사진이 영상 시작부터 끝까지 고정됩니다. 제목·가격·그래프·자막은 배경 이미지에 넣지 마세요.</p>
+          {tasks.length === 0 && <p className="muted">공통 배경 업로드 칸 대기 중 · 3. 장면표 입력 후 나타납니다.</p>}
           {tasks.map((t, i) => <div className="assetRow" key={t.title}>
             <div><b>{t.title}</b><p>9:16 무문자 아파트 전경</p></div>
             <div className="inlineActions"><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>GPT 배경 요청서 ↗</button>
@@ -1283,7 +1291,7 @@ export default function Home() {
 
         <div className="grid2">
           <div className="box assetUploadBox">
-            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
+            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
             <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
             {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.5x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.5배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
@@ -1308,7 +1316,7 @@ export default function Home() {
 
         <div className="assetChecklist">
           <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
-          <span className={shortsDataIssues.length===0 ? "ready" : ""}>코드 정보판 {shortsDataIssues.length ? "데이터 수정 필요" : "7장 자동 생성 ✓"}</span>
+          <span className={shortsSceneCountReady && shortsDataIssues.length===0 ? "ready" : ""}>코드 정보판 {!shortsSceneCountReady ? `${shortsScenes.length}/7 · 장면표 대기` : shortsDataIssues.length ? "데이터 수정 필요" : "7장 자동 생성 ✓"}</span>
           <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.5x) ✓" : "✓") : "대기"}</span>
           <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>한 줄 SRT {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 확인"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
@@ -1336,14 +1344,15 @@ export default function Home() {
 
       {phase === "review" && (isShorts ? <>
         <div className="sectionHead"><div><h2>5. 집값쓱 V3 조립 패키지</h2><p>공통 배경 1장과 코드로 만든 투명 정보판 7장, 한 줄 SRT를 ZIP으로 출력합니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
+        {!shortsAssemblyReady && <p className="stagePreviewNote">미리보기: 조립에 필요한 장면표·배경·음성이 준비되면 검수가 완료되고 ZIP 다운로드가 활성화됩니다.</p>}
 
         <div className="box finalPackageBox">
-          <div className="miniHead"><h3>자동 최종검사</h3><span className={shortsAssemblyReady ? "ok" : "warn"}>{shortsAssemblyReady ? "빠른 조립 준비 완료" : "수정 필요"}</span></div>
+          <div className="miniHead"><h3>자동 최종검사</h3><span className={shortsAssemblyReady ? "ok" : "warn"}>{shortsAssemblyReady ? "빠른 조립 준비 완료" : shortsScenes.length || shortsScript.trim() ? "수정 필요" : "준비 전"}</span></div>
           <div className="assetChecklist">
             <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/7 {shortsSceneCountReady ? "✓" : ""}</span>
             <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>원문과 일치하는 한 줄 자막 {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 재확인"}</span>
             <span className={shortsVisualReady ? "ready" : ""}>공통 배경 {backgroundReady}/1 {shortsVisualReady ? "✓" : ""}</span>
-            <span className={shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
+            <span className={shortsSceneCountReady && shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {!shortsSceneCountReady ? "장면표 대기" : shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
             <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
             <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>6초 초과 {shortsLongScenes.length ? shortsLongScenes.map(x => "장면" + x.scene.order).join(", ") : sceneTimeline.length ? "없음 ✓" : "미확인"}</span>
@@ -1351,7 +1360,7 @@ export default function Home() {
           </div>
           {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 내레이션을 분산해주세요.</p>}
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
-          {!shortsScriptReady && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
+          {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
 
           <h3>빠른 조립 패키지</h3>
@@ -1383,7 +1392,7 @@ export default function Home() {
         </div>
 
         <div className="box">
-          <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
+          <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" disabled={!shortsAssemblyReady} onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" disabled={!shortsAssemblyReady} onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>background.png 한 장을 영상 끝까지 고정 + overlays/01~07 정보판만 교체</span>
