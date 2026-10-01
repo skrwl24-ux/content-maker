@@ -956,6 +956,11 @@ export default function Home() {
     return [
       "[집값쓱 쇼츠 V3 · 고정 배경 + 정보판 최종 조립]",
       "주제: " + (projectTitle || "첨부 패키지의 주제"), "",
+      "[첨부 파일 확인]",
+      "- 이 요청서와 함께 사이트에서 다운로드한 빠른 조립 ZIP 파일 1개를 GPT 대화에 직접 첨부하세요.",
+      "- 첨부 ZIP이 보이지 않거나 필수 파일이 없다면 임의 영상 제작을 시작하지 말고 재첨부를 요청하세요.",
+      "- scene_contact_sheet.png는 검수용 미리보기이며 영상 레이어로 사용하지 마세요.",
+      "",
       "[ZIP 내용만 정확하게 조립할 것]",
       "- background.png는 영상 시작부터 종료까지 한 장으로 고정. 절대 움직이거나 다른 배경으로 교체하지 말 것.",
       "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
@@ -1052,7 +1057,8 @@ export default function Home() {
         "GPT에서 만든 개별 투명 정보판을 업로드했다면 그 파일을 우선 사용하며, 없는 장면은 기존 코드 렌더링으로 보완합니다.",
         "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
         "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
-        "업로드 정보판은 내용이 잘리지 않도록 Y 1320 이내로 자동 맞춤 처리되며, 자막은 Y 1450~1660에 배치합니다."
+        "업로드 정보판은 내용이 잘리지 않도록 Y 1320 이내로 자동 맞춤 처리되며, 자막은 Y 1450~1660에 배치합니다.",
+        "shorts_request.txt는 ZIP을 GPT에 첨부하여 영상을 최종 조립할 때, youtube_upload_request.txt는 완성 영상의 유튜브 업로드 문구를 만들 때 사용합니다."
       ].join("\n"));
       if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
       if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
@@ -1060,6 +1066,7 @@ export default function Home() {
       folder.file("edit_plan.txt", shortsEditPlanExport());
       folder.file("audio_plan.txt", shortsAudioPlanExport());
       folder.file("shorts_request.txt", shortsVideoPrompt());
+      folder.file("youtube_upload_request.txt", shortsUploadPrompt());
 
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -1549,7 +1556,7 @@ export default function Home() {
             <div><span>BGM</span><b>{bgmFile ? packageAudioFileName("bgm", bgmFile) : "선택"}</b></div>
             <div><span>편집표</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
           </div>
-          <p className="muted">빠른 ZIP에는 background.png, overlays/01~07_overlay.png, 미리보기, voice, bgm, 한 줄 subtitles_full.srt, 편집표, 검수용 overlay_data.json을 담습니다. 정보판 PNG에는 자막이 새겨지지 않습니다.</p>
+          <p className="muted">빠른 ZIP에는 background.png, overlays/01~07_overlay.png, 미리보기, voice, bgm, 한 줄 subtitles_full.srt, 편집표, 검수용 overlay_data.json과 영상 조립·유튜브 업로드 요청서 TXT 2개를 담습니다. 정보판 PNG에는 자막이 새겨지지 않습니다.</p>
           <div className="inlineActions"><button className="secondary compact" disabled={loading || !shortsVisualReady || !shortsSceneCountReady || shortsDataIssues.length>0} onClick={previewShortsCards}>👁 배경 + 정보판 7장 미리보기</button></div>
           {shortsPreview && <div className="box" style={{marginTop:12}}>
             <h3>장면별 크게 확인하기</h3>
@@ -1570,7 +1577,8 @@ export default function Home() {
         </div>
 
         <div className="box">
-          <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" disabled={!shortsAssemblyReady} onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" disabled={!shortsAssemblyReady} onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
+          <div className="miniHead"><h3>최종 영상 조립 요청서 · ZIP 첨부용</h3><div className="inlineActions"><button className="secondary compact" disabled={!shortsAssemblyReady} onClick={() => copyText(shortsVideoPrompt(), "영상 조립 요청서를 복사했습니다. 다운로드한 ZIP을 GPT에 첨부하세요.")}>📋 영상 조립 요청서 복사</button><button className="primary" disabled={!shortsAssemblyReady} onClick={() => openGPT(shortsVideoPrompt())}>GPT에서 영상 조립 ↗</button></div></div>
+          <p className="muted">빠른 조립 ZIP 다운로드 → GPT 열기 → ZIP 파일 1개 직접 첨부 → 조립 요청서 붙여넣고 전송. 브라우저 보안상 ZIP 첨부는 직접 해야 합니다.</p>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>background.png 한 장을 영상 끝까지 고정 + overlays/01~07 정보판만 교체</span>
@@ -1579,7 +1587,23 @@ export default function Home() {
             <span>edit_plan.txt 시간표를 최우선 적용</span>
             <span>BGM은 audio_plan.txt 기준으로 낮게</span>
           </div>
-          <p className="muted">GPT가 열리면 방금 받은 ZIP을 첨부하고 전송하면 됩니다. 파일 첨부 자체는 브라우저 보안 때문에 사이트가 대신할 수 없습니다.</p>
+        </div>
+
+        <div className="box">
+          <div className="miniHead">
+            <h3>유튜브 업로드 요청서 · 제목·설명·해시태그</h3>
+            <div className="inlineActions">
+              <button type="button" className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsUploadPrompt(), "유튜브 업로드 요청서를 복사했습니다.")}>📋 업로드 요청서 복사</button>
+              <button type="button" className="primary compact" disabled={!shortsScript.trim()} onClick={() => openGPT(shortsUploadPrompt())}>GPT에서 업로드 문구 만들기 ↗</button>
+            </div>
+          </div>
+          <p className="muted">영상 조립용 ZIP 요청서와 별개입니다. 완성 대본과 원문을 기준으로 유튜브에 입력할 문구를 만듭니다. ZIP 첨부 없이도 대본만 준비되면 요청서를 복사할 수 있습니다.</p>
+          <div className="requestSummary">
+            <b>업로드 문구 포함 항목</b>
+            <span>유튜브 쇼츠 제목 3개 · 설명문 2~3문장</span>
+            <span>해시태그 5~8개 · 고정댓글 1개</span>
+            <span>검색 키워드는 자연스럽게 반영 · 원문에 없는 숫자와 사실 추가 금지</span>
+          </div>
         </div>
 
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("images")}>제작자료 수정</button><button className="primary" onClick={resetNew}>새 쇼츠 만들기</button></div>
