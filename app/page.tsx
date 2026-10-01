@@ -313,12 +313,12 @@ export default function Home() {
   const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
   const shortsSceneCountReady = shortsScenes.length === 7;
   const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
-  const shortsDataIssues = resolvedShortsScenes.flatMap(s => {
-    const kind = sceneKind(s);
-    const rows = parseOverlayRows(s.dataRows || "");
-    const issues = (kind === "bar" || kind === "price") && rows.length < 2 ? ["장면 " + s.order + ": 데이터행을 두 개 이상 입력하세요."] : [];
-    return issues.concat(unsupportedRowValues(s, rawContent + "\n" + shortsScript).map(v => "장면 " + s.order + ": 원문에 없는 값 " + v));
-  });
+  // Missing/one-point chart data now produces a fact-only card, not an export blocker.
+  // Explicit numerical values absent from the source are still rejected.
+  const shortsDataIssues = resolvedShortsScenes.flatMap(s =>
+    unsupportedRowValues(s, rawContent + "\n" + shortsScript)
+      .map(v => "장면 " + s.order + ": 원문에 없는 값 " + v)
+  );
   const normalizeCheck = (v: string) => v.replace(/[\s.,!?。·:：]/g, "");
   const shortsScriptReady = !!shortsScript.trim() && normalizeCheck(shortsScenes.map(s => s.narration).join("")) === normalizeCheck(shortsScript);
   const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
@@ -811,7 +811,8 @@ export default function Home() {
   }
 
   function shortsSceneExport() {
-    return shortsScenes.map(scene => {
+    // Export the recovered, source-verified rows rather than the old blank plan.
+    return resolvedShortsScenes.map(scene => {
       const timing = sceneTimeline.find(t => t.scene.order === scene.order);
       return [
         `장면 ${scene.order}${timing ? ` · ${timing.start.toFixed(1)}~${timing.end.toFixed(1)}초` : ""}`,
@@ -1453,7 +1454,7 @@ export default function Home() {
         <div className="box">
           <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
           {tasks.map(t => <div className="imageRow" key={t.title}><span>BG</span><div><b>{t.title}</b><p>투명 오버레이 7장 아래에서 계속 고정됩니다.</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>배경 만들기 ↗</button></div>)}
-          <p className="muted">데이터행 형식: 풍무푸르지오센트레빌 | 14건 ; 풍무센트럴푸르지오 | 14건. 원문에 없는 숫자는 ZIP 검수에서 차단됩니다.</p>
+          <p className="muted">데이터행 형식: 풍무푸르지오센트레빌 | 14건 ; 풍무센트럴푸르지오 | 14건. 4번 월별 가격은 원문에서 자동 복원되며, 비교값이 부족하면 임의 생성 없이 정보 카드로 전환합니다. 원문에 없는 숫자는 ZIP 검수에서 차단됩니다.</p>
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
           {!shortsScriptReady && shortsScenes.length > 0 && <p className="voiceWarning">장면 내레이션 합본과 기준 대본이 다릅니다. 누락·중복된 문장을 수정해주세요.</p>}
         </div>

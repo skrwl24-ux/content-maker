@@ -166,8 +166,8 @@ export function oneLineSrt(timeline: TimedScene[]): string {
   return entries.join("\n\n");
 }
 
-// Older saved scene plans may not contain dataRows. Recover only when names AND values
-// are explicitly present in the supplied source; otherwise keep validation blocking export.
+// Older saved scene plans may omit structured data. Recover only documented values;
+// when too few values exist, render a fact-only card rather than inventing a chart.
 function extractVolumeRows(source: string): string {
   const text = source.replace(/\s+/g, " ");
   const pair = text.match(/([가-힣A-Za-z0-9]+)(?:과|와)\s+([가-힣A-Za-z0-9]+)(?:가|이)\s*(?:각각[, ]*)?(\d[\d,]*)건(?:씩|으로|[\s,!])/);
@@ -193,6 +193,33 @@ function extractVolumeRows(source: string): string {
   return found.length === 3 ? found.map(r => r.label+" | "+r.value).join(" ; ") : "";
 }
 
+// Extract explicit month-by-month prices (including Korean 억/만원 notation) from
+// original source paragraphs. Ignore month/day transaction dates and unrelated
+// rent prices. Conflicting values for the same month are excluded, not guessed.
+export function extractMonthlyPriceRows(source: string): string {
+  const lines = String(source || "").replace(/\r/g, "")
+    .replace(/([.!?。])\s+(?=(?:20\d{2}년\s*)?(?:1[0-2]|[1-9])월)/g, "$1\n")
+    .split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const found = new Map<number, { value: string; rank: number; conflict: boolean }>();
+  const pricePattern = /(?:월별\s*)?(?:중앙값|대표값|거래가(?:는|가)?|매매가(?:는|가)?|실거래가(?:는|가)?)[^.!?\n]{0,90}?(\d[\d,]*(?:\.\d+)?\s*억(?:\s*\d[\d,]*\s*만원)?)(?!원대)/;
+  for (const line of lines) {
+    const head = line.match(/^(?:[-•]\s*)?(?:20\d{2}년\s*)?(1[0-2]|[1-9])월(?!\s*\d{1,2}일)/);
+    if (!head) continue;
+    const price = line.match(pricePattern);
+    const singleTrade = line.match(/^\d{1,2}월\s+\d+건(?:은|이|으로)\s*(?:약\s*)?(\d[\d,]*(?:\.\d+)?\s*억(?:\s*\d[\d,]*\s*만원)?)/);
+    const value = (price?.[1] || singleTrade?.[1] || "").replace(/\s+/g, "").trim();
+    if (!/^\d[\d,]*(?:\.\d+)?억(?:\d[\d,]*만원)?$/.test(value)) continue;
+    const month = Number(head[1]);
+    const rank = /중앙값/.test(line) ? 2 : 1;
+    const previous = found.get(month);
+    if (!previous || rank > previous.rank) found.set(month, { value, rank, conflict: false });
+    else if (rank === previous.rank && value !== previous.value) previous.conflict = true;
+  }
+  return [...found.entries()].filter(([, entry]) => !entry.conflict)
+    .sort((a, b) => a[0] - b[0])
+    .map(([month, entry]) => month + "월 | " + entry.value).join(" ; ");
+}
+
 export function resolveOverlayScenes<T extends OverlayScene>(scenes: T[], fullSource: string): T[] {
   const barScene = scenes.find(s => sceneKind(s) === "bar");
   let volumeRows = parseOverlayRows(barScene?.dataRows || "");
@@ -200,11 +227,18 @@ export function resolveOverlayScenes<T extends OverlayScene>(scenes: T[], fullSo
     const extracted = extractVolumeRows(barScene.narration + " " + fullSource);
     volumeRows = parseOverlayRows(extracted);
   }
+  const monthlyPriceRows = extractMonthlyPriceRows(fullSource);
   return scenes.map(scene => {
     if (parseOverlayRows(scene.dataRows || "").length >= 2) return scene;
     const kind = sceneKind(scene);
     if (kind === "bar" && volumeRows.length >= 3) {
       return { ...scene, dataRows: volumeRows.slice(0,3).map(r => r.label+" | "+r.value).join(" ; ") };
+    }
+    if (kind === "price") {
+      // A genuine month-by-month price series takes priority over TOP3 recovery.
+      if (parseOverlayRows(monthlyPriceRows).length >= 2) return { ...scene, dataRows: monthlyPriceRows };
+      if (parseOverlayRows(scene.dataRows || "").length === 0 && parseOverlayRows(monthlyPriceRows).length === 1)
+        return { ...scene, dataRows: monthlyPriceRows };
     }
     if (kind === "price" && volumeRows.length === 3) {
       const specific = scene.narration || scene.subtitle;
@@ -331,29 +365,85 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
       const y = 545 + i * 232;
       const rank = 1 + rows.filter(r => r.numeric > row.numeric).length;
       roundRect(ctx, 120, y+7, 62, 62, 31, rank===1 ? YELLOW : "#D9E5F1");
-      text(ctx, String(rank), 151, y+15, 55, 42, NAVY, "center", 34);
+      text(ctx, rows.length === 1 ? "·" : String(rank), 151, y+15, 55, 42, NAVY, "center", 34);
       text(ctx, row.label, 205, y+8, 730, 46, WHITE, "left", 29);
       roundRect(ctx, 205, y+100, 590, 48, 14, "rgba(255,255,255,.19)");
       roundRect(ctx, 205, y+100, Math.max(18, 590*row.numeric/max), 48, 14, rank===1 ? BLUE : "#9DBADB");
       text(ctx, row.value, 944, y+94, 145, 51, rank===1 ? YELLOW : WHITE, "right", 34);
     });
-    if (rows.length < 2) {
-      titleLines("거래량 데이터 확인 필요", 790, 65, YELLOW, 2);
-      text(ctx, "장면표의 데이터행을 확인하세요", 540, 920, 800, 43, WHITE, "center");
+    if (rows.length === 1) {
+      text(ctx, "확인된 거래량 1개 · 비교 그래프 생략", 540, 1020, 810, 39, YELLOW, "center", 29);
+    } else if (rows.length === 0) {
+      titleLines(cleanSceneField(scene.narration || scene.subtitle || header), 690, 57, WHITE, 3);
+      text(ctx, "비교 가능한 거래량 데이터 없음", 540, 1050, 800, 40, YELLOW, "center", 27);
     }
   } else if (kind === "price") {
-    panel(260, 1050);
+    panel(260, 985); // Shadow also stays entirely above the Y1320 caption boundary.
     titleLines(header, 325, 59, WHITE, 2);
-    rows.slice(0,3).forEach((row, i) => {
-      const y = 525+i*247;
-      roundRect(ctx, 115, y, 850, 213, 28, "rgba(255,255,255,.98)");
-      roundRect(ctx, 115, y, 14, 213, 6, i===1 ? YELLOW : BLUE);
-      text(ctx, row.label, 165, y+29, 745, 43, NAVY, "left", 29);
-      text(ctx, row.value, 930, y+103, 720, 85, BLUE, "right", 62);
-    });
-    if (rows.length < 2) {
-      titleLines("가격 비교 데이터 확인 필요", 790, 62, YELLOW, 2);
-      text(ctx, "장면표의 데이터행을 확인하세요", 540, 922, 800, 40, WHITE, "center");
+    const priceInEok = (value: string): number | null => {
+      const match = value.replace(/,/g, "").match(/^(\d+(?:\.\d+)?)\s*억(?:\s*(\d+)\s*만원)?/);
+      if (!match) return null;
+      const amount = Number(match[1]) + (match[2] ? Number(match[2]) / 10000 : 0);
+      return Number.isFinite(amount) ? amount : null;
+    };
+    const series = rows.map(row => ({
+      ...row, month: row.label.match(/(?:^|[^\d])(1[0-2]|[1-9])월/)?.[1] || "",
+      amount: priceInEok(row.value)
+    }));
+    if (series.length >= 2 && series.every(row => row.month && row.amount !== null)) {
+      // Actual monthly observations only: no missing-month interpolation or invented labels.
+      roundRect(ctx, 112, 515, 856, 535, 28, "rgba(255,255,255,.98)");
+      const amounts = series.map(row => row.amount as number);
+      const min = Math.min(...amounts), max = Math.max(...amounts);
+      const extent = Math.max(0.2, max - min);
+      const plotLeft = 170, plotRight = 907, plotTop = 640, plotBottom = 920;
+      const points = series.map((row, i) => ({
+        x: plotLeft + (plotRight - plotLeft) * i / Math.max(1, series.length - 1),
+        y: (plotTop + plotBottom) / 2 - ((row.amount as number) - (min + max) / 2) / extent * (plotBottom - plotTop) * 0.80,
+        row
+      }));
+      ctx.save();
+      ctx.strokeStyle = "rgba(18,40,65,.12)"; ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const y = plotTop + i * (plotBottom - plotTop) / 2;
+        ctx.beginPath(); ctx.moveTo(plotLeft, y); ctx.lineTo(plotRight, y); ctx.stroke();
+      }
+      ctx.beginPath(); ctx.strokeStyle = BLUE; ctx.lineWidth = 8;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      points.forEach((point, i) => i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y));
+      ctx.stroke();
+      points.forEach((point, i) => {
+        ctx.beginPath(); ctx.arc(point.x, point.y, 11, 0, Math.PI * 2);
+        ctx.fillStyle = i === points.length - 1 ? "#E49B38" : BLUE; ctx.fill();
+        ctx.strokeStyle = WHITE; ctx.lineWidth = 3; ctx.stroke();
+        const showLabel = series.length <= 6 || i % Math.ceil(series.length / 6) === 0 || i === series.length - 1;
+        if (showLabel) {
+          const exactEok = Number((point.row.amount as number).toFixed(4)).toString() + "억";
+          text(ctx, exactEok, point.x, point.y - 55, 145, 31, NAVY, "center", 22);
+        }
+        text(ctx, point.row.month + "월", point.x, 985, 77, 30, NAVY, "center", 24);
+      });
+      ctx.restore();
+      const first = series[0], last = series[series.length - 1];
+      text(ctx, first.label + "  " + first.value, 145, 1090, 795, 39, WHITE, "left", 29);
+      text(ctx, last.label + "  " + last.value, 145, 1153, 795, 43, YELLOW, "left", 30);
+    } else if (rows.length >= 2) {
+      // Non-time-series prices (e.g. TOP3 complexes) keep the existing comparison cards.
+      rows.slice(0, 3).forEach((row, i) => {
+        const y = 525 + i * 234;
+        roundRect(ctx, 115, y, 850, 204, 28, "rgba(255,255,255,.98)");
+        roundRect(ctx, 115, y, 14, 204, 6, i === 1 ? YELLOW : BLUE);
+        text(ctx, row.label, 165, y + 29, 745, 43, NAVY, "left", 29);
+        text(ctx, row.value, 930, y + 100, 720, 82, BLUE, "right", 60);
+      });
+    } else if (rows.length === 1) {
+      roundRect(ctx, 115, 610, 850, 252, 28, "rgba(255,255,255,.98)");
+      text(ctx, rows[0].label, 165, 645, 740, 49, NAVY, "left", 33);
+      text(ctx, rows[0].value, 930, 750, 755, 81, BLUE, "right", 52);
+      text(ctx, "확인된 가격 1개 · 추세선 생략", 540, 940, 795, 46, YELLOW, "center", 30);
+    } else {
+      titleLines(cleanSceneField(scene.narration || scene.subtitle || header), 650, 56, WHITE, 3);
+      text(ctx, "확인된 월별 가격 데이터 없음 · 그래프 생략", 540, 1040, 810, 39, YELLOW, "center", 27);
     }
   } else if (kind === "highlight") {
     panel(405, 770);
