@@ -842,71 +842,73 @@ export default function Home() {
   async function exportShortsPackage(includeSources = false) {
     setLoading(true); setError("");
     try {
+      if (!shortsAssemblyReady) {
+        const problems = [
+          !shortsSceneCountReady && "정확히 7장면이 필요합니다.",
+          !shortsScriptReady && "장면 내레이션 전체와 원본 대본이 일치하지 않습니다.",
+          !shortsVisualReady && "공통 배경을 업로드하세요.",
+          !shortsCaptionReady && "내레이션이 비어 있습니다.",
+          !voiceFile && "음성 파일을 첨부하세요.",
+          ...shortsDataIssues
+        ].filter(Boolean);
+        throw new Error(problems.join(" / ") || "제작 패키지 검수가 완료되지 않았습니다.");
+      }
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const folder = zip.folder(cleanName(projectTitle || "jibssuk-shorts"))!;
-
-      // Quick assembly package intentionally excludes original image assets.
-      // Backup mode retains them for later re-editing.
-      if (includeSources) {
-        let bgNo = 0;
-        let graphNo = 0;
-        tasks.forEach((task) => {
-          const dataUrl = task.sourceDataUrl || task.imageDataUrl;
-          const match = dataUrl?.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-          if (match) {
-            const ext = match[1].includes("jpeg") ? "jpg" : match[1].includes("webp") ? "webp" : "png";
-            const prefix = task.assetKind === "graphic"
-              ? `source_graphic_${String(++graphNo).padStart(2, "0")}`
-              : `source_background_${String(++bgNo).padStart(2, "0")}`;
-            folder.file(`${prefix}.${ext}`, match[2], { base64: true });
-          }
-        });
-      }
+      const background = await composeShortsBackground();
+      const backgroundMatch = background.match(/^data:image\/png;base64,(.+)$/);
+      if (!backgroundMatch) throw new Error("공통 배경 PNG 변환에 실패했습니다.");
+      folder.file("background.png", backgroundMatch[1], { base64: true });
 
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (let i = 0; i < shortsScenes.length; i++) {
-        const scene = shortsScenes[i];
-        const dataUrl = await composeShortsSceneFrame(scene, i);
-        const match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
-        if (match) {
-          folder.file(sceneFrameFileName(scene.order), match[1], { base64: true });
-          frames.push({ order: scene.order, dataUrl });
-        }
+      for (const scene of shortsScenes) {
+        const overlay = await renderShortsOverlay(scene);
+        const match = overlay.match(/^data:image\/png;base64,(.+)$/);
+        if (!match) throw new Error("장면 " + scene.order + " 정보판 PNG 출력에 실패했습니다.");
+        folder.file("overlays/" + overlayFileName(scene.order), match[1], { base64: true });
+        frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
       }
-
-      if (frames.length) {
-        const contactSheet = await composeShortsContactSheet(frames);
-        const contactMatch = contactSheet.match(/^data:image\/png;base64,(.+)$/);
-        if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
-      }
-
-      if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
-      if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
-
-      folder.file("edit_plan.txt", shortsEditPlanExport());
-      folder.file("audio_plan.txt", shortsAudioPlanExport());
-      folder.file("subtitles_full.srt", shortsSrt());
-      folder.file("shorts_request.txt", shortsVideoPrompt());
+      const contactSheet = await composeShortsContactSheet(frames);
+      const contactMatch = contactSheet.match(/^data:image\/png;base64,(.+)$/);
+      if (contactMatch) folder.file("scene_contact_sheet.png", contactMatch[1], { base64: true });
 
       if (includeSources) {
+        const original = tasks[0]?.sourceDataUrl || tasks[0]?.imageDataUrl || "";
+        const originalMatch = original.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (originalMatch) folder.file("source_background." + (originalMatch[1].includes("jpeg") ? "jpg" : "png"), originalMatch[2], { base64: true });
         folder.file("display_script.txt", shortsScript);
         folder.file("voice_script.txt", shortsVoiceScript);
         folder.file("scene_plan.txt", shortsSceneExport());
         folder.file("timeline.txt", shortsTimelineExport());
-        folder.file("subtitles_full.txt", shortsScenes.map(s => `${s.order}. ${s.narration || s.subtitle || s.headline}`).join("\n"));
         if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       }
+      folder.file("overlay_data.json", JSON.stringify(shortsScenes.map(s => ({
+        order: s.order, headline: cleanSceneField(s.headline), screenType: s.screenType,
+        dataRows: parseOverlayRows(s.dataRows || "").map(r => ({ label: r.label, value: r.value }))
+      })), null, 2));
+      folder.file("README.txt", [
+        "집값쓱 V3: 공통 background.png + 투명 overlays 7장.",
+        "scene_contact_sheet.png는 자막 위치를 포함한 확인용이며 영상 소재로 사용하지 마세요.",
+        "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
+        "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
+        "Y 1350 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
+      ].join("\n"));
+      if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
+      if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
+      folder.file("subtitles_full.srt", shortsSrt());
+      folder.file("edit_plan.txt", shortsEditPlanExport());
+      folder.file("audio_plan.txt", shortsAudioPlanExport());
+      folder.file("shorts_request.txt", shortsVideoPrompt());
 
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${cleanName(projectTitle || "jibssuk-shorts")}_${includeSources ? "backup_package" : "quick_assembly"}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = cleanName(projectTitle || "jibssuk-shorts") + (includeSources ? "_backup_package" : "_quick_assembly") + "_v3.zip";
+      link.click(); URL.revokeObjectURL(url);
     } catch (e: any) {
-      setError(e.message || (includeSources ? "백업 ZIP 생성에 실패했습니다." : "빠른 조립 ZIP 생성에 실패했습니다."));
+      setError(e.message || "V3 조립용 ZIP 생성에 실패했습니다.");
     } finally {
       setLoading(false);
     }
