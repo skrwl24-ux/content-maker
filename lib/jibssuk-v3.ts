@@ -184,7 +184,8 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
     rows.forEach((r, i) => {
       const y = 558 + i * rowH;
       roundRect(ctx, 105, y - 8, 50, 50, 25, i < 2 ? YELLOW : "#D6E2EF");
-      text(ctx, String(i + 1), 130, y, 42, 32, NAVY, "center");
+      const competitionRank = 1 + rows.filter(other => other.numeric > r.numeric).length;
+      text(ctx, String(competitionRank), 130, y, 42, 32, NAVY, "center");
       text(ctx, r.label, 180, y, 665, 42, WHITE, "left", 27);
       roundRect(ctx, 180, y + 69, 610, 45, 12, "rgba(255,255,255,.18)");
       roundRect(ctx, 180, y + 69, Math.max(16, 610 * r.numeric / max), 45, 12, i < 2 ? BLUE : "#9DBAD8");
@@ -215,7 +216,8 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
     }
   } else if (kind === "ending") {
     roundRect(ctx, 77, 515, 926, 540, 50, "rgba(12,35,60,.88)");
-    headline(ctx, header, 595, 74, WHITE);
+    const outroHeading = header.replace(/집\s*\.\s*값\s*\.\s*쓱\.?/g, "").replace(/[\/\s]+$/g, "").trim();
+    headline(ctx, outroHeading || header, 595, 74, WHITE);
     text(ctx, "집.값.쓱.", 540, 835, 830, 100, YELLOW, "center", 55);
   } else {
     roundRect(ctx, 75, 420, 930, 755, 45, kind === "criteria" ? "rgba(255,255,255,.94)" : "rgba(12,35,60,.92)");
