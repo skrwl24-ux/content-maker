@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
+import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions } from "@/lib/jibssuk-v3";
 
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
 type Analysis = { recommendedTitle: string; titleCandidates: string[]; keywords: string[]; facts: Fact[]; images: ImagePlan[] };
 type Task = ImagePlan & { done: boolean; imageDataUrl: string; imageUrl?: string; sourceDataUrl?: string; replaced: boolean; assetKind?: "background" | "graphic" };
 type Recommendation = { title: string; brief: string };
-type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string };
+type ShortsScene = { order: number; narration: string; headline: string; subtitle: string; screenType: string; dataRows?: string };
 type Phase = "home" | "input" | "script" | "analysis" | "images" | "review" | "done";
 
 const TYPES = [
@@ -16,7 +17,7 @@ const TYPES = [
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
   ["🤖", "AI Price Atlas", "가격·국가 비교"],
-  ["🎬", "집값쓱 쇼츠", "AI 제작재료 → 쇼츠 패키지"],
+  ["🎬", "집값쓱 쇼츠", "배경 1장 + 코드 정보판 7장"],
 ] as const;
 
 const PARAMMA_CATEGORIES = [
@@ -292,10 +293,18 @@ export default function Home() {
 
   const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
   const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
-  const shortsVisualReady = tasks.length === 0 || imageCount === tasks.length;
-  const shortsSceneCountReady = shortsScenes.length >= 6 && shortsScenes.length <= 7;
+  const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
+  const shortsSceneCountReady = shortsScenes.length === 7;
   const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
-  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+  const shortsDataIssues = shortsScenes.flatMap(s => {
+    const kind = sceneKind(s);
+    const rows = parseOverlayRows(s.dataRows || "");
+    const issues = (kind === "bar" || kind === "price") && rows.length < 2 ? ["장면 " + s.order + ": 데이터행을 두 개 이상 입력하세요."] : [];
+    return issues.concat(unsupportedRowValues(s, rawContent + "\n" + shortsScript).map(v => "장면 " + s.order + ": 원문에 없는 값 " + v));
+  });
+  const normalizeCheck = (v: string) => v.replace(/[\s.,!?。·:：]/g, "");
+  const shortsScriptReady = !!shortsScript.trim() && normalizeCheck(shortsScenes.map(s => s.narration).join("")) === normalizeCheck(shortsScript);
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
@@ -321,9 +330,13 @@ export default function Home() {
         setFinalBody(String(draft.finalBody || ""));
         setAnalysis(draft.analysis || null);
         setProjectId(draft.projectId || null);
-        const restoredTasks = Array.isArray(draft.tasks)
-          ? draft.tasks.map((t: Task) => ({ ...t, imageDataUrl: "", sourceDataUrl: undefined, done: false }))
-          : [];
+        const oldBackground = Array.isArray(draft.tasks) ? draft.tasks.find((t: Task) => t.assetKind !== "graphic") : null;
+        const restoredTasks: Task[] = draft.shortsScenes?.length ? [{
+          order: 0, title: "공통 아파트 배경", keyMessage: "무문자 배경 한 장",
+          sourceText: "", imagePrompt: "한 장의 아파트 배경을 전체 영상에 고정 사용.",
+          done: false, imageDataUrl: "", sourceDataUrl: undefined, replaced: false,
+          assetKind: "background", imageUrl: oldBackground?.imageUrl || ""
+        }] : [];
         setTasks(restoredTasks);
         setCurrentIndex(Math.max(0, Math.min(Number(draft.currentIndex || 0), Math.max(0, restoredTasks.length - 1))));
         const savedPhase = String(draft.phase || "");
