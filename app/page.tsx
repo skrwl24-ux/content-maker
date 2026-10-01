@@ -301,7 +301,14 @@ export default function Home() {
     });
   }, [resolvedShortsScenes, finalVoiceDuration]);
 
-  const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
+  // Information-heavy graph/comparison scenes may hold for up to seven seconds.
+  // Keep six seconds as the limit for the other five scenes.
+  const shortsExtendedGraphScenes = useMemo(() => sceneTimeline.filter(item =>
+    (item.scene.order === 3 || item.scene.order === 4) && item.duration > 6 && item.duration <= 7
+  ), [sceneTimeline]);
+  const shortsLongScenes = useMemo(() => sceneTimeline.filter(item =>
+    item.duration > ((item.scene.order === 3 || item.scene.order === 4) ? 7 : 6)
+  ), [sceneTimeline]);
   const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
   const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
   const shortsSceneCountReady = shortsScenes.length === 7;
@@ -815,6 +822,46 @@ export default function Home() {
         `데이터행: ${scene.dataRows || ""}`
       ].join("\n");
     }).join("\n\n");
+  }
+
+  function shortsTimingRevisionPrompt() {
+    return [
+      "[집값쓱 쇼츠 V3 · 7장면 시간 재분배 요청]",
+      "주제: " + (projectTitle || "아래 원본 대본의 핵심 주제"),
+      "",
+      "[수정 목표]",
+      "- 완성된 원본 대본의 문구·순서·문장·숫자·단위를 바꾸거나 누락하거나 중복하지 마세요.",
+      "- 7장면 구성 유지. 총 영상 길이와 음성 속도 1.4배속을 유지하세요.",
+      "- 장면 3(핵심 수치)과 4(가격 그래프)는 각각 최대 7초, 나머지 장면은 각각 최대 6초로 배분하세요.",
+      "- 장면 경계에서 내레이션을 자연스럽게 옮기되 모든 원본 문장은 순서대로 정확히 한 번씩 등장해야 합니다.",
+      "- 이동한 내레이션에 맞춰 큰 문구·하단 자막·화면 방식·데이터행도 함께 갱신하세요.",
+      "- 하단 자막은 해당 장면 내레이션 전체와 동일하게 입력합니다. 실제 영상에서는 사이트가 1줄씩 분할합니다.",
+      "- 원문에 없는 새 수치나 데이터는 만들지 마세요. 그래프·표의 데이터행은 해당 장면과 실제로 대응해야 합니다.",
+      "- 영상은 공통 배경 1장 + 투명 정보판 7장 방식 그대로 유지합니다.",
+      "",
+      "[현재 시간 초과 장면]",
+      ...shortsLongScenes.map(item => `장면 ${item.scene.order}: ${item.duration.toFixed(2)}초 (허용 ${item.scene.order === 3 || item.scene.order === 4 ? 7 : 6}초)`),
+      "",
+      "[현재 타임라인 · 최종 1.4배속 기준]",
+      shortsTimelineExport(),
+      "",
+      "[원본 완성 대본 · 아래 문구 그대로 보존]",
+      shortsScript,
+      "",
+      "[기존 7장면 · 데이터행까지 확인]",
+      shortsSceneExport(),
+      "",
+      "[출력 형식]",
+      "장면 1부터 7까지 빠짐없이 아래 형식을 반복해 주세요. 사이트의 3단계 장면표 입력란에 결과를 붙여넣을 예정입니다.",
+      "[장면 1]",
+      "내레이션: ...",
+      "큰문구: ...",
+      "하단자막: ...",
+      "화면방식: ...",
+      "데이터행: ...",
+      "",
+      "최종 점검: 7장면 내레이션을 순서대로 합쳤을 때 원본 완성 대본과 정확히 일치해야 합니다."
+    ].join("\n");
   }
 
   function shortsBackgroundDataUrl() {
@@ -1479,10 +1526,17 @@ export default function Home() {
             <span className={shortsSceneCountReady && shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {!shortsSceneCountReady ? "장면표 대기" : shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
             <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
-            <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>6초 초과 {shortsLongScenes.length ? shortsLongScenes.map(x => "장면" + x.scene.order).join(", ") : sceneTimeline.length ? "없음 ✓" : "미확인"}</span>
+            <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>장면 시간 {shortsLongScenes.length ? "조정 필요 · " + shortsLongScenes.map(x => "장면" + x.scene.order + "(" + x.duration.toFixed(1) + "초)").join(", ") : shortsExtendedGraphScenes.length ? "그래프 7초 예외 허용 ✓" : sceneTimeline.length ? "정상 ✓" : "미확인"}</span>
             <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
           </div>
-          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 내레이션을 분산해주세요.</p>}
+          {shortsExtendedGraphScenes.length > 0 && <p className="muted">그래프·비교표 장면 {shortsExtendedGraphScenes.map(x => x.scene.order + "번(" + x.duration.toFixed(1) + "초)").join(", ")}은 6~7초 허용 구간입니다. 장면을 추가로 나누지 않아도 ZIP 제작을 진행할 수 있습니다.</p>}
+          {shortsLongScenes.length > 0 && <>
+            <p className="voiceWarning">허용 시간을 넘는 장면이 있습니다: {shortsLongScenes.map(x => x.scene.order + "번 " + x.duration.toFixed(1) + "초").join(", ")}. 일반 장면은 6초, 3·4번 그래프 장면은 7초까지 허용합니다. 아래 수정 요청서를 복사해 7장면 내레이션을 재분배해 주세요.</p>
+            <div className="inlineActions">
+              <button type="button" className="secondary compact" onClick={() => copyText(shortsTimingRevisionPrompt(), "7장면 시간 수정 요청서를 복사했습니다.")}>📋 장면 시간 수정 요청 복사</button>
+              <button type="button" className="secondary compact" onClick={() => setPhase("analysis")}>장면표 수정하기</button>
+            </div>
+          </>}
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
           {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
