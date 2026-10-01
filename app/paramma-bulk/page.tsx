@@ -8,6 +8,7 @@ type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 �
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
 type SlotId = "00" | "01" | "02" | "03";
+type KickMode = "auto" | "research" | "manual";
 
 type SlotMeta = {
   status: SlotStatus;
@@ -20,6 +21,9 @@ type SlotMeta = {
 
 type TopicWork = {
   articlePrompt: string;
+  kickMode?: KickMode;
+  searchNotes?: string;
+  selectedKick?: string;
   body: string;
   bodyConfirmed: boolean;
   optional03: boolean;
@@ -333,12 +337,12 @@ function kickGuide(topic: Topic) {
     return "검색자가 이유뿐 아니라 예방·해결·관리·보관 등 어떤 실용 답을 기대하는지 먼저 판단하고, 주제와 실제로 연결되는 방법 1~3가지를 킥으로 선택한다. 실용 방법이 적절하지 않은 주제는 생활에서 볼 수 있는 의외의 비교나 흔한 오해의 해소를 보상으로 삼는다.";
   }
   if (topic.category === "신기한 동물이야기") {
-    return "행동·생존 전략·해부학에서 검증된 의외의 사실 하나를 킥으로 선택한다. 사람에게 직접 해보라는 생활 팁을 억지로 붙이지 않고, 비슷한 동물과의 차이 또는 실제 관찰을 읽는 재미를 보상으로 준다.";
+    return "독자가 주제와 함께 검색할 만한 생활 속 해결·관리·예방법이 있는지 먼저 살핀다. 동물 보호와 안전을 고려해 실용적인 킥이 자연스럽다면 채택하고, 억지 팁이 된다면 검증된 의외의 행동·관찰 포인트·오해 해소를 킥으로 선택한다.";
   }
   if (topic.category === "신비로운 자연") {
-    return "익숙한 자연현상을 새로 보게 만드는 관찰 포인트·조건 차이·잘 알려지지 않은 과정을 하나 선정한다. 놀라운 사진이나 숫자로 낚지 말고, 독자가 다음에 해당 현상을 볼 때 눈여겨볼 점을 남긴다.";
+    return "생활 속 안전·대처·관찰·활용으로 이어지는 연관 검색 의도가 있는지 먼저 살핀다. 자연스러운 실용 정보가 없다면 관찰 포인트·조건 차이·오해 해소 중 하나를 보상으로 선택하고, 수치나 사진으로 과장하지 않는다.";
   }
-  return "우리 몸의 작용 중 잘 알려지지 않은 사실·개인차·흔한 오해 중 하나를 킥으로 삼는다. 일상에서 이해할 수 있는 연결점을 주되 의학적 진단·치료법·실험을 만들어내지 않는다.";
+  return "독자가 이어서 궁금해할 일상 관리·정상 범위·주의할 신호가 안전하고 검증 가능한지 먼저 확인한다. 부자연스럽다면 개인차·오해 해소·관찰 포인트를 킥으로 삼으며 진단이나 치료를 단정하지 않는다.";
 }
 
 function buildArticlePrompt(topic: Topic, date = formatToday()) {
@@ -507,6 +511,90 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
 [제작 목표]`);
 }
 
+
+function buildArticlePromptV3(topic: Topic, date = formatToday()) {
+  return buildArticlePrompt(topic, date)
+    .replace("[Paramma V2 · 호기심 → 발견 → 보상]", "[Paramma V3 · 검색 의도 → 호기심 → 발견 → 보상]")
+    .replace("- 원고를 쓰기 전에 이 글의 핵심 독자 질문과 '이번 글만의 킥' 하나를 웹 검증을 바탕으로 내부 선정할 것.", "- 별도의 킥 입력이 없다면 글 작성 전에 웹에서 주제의 핵심 질문과 관련된 추가 검색 의도를 살펴 '이번 글만의 킥' 하나를 자동 선정할 것. 사용자에게 킥 선정을 요구하거나 원고 생성을 중단하지 말 것.")
+    .replace("- 킥은 검색 답을 반복하지 않으면서 독자가 추가로 알아갈 만한 실용 방법, 의외의 차이, 오해 해소, 관찰 포인트 중 주제에 맞는 단 하나로 정할 것.", "- 킥 선정의 우선순위: 주제와 자연스럽게 연결되는 실용적 해결·예방·관리 방법을 먼저 살피고, 맞지 않으면 의외의 차이·오해 해소·관찰 포인트 중 하나를 선택한다. 억지 생활 팁은 금지한다.")
+    .replace("[네이버 검색형 제목]", "[Paramma V3 · 자동 킥 기본 규칙]\n- 검색 조사나 직접 킥 입력이 없는 경우에도 반드시 원고를 끝까지 작성한다.\n- 검색어가 실제 자동완성·검색량 데이터라고 확인하지 않았다면 이를 관측 사실로 말하지 않는다.\n- 과학적 원리만 되풀이하는 대신 독자가 글을 읽고 가져갈 추가적인 보상을 하나 만든다.\n- 이미지 02는 본문에서 실제로 선정한 킥을 저장용 정보 카드로 구체적으로 보여준다. 이미지 01과 중복하지 않는다.\n\n[네이버 검색형 제목]");
+}
+
+function buildImagePromptV3(topic: Topic, slotId: SlotId) {
+  const prompt = buildImagePrompt(topic, slotId);
+  if (slotId === "00") return prompt;
+  return prompt
+    .replace("[Paramma V2 · 이미지 기획]", "[Paramma V3 · 이미지 기획]")
+    .replace("- 주제별 킥 참고: " + kickGuide(topic), "- 킥 선정은 카테고리 고정 규칙보다 실제 발행 원고의 검색 의도와 확정된 보상을 우선한다.")
+    .replace("동물·자연·우리 몸이면 새로운 관찰 포인트·의외의 구조·흔한 오해의 비교를 선택한다.", "동물·자연·우리 몸도 주제와 연결되는 검증된 실용 방법이 킥이면 이를 우선 시각화한다. 그런 정보가 부자연스러울 때만 관찰 포인트·의외의 구조·오해 비교로 구성한다.");
+}
+
+function buildKeywordResearchPrompt(topic: Topic) {
+  return [
+    "[Paramma V3 · 네이버 검색어 추천 요청]",
+    "주제: " + topic.title,
+    "카테고리: " + topic.category,
+    "기획 의도: " + topic.brief,
+    "",
+    "이 주제를 네이버에서 수동 조사하려고 한다. 검색창에 직접 입력할 검색어 5~6개를 추천해 줘.",
+    "- 핵심 호기심 검색어 1~2개, 연관 생활 질문·문제 해결·관리 검색어 2~3개, 대체 표현 1개를 섞어 줘.",
+    "- 어떤 검색어를 먼저 확인할지와 결과에서 살펴볼 포인트를 짧게 정리해 줘.",
+    "- 실제 검색량·자동완성·연관검색어를 확인하지 않았다면 확인한 것처럼 단정하지 마.",
+    "- 아직 킥이나 본문을 작성하지 말고 검색어 추천만 해 줘."
+  ].join("\n");
+}
+
+function buildKickAnalysisPrompt(topic: Topic, searchNotes: string) {
+  return [
+    "[Paramma V3 · 네이버 검색 의도와 킥 분석]",
+    "주제: " + topic.title,
+    "카테고리: " + topic.category,
+    "기획 의도: " + topic.brief,
+    "",
+    "[사용자가 직접 조사한 네이버 검색 메모]",
+    searchNotes.trim() || "(입력된 검색 메모 없음. 관련 검색어부터 추천해 주세요.)",
+    "",
+    "이 자료만으로 실제 검색량이나 순위를 추정하지 말고, 필요한 사실은 별도 웹 검색으로 검증해 줘.",
+    "원래의 신비한 현상 설명과 자연스럽게 연결되면서 독자가 추가로 검색하거나 저장하고 싶어 할 킥 후보를 비교해 줘.",
+    "해결·예방·관리 같은 생활형 보상이 적절한지 우선 판단하되 억지 팁은 금지해.",
+    "출력: (1) 핵심 검색 의도 (2) 추가 궁금증 (3) 킥 후보 2~3개 (4) 가장 자연스러운 추천 킥 한 줄 (5) 이미지 02 정보 카드 방향.",
+    "추천 킥은 사이트의 '확정할 킥(선택)' 칸에 복사하기 쉽게 한 줄로 별도 표기해 줘."
+  ].join("\n");
+}
+
+function derivedKickFromBody(body: string) {
+  const match = body.match(/(?:이번 글의 킥|선정한 킥|확정 킥)\s*[:：]\s*([^\n]+)/i);
+  return match ? match[1].replace(/[*_]/g, "").trim().slice(0, 280) : "";
+}
+
+function kickContext(work: TopicWork, image02 = false) {
+  const mode = work.kickMode || "auto";
+  const notes = mode === "research" ? (work.searchNotes || "").trim() : "";
+  const chosen = mode !== "auto" ? (work.selectedKick || "").trim() : "";
+  const bodyKick = image02 && !chosen ? derivedKickFromBody(work.body || "") : "";
+  if (!notes && !chosen && !bodyKick) return "";
+  return [
+    "",
+    "",
+    "[Paramma V3 · 최신 킥 입력 — 앞선 일반 선정 지침과 충돌하면 이 항목이 우선]",
+    notes ? "[네이버 검색 조사 메모]\n" + notes + "\n- 실제 검색량이나 자동완성으로 확인한 자료가 아닌 부분은 단정하지 말 것." : "",
+    chosen ? "[사용자가 확정한 킥]\n" + chosen + "\n- 이 킥을 임의로 다른 과학 상식이나 관찰 실험으로 교체하지 말 것. 검증되지 않거나 부적절한 방법은 사실을 바로잡아 안전하게 다룰 것." :
+      bodyKick ? "[완성 원고의 검수 메모에서 확인한 킥]\n" + bodyKick + "\n- 이미지 02에 이 보상을 정확히 반영할 것." :
+      "- 킥 미지정: 검색 메모를 고려해 웹 검증 후 가장 자연스러운 보상 하나를 자동 선정하고 작업을 계속할 것.",
+    image02 ? "- 02번 이미지는 해당 킥의 핵심 방법·비교·관찰 포인트를 구체적인 정보 카드로 시각화. 본문 01의 원리 그림과 중복하지 말 것." :
+      "- 최종 본문과 검수 메모 및 이미지 02의 기획을 같은 킥 기준으로 일치시킬 것."
+  ].filter(Boolean).join("\n");
+}
+
+function articlePromptForWork(work: TopicWork) {
+  return work.articlePrompt + kickContext(work);
+}
+
+function imagePromptForWork(work: TopicWork, slotId: SlotId) {
+  const base = work.slots[slotId].prompt;
+  return slotId === "02" ? base + kickContext(work, true) : base;
+}
+
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
   let changed = false;
   const next = { ...works };
@@ -517,8 +605,8 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
 
     const savedDate = current.articlePrompt?.match(/\[작성 기준일\]\n([^\n]+)\n\n\[발행 정보\]/)?.[1] || formatToday();
     // 이미 직접 수정한 요청서는 자동으로 덮어쓰지 않는다.
-    const articlePrompt = current.articlePrompt === buildArticlePromptV1(topic, savedDate)
-      ? buildArticlePrompt(topic, savedDate)
+    const articlePrompt = current.articlePrompt === buildArticlePromptV1(topic, savedDate) || current.articlePrompt === buildArticlePrompt(topic, savedDate)
+      ? buildArticlePromptV3(topic, savedDate)
       : current.articlePrompt;
     const slots = { ...current.slots };
     let topicChanged = articlePrompt !== current.articlePrompt;
@@ -528,10 +616,11 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
       if (!slot) continue;
       if (
         slot.prompt === buildImagePromptV1(topic, slotId) ||
+        slot.prompt === buildImagePrompt(topic, slotId) ||
         slot.prompt === buildLegacyImagePrompt(topic, slotId) ||
         isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)
       ) {
-        slots[slotId] = { ...slot, prompt: buildImagePrompt(topic, slotId) };
+        slots[slotId] = { ...slot, prompt: buildImagePromptV3(topic, slotId) };
         topicChanged = true;
       }
     }
@@ -554,15 +643,18 @@ function normalizeParammaTopic(value: string) {
 
 function defaultWork(topic: Topic): TopicWork {
   return {
-    articlePrompt: buildArticlePrompt(topic),
+    articlePrompt: buildArticlePromptV3(topic),
+    kickMode: "auto",
+    searchNotes: "",
+    selectedKick: "",
     body: "",
     bodyConfirmed: false,
     optional03: false,
     slots: {
-      "00": { status: "waiting", prompt: buildImagePrompt(topic, "00") },
-      "01": { status: "waiting", prompt: buildImagePrompt(topic, "01") },
-      "02": { status: "waiting", prompt: buildImagePrompt(topic, "02") },
-      "03": { status: "waiting", prompt: buildImagePrompt(topic, "03") },
+      "00": { status: "waiting", prompt: buildImagePromptV3(topic, "00") },
+      "01": { status: "waiting", prompt: buildImagePromptV3(topic, "01") },
+      "02": { status: "waiting", prompt: buildImagePromptV3(topic, "02") },
+      "03": { status: "waiting", prompt: buildImagePromptV3(topic, "03") },
     },
   };
 }
@@ -715,7 +807,9 @@ export default function ParammaBulkPage() {
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
-  const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(work.articlePrompt);
+  const effectiveArticlePrompt = articlePromptForWork(work);
+  const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
+  const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
   const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
@@ -1002,28 +1096,28 @@ export default function ParammaBulkPage() {
   }
 
 
-  function regenerateParammaV2Prompts() {
-    if (!window.confirm("현재 원고·등록 이미지·진행 상태는 유지하고, 본문 및 이미지 요청서 문구만 Paramma V2로 다시 생성할까요? 직접 수정한 요청서 문구는 새 내용으로 교체됩니다.")) return;
+  function regenerateParammaV3Prompts() {
+    if (!window.confirm("현재 원고·등록 이미지·진행 상태와 킥 설정은 유지하고, 본문 및 이미지 기본 요청서 문구만 Paramma V3로 다시 생성할까요? 직접 수정한 요청서 문구는 새 내용으로 교체됩니다.")) return;
     setWorks((prev) => {
       const base = prev[selected.id] || defaultWork(selected);
       const slots = { ...base.slots };
-      for (const slotId of SLOT_IDS) slots[slotId] = { ...slots[slotId], prompt: buildImagePrompt(selected, slotId) };
-      return { ...prev, [selected.id]: { ...base, articlePrompt: buildArticlePrompt(selected), slots } };
+      for (const slotId of SLOT_IDS) slots[slotId] = { ...slots[slotId], prompt: buildImagePromptV3(selected, slotId) };
+      return { ...prev, [selected.id]: { ...base, articlePrompt: buildArticlePromptV3(selected), slots } };
     });
-    setNotice("이번 글에 Paramma V2 · 호기심 → 발견 → 보상 요청서를 적용했습니다. 원고와 이미지 파일은 그대로 보존했습니다.");
+    setNotice("이번 글에 Paramma V3 · 검색 의도 기반 요청서를 적용했습니다. 원고와 이미지 파일은 그대로 보존했습니다.");
   }
 
   async function copyArticlePrompt() {
     startTopic(selected.id);
     const current = ensureWork();
-    await copyText(current.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+    await copyText(articlePromptForWork(current), `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
   }
 
   async function copyImagePrompt(slotId: SlotId) {
     const current = ensureWork();
     const meta = current.slots[slotId];
     const copied = await copyText(
-      meta.prompt,
+      imagePromptForWork(current, slotId),
       `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다. ChatGPT 새 채팅에서 Ctrl+V로 붙여넣으세요.`
     );
     if (!copied) return;
@@ -1160,9 +1254,9 @@ export default function ParammaBulkPage() {
         folder.file(SLOT_INFO[slotId].filename, record.blob);
       }
       folder.file("final_post.txt", current.body);
-      folder.file("article_request.txt", current.articlePrompt);
-      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${current.slots[slotId].prompt}`).join("\n\n====================\n\n"));
-      folder.file("project.json", JSON.stringify({ topic: selected, bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
+      folder.file("article_request.txt", articlePromptForWork(current));
+      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId)}`).join("\n\n====================\n\n"));
+      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1329,6 +1423,58 @@ export default function ParammaBulkPage() {
             <h2>{selected.title}</h2>
             <p className={styles.brief}>{selected.brief}</p>
 
+            <div className={styles.kickPanel}>
+              <div className={styles.kickPanelHead}>
+                <div>
+                  <p className={styles.eyebrow}>NEW · PARAMMA V3</p>
+                  <h3>이번 글의 킥 설정</h3>
+                </div>
+                <span>미입력이어도 원고 제작 가능</span>
+              </div>
+              <div className={styles.kickModeChoices} role="radiogroup" aria-label="킥 선정 방식">
+                {([
+                  ["auto", "✨ AI 자동 선정", "기본값 · 바로 글 제작"],
+                  ["research", "🔎 네이버 검색 조사", "검색 메모로 방향 잡기"],
+                  ["manual", "✍️ 직접 킥 지정", "원하는 보상을 한 줄 입력"]
+                ] as const).map(([mode, label, description]) => (
+                  <label key={mode} className={kickMode === mode ? styles.kickModeActive : ""}>
+                    <input type="radio" name={"kick-mode-" + selected.id} value={mode} checked={kickMode === mode} onChange={() => patchWork({ kickMode: mode })} />
+                    <b>{label}</b>
+                    <small>{description}</small>
+                  </label>
+                ))}
+              </div>
+              {kickMode === "auto" && (
+                <p className={styles.kickHint}>별도 입력 없이 GPT가 웹에서 연관 검색 의도를 확인하고 자연스러운 실용 방법을 우선 검토합니다. 맞지 않으면 관찰·비교·오해 해소로 선정합니다.</p>
+              )}
+              {kickMode === "research" && (
+                <div className={styles.kickInputs}>
+                  <div className={styles.kickResearchActions}>
+                    <a target="_blank" rel="noopener noreferrer" href={"https://chatgpt.com/?q=" + encodeURIComponent(buildKeywordResearchPrompt(selected))} onClick={() => { void copyText(buildKeywordResearchPrompt(selected), "검색어 추천 요청서를 복사했습니다."); }}>검색어 추천받기 ↗</a>
+                    <a target="_blank" rel="noopener noreferrer" href={"https://search.naver.com/search.naver?query=" + encodeURIComponent(selected.title)}>네이버에서 주제 검색 ↗</a>
+                  </div>
+                  <label>
+                    네이버 검색 결과 메모 <small>(선택 · 자동완성, 연관 검색어, 상위 글 제목 등)</small>
+                    <textarea value={work.searchNotes || ""} onChange={(e) => patchWork({ searchNotes: e.target.value })} placeholder={"예) 거미줄 제거 방법\\n베란다 거미줄 제거\\n거미줄 재발 방지"} />
+                  </label>
+                  <a className={styles.kickAnalyze} target="_blank" rel="noopener noreferrer" href={"https://chatgpt.com/?q=" + encodeURIComponent(buildKickAnalysisPrompt(selected, work.searchNotes || ""))} onClick={() => { void copyText(buildKickAnalysisPrompt(selected, work.searchNotes || ""), "검색 의도 분석 요청서를 복사했습니다."); }}>검색 결과 분석·킥 추천받기 ↗</a>
+                  <label>
+                    추천받은 킥 확정 <small>(선택 · 비워 두면 검색 메모를 바탕으로 AI 선정)</small>
+                    <input type="text" value={work.selectedKick || ""} onChange={(e) => patchWork({ selectedKick: e.target.value })} placeholder="예) 집 안 거미줄 제거 방법과 재발 방지" />
+                  </label>
+                </div>
+              )}
+              {kickMode === "manual" && (
+                <div className={styles.kickInputs}>
+                  <label>
+                    직접 지정할 킥 <small>(비워 두면 AI 자동 선정)</small>
+                    <input type="text" value={work.selectedKick || ""} onChange={(e) => patchWork({ selectedKick: e.target.value })} placeholder="예) 거미줄 제거 방법과 재발 방지" />
+                  </label>
+                </div>
+              )}
+              <p className={styles.kickHint}>최종 킥은 본문과 이미지 02 요청서에 함께 반영됩니다. 설정을 바꿔도 작성한 본문·등록 이미지는 삭제되지 않습니다.</p>
+            </div>
+
             <div className={styles.primaryActions}>
               <a
                 className={styles.primary}
@@ -1337,7 +1483,7 @@ export default function ParammaBulkPage() {
                 rel="noopener noreferrer"
                 onClick={() => {
                   startTopic(selected.id);
-                  void copyText(work.articlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+                  void copyText(effectiveArticlePrompt, `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
                 }}
               >
                 📝 본문·이미지 기획 요청서 복사 + 열기
@@ -1345,14 +1491,15 @@ export default function ParammaBulkPage() {
               <button type="button" className={styles.secondary} onClick={() => void copyArticlePrompt()}>
                 요청서만 복사
               </button>
-              <button type="button" className={styles.secondary} onClick={regenerateParammaV2Prompts}>
-                ✨ V2 요청서 적용
+              <button type="button" className={styles.secondary} onClick={regenerateParammaV3Prompts}>
+                ✨ V3 요청서 적용
               </button>
             </div>
 
             <details className={styles.promptDetails}>
               <summary>본문 요청서 확인·수정</summary>
               <textarea value={work.articlePrompt} onChange={(e) => patchWork({ articlePrompt: e.target.value })} />
+              <p className={styles.kickHint}>킥·검색 메모는 요청서 복사 및 ChatGPT 열기 시 이 기본 요청서 뒤에 자동으로 추가됩니다.</p>
             </details>
 
             <label className={styles.bodyLabel}>
@@ -1389,7 +1536,8 @@ export default function ParammaBulkPage() {
                 const meta = work.slots[slotId];
                 const image = images[slotId];
                 const optionalInactive = slotId === "03" && !work.optional03;
-                const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(meta.prompt);
+                const effectiveImagePrompt = imagePromptForWork(work, slotId);
+                const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
                 return (
                   <article key={slotId} className={`${styles.imageCard} ${optionalInactive ? styles.inactiveCard : ""}`}>
                     <div className={styles.imageCardHead}>
