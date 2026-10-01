@@ -890,14 +890,18 @@ export default function Home() {
     ctx.drawImage(base, 0, 0, 1080, 1920);
     const overlay = await loadImage(shortsCustomOverlays[scene.order - 1] || await renderShortsOverlay(scene));
     ctx.drawImage(overlay, 0, 0, 1080, 1920);
-    const caption = splitOneLineCaptions(scene.narration || scene.subtitle, 20)[0] || "";
+    const caption = splitOneLineCaptions(scene.narration || scene.subtitle)[0] || "";
     if (caption) {
-      ctx.font = '700 47px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      const x = 540; const y = 1510;
-      ctx.fillStyle = "rgba(0,0,0,.78)";
-      ctx.beginPath(); ctx.roundRect(65, 1478, 950, 115, 25); ctx.fill();
+      // First cue preview. Final video uses every cue from subtitles_full.srt.
+      const fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      ctx.font = '800 86px ' + fontFamily;
+      const measured = ctx.measureText(caption).width;
+      const fontSize = Math.min(86, Math.max(45, Math.floor(86 * 910 / Math.max(measured, 1))));
+      ctx.font = '800 ' + fontSize + 'px ' + fontFamily;
+      ctx.fillStyle = "rgba(0,0,0,.84)";
+      ctx.beginPath(); ctx.roundRect(45, 1468, 990, 170, 28); ctx.fill();
       ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffffff";
-      ctx.fillText(caption, x, y + 28, 870);
+      ctx.fillText(caption, 540, 1553, 910);
     }
     return canvas.toDataURL("image/png");
   }
@@ -966,8 +970,10 @@ export default function Home() {
       "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
       "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
       "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
-      "- subtitles_full.srt는 최종 1.4배속 타임라인으로 이미 변환된 1줄 자막. 한 줄씩 빠짐없이 정확하게 표시.",
-      "- 하단 자막은 Y 1450~1660 범위(1080×1920 기준)에 중앙 정렬, 짙은 반투명 배경으로 정보 카드와 겹치지 않게 합성.",
+      "- subtitles_full.srt는 최종 1.4배속 기준 의미 단위로 분할된 1줄 자막입니다. 큐 순서·시작·종료 시각·문구를 그대로 적용하세요. GPT가 임의로 글자 수대로 다시 분할하거나 합치거나 대사를 재작성하지 마세요.",
+      "- 모든 자막은 동일한 고정 위치 X540/Y1553(1080×1920) 중앙 정렬, Y1450~1660 범위에 정확히 1줄만 표시하세요.",
+      "- 자막 글꼴은 굵은 고딕 ExtraBold, 기본 86px(기존 47px보다 약 1.8배), 흰색에 짙은 그림자. 긴 단지명·숫자는 잘라내거나 두 줄로 넘기지 말고 해당 큐의 글꼴만 너비 910px 안에 비례 축소하세요.",
+      "- 자막 배경은 모든 장면에서 X45~1035/Y1468~1638의 동일한 짙은 반투명 둥근 박스를 사용하세요. 위치·높이·기준선을 장면마다 바꾸지 마세요.",
       "- Y 1720~1920은 쇼츠 UI 영역이므로 비워두기.",
       "- voice.mp3 또는 voice.wav는 정확히 1.4배속 적용. SRT 속도를 다시 바꾸지 않기.",
       "- bgm.mp3 또는 bgm.wav는 audio_plan.txt 기준으로 음성보다 충분히 낮게 재생.",
@@ -1588,7 +1594,7 @@ export default function Home() {
 
         <div className="box">
           <div className="miniHead"><h3>최종 영상 조립 요청서 · ZIP 첨부용</h3><div className="inlineActions"><button className="secondary compact" disabled={!shortsAssemblyReady} onClick={() => copyText(shortsVideoPrompt(), "영상 조립 요청서를 복사했습니다. 다운로드한 ZIP을 GPT에 첨부하세요.")}>📋 영상 조립 요청서 복사</button><button className="primary" disabled={!shortsAssemblyReady} onClick={() => openGPT(shortsVideoPrompt())}>GPT에서 영상 조립 ↗</button></div></div>
-          <p className="muted">빠른 조립 ZIP 다운로드 → GPT 열기 → ZIP 파일 1개 직접 첨부 → 조립 요청서 붙여넣고 전송. 브라우저 보안상 ZIP 첨부는 직접 해야 합니다.</p>
+          <p className="muted">빠른 조립 ZIP 다운로드 → GPT 열기 → ZIP 파일 1개 직접 첨부 → 조립 요청서 붙여넣고 전송. SRT는 의미 단위 한 줄 자막으로 분할하며, 영상 자막은 약 86px 굵기로 같은 Y 위치에 고정합니다. ZIP 첨부는 브라우저 보안상 직접 해야 합니다.</p>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
             <span>background.png 한 장을 영상 끝까지 고정 + overlays/01~07 정보판만 교체</span>
