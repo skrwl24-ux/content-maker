@@ -22,9 +22,9 @@ export function sceneKind(scene: OverlayScene): string {
   const kind = scene.screenType || "";
   if (/거래량|막대/.test(kind)) return "bar";
   if (/가격 비교표|가격표/.test(kind)) return "price";
+  if (/비교 기준|주의|텍스트 카드/.test(kind)) return "notice";
   if (/기준 카드|조사 기준/.test(kind)) return "criteria";
   if (/핵심 숫자|강조/.test(kind)) return "highlight";
-  if (/비교 기준|주의|텍스트 카드/.test(kind)) return "notice";
   if (/엔딩/.test(kind)) return "ending";
   if (/질문/.test(kind)) return "cover";
   // Migrate older six/seven-scene plan types without using old AI graphics.
