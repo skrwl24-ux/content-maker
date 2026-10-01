@@ -72,3 +72,22 @@
 .voiceWarning{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#fff4e8;color:#b46512;font-weight:750}
 
 .voiceScriptEditor{min-height:190px;font-size:16px;line-height:1.75;background:#fff;border:1px solid #dfe5ee;border-radius:14px;padding:14px;resize:vertical}
+
+
+/* Jibssuk approved visual-master request library */
+.masterReferenceBox{background:linear-gradient(180deg,#f7f9ff,#fff);border-color:#cfdaf0}
+.masterReferenceLayout{display:grid;grid-template-columns:128px minmax(0,1fr);gap:18px;align-items:start;margin:12px 0 18px}
+.masterReferenceThumb{width:128px;aspect-ratio:9/16;object-fit:contain;background:#13233e;border-radius:10px;box-shadow:0 8px 20px rgba(19,35,62,.2)}
+.masterReferencePlaceholder{width:128px;aspect-ratio:9/16;border:1px dashed #9db1d4;border-radius:10px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;font-weight:700;color:#64748b;background:#edf2fa;font-size:12px;line-height:1.6}
+.masterReferenceActions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px}
+.masterReferenceActions .muted,.masterReferenceActions .ok{flex-basis:100%;margin:4px 0}
+.masterSceneCards{display:grid;gap:8px;margin-top:12px}
+.masterSceneCard{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;border:1px solid #dce4f0;background:white;border-radius:13px;padding:12px}
+.masterSceneCard>div:first-child{min-width:145px;flex:1}
+.masterSceneCard b,.masterSceneCard small{display:block}
+.masterSceneCard b{font-size:15px;color:#182944}
+.masterSceneCard small{margin-top:3px;color:#697d9a;font-size:12px}
+.masterSceneCard .inlineActions{justify-content:flex-end}
+.masterSceneCard button:disabled{opacity:.37;cursor:not-allowed}
+.masterPromptPreview{flex-basis:100%;width:100%;font-family:inherit;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:380px;margin:4px 0 0;border:1px solid #d8e1ed;background:#f7f9fd;border-radius:10px;padding:13px;color:#25374e;font-size:12px;line-height:1.6}
+@media(max-width:650px){.masterReferenceLayout{grid-template-columns:90px minmax(0,1fr);gap:10px}.masterReferenceThumb,.masterReferencePlaceholder{width:90px}.masterSceneCard>div:first-child{flex-basis:100%}.masterSceneCard .inlineActions{justify-content:flex-start}.masterSceneCard .inlineActions>*{flex:1}}
