@@ -102,7 +102,7 @@ const PRESETS: Record<string, { width: number; height: number; label: string }> 
 
 const SHORTS_DRAFT_KEY = "content-maker-jibssuk-shorts-draft-v1";
 const LAST_CONTENT_TYPE_KEY = "content-maker-last-content-type-v1";
-const SHORTS_PLAYBACK_RATE = 1.5;
+const SHORTS_PLAYBACK_RATE = 1.4;
 
 function cleanName(v: string) {
   return v.replace(/[\\/:*?"<>|\s]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 38) || "image";
@@ -504,7 +504,7 @@ export default function Home() {
       `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
       "",
       "[고정 제작 기준]",
-      "- 음성은 1.5배속으로 사용할 예정",
+      "- 음성은 1.4배속으로 사용할 예정",
       "- 완성 영상 목표 30~33초",
       "- 전체 내레이션은 공백 제외 210~225자로 작성",
       "- 새로운 고정 배경 정보판 7장면으로 자연스럽게 나눌 수 있는 흐름",
@@ -533,7 +533,7 @@ export default function Home() {
       "- 공백과 줄바꿈을 모두 제외한 실제 내레이션이 210~225자인지 세고, 범위를 벗어나면 고정 멘트는 유지한 채 중간 설명을 다듬을 것",
       "- '집.값.쓱. 해보겠습니다.' / '차이가 꽤 나죠.' / '근데 여기서 잠깐.' / '[대표 지역명] 집값, 오늘도. 집.값.쓱.' 네 구절의 존재·순서·표기를 확인할 것",
       "- 원문 밖의 숫자·순위·단지명은 없는지, 월 진행 중 집계와 서로 다른 면적·거래 기준을 섞어 단정하지 않았는지 확인할 것",
-      "- 정확히 7장면으로 끊기 쉬운 짧은 호흡인지, 1.5배속에서도 발음이 뭉개지지 않을지 확인할 것",
+      "- 정확히 7장면으로 끊기 쉬운 짧은 호흡인지, 1.4배속에서도 발음이 뭉개지지 않을지 확인할 것",
       "",
       "[출력 형식]",
       "- 설명이나 제목, 글자 수, 검수 결과를 붙이지 말 것",
@@ -735,7 +735,7 @@ export default function Home() {
       "- 쉼표에서는 아주 짧게 쉬고, 마침표에서는 한 호흡 쉬어 자연스럽게 연결",
       "- '집.값.쓱.'처럼 마침표로 나눈 표현은 각 음절을 또렷하게 끊어 읽을 것",
       "- 짧고 빠른 정보 전달형 템포",
-      "- 음성 파일 자체는 원본 속도로 생성해도 됨. 최종 쇼츠 편집 단계에서 정확히 1.5배속 적용 예정",
+      "- 음성 파일 자체는 원본 속도로 생성해도 됨. 최종 쇼츠 편집 단계에서 정확히 1.4배속 적용 예정",
       "- BGM, 효과음 없이 내레이션 음성만 출력",
       "- MP3 또는 WAV 파일로 제공",
       "- 대본을 요약하거나 바꾸지 말 것",
@@ -784,12 +784,12 @@ export default function Home() {
   function shortsAudioPlanExport() {
     return [
       voiceDuration
-        ? `음성 원본: ${voiceDuration.toFixed(1)}초 → 반드시 1.5배속 → 최종 약 ${finalVoiceDuration.toFixed(1)}초`
-        : "음성: 반드시 1.5배속 적용",
+        ? `음성 원본: ${voiceDuration.toFixed(1)}초 → 반드시 1.4배속 → 최종 약 ${finalVoiceDuration.toFixed(1)}초`
+        : "음성: 반드시 1.4배속 적용",
       "BGM: 보컬 없이 사용하고 내레이션이 항상 명확하게 들리도록 낮게 유지",
       "권장 BGM 레벨: 내레이션보다 약 18~24dB 낮게 시작하고, 말하는 동안 더 낮춰도 됨",
       "효과음: 기본적으로 사용하지 않음",
-      "영상 전체 길이는 1.5배속 적용된 음성 길이를 기준으로 맞출 것"
+      "영상 전체 길이는 1.4배속 적용된 음성 길이를 기준으로 맞출 것"
     ].join("\n");
   }
 
@@ -914,10 +914,10 @@ export default function Home() {
       "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
       "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
       "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
-      "- subtitles_full.srt는 최종 1.5배속 타임라인으로 이미 변환된 1줄 자막. 한 줄씩 빠짐없이 정확하게 표시.",
+      "- subtitles_full.srt는 최종 1.4배속 타임라인으로 이미 변환된 1줄 자막. 한 줄씩 빠짐없이 정확하게 표시.",
       "- 하단 자막은 Y 1450~1660 범위(1080×1920 기준)에 중앙 정렬, 짙은 반투명 배경으로 정보 카드와 겹치지 않게 합성.",
       "- Y 1720~1920은 쇼츠 UI 영역이므로 비워두기.",
-      "- voice.mp3 또는 voice.wav는 정확히 1.5배속 적용. SRT 속도를 다시 바꾸지 않기.",
+      "- voice.mp3 또는 voice.wav는 정확히 1.4배속 적용. SRT 속도를 다시 바꾸지 않기.",
       "- bgm.mp3 또는 bgm.wav는 audio_plan.txt 기준으로 음성보다 충분히 낮게 재생.",
       "- 모든 레이어는 마지막 음성과 마지막 자막이 끝나는 지점에서 동시에 종료.",
       "", "[편집표]", shortsEditPlanExport()
@@ -1267,7 +1267,7 @@ export default function Home() {
         <label>원문 자료</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="블로그 글이나 실거래 자료를 붙여넣으세요." />
         <div className="box">
           <h3>다음 단계에서 자동으로 지킬 기준</h3>
-          <div className="tags"><span>1.5x 음성</span><span>210~225자</span><span>30~33초</span><span>질문형 시작</span><span>집.값.쓱. 고정 멘트</span><span>차이가 꽤 나죠.</span></div>
+          <div className="tags"><span>1.4x 음성</span><span>210~225자</span><span>30~33초</span><span>질문형 시작</span><span>집.값.쓱. 고정 멘트</span><span>차이가 꽤 나죠.</span></div>
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><div className="inlineActions"><button className="secondary" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" disabled={rawContent.trim().length < 30} onClick={openShortsScriptMaker}>GPT로 대본 만들기 ↗</button></div></div>
       </> : <>
@@ -1278,16 +1278,16 @@ export default function Home() {
         <label>본문</label><textarea value={rawContent} onChange={e => setRawContent(e.target.value)} placeholder="본문을 붙여넣으세요. 30자 이상이면 분석할 수 있습니다." />
         {isShorts && <div className="box">
           <div className="miniHead"><h3>① 쇼츠 대본</h3><div className="inlineActions"><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => copyText(shortsScriptPrompt(), "쇼츠 대본 요청서를 복사했습니다.")}>📋 대본 요청서 복사</button><button className="secondary compact" onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT 열기</button></div></div>
-          <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.5배속 · 공백 제외 210~225자 · 30~33초입니다. 입력 내용은 이 브라우저에 자동 임시저장됩니다.</p>
+          <p className="muted">GPT에 요청서를 붙여넣고 나온 완성 내레이션만 아래에 붙여넣으세요. 기준은 1.4배속 · 공백 제외 210~225자 · 30~33초입니다. 입력 내용은 이 브라우저에 자동 임시저장됩니다.</p>
           <label>완성 대본</label>
           <textarea className="smallArea" value={shortsScript} onChange={e => setShortsScript(e.target.value)} placeholder="GPT에서 만든 완성 내레이션을 붙여넣으세요." />
           <div className="tags">
-            <span>1.5x</span>
+            <span>1.4x</span>
             <span>목표 30~33초</span>
             <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>공백 제외 {shortsCharCount}/210~225자</span>
             {shortsCharCount > 0 && <span>글자수 기준 약 {shortsEstimatedSeconds.toFixed(1)}초</span>}
           </div>
-          <p className="muted">예상 시간은 글자수 기준 참고값입니다. 최종 길이는 실제 1.5배속 TTS 파일을 기준으로 확인합니다.</p>
+          <p className="muted">예상 시간은 글자수 기준 참고값입니다. 최종 길이는 실제 1.4배속 TTS 파일을 기준으로 확인합니다.</p>
         </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("home")}>이전</button><button className="primary" disabled={rawContent.trim().length < 30 || loading || (isShorts && shortsScript.trim().length < 50)} onClick={analyze}>{loading ? "분석 중..." : isShorts ? "쇼츠 요청서 구성" : "본문 분석"}</button></div>
       </>)}
@@ -1311,7 +1311,7 @@ export default function Home() {
           <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => setShortsVoiceOverride(e.target.value)} />
           <p className="muted">숫자·단위 변환과 기본 호흡은 자동으로 넣습니다. 단지명 띄어쓰기나 쉼표가 어색하면 이 원고만 직접 손보면 됩니다. 화면용 대본과 자막 숫자는 바뀌지 않습니다.</p>
           <div className="tags">
-            <span>1.5x 기준</span>
+            <span>1.4x 기준</span>
             <span>목표 30~33초</span>
             <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>음성용 {shortsVoiceCharCount}자</span>
             <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
@@ -1418,7 +1418,7 @@ export default function Home() {
             <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
             <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
-            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.5x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.5배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
+            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.4x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.4배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
           </div>
 
           <div className="box assetUploadBox">
@@ -1435,13 +1435,13 @@ export default function Home() {
         <div className="box">
           <div className="miniHead"><h3>④ 한 줄 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
           {sceneTimeline.length > 0 ? <div className="timelineSimple">{sceneTimeline.map(item => <div key={item.scene.order}><b>{item.scene.order}. {item.start.toFixed(1)}~{item.end.toFixed(1)}초</b><span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 장면 시간을 자동 배분합니다.</p>}
-          <p className="muted">SRT는 원문 내레이션을 빠짐없이 보존하면서 20자 안팎의 한 줄 큐로 나누고, 1.5배속 최종 타임라인에 배치합니다. 배경·투명 정보판·자막은 서로 별도 레이어입니다.</p>
+          <p className="muted">SRT는 원문 내레이션을 빠짐없이 보존하면서 20자 안팎의 한 줄 큐로 나누고, 1.4배속 최종 타임라인에 배치합니다. 배경·투명 정보판·자막은 서로 별도 레이어입니다.</p>
         </div>
 
         <div className="assetChecklist">
           <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
           <span className={shortsSceneCountReady && shortsDataIssues.length===0 ? "ready" : ""}>코드 정보판 {!shortsSceneCountReady ? `${shortsScenes.length}/7 · 장면표 대기` : shortsDataIssues.length ? "데이터 수정 필요" : "7장 자동 생성 ✓"}</span>
-          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.5x) ✓" : "✓") : "대기"}</span>
+          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.4x) ✓" : "✓") : "대기"}</span>
           <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>한 줄 SRT {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 확인"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
@@ -1467,7 +1467,7 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. 집값쓱 V3 조립 패키지</h2><p>공통 배경 1장과 코드로 만든 투명 정보판 7장, 한 줄 SRT를 ZIP으로 출력합니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
+        <div className="sectionHead"><div><h2>5. 집값쓱 V3 조립 패키지</h2><p>공통 배경 1장과 코드로 만든 투명 정보판 7장, 한 줄 SRT를 ZIP으로 출력합니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.4x" : "음성 기준"}</span></div>
         {!shortsAssemblyReady && <p className="stagePreviewNote">미리보기: 조립에 필요한 장면표·배경·음성이 준비되면 검수가 완료되고 ZIP 다운로드가 활성화됩니다.</p>}
 
         <div className="box finalPackageBox">
