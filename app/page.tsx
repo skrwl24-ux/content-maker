@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
+import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
@@ -223,6 +224,10 @@ export default function Home() {
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmMemo, setBgmMemo] = useState("");
   const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
+  const [shortsMasterReference, setShortsMasterReference] = useState("");
+  const [shortsImagePromptPreview, setShortsImagePromptPreview] = useState(0);
+  const [shortsCustomOverlays, setShortsCustomOverlays] = useState<string[]>(() => Array(7).fill(""));
+  const [shortsOverlayNotice, setShortsOverlayNotice] = useState("");
   const [voiceDuration, setVoiceDuration] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -319,6 +324,10 @@ export default function Home() {
   useEffect(() => {
     refreshSaved().catch(() => {});
     try {
+      const savedMaster = window.localStorage.getItem(JIBSSUK_MASTER_REFERENCE_KEY);
+      if (savedMaster?.startsWith("data:image/")) setShortsMasterReference(savedMaster);
+    } catch {}
+    try {
       const lastType = window.localStorage.getItem(LAST_CONTENT_TYPE_KEY);
       const raw = window.localStorage.getItem(SHORTS_DRAFT_KEY);
       if (lastType === "집값쓱 쇼츠" && raw) {
@@ -396,7 +405,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -617,6 +626,70 @@ export default function Home() {
     setShortsScenes(prev => prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene));
   }
 
+  function imagePromptForScene(order: number) {
+    const scene = resolvedShortsScenes.find(x => x.order === order);
+    return buildJibssukImagePrompt({
+      order, projectTitle, rawContent, script: shortsScript,
+      narration: scene?.narration || "",
+      headline: scene?.headline || "",
+      dataRows: scene?.dataRows || ""
+    });
+  }
+
+  async function saveMasterReference(file: File) {
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("이미지 파일만 등록할 수 있습니다.");
+      const original = await loadImage(await fileToDataUrl(file));
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 720 / original.width, 1280 / original.height);
+      canvas.width = Math.max(1, Math.round(original.width * scale));
+      canvas.height = Math.max(1, Math.round(original.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("이미지 변환을 시작할 수 없습니다.");
+      ctx.drawImage(original, 0, 0, canvas.width, canvas.height);
+      const image = canvas.toDataURL("image/jpeg", 0.78);
+      window.localStorage.setItem(JIBSSUK_MASTER_REFERENCE_KEY, image);
+      setShortsMasterReference(image);
+      setShortsOverlayNotice("승인 마스터 이미지를 이 브라우저에 저장했습니다. GPT 요청 시 참고 이미지로 함께 첨부하세요.");
+      setError("");
+    } catch (e: any) {
+      setError(e.message || "마스터 이미지 저장에 실패했습니다.");
+    }
+  }
+
+  function downloadMasterReference() {
+    if (!shortsMasterReference) return;
+    const link = document.createElement("a");
+    link.href = shortsMasterReference;
+    link.download = "jibssuk_approved_master_reference.jpg";
+    link.click();
+  }
+
+  async function uploadCustomOverlay(index: number, file: File) {
+    try {
+      if (file.type !== "image/png" && file.type !== "image/webp") throw new Error("정보판은 투명 PNG 또는 WebP 파일로 올려주세요.");
+      const source = await loadImage(await fileToDataUrl(file));
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080; canvas.height = 1920;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("정보판 변환에 실패했습니다.");
+      // Ensure that no generated graphic can cover the separate subtitle/UI layer.
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, 1080, 1350); ctx.clip();
+      ctx.drawImage(source, 0, 0, 1080, 1920);
+      ctx.restore();
+      const pixels = ctx.getImageData(0, 0, 1080, 1350).data;
+      let hasAlpha = false;
+      for (let i = 3; i < pixels.length; i += 101 * 4) { if (pixels[i] < 245) { hasAlpha = true; break; } }
+      if (!hasAlpha) throw new Error("정보판이 불투명해 공통 배경을 가립니다. GPT에서 투명 배경(RGBA)으로 다시 제작해주세요.");
+      const overlay = canvas.toDataURL("image/png");
+      setShortsCustomOverlays(prev => prev.map((src, i) => i === index ? overlay : src));
+      setShortsPreview(""); setShortsPreviewFrames([]);
+      setShortsOverlayNotice(String(index + 1) + "번 GPT 정보판을 적용했습니다. 그래프와 한글·숫자는 미리보기에서 다시 검토하세요.");
+      setError("");
+    } catch (e: any) { setError(e.message || "정보판 업로드에 실패했습니다."); }
+  }
+
   function openShortsScriptMaker() {
     setPhase("script");
     openGPT(shortsScriptPrompt());
@@ -748,7 +821,7 @@ export default function Home() {
     if (!ctx) throw new Error("장면 미리보기를 만들 수 없습니다.");
     const base = await loadImage(background);
     ctx.drawImage(base, 0, 0, 1080, 1920);
-    const overlay = await loadImage(await renderShortsOverlay(scene));
+    const overlay = await loadImage(shortsCustomOverlays[scene.order - 1] || await renderShortsOverlay(scene));
     ctx.drawImage(overlay, 0, 0, 1080, 1920);
     const caption = splitOneLineCaptions(scene.narration || scene.subtitle, 20)[0] || "";
     if (caption) {
@@ -882,7 +955,7 @@ export default function Home() {
 
       const frames: Array<{ order: number; dataUrl: string }> = [];
       for (const scene of resolvedShortsScenes) {
-        const overlay = await renderShortsOverlay(scene);
+        const overlay = shortsCustomOverlays[scene.order - 1] || await renderShortsOverlay(scene);
         const match = overlay.match(/^data:image\/png;base64,(.+)$/);
         if (!match) throw new Error("장면 " + scene.order + " 정보판 PNG 출력에 실패했습니다.");
         folder.file("overlays/" + overlayFileName(scene.order), match[1], { base64: true });
@@ -909,6 +982,7 @@ export default function Home() {
       folder.file("README.txt", [
         "집값쓱 V3: 공통 background.png + 투명 overlays 7장.",
         "scene_contact_sheet.png는 자막 위치를 포함한 확인용이며 영상 소재로 사용하지 마세요.",
+        "GPT에서 만든 개별 투명 정보판을 업로드했다면 그 파일을 우선 사용하며, 없는 장면은 기존 코드 렌더링으로 보완합니다.",
         "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
         "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
         "Y 1350 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
@@ -1092,7 +1166,7 @@ export default function Home() {
       } else {
         setContentType(savedType);
       }
-      setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setShortsScript(savedType === "집값쓱 쇼츠" ? (p.memo || "") : ""); setAnalysis(p.analysis_json);
+      setProjectTitle(p.project_title); setRawContent(p.raw_content); setFinalTitle(p.final_title || p.recommended_title || ""); setFinalBody(p.final_body || ""); setShortsScript(savedType === "집값쓱 쇼츠" ? (p.memo || "") : ""); setShortsCustomOverlays(Array(7).fill("")); setAnalysis(p.analysis_json);
       setTasks((imgs || []).map((x: any) => ({ order: x.order_no, title: x.section_title, keyMessage: x.key_message, sourceText: x.source_text, imagePrompt: x.image_prompt, imageDataUrl: x.image_url, imageUrl: x.image_url, done: x.status === "done", replaced: x.replaced })));
       setCurrentIndex(0); setPhase((imgs || []).length ? "images" : "analysis");
     } catch (e: any) { setError(e.message || "불러오기 실패"); }
@@ -1149,7 +1223,7 @@ export default function Home() {
     {error && <div className="error">{error}</div>}
 
     <section className="panel">
-      <div className="steps">{(isShorts ? ["자료", "대본", "장면표", "제작자료", "GPT 제작"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
+      <div className="steps">{(isShorts ? ["자료", "대본", "이미지 7장", "제작자료", "GPT 제작"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
         const active = isShorts
           ? (((phase === "home" || phase === "input") && i === 0) || (phase === "script" && i === 1) || (phase === "analysis" && i === 2) || (phase === "images" && i === 3) || ((phase === "review" || phase === "done") && i === 4))
           : (((phase === "home" || phase === "input") && i === 0) || (phase === "analysis" && i === 1) || (phase === "images" && i === 2) || (phase === "review" && i === 3) || (phase === "done" && i === 4));
@@ -1229,8 +1303,38 @@ export default function Home() {
       </>}
 
       {phase === "analysis" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>3. 정보판 7장 설계</h2><p>배경은 한 장만 사용합니다. 거래량과 가격은 데이터행으로 입력하면 사이트가 직접 그립니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면</span></div>
+        <div className="sectionHead"><div><h2>3. 이미지 7장 제작</h2><p>승인된 썸네일 스타일을 기준으로 장면별 GPT 요청서를 만들고, 완성된 투명 정보판을 장면마다 적용합니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면 설계</span></div>
         {shortsScript.trim().length < 50 && <p className="stagePreviewNote">미리보기: 2. 대본 단계에 완성 대본을 넣으면 이 단계의 GPT 장면표 요청서에 자동 포함됩니다.</p>}
+        <div className="box masterReferenceBox">
+          <div className="miniHead"><h3>🎨 집값쓱 스타일 마스터 V1</h3><span className="muted">요청서 7종 · 사이트에 고정 저장</span></div>
+          <p className="muted">방금 승인한 김포 썸네일을 한 번 등록하세요. 이미지의 색감·글씨·로고 디자인만 참고하고, 다른 지역 영상에서는 김포 숫자와 문구를 복사하지 않습니다.</p>
+          <div className="masterReferenceLayout">
+            {shortsMasterReference
+              ? <img src={shortsMasterReference} alt="집값쓱 승인 마스터 썸네일 미리보기" className="masterReferenceThumb" />
+              : <div className="masterReferencePlaceholder">승인된 마스터 썸네일<br />이미지를 1회 등록하세요</div>}
+            <div className="masterReferenceActions">
+              <label className="fileBtn compact">{shortsMasterReference ? "✓ 마스터 이미지 교체" : "📤 마스터 이미지 등록"}<input type="file" accept="image/*" onChange={e => { const f=e.target.files?.[0]; if(f) void saveMasterReference(f); e.currentTarget.value=""; }} /></label>
+              <button className="secondary compact" disabled={!shortsMasterReference} onClick={downloadMasterReference}>📥 참고 이미지 받기</button>
+              <button className="secondary compact" onClick={() => copyText(JIBSSUK_MASTER_STYLE, "집값쓱 공통 스타일 규칙을 복사했습니다.")}>📋 공통 디자인 규칙</button>
+              <p className="muted">마스터 이미지는 이 브라우저에 보관됩니다. GPT 요청 버튼은 텍스트만 전달하므로 내려받은 참고 이미지 파일을 GPT 대화에 직접 첨부해주세요.</p>
+              {shortsOverlayNotice && <p className="ok">{shortsOverlayNotice}</p>}
+            </div>
+          </div>
+          <div className="masterSceneCards">
+            {JIBSSUK_SCENE_TEMPLATES.map((scene, index) => <div key={scene.order} className="masterSceneCard">
+              <div><b>{String(scene.order).padStart(2,"0")} · {scene.title}</b><small>{scene.subtitle}</small></div>
+              <div className="inlineActions">
+                <button className="secondary compact" onClick={() => setShortsImagePromptPreview(prev => prev === scene.order ? 0 : scene.order)}>{shortsImagePromptPreview === scene.order ? "접기" : "요청서 보기"}</button>
+                <button className="secondary compact" disabled={shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => copyText(imagePromptForScene(scene.order), scene.order + "번 이미지 요청서를 복사했습니다.")}>📋 요청서 복사</button>
+                <button className="primary compact" disabled={shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => openGPT(imagePromptForScene(scene.order))}>↗ GPT 제작</button>
+                <label className="fileBtn compact">{shortsCustomOverlays[index] ? "✓ 이미지 교체" : "투명 PNG 넣기"}<input type="file" accept="image/png,image/webp" onChange={e => { const f=e.target.files?.[0]; if(f) void uploadCustomOverlay(index,f); e.currentTarget.value=""; }} /></label>
+                {shortsCustomOverlays[index] && <button className="secondary compact" onClick={() => {setShortsCustomOverlays(prev=>prev.map((v,i)=>i===index?"":v));setShortsPreview("");setShortsPreviewFrames([]);}}>기본 정보판 사용</button>}
+              </div>
+              {shortsImagePromptPreview === scene.order && <pre className="masterPromptPreview">{imagePromptForScene(scene.order)}</pre>}
+            </div>)}
+          </div>
+          <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 Y 1350 아래를 자동으로 투명 처리해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
+        </div>
         <div className="box scenePasteBox">
           <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
           <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 질문 카드\n데이터행:"} />
