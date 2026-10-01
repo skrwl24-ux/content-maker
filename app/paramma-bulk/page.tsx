@@ -563,7 +563,7 @@ function buildKickAnalysisPrompt(topic: Topic, searchNotes: string) {
 }
 
 function derivedKickFromBody(body: string) {
-  const match = body.match(/(?:이번 글의 킥|선정한 킥|확정 킥)\s*[:：]\s*([^\n]+)/i);
+  const match = body.match(/(?:이번 글의 킥|선정한 킥|확정 킥)\*{0,2}\s*[:：]\*{0,2}\s*([^\n]+)/i);
   return match ? match[1].replace(/[*_]/g, "").trim().slice(0, 280) : "";
 }
 
