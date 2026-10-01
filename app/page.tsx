@@ -1312,7 +1312,7 @@ export default function Home() {
               <label className="fileBtn compact">{shortsMasterReference ? "✓ 마스터 이미지 교체" : "📤 마스터 이미지 등록"}<input type="file" accept="image/*" onChange={e => { const f=e.target.files?.[0]; if(f) void saveMasterReference(f); e.currentTarget.value=""; }} /></label>
               <button className="secondary compact" disabled={!shortsMasterReference} onClick={downloadMasterReference}>📥 참고 이미지 받기</button>
               <button className="secondary compact" onClick={() => copyText(JIBSSUK_MASTER_STYLE, "집값쓱 공통 스타일 규칙을 복사했습니다.")}>📋 공통 디자인 규칙</button>
-              <p className="muted">마스터 이미지는 이 브라우저에 보관됩니다. GPT 요청 버튼은 텍스트만 전달하므로 내려받은 참고 이미지 파일을 GPT 대화에 직접 첨부해주세요.</p>
+              <p className="muted">마스터 이미지는 이 브라우저에 보관됩니다. 마스터 등록 + 원문·대본 입력 후 요청 버튼이 활성화됩니다. GPT 요청 버튼은 텍스트만 전달하므로 내려받은 참고 이미지 파일을 GPT 대화에 직접 첨부해주세요.</p>
               {shortsOverlayNotice && <p className="ok">{shortsOverlayNotice}</p>}
             </div>
           </div>
@@ -1321,8 +1321,8 @@ export default function Home() {
               <div><b>{String(scene.order).padStart(2,"0")} · {scene.title}</b><small>{scene.subtitle}</small></div>
               <div className="inlineActions">
                 <button className="secondary compact" onClick={() => setShortsImagePromptPreview(prev => prev === scene.order ? 0 : scene.order)}>{shortsImagePromptPreview === scene.order ? "접기" : "요청서 보기"}</button>
-                <button className="secondary compact" disabled={shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => copyText(imagePromptForScene(scene.order), scene.order + "번 이미지 요청서를 복사했습니다.")}>📋 요청서 복사</button>
-                <button className="primary compact" disabled={shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => openGPT(imagePromptForScene(scene.order))}>↗ GPT 제작</button>
+                <button className="secondary compact" disabled={!shortsMasterReference || shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => copyText(imagePromptForScene(scene.order), scene.order + "번 이미지 요청서를 복사했습니다.")}>📋 요청서 복사</button>
+                <button className="primary compact" disabled={!shortsMasterReference || shortsScript.trim().length < 50 || rawContent.trim().length < 30} onClick={() => openGPT(imagePromptForScene(scene.order))}>↗ GPT 제작</button>
                 <label className="fileBtn compact">{shortsCustomOverlays[index] ? "✓ 이미지 교체" : "투명 PNG 넣기"}<input type="file" accept="image/png,image/webp" onChange={e => { const f=e.target.files?.[0]; if(f) void uploadCustomOverlay(index,f); e.currentTarget.value=""; }} /></label>
                 {shortsCustomOverlays[index] && <button className="secondary compact" onClick={() => {setShortsCustomOverlays(prev=>prev.map((v,i)=>i===index?"":v));setShortsPreview("");setShortsPreviewFrames([]);}}>기본 정보판 사용</button>}
               </div>
@@ -1385,7 +1385,7 @@ export default function Home() {
               <label className="fileBtn compact">{t.imageDataUrl ? "✓ 배경 교체" : "배경 PNG/JPG 넣기"}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => { const f = e.target.files?.[0]; if (!f) return; fileToDataUrl(f).then(src => {updateTask(i,{sourceDataUrl:src,imageDataUrl:src,replaced:true,done:true});setShortsPreview("");}).catch(()=>setError("배경 업로드 실패")); }} /></label>
             </div>
           </div>)}
-          <p className="muted">② 정보판 7개는 장면표의 큰 문구와 데이터행을 바탕으로 자동으로 만듭니다. 별도의 그래프 AI 이미지 업로드는 필요 없습니다.</p>
+          <p className="muted">② 3단계에서 업로드한 고품질 GPT 투명 정보판을 우선 적용합니다. 현재 {shortsCustomOverlays.filter(Boolean).length}/7장 적용 중이며, 나머지는 큰 문구와 데이터행으로 사이트가 자동 생성합니다.</p>
           {shortsDataIssues.map(issue => <p className="voiceWarning" key={issue}>{issue}</p>)}
         </div>
 
