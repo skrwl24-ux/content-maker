@@ -154,7 +154,7 @@ export function resolveOverlayScenes<T extends OverlayScene>(scenes: T[], fullSo
       const specific = scene.narration || scene.subtitle;
       let values = [...specific.matchAll(/(\d+(?:\.\d+)?)\s*억(?!대)/g)].map(m => m[1] + "억");
       if (values.length !== 3) {
-        const priceLine = fullSource.match(/(?:84\s*㎡|대표값|가격)[^\n.!?]{0,90}?\d+(?:\.\d+)?\s*억[^\n.!?]{0,100}/);
+        const priceLine = fullSource.match(/(?:84\s*㎡|대표값|가격)[^\n!?]{0,180}/);
         values = priceLine ? [...priceLine[0].matchAll(/(\d+(?:\.\d+)?)\s*억(?!대)/g)].map(m => m[1]+"억") : [];
       }
       if (values.length === 3 && values.every(v => fullSource.includes(v) || specific.includes(v))) {
@@ -243,7 +243,7 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
   };
   if (kind === "cover") {
     panel(410, 690);
-    text(ctx, "김포" === header.slice(0,2) ? "김포 · 집값쓱" : "집값쓱  |  부동산 정보", 540, 485, 810, 43, MUTE, "center");
+    text(ctx, "집값쓱  |  부동산 정보", 540, 485, 810, 43, MUTE, "center");
     titleLines(header, 610, 93, WHITE);
     roundRect(ctx, 215, 995, 650, 15, 7, YELLOW);
   } else if (kind === "criteria") {
