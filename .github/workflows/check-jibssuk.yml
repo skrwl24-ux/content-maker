@@ -1,0 +1,17 @@
+name: Verify Jibssuk voice and timing
+on:
+  push:
+    branches:
+      - fix/jibssuk-korean-voice-sync-20261002
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --test tests/jibssuk-voice.cjs
+      - run: npm run build
