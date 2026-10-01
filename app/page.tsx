@@ -214,6 +214,7 @@ export default function Home() {
   const [finalBody, setFinalBody] = useState("");
   const [shortsScript, setShortsScript] = useState("");
   const [shortsSceneText, setShortsSceneText] = useState("");
+  const [shortsPreview, setShortsPreview] = useState("");
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
@@ -552,9 +553,9 @@ export default function Home() {
       "[장면 2]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
       "화면방식: 기준 카드", "데이터행:", "",
       "[장면 3]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
-      "화면방식: 거래량 그래프", "데이터행: 실제단지명1 | 14건 ; 실제단지명2 | 14건 ; 실제단지명3 | 13건", "",
+      "화면방식: 거래량 그래프", "데이터행: 실제단지명1 | 원문거래건수1 ; 실제단지명2 | 원문거래건수2 ; 실제단지명3 | 원문거래건수3", "",
       "[장면 4]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
-      "화면방식: 가격 비교표", "데이터행: 실제단지명1 | 6.93억 ; 실제단지명2 | 7.30억 ; 실제단지명3 | 5.69억", "",
+      "화면방식: 가격 비교표", "데이터행: 실제단지명1 | 원문가격1 ; 실제단지명2 | 원문가격2 ; 실제단지명3 | 원문가격3", "",
       "[장면 5]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
       "화면방식: 핵심 숫자 카드", "데이터행:", "",
       "[장면 6]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
@@ -597,6 +598,7 @@ export default function Home() {
 
   function applyShortsSceneText(text: string) {
     setShortsSceneText(text);
+    setShortsPreview("");
     const parsed = parseShortsScenes(text);
     setShortsScenes(parsed);
     if (parsed.length) {
@@ -607,6 +609,7 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
+    setShortsPreview("");
     setShortsScenes(prev => {
       const next = prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene);
       setTasks(buildShortsImageTasks(next));
@@ -794,6 +797,18 @@ export default function Home() {
     return canvas.toDataURL("image/png", 0.92);
   }
 
+  async function previewShortsCards() {
+    setLoading(true); setError("");
+    try {
+      if (!shortsVisualReady || shortsScenes.length !== 7) throw new Error("공통 배경과 7장면을 먼저 준비해주세요.");
+      const background = await composeShortsBackground();
+      const frames: Array<{ order: number; dataUrl: string }> = [];
+      for (const scene of shortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      setShortsPreview(await composeShortsContactSheet(frames));
+    } catch (e: any) { setError(e.message || "정보판 미리보기 생성에 실패했습니다."); }
+    finally { setLoading(false); }
+  }
+
   function shortsVideoPrompt() {
     return [
       "[집값쓱 쇼츠 V3 · 고정 배경 + 정보판 최종 조립]",
@@ -830,6 +845,7 @@ export default function Home() {
 
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
+    setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
 
