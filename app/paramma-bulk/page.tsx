@@ -259,11 +259,11 @@ function naverRichHtml(blocks: NaverBlock[]) {
   return `<div>${blockHtml.join(spacer)}</div>`;
 }
 
-function buildArticlePrompt(topic: Topic) {
+function buildArticlePromptV1(topic: Topic, date = formatToday()) {
   return `Paramma 블로거 네이버 글을 최종 발행본으로 만들어줘.
 
 [작성 기준일]
-${formatToday()}
+${date}
 
 [발행 정보]
 발행 큐: 상시 10개
@@ -325,6 +325,39 @@ ${categoryGuide(topic.category)}
 중요: 검색하지 않고 일반 상식만으로 작성하지 말고, 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
 }
 
+function kickGuide(topic: Topic) {
+  if (topic.category === "생활 속 궁금증") {
+    if (/사과.*(?:갈색|갈변)/.test(topic.title)) {
+      return "이번 사과 글의 우선 킥은 '사과 갈변을 늦추는 실용적인 방법'이다. 갈변과 부패의 구분은 안전 정보로 함께 다루고, 레몬즙·공기 접촉 줄이기·신속한 냉장 보관의 작동 원리와 한계를 출처로 확인한다. 갈변을 완전히 막는다거나 이미 상한 사과가 안전해진다고 표현하지 않는다.";
+    }
+    return "검색자가 이유뿐 아니라 예방·해결·관리·보관 등 어떤 실용 답을 기대하는지 먼저 판단하고, 주제와 실제로 연결되는 방법 1~3가지를 킥으로 선택한다. 실용 방법이 적절하지 않은 주제는 생활에서 볼 수 있는 의외의 비교나 흔한 오해의 해소를 보상으로 삼는다.";
+  }
+  if (topic.category === "신기한 동물이야기") {
+    return "행동·생존 전략·해부학에서 검증된 의외의 사실 하나를 킥으로 선택한다. 사람에게 직접 해보라는 생활 팁을 억지로 붙이지 않고, 비슷한 동물과의 차이 또는 실제 관찰을 읽는 재미를 보상으로 준다.";
+  }
+  if (topic.category === "신비로운 자연") {
+    return "익숙한 자연현상을 새로 보게 만드는 관찰 포인트·조건 차이·잘 알려지지 않은 과정을 하나 선정한다. 놀라운 사진이나 숫자로 낚지 말고, 독자가 다음에 해당 현상을 볼 때 눈여겨볼 점을 남긴다.";
+  }
+  return "우리 몸의 작용 중 잘 알려지지 않은 사실·개인차·흔한 오해 중 하나를 킥으로 삼는다. 일상에서 이해할 수 있는 연결점을 주되 의학적 진단·치료법·실험을 만들어내지 않는다.";
+}
+
+function buildArticlePrompt(topic: Topic, date = formatToday()) {
+  const legacy = buildArticlePromptV1(topic, date);
+  return legacy
+    .replace("[네이버 검색형 제목]", `[Paramma V2 · 호기심 → 발견 → 보상]
+- 원고를 쓰기 전에 이 글의 핵심 독자 질문과 '이번 글만의 킥' 하나를 웹 검증을 바탕으로 내부 선정할 것.
+- 킥은 검색 답을 반복하지 않으면서 독자가 추가로 알아갈 만한 실용 방법, 의외의 차이, 오해 해소, 관찰 포인트 중 주제에 맞는 단 하나로 정할 것.
+- 주제별 킥 선정 지침: ${kickGuide(topic)}
+- 글은 '① 호기심: 일상 상황과 핵심 답 선공개 → ② 발견: 숨은 원리와 한 가지 흥미로운 사실 → ③ 보상: 이번 글의 킥을 구체적으로 전달 → ④ 필요할 때만 안전·한계'의 이야기 흐름으로 작성할 것.
+- 생활형 주제에서 실제 독자가 원하는 예방·해결법이 있다면 도입에서 짧게 예고하고, 본문 안에서 구체적인 방법과 이유·한계를 알려줄 것. 생활 팁만 나열하여 신기한 원리가 사라지지 않도록 할 것.
+- 카테고리에 맞지 않는 억지 꿀팁, 반전, 놀라운 수치, 확인하지 않은 실험 결과, 직접 촬영·실험했다는 허구의 경험담을 넣지 말 것.
+- 선정한 킥은 별도 기획표로 길게 설명하지 말고 본문의 자연스러운 소제목과 사례에 녹일 것. 소제목 4~6개 안에서 앞뒤 설명이 중복되지 않게 할 것.
+
+[네이버 검색형 제목]`)
+    .replace("- 이미지 02: 과정·비교·구조를 보여주는 장면", "- 이미지 02: 이번 글의 '발견·보상'(생활형이면 검증된 실용 방법, 그 외에는 흥미로운 차이·관찰 포인트)을 한눈에 남기는 장면. 01번 원리 이미지의 반복을 피할 것")
+    .replace("- 이미지 03은 내용상 꼭 필요할 때만 제안", "- 이미지 03은 안전상 중요한 비교 등 내용상 꼭 필요할 때만 제안. 이미 00~02로 충분하면 생략")
+    .replace("5. 마지막에 ‘검수 메모’로 사용한 주요 출처와 핵심 사실을 짧게 정리", "5. 마지막에 ‘검수 메모’로 이번 글에 선정한 킥 1줄, 사용한 주요 출처와 핵심 사실을 짧게 정리");
+}
 
 function buildLegacyImagePrompt(topic: Topic, slotId: SlotId) {
   const info = SLOT_INFO[slotId];
@@ -370,7 +403,7 @@ ${textLine}
 중요: 다른 채팅에 이 요청서만 단독으로 붙여넣어도 바로 제작할 수 있게 필요한 정보를 모두 포함했다.`;
 }
 
-function buildImagePrompt(topic: Topic, slotId: SlotId) {
+function buildImagePromptV1(topic: Topic, slotId: SlotId) {
   const info = SLOT_INFO[slotId];
   const isThumbnail = slotId === "00";
   const ratio = info.width === info.height ? "1:1 정사각형" : "16:9 가로형";
@@ -449,32 +482,67 @@ function isPreviousStrictBodyPrompt(prompt: string, topic: Topic, slotId: SlotId
     prompt.includes("- 과학적 이해에 꼭 필요한 경우에만 짧은 라벨 1~3개 정도 허용");
 }
 
-function refreshLegacyImagePrompts(works: Record<number, TopicWork>) {
+
+function buildImagePrompt(topic: Topic, slotId: SlotId) {
+  const legacy = buildImagePromptV1(topic, slotId);
+  if (slotId === "00") return legacy;
+  const info = SLOT_INFO[slotId];
+  const purpose = slotId === "01"
+    ? "핵심 과학 원리·구조를 이해시키는 설명 장면. 독자가 왜 그런지 단번에 알 수 있게 하고, 생활 팁 목록이나 02번 보상 카드를 중복하지 않는다."
+    : slotId === "02"
+      ? "이번 글의 '발견 또는 보상'을 저장하고 싶게 보여주는 본문 정보 이미지. 생활형이면 검증된 예방법·활용법·상황별 비교를, 동물·자연·우리 몸이면 새로운 관찰 포인트·의외의 구조·흔한 오해의 비교를 선택한다. 사과 갈변 글이라면 갈변을 늦추는 레몬즙, 단면 밀착 포장, 신속한 냉장 보관을 짧은 카드로 설명하되 갈변 방지와 식품 안전을 혼동하지 않는다."
+      : "01번 원리와 02번 킥만으로 이해되지 않는 추가 안전·한계·비교가 있을 때만 사용하는 선택 이미지. 글에 없는 새 정보를 만들지 않는다.";
+  return legacy
+    .replace(`역할: ${info.role}
+이 이미지가 전달할 내용: ${info.copy}`, `역할: ${slotId === "01" ? "핵심 원리" : slotId === "02" ? "이번 글의 발견·보상" : "필요 시 추가 비교"}
+이 이미지가 전달할 내용: ${purpose}`)
+    .replace("[제작 목표]", `[Paramma V2 · 이미지 기획]
+- 주제: ${topic.title}
+- 이 슬롯의 목표: ${purpose}
+- 주제별 킥 참고: ${kickGuide(topic)}
+- 실제 발행용 원고에서 확인된 내용만 시각화한다. 독립 이미지 제작 채팅에는 완성 본문의 해당 문단을 함께 첨부하면 가장 정확하다.
+- 01과 02의 역할을 분리하고, 본문 이미지는 썸네일 제목·후킹 문구를 반복하지 않는다.
+- 수치·효과·비교 결과는 검증하지 않았다면 이미지에도 단정해 넣지 않는다.
+
+[제작 목표]`);
+}
+
+function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
   let changed = false;
   const next = { ...works };
 
-  for (const topic of TOPICS) {
+  for (const topic of savedTopics) {
     const current = works[topic.id];
     if (!current?.slots) continue;
 
-    let topicChanged = false;
+    const savedDate = current.articlePrompt?.match(/\[작성 기준일\]\n([^\n]+)\n\n\[발행 정보\]/)?.[1] || formatToday();
+    // 이미 직접 수정한 요청서는 자동으로 덮어쓰지 않는다.
+    const articlePrompt = current.articlePrompt === buildArticlePromptV1(topic, savedDate)
+      ? buildArticlePrompt(topic, savedDate)
+      : current.articlePrompt;
     const slots = { ...current.slots };
+    let topicChanged = articlePrompt !== current.articlePrompt;
 
     for (const slotId of ["01", "02", "03"] as SlotId[]) {
       const slot = slots[slotId];
       if (!slot) continue;
-      if (slot.prompt === buildLegacyImagePrompt(topic, slotId) || isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)) {
+      if (
+        slot.prompt === buildImagePromptV1(topic, slotId) ||
+        slot.prompt === buildLegacyImagePrompt(topic, slotId) ||
+        isPreviousStrictBodyPrompt(slot.prompt, topic, slotId)
+      ) {
         slots[slotId] = { ...slot, prompt: buildImagePrompt(topic, slotId) };
         topicChanged = true;
-        changed = true;
       }
     }
-
-    if (topicChanged) next[topic.id] = { ...current, slots };
+    if (topicChanged) {
+      next[topic.id] = { ...current, articlePrompt, slots };
+      changed = true;
+    }
   }
-
   return changed ? next : works;
 }
+
 
 function normalizeParammaTopic(value: string) {
   return value
@@ -613,6 +681,8 @@ function buildNextTenPrompt() {
 - 계절에 맞지 않는 주제는 우선순위를 낮출 것.
 - 아래 이전 10개와 동일하거나 지나치게 비슷한 주제는 제외할 것.
 - 각 항목에 카테고리와 한 줄 기획 의도를 함께 표시할 것.
+- 각 주제는 호기심 → 발견 → 보상 흐름을 적용하고, 한 줄 기획 의도에 독자가 얻어 갈 '이번 글만의 킥'을 자연스럽게 포함할 것.
+- 생활 속 궁금증은 관련된 예방·해결·활용법이 있는지 살피고, 동물·자연·우리 몸은 뜻밖의 사실·관찰 포인트·오해 해소를 보상으로 삼을 것. 사실 확인이 불가능한 반전이나 억지 꿀팁은 만들지 말 것.
 - “평소 자주 보지만 이유는 잘 모르는 것”처럼 제목을 보는 순간 “그러게, 왜 그렇지?”가 나오는 생활 호기심형을 최우선으로 할 것.
 - 계절성만을 이유로 궁금증이 약한 소재를 억지로 넣지 말 것.
 - 각 항목마다 실제 발행용 글 제목과 네이버 홈용 썸네일 후킹 문구를 따로 제안할 것.
@@ -672,7 +742,7 @@ export default function ParammaBulkPage() {
         setTopics(savedTopics);
         if (parsed?.statuses) setStatuses(parsed.statuses);
         if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
-        if (parsed?.works) setWorks(refreshLegacyImagePrompts(parsed.works));
+        if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
       }
     } catch {
       setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
@@ -929,6 +999,18 @@ export default function ParammaBulkPage() {
       setNotice("클립보드 복사에 실패했습니다. 요청서 내용을 직접 선택해 복사해주세요.");
       return false;
     }
+  }
+
+
+  function regenerateParammaV2Prompts() {
+    if (!window.confirm("현재 원고·등록 이미지·진행 상태는 유지하고, 본문 및 이미지 요청서 문구만 Paramma V2로 다시 생성할까요? 직접 수정한 요청서 문구는 새 내용으로 교체됩니다.")) return;
+    setWorks((prev) => {
+      const base = prev[selected.id] || defaultWork(selected);
+      const slots = { ...base.slots };
+      for (const slotId of SLOT_IDS) slots[slotId] = { ...slots[slotId], prompt: buildImagePrompt(selected, slotId) };
+      return { ...prev, [selected.id]: { ...base, articlePrompt: buildArticlePrompt(selected), slots } };
+    });
+    setNotice("이번 글에 Paramma V2 · 호기심 → 발견 → 보상 요청서를 적용했습니다. 원고와 이미지 파일은 그대로 보존했습니다.");
   }
 
   async function copyArticlePrompt() {
@@ -1262,6 +1344,9 @@ export default function ParammaBulkPage() {
               </a>
               <button type="button" className={styles.secondary} onClick={() => void copyArticlePrompt()}>
                 요청서만 복사
+              </button>
+              <button type="button" className={styles.secondary} onClick={regenerateParammaV2Prompts}>
+                ✨ V2 요청서 적용
               </button>
             </div>
 
