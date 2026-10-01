@@ -109,6 +109,62 @@ export function oneLineSrt(timeline: TimedScene[]): string {
   return entries.join("\n\n");
 }
 
+
+// Older saved scene plans may not contain dataRows. Recover only when names AND values
+// are explicitly present in the supplied source; otherwise keep validation blocking export.
+function extractVolumeRows(source: string): string {
+  const text = source.replace(/\s+/g, " ");
+  const pair = text.match(/([가-힣A-Za-z0-9]+)(?:과|와)\s+([가-힣A-Za-z0-9]+)(?:가|이)\s*(?:각각[, ]*)?(\d[\d,]*)건(?:씩|으로|[\s,!])/);
+  if (pair) {
+    const rows = [
+      { label: pair[1], value: pair[3] + "건" },
+      { label: pair[2], value: pair[3] + "건" }
+    ];
+    const tail = text.slice((pair.index || 0) + pair[0].length);
+    const third = tail.match(/([가-힣A-Za-z0-9]+)(?:은|는|가|이)\s*(\d[\d,]*)건/);
+    if (third) rows.push({ label: third[1], value: third[2] + "건" });
+    if (rows.length === 3 && new Set(rows.map(r => r.label)).size === 3)
+      return rows.map(r => r.label + " | " + r.value).join(" ; ");
+  }
+  // Explicit individual "complex-name 14건" patterns, no rank or labels invented.
+  const found: Array<{label:string;value:string}> = [];
+  const re = /([가-힣A-Za-z0-9]{3,})(?:은|는|가|이)?\s+(\d[\d,]*)건/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) && found.length < 3) {
+    const label = match[1];
+    if (!found.some(item => item.label === label)) found.push({label,value:match[2] + "건"});
+  }
+  return found.length === 3 ? found.map(r => r.label+" | "+r.value).join(" ; ") : "";
+}
+
+export function resolveOverlayScenes<T extends OverlayScene>(scenes: T[], fullSource: string): T[] {
+  const barScene = scenes.find(s => sceneKind(s) === "bar");
+  let volumeRows = parseOverlayRows(barScene?.dataRows || "");
+  if (volumeRows.length < 3 && barScene) {
+    const extracted = extractVolumeRows(barScene.narration + " " + fullSource);
+    volumeRows = parseOverlayRows(extracted);
+  }
+  return scenes.map(scene => {
+    if (parseOverlayRows(scene.dataRows || "").length >= 2) return scene;
+    const kind = sceneKind(scene);
+    if (kind === "bar" && volumeRows.length >= 3) {
+      return { ...scene, dataRows: volumeRows.slice(0,3).map(r => r.label+" | "+r.value).join(" ; ") };
+    }
+    if (kind === "price" && volumeRows.length === 3) {
+      const specific = scene.narration || scene.subtitle;
+      let values = [...specific.matchAll(/(\d+(?:\.\d+)?)\s*억(?!대)/g)].map(m => m[1] + "억");
+      if (values.length !== 3) {
+        const priceLine = fullSource.match(/(?:84\s*㎡|대표값|가격)[^\n.!?]{0,90}?\d+(?:\.\d+)?\s*억[^\n.!?]{0,100}/);
+        values = priceLine ? [...priceLine[0].matchAll(/(\d+(?:\.\d+)?)\s*억(?!대)/g)].map(m => m[1]+"억") : [];
+      }
+      if (values.length === 3 && values.every(v => fullSource.includes(v) || specific.includes(v))) {
+        return { ...scene, dataRows: volumeRows.map((r, i) => r.label + " | " + values[i]).join(" ; ") };
+      }
+    }
+    return scene;
+  });
+}
+
 const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const NAVY = "#122841";
 const BLUE = "#2376E4";
