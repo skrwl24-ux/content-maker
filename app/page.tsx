@@ -533,92 +533,66 @@ export default function Home() {
 
   function shortsSilentPrompt() {
     return [
-      "[집값쓱 쇼츠 장면표 제작]",
-      `주제: ${projectTitle || "아래 자료의 핵심 주제"}`,
+      "[집값쓱 쇼츠 V3 · 고정 배경 + 투명 정보판 장면표 제작]",
+      "주제: " + (projectTitle || "아래 자료의 핵심 주제"), "",
+      "[기본 원칙]",
+      "- 동일한 아파트 배경 한 장을 모든 장면에서 사용. 배경에는 정보를 넣지 않는다.",
+      "- 완성 대본을 문장 하나도 누락·중복·수정하지 않고 순서대로 정확히 7장면에 나눈다.",
+      "- 큰문구는 한눈에 읽히는 짧은 제목만 작성한다. 다른 필드 지시문을 절대 포함하지 말 것.",
+      "- 전체대사 자막은 사이트가 자동으로 한 줄씩 분할하므로 장면 하단자막만 대본 그대로 작성한다.",
+      "- 화면방식은 정확히 다음 순서: 질문 카드 / 기준 카드 / 거래량 그래프 / 가격 비교표 / 핵심 숫자 카드 / 비교 기준 카드 / 고정 엔딩.",
+      "- 3번·4번의 데이터행에는 원문 수치를 라벨 | 값 ; 라벨 | 값 형식으로 기입한다.",
+      "- 다른 장면에서 표가 필요하면 데이터행을 같은 형식으로 넣고, 아니면 비워 둔다.",
+      "- 그래프·표 숫자는 원문에 존재하는 값만 사용한다. 전체 평형 거래량과 84㎡대 가격을 섞지 말 것.",
+      "- 정확한 5개 필드를 각기 다른 줄에 출력. 필드 값을 한 줄에 이어 쓰거나 제작 지시문을 섞지 말 것.",
       "",
-      "[목표]",
-      "- 소리를 완전히 끄고 봐도 영상 내용을 이해할 수 있게 6~7장면으로 구성",
-      "- 완성 대본의 문장을 새로 쓰지 말고 장면별로 자연스럽게 나눌 것",
-      "- 각 장면은 내레이션, 큰 화면 문구, 하단 자막, 화면 방식으로 설계",
-      "- 전체 30초 안팎에서 각 장면이 대체로 3~5초가 되도록 내레이션을 6~7장면에 균등하게 나눌 것",
-      "- 한 장면에 긴 문장을 몰아넣지 말고, 6초 이상 같은 화면이 유지되지 않도록 분할할 것",
-      "- 큰 화면 문구는 1~2줄, 한 줄은 짧고 크게",
-      "- 하단 자막은 요약하지 말고 해당 장면의 내레이션 전체 문장을 그대로 사용",
-      "- 숫자·순위·단지명은 눈에 바로 들어오게 유지",
-      "- 새 배경 이미지는 전체에서 최대 2~3개만 지정",
-      "- 데이터 비교나 추세가 핵심인 장면은 '그래프/숫자 카드'를 사용",
-      "- 나머지는 '이미지 재사용', '텍스트 카드', '고정 엔딩' 중 하나 사용",
-      "- 첫 장면은 지역명 + 질문형 후킹",
-      "- 마지막 장면은 완성 대본의 '[대표 지역명] 집값, 오늘도. 집.값.쓱.' 멘트를 그대로 사용하는 브랜드 엔딩",
-      "- 화면 정보와 하단 자막이 같은 내용을 불필요하게 반복하지 않게 할 것",
-      "",
-      "[출력 형식 - 반드시 그대로]",
-      "[장면 1]",
-      "내레이션: ...",
-      "큰문구: ...",
-      "하단자막: ...",
-      "화면방식: 새 이미지",
-      "",
-      "[장면 2]",
-      "내레이션: ...",
-      "큰문구: ...",
-      "하단자막: ...",
-      "화면방식: 그래프/숫자 카드",
-      "",
-      "- 위 형식으로 장면 6~7개만 출력",
-      "- 설명, 표, 코드블록, 추가 문장 금지",
-      "",
-      "[완성 대본]",
-      shortsScript.trim(),
-      "",
-      "[원문 자료]",
-      rawContent.trim()
+      "[출력 형식: 총 7장면, 다른 설명 없이 아래 형식 반복]",
+      "[장면 1]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 질문 카드", "데이터행:", "",
+      "[장면 2]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 기준 카드", "데이터행:", "",
+      "[장면 3]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 거래량 그래프", "데이터행: 실제단지명1 | 14건 ; 실제단지명2 | 14건 ; 실제단지명3 | 13건", "",
+      "[장면 4]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 가격 비교표", "데이터행: 실제단지명1 | 6.93억 ; 실제단지명2 | 7.30억 ; 실제단지명3 | 5.69억", "",
+      "[장면 5]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 핵심 숫자 카드", "데이터행:", "",
+      "[장면 6]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 비교 기준 카드", "데이터행:", "",
+      "[장면 7]", "내레이션: ...", "큰문구: ...", "하단자막: ...",
+      "화면방식: 고정 엔딩", "데이터행:", "",
+      "주의: 위 데이터행 예시는 출력값이 아니다. 반드시 주어진 원문 실제값으로 치환할 것.",
+      "", "[완성 대본]", shortsScript.trim(), "", "[원문 자료]", rawContent.trim()
     ].join("\n");
   }
 
-  function parseShortsScenes(text: string): ShortsScene[] {
+  function parseShortsScenes(value: string): ShortsScene[] {
     const scenes: ShortsScene[] = [];
-    const re = /\[?장면\s*(\d+)\]?\s*([\s\S]*?)(?=(?:\n\s*)?\[?장면\s*\d+\]?|$)/g;
+    const re = /\[장면\s*(\d+)\]\s*([\s\S]*?)(?=\n\s*\[장면\s*\d+\]|$)/g;
     let match: RegExpExecArray | null;
-    while ((match = re.exec(text)) !== null) {
+    while ((match = re.exec(value)) !== null) {
       const body = match[2];
-      const narration = body.match(/내레이션\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const headline = body.match(/큰\s*문구\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const subtitle = body.match(/하단\s*자막\s*[:：]\s*(.+)/)?.[1]?.trim() || "";
-      const screenType = body.match(/화면\s*방식\s*[:：]\s*(.+)/)?.[1]?.trim() || "텍스트 카드";
-      if (narration || headline || subtitle) scenes.push({ order: Number(match[1]), narration, headline, subtitle, screenType });
+      const field = (label: RegExp) => cleanSceneField(body.match(label)?.[1] || "");
+      const narration = field(/^\s*내레이션\s*[:：]\s*(.*)$/m);
+      const headline = field(/^\s*큰\s*문구\s*[:：]\s*(.*)$/m);
+      const subtitle = field(/^\s*하단\s*자막\s*[:：]\s*(.*)$/m);
+      const screenType = field(/^\s*화면\s*방식\s*[:：]\s*(.*)$/m);
+      const dataRows = field(/^\s*데이터행\s*[:：]\s*(.*)$/m);
+      if (narration || headline) scenes.push({ order: Number(match[1]), narration, headline, subtitle, screenType: screenType || SCENE_TYPES[Math.min(scenes.length, 6)], dataRows });
     }
-    return scenes.sort((a, b) => a.order - b.order).slice(0, 7);
+    return scenes.sort((x, y) => x.order - y.order).slice(0, 7);
   }
 
   function buildShortsImageTasks(scenes: ShortsScene[], previous: Task[] = tasks): Task[] {
-    const selected = scenes.filter(s => s.screenType.includes("새 이미지") || s.screenType.includes("그래프/숫자 카드"));
-    let backgroundSeen = 0;
-    return selected.flatMap((scene) => {
-      const isGraphic = scene.screenType.includes("그래프/숫자 카드");
-      if (!isGraphic) {
-        backgroundSeen += 1;
-        if (backgroundSeen > 3) return [];
-      }
-      const assetKind: "background" | "graphic" = isGraphic ? "graphic" : "background";
-      const title = `장면 ${scene.order} · ${isGraphic ? "그래프/숫자 카드" : "배경 이미지"}`;
-      const prev = previous.find(t => t.title === title);
-      return [{
-        order: 0,
-        title,
-        keyMessage: scene.headline,
-        sourceText: scene.narration || scene.subtitle || scene.headline,
-        imagePrompt: isGraphic
-          ? `${scene.headline} 내용을 정확한 그래프 또는 숫자 카드로 정리한다.`
-          : `${scene.headline} 내용을 뒷받침하는 대표 세로 배경 이미지. 이미지 안에는 글자를 넣지 않는다.`,
-        done: prev?.done || false,
-        imageDataUrl: prev?.imageDataUrl || "",
-        imageUrl: prev?.imageUrl || "",
-        sourceDataUrl: prev?.sourceDataUrl,
-        replaced: prev?.replaced || false,
-        assetKind
-      }];
-    }).map((task, index) => ({ ...task, order: index }));
+    if (!scenes.length) return [];
+    const existing = previous.find(t => t.title === "공통 아파트 배경") || previous.find(t => t.assetKind !== "graphic");
+    return [{
+      order: 0, title: "공통 아파트 배경", keyMessage: "글자 없는 공통 배경 한 장",
+      sourceText: projectTitle, imagePrompt: "고화질 한국 아파트 전경. 영상 전체에 고정으로 사용. 문자와 차트 금지.",
+      done: !!existing?.imageDataUrl, imageDataUrl: existing?.imageDataUrl || "",
+      imageUrl: existing?.imageUrl || "", sourceDataUrl: existing?.sourceDataUrl,
+      replaced: existing?.replaced || false, assetKind: "background"
+    }];
   }
 
   function applyShortsSceneText(text: string) {
