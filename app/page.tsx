@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
-import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions } from "@/lib/jibssuk-v3";
+import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
@@ -215,6 +215,8 @@ export default function Home() {
   const [shortsScript, setShortsScript] = useState("");
   const [shortsSceneText, setShortsSceneText] = useState("");
   const [shortsPreview, setShortsPreview] = useState("");
+  const [shortsPreviewFrames, setShortsPreviewFrames] = useState<string[]>([]);
+  const [shortsPreviewIndex, setShortsPreviewIndex] = useState(0);
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
@@ -278,26 +280,27 @@ export default function Home() {
   const graphicCount = useMemo(() => tasks.filter(t => t.assetKind === "graphic").length, [tasks]);
   const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
+  const resolvedShortsScenes = useMemo(() => resolveOverlayScenes(shortsScenes, rawContent + "\n" + shortsScript), [shortsScenes, rawContent, shortsScript]);
   const sceneTimeline = useMemo(() => {
-    if (!finalVoiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
-    const weights = shortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
+    if (!finalVoiceDuration || !resolvedShortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
+    const weights = resolvedShortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let cursor = 0;
-    return shortsScenes.map((scene, i) => {
+    return resolvedShortsScenes.map((scene, i) => {
       const duration = i === shortsScenes.length - 1 ? Math.max(0, finalVoiceDuration - cursor) : finalVoiceDuration * (weights[i] / totalWeight);
       const start = cursor;
       const end = i === shortsScenes.length - 1 ? finalVoiceDuration : Math.min(finalVoiceDuration, start + duration);
       cursor = end;
       return { scene, start, end, duration: end - start };
     });
-  }, [shortsScenes, finalVoiceDuration]);
+  }, [resolvedShortsScenes, finalVoiceDuration]);
 
   const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
   const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
   const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
   const shortsSceneCountReady = shortsScenes.length === 7;
   const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
-  const shortsDataIssues = shortsScenes.flatMap(s => {
+  const shortsDataIssues = resolvedShortsScenes.flatMap(s => {
     const kind = sceneKind(s);
     const rows = parseOverlayRows(s.dataRows || "");
     const issues = (kind === "bar" || kind === "price") && rows.length < 2 ? ["장면 " + s.order + ": 데이터행을 두 개 이상 입력하세요."] : [];
@@ -598,7 +601,7 @@ export default function Home() {
 
   function applyShortsSceneText(text: string) {
     setShortsSceneText(text);
-    setShortsPreview("");
+    setShortsPreview(""); setShortsPreviewFrames([]);
     const parsed = parseShortsScenes(text);
     setShortsScenes(parsed);
     if (parsed.length) {
@@ -609,7 +612,7 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
-    setShortsPreview("");
+    setShortsPreview(""); setShortsPreviewFrames([]);
     setShortsScenes(prev => {
       const next = prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene);
       setTasks(buildShortsImageTasks(next));
@@ -800,11 +803,13 @@ export default function Home() {
 
   async function previewShortsCards() {
     setLoading(true); setError("");
+    if (shortsDataIssues.length) { setError(shortsDataIssues.join(" / ")); setLoading(false); return; }
     try {
       if (!shortsVisualReady || shortsScenes.length !== 7) throw new Error("공통 배경과 7장면을 먼저 준비해주세요.");
       const background = await composeShortsBackground();
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (const scene of shortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      for (const scene of resolvedShortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      setShortsPreviewFrames(frames.map(f => f.dataUrl)); setShortsPreviewIndex(0);
       setShortsPreview(await composeShortsContactSheet(frames));
     } catch (e: any) { setError(e.message || "정보판 미리보기 생성에 실패했습니다."); }
     finally { setLoading(false); }
@@ -879,7 +884,7 @@ export default function Home() {
       folder.file("background.png", backgroundMatch[1], { base64: true });
 
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (const scene of shortsScenes) {
+      for (const scene of resolvedShortsScenes) {
         const overlay = await renderShortsOverlay(scene);
         const match = overlay.match(/^data:image\/png;base64,(.+)$/);
         if (!match) throw new Error("장면 " + scene.order + " 정보판 PNG 출력에 실패했습니다.");
@@ -900,7 +905,7 @@ export default function Home() {
         folder.file("timeline.txt", shortsTimelineExport());
         if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       }
-      folder.file("overlay_data.json", JSON.stringify(shortsScenes.map(s => ({
+      folder.file("overlay_data.json", JSON.stringify(resolvedShortsScenes.map(s => ({
         order: s.order, headline: cleanSceneField(s.headline), screenType: s.screenType,
         dataRows: parseOverlayRows(s.dataRows || "").map(r => ({ label: r.label, value: r.value }))
       })), null, 2));
