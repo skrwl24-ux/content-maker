@@ -587,12 +587,27 @@ function kickContext(work: TopicWork, image02 = false) {
 }
 
 function articlePromptForWork(work: TopicWork) {
-  return work.articlePrompt + kickContext(work);
+  // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
+  const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
+    ? [
+      "",
+      "",
+      "[Paramma V3 · 기존 V2 저장본 호환 지침: 앞선 카테고리별 기본 지침보다 우선]",
+      "- 킥을 지정하지 않아도 웹 검색을 통해 자동으로 선정하고 최종 원고를 끝까지 작성할 것.",
+      "- 실용적인 해결·예방·관리 방법이 주제와 자연스럽게 연결되면 카테고리와 관계없이 먼저 검토할 것.",
+      "- 생활 팁이 맞지 않는 주제라면 의외의 비교·관찰 포인트·오해 해소를 보상으로 삼을 것.",
+      "- 이미지 02는 선택한 보상을 구체적인 저장용 정보 카드로, 01은 신비한 핵심 원리로 분리할 것."
+    ].join("\n") : "";
+  return work.articlePrompt + legacyOverride + kickContext(work);
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId) {
   const base = work.slots[slotId].prompt;
-  return slotId === "02" ? base + kickContext(work, true) : base;
+  if (slotId !== "02") return base;
+  const legacyOverride = base.includes("[Paramma V2 · 이미지 기획]")
+    ? "\n\n[Paramma V3 최신 이미지 02 지침]\n- 기존 카테고리별 선택보다 최종 본문의 킥을 우선한다. 실용적인 킥이라면 구체적인 방법과 조건을 저장용 정보 카드로 보여주며 원리 이미지 01을 반복하지 말 것."
+    : "";
+  return base + legacyOverride + kickContext(work, true);
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -1455,7 +1470,7 @@ export default function ParammaBulkPage() {
                   </div>
                   <label>
                     네이버 검색 결과 메모 <small>(선택 · 자동완성, 연관 검색어, 상위 글 제목 등)</small>
-                    <textarea value={work.searchNotes || ""} onChange={(e) => patchWork({ searchNotes: e.target.value })} placeholder={"예) 거미줄 제거 방법\\n베란다 거미줄 제거\\n거미줄 재발 방지"} />
+                    <textarea value={work.searchNotes || ""} onChange={(e) => patchWork({ searchNotes: e.target.value })} placeholder={"예) 거미줄 제거 방법\n베란다 거미줄 제거\n거미줄 재발 방지"} />
                   </label>
                   <a className={styles.kickAnalyze} target="_blank" rel="noopener noreferrer" href={"https://chatgpt.com/?q=" + encodeURIComponent(buildKickAnalysisPrompt(selected, work.searchNotes || ""))} onClick={() => { void copyText(buildKickAnalysisPrompt(selected, work.searchNotes || ""), "검색 의도 분석 요청서를 복사했습니다."); }}>검색 결과 분석·킥 추천받기 ↗</a>
                   <label>
