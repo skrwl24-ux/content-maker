@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 import { narrationDifference, restoreOriginalNarration } from "@/lib/jibssuk-narration";
-import { toKoreanVoiceScript } from "@/lib/jibssuk-voice";
+import { toKoreanVoiceScript, hasArabicVoiceDigits } from "@/lib/jibssuk-voice";
 import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
@@ -226,6 +226,7 @@ export default function Home() {
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmMemo, setBgmMemo] = useState("");
   const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
+  const [voiceFileForScript, setVoiceFileForScript] = useState<string | null>(null);
   const [shortsMasterReference, setShortsMasterReference] = useState("");
   const [shortsImagePromptPreview, setShortsImagePromptPreview] = useState(0);
   const [shortsCustomOverlays, setShortsCustomOverlays] = useState<string[]>(() => Array(7).fill(""));
@@ -249,6 +250,8 @@ export default function Home() {
   const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
   const autoShortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
   const shortsVoiceScript = shortsVoiceOverride ?? autoShortsVoiceScript;
+  const shortsVoiceDigitsRemain = hasArabicVoiceDigits(shortsVoiceScript);
+  const voiceMatchesScript = !!voiceFile && voiceFileForScript === shortsVoiceScript && !shortsVoiceDigitsRemain;
   const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
   const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
   const finalVoiceDuration = voiceDuration ? voiceDuration / SHORTS_PLAYBACK_RATE : 0;
@@ -302,7 +305,7 @@ export default function Home() {
       ? narrationDifference(shortsScript, shortsScenes.map(s => s.narration))
       : null, [shortsScript, shortsScenes]);
   const shortsScriptReady = !!shortsScript.trim() && shortsScenes.length > 0 && !shortsScriptDifference;
-  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && voiceMatchesScript && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
@@ -393,7 +396,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceFileForScript(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -1006,6 +1009,7 @@ export default function Home() {
 
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
+    setVoiceFileForScript(file ? shortsVoiceScript : null);
     setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
@@ -1050,6 +1054,8 @@ export default function Home() {
           !shortsVisualReady && "공통 배경을 업로드하세요.",
           !shortsCaptionReady && "내레이션이 비어 있습니다.",
           !voiceFile && "음성 파일을 첨부하세요.",
+          shortsVoiceDigitsRemain && "음성용 대본의 숫자를 한글로 변환하세요.",
+          !!voiceFile && !voiceMatchesScript && "대본이 변경되어 이전 음성을 사용할 수 없습니다. 다시 생성·업로드하세요.",
           ...shortsDataIssues
         ].filter(Boolean);
         throw new Error(problems.join(" / ") || "제작 패키지 검수가 완료되지 않았습니다.");
@@ -1410,7 +1416,9 @@ export default function Home() {
         {shortsScript.trim() && <div className="box voiceScriptBox">
           <div className="miniHead"><h3>AI 음성용 발음·호흡 보정</h3><div className="inlineActions"><button className="secondary compact" onClick={() => setShortsVoiceOverride(null)}>↻ 자동 보정 다시 적용</button><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
           <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => setShortsVoiceOverride(e.target.value)} />
-          <p className="muted">숫자·단위 변환과 기본 호흡은 자동으로 넣습니다. 단지명 띄어쓰기나 쉼표가 어색하면 이 원고만 직접 손보면 됩니다. 화면용 대본과 자막 숫자는 바뀌지 않습니다.</p>
+          <p className="muted">숫자·금액·연월·건수를 실제 한국어 발음으로 변환합니다. 화면용 대본과 SRT 숫자는 그대로 유지합니다. 음성을 업로드한 뒤 발음용 원고를 바꾸면 새 음성을 업로드해야 합니다.</p>
+          {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 원고에 숫자(0~9)가 남아 있습니다. 한글 표기로 수정하거나 자동 보정을 다시 적용하세요.</p>}
+          {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">기존 음성과 현재 음성용 대본이 다릅니다. 새 음성을 다시 업로드해야 ZIP을 만들 수 있습니다.</p>}
           <div className="tags">
             <span>1.4x 기준</span>
             <span>목표 30~33초</span>
@@ -1418,7 +1426,7 @@ export default function Home() {
             <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
             {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
           </div>
-          <p className={shortsVoiceEstimatedSeconds > 33 ? "voiceWarning" : "muted"}>{shortsVoiceEstimatedSeconds > 33 ? "음성용 변환 후 33초를 넘길 가능성이 있습니다. 숫자·단위는 그대로 두고 다른 문장을 압축하는 것을 권장합니다." : "6.93억 → 6억 9천만원, 84㎡ → 84제곱미터처럼 음성에서만 자연스럽게 읽도록 자동 변환합니다."}</p>
+          <p className="muted">예: 6.93억 → 육억 구천삼백만 원, 84㎡ → 팔십사 제곱미터. 글자수는 참고값이며 최종 시간은 업로드한 실제 음성 길이로 계산합니다.</p>
         </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
@@ -1526,10 +1534,11 @@ export default function Home() {
 
         <div className="grid2">
           <div className="box assetUploadBox">
-            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
+            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50 || shortsVoiceDigitsRemain} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
             <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
-            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.4x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.4배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
+            {voiceFile ? <div className="assetReady"><b>{voiceMatchesScript ? "✓" : "⚠"} {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.4x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.4배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
+            {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">발음용 대본 수정 후 새 음성을 업로드해야 타임라인과 ZIP이 유효합니다.</p>}
           </div>
 
           <div className="box assetUploadBox">
@@ -1588,7 +1597,7 @@ export default function Home() {
             <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>원문과 일치하는 한 줄 자막 {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 재확인"}</span>
             <span className={shortsVisualReady ? "ready" : ""}>공통 배경 {backgroundReady}/1 {shortsVisualReady ? "✓" : ""}</span>
             <span className={shortsSceneCountReady && shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {!shortsSceneCountReady ? "장면표 대기" : shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
-            <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
+            <span className={voiceMatchesScript ? "ready" : ""}>음성 {voiceMatchesScript ? "✓" : voiceFile ? "원고 불일치" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
             <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>장면 시간 {shortsLongScenes.length ? "조정 필요 · " + shortsLongScenes.map(x => "장면" + x.scene.order + "(" + x.duration.toFixed(1) + "초)").join(", ") : shortsExtendedGraphScenes.length ? "그래프 7초 예외 허용 ✓" : sceneTimeline.length ? "정상 ✓" : "미확인"}</span>
             <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
@@ -1604,6 +1613,8 @@ export default function Home() {
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
           {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본과 장면 내레이션이 다릅니다. 3단계에서 차이 위치를 확인하고 원본 대본 복원을 적용해 주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
+          {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">음성용 원고가 바뀌어 ZIP 출력을 막았습니다. 새 음성을 생성·업로드하세요.</p>}
+          {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 원고의 아라비아 숫자를 모두 한글로 변환해야 합니다.</p>}}
 
           <h3>빠른 조립 패키지</h3>
           <div className="packageGrid five">
