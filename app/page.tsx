@@ -254,7 +254,6 @@ export default function Home() {
   const shortsVoiceDigitsRemain = hasArabicVoiceDigits(shortsVoiceScript);
   const voiceMatchesScript = !!voiceFile && voiceFileForScript === shortsVoiceScript && !shortsVoiceDigitsRemain;
   const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
-  const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
   const finalVoiceDuration = voiceDuration ? voiceDuration / SHORTS_PLAYBACK_RATE : 0;
   const shortsBgm = useMemo(() => {
     const text = `${projectTitle} ${rawContent}`;
@@ -826,7 +825,8 @@ export default function Home() {
       "BGM: 보컬 없이 사용하고 내레이션이 항상 명확하게 들리도록 낮게 유지",
       "권장 BGM 레벨: 내레이션보다 약 18~24dB 낮게 시작하고, 말하는 동안 더 낮춰도 됨",
       "효과음: 기본적으로 사용하지 않음",
-      "영상 전체 길이는 1.4배속 적용된 음성 길이를 기준으로 맞출 것"
+      "영상 전체 길이는 1.4배속 적용된 음성 길이를 기준으로 맞출 것",
+      "장면 경계는 사용자가 최종 음성에 맞춰 보정한 값을 반영합니다. 자막 큐 내부 구간은 한글 발음 길이에 따른 추정치이므로 최종 청취 확인 필요"
     ].join("\n");
   }
 
@@ -1004,7 +1004,7 @@ export default function Home() {
       "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
       "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
       "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
-      "- subtitles_full.srt는 최종 1.4배속 기준 의미 단위로 분할된 1줄 자막입니다. 큐 순서·시작·종료 시각·문구를 그대로 적용하세요. GPT가 임의로 글자 수대로 다시 분할하거나 합치거나 대사를 재작성하지 마세요.",
+      "- subtitles_full.srt는 최종 1.4배속 음성 전체 길이, 한글 발음 길이와 보정된 장면 경계를 반영한 1줄 자막입니다. 숫자/대사를 바꾸지 말고 큐를 사용하되 실제 음성을 들으며 싱크를 최종 확인하세요.",
       "- 모든 자막은 동일한 고정 위치 X540/Y1553(1080×1920) 중앙 정렬, Y1450~1660 범위에 정확히 1줄만 표시하세요.",
       "- 자막 글꼴은 굵은 고딕 ExtraBold, 기본 86px(기존 47px보다 약 1.8배), 흰색에 짙은 그림자. 긴 단지명·숫자는 잘라내거나 두 줄로 넘기지 말고 해당 큐의 글꼴만 너비 910px 안에 비례 축소하세요.",
       "- 자막 배경은 모든 장면에서 X45~1035/Y1468~1638의 동일한 짙은 반투명 둥근 박스를 사용하세요. 위치·높이·기준선을 장면마다 바꾸지 마세요.",
@@ -1447,8 +1447,8 @@ export default function Home() {
           <div className="tags">
             <span>1.4x 기준</span>
             <span>목표 30~33초</span>
-            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>음성용 {shortsVoiceCharCount}자</span>
-            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
+            <span>음성용 {shortsVoiceCharCount}자 (발음 표기)</span>
+            <span>시간은 실제 음성 파일 업로드 후 확인</span>
             {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
           </div>
           <p className="muted">예: 6.93억 → 육억 구천삼백만 원 / 84㎡ → 팔십사 제곱미터. 음성 길이 예측은 참고용이며 실제 녹음 파일의 1.4배속 길이가 기준입니다.</p>
