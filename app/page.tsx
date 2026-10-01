@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 import { narrationDifference, restoreOriginalNarration } from "@/lib/jibssuk-narration";
+import { toKoreanVoiceScript, hasArabicVoiceDigits } from "@/lib/jibssuk-voice";
 import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
@@ -225,6 +226,8 @@ export default function Home() {
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmMemo, setBgmMemo] = useState("");
   const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
+  const [voiceFileForScript, setVoiceFileForScript] = useState<string | null>(null);
+  const [sceneBoundaryOverrides, setSceneBoundaryOverrides] = useState<number[] | null>(null);
   const [shortsMasterReference, setShortsMasterReference] = useState("");
   const [shortsImagePromptPreview, setShortsImagePromptPreview] = useState(0);
   const [shortsCustomOverlays, setShortsCustomOverlays] = useState<string[]>(() => Array(7).fill(""));
@@ -241,39 +244,16 @@ export default function Home() {
   const isShorts = contentType === "집값쓱 쇼츠";
   const preset = PRESETS[contentType] || PRESETS.default;
   function normalizeShortsVoiceText(text: string) {
-    return text
-      .replace(/(\d+\.\d+)\s*억(?:원)?/g, (full, raw) => {
-        const value = Number(raw);
-        if (!Number.isFinite(value)) return full;
-        const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
-        const eok = Math.floor(rounded + 1e-9);
-        const tenth = Math.round((rounded - eok) * 10);
-        if (tenth <= 0) return `${eok}억원`;
-        if (eok <= 0) return `${tenth}천만원`;
-        return `${eok}억 ${tenth}천만원`;
-      })
-      .replace(/(\d+(?:\.\d+)?)\s*(?:㎡|m²|m2)\s*(대)?/gi, (_full, num, dae) => `${num}제곱미터${dae ? "대" : ""}`)
-      .replace(/(\d+(?:\.\d+)?)\s*%/g, "$1퍼센트")
-      .replace(/\bTOP\s*3\b/gi, "탑 쓰리")
-      .replace(/\bDSR\b/gi, "디에스알")
-      .replace(/\bLTV\b/gi, "엘티브이")
-      .replace(/\bGTX\b/gi, "지티엑스")
-      .replace(/\bAI\b/gi, "에이아이")
-      .replace(/([가-힣])앤([가-힣])/g, "$1 앤 $2")
-      .replace(/([가-힣])(\d+단지)/g, "$1 $2")
-      .replace(/([가-힣])(푸르지오|래미안|힐스테이트|아이파크|롯데캐슬|더샵|센트럴푸르지오|어바인퍼스트|포레스티아|메가트리아|디에트르|제일풍경채|휴먼시아)/g, "$1 $2")
-      .replace(/각각\s+(?=\d)/g, "각각, ")
-      .replace(/오늘도\s*,?\s*집\.값\.쓱\./g, "오늘도, 집.값.쓱.")
-      .replace(/[ \t]{2,}/g, " ")
-      .trim();
+    return toKoreanVoiceScript(text);
   }
 
   const shortsCharCount = useMemo(() => shortsScript.replace(/\s/g, "").length, [shortsScript]);
   const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
   const autoShortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
   const shortsVoiceScript = shortsVoiceOverride ?? autoShortsVoiceScript;
+  const shortsVoiceDigitsRemain = hasArabicVoiceDigits(shortsVoiceScript);
+  const voiceMatchesScript = !!voiceFile && voiceFileForScript === shortsVoiceScript && !shortsVoiceDigitsRemain;
   const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
-  const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
   const finalVoiceDuration = voiceDuration ? voiceDuration / SHORTS_PLAYBACK_RATE : 0;
   const shortsBgm = useMemo(() => {
     const text = `${projectTitle} ${rawContent}`;
@@ -288,19 +268,40 @@ export default function Home() {
   const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
   const resolvedShortsScenes = useMemo(() => resolveOverlayScenes(shortsScenes, rawContent + "\n" + shortsScript), [shortsScenes, rawContent, shortsScript]);
-  const sceneTimeline = useMemo(() => {
+  // The uploaded audio gives the total duration. Pronunciation-aware lengths only
+  // suggest initial per-scene bounds; users can correct actual spoken boundaries.
+  const autoSceneTimeline = useMemo(() => {
     if (!finalVoiceDuration || !resolvedShortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
     const weights = resolvedShortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let cursor = 0;
     return resolvedShortsScenes.map((scene, i) => {
-      const duration = i === shortsScenes.length - 1 ? Math.max(0, finalVoiceDuration - cursor) : finalVoiceDuration * (weights[i] / totalWeight);
+      const duration = i === resolvedShortsScenes.length - 1 ? Math.max(0, finalVoiceDuration - cursor) : finalVoiceDuration * (weights[i] / totalWeight);
       const start = cursor;
-      const end = i === shortsScenes.length - 1 ? finalVoiceDuration : Math.min(finalVoiceDuration, start + duration);
+      const end = i === resolvedShortsScenes.length - 1 ? finalVoiceDuration : Math.min(finalVoiceDuration, start + duration);
       cursor = end;
       return { scene, start, end, duration: end - start };
     });
   }, [resolvedShortsScenes, finalVoiceDuration]);
+  const sceneTimeline = useMemo(() => {
+    if (!sceneBoundaryOverrides || sceneBoundaryOverrides.length !== 6 || autoSceneTimeline.length !== 7) return autoSceneTimeline;
+    const boundaries = [0, ...sceneBoundaryOverrides, finalVoiceDuration];
+    if (boundaries.some((n, i) => !Number.isFinite(n) || (i > 0 && n <= boundaries[i - 1] + 0.09))) return autoSceneTimeline;
+    return autoSceneTimeline.map((item, i) => ({
+      ...item, start: boundaries[i], end: boundaries[i + 1], duration: boundaries[i + 1] - boundaries[i]
+    }));
+  }, [autoSceneTimeline, sceneBoundaryOverrides, finalVoiceDuration]);
+
+  function updateSceneBoundary(index: number, raw: string) {
+    const time = Number(raw);
+    if (!raw.trim() || !Number.isFinite(time) || autoSceneTimeline.length !== 7) return;
+    const times = (sceneBoundaryOverrides ?? autoSceneTimeline.slice(0, -1).map(item => item.end)).slice();
+    const previous = index ? times[index - 1] : 0;
+    const following = index === 5 ? finalVoiceDuration : times[index + 1];
+    if (index < 0 || index >= 6 || time <= previous + 0.1 || time >= following - 0.1) return;
+    times[index] = time;
+    setSceneBoundaryOverrides(times);
+  }
 
   // Information-heavy graph/comparison scenes may hold for up to seven seconds.
   // Keep six seconds as the limit for the other five scenes.
@@ -325,7 +326,7 @@ export default function Home() {
       ? narrationDifference(shortsScript, shortsScenes.map(s => s.narration))
       : null, [shortsScript, shortsScenes]);
   const shortsScriptReady = !!shortsScript.trim() && shortsScenes.length > 0 && !shortsScriptDifference;
-  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && voiceMatchesScript && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
@@ -416,7 +417,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceFileForScript(null); setSceneBoundaryOverrides(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -617,6 +618,7 @@ export default function Home() {
   }
 
   function applyShortsSceneText(text: string) {
+    setSceneBoundaryOverrides(null);
     setShortsSceneText(text);
     setShortsPreview(""); setShortsPreviewFrames([]);
     const parsed = parseShortsScenes(text);
@@ -629,6 +631,7 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
+    setSceneBoundaryOverrides(null);
     setShortsPreview(""); setShortsPreviewFrames([]);
     setShortsScenes(prev => prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene));
   }
@@ -762,7 +765,7 @@ export default function Home() {
       "- 아래 대본 그대로 한국어 내레이션 음성으로 제작",
       "- 부동산 정보 쇼츠에 어울리는 자연스럽고 또렷한 톤",
       "- 광고처럼 과하게 흥분된 톤은 피하고 신뢰감 있게",
-      "- 아래 'AI 음성용 대본'은 사이트에서 발음용으로 이미 변환한 최종 원고이므로 숫자·단위·금액 표현을 다시 바꾸지 말 것",
+      "- 아래 AI 음성용 대본의 숫자는 실제 한국어 발음 그대로 한글화되어 있습니다. 숫자·단위·금액을 다시 바꾸지 말 것",
       "- 숫자, 금액, 단지명, 지역명은 적힌 그대로 정확하게 발음",
       "- 대본의 띄어쓰기는 고유명사 발음 단위이므로 최대한 그대로 반영",
       "- 쉼표에서는 아주 짧게 쉬고, 마침표에서는 한 호흡 쉬어 자연스럽게 연결",
@@ -788,7 +791,8 @@ export default function Home() {
   }
 
   function shortsSrt() {
-    return oneLineSrt(sceneTimeline);
+    // Keep the display numbers, but distribute cue times using spoken Korean length.
+    return oneLineSrt(sceneTimeline, line => toKoreanVoiceScript(line).replace(/\s/g, "").length);
   }
 
   function overlayFileName(order: number) {
@@ -822,7 +826,8 @@ export default function Home() {
       "BGM: 보컬 없이 사용하고 내레이션이 항상 명확하게 들리도록 낮게 유지",
       "권장 BGM 레벨: 내레이션보다 약 18~24dB 낮게 시작하고, 말하는 동안 더 낮춰도 됨",
       "효과음: 기본적으로 사용하지 않음",
-      "영상 전체 길이는 1.4배속 적용된 음성 길이를 기준으로 맞출 것"
+      "영상 전체 길이는 1.4배속 적용된 음성 길이를 기준으로 맞출 것",
+      "장면 시작·종료 시각은 실음성 전체 길이와 사용자가 보정한 경계를 적용합니다. 자막의 장면 내 세부 시각은 한글 발음 길이 기반 추정이므로 최종 청취로 검수하세요."
     ].join("\n");
   }
 
@@ -1000,7 +1005,7 @@ export default function Home() {
       "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
       "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
       "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
-      "- subtitles_full.srt는 최종 1.4배속 기준 의미 단위로 분할된 1줄 자막입니다. 큐 순서·시작·종료 시각·문구를 그대로 적용하세요. GPT가 임의로 글자 수대로 다시 분할하거나 합치거나 대사를 재작성하지 마세요.",
+      "- subtitles_full.srt는 업로드한 음성 총길이와 보정된 장면 경계를 반영한 1줄 자막입니다. 큐 순서·시작·종료 시각·문구를 우선 적용하고 최종 음성을 청취하여 구간별 싱크를 검수하세요. 원문 숫자와 문장을 재작성하지 마세요.",
       "- 모든 자막은 동일한 고정 위치 X540/Y1553(1080×1920) 중앙 정렬, Y1450~1660 범위에 정확히 1줄만 표시하세요.",
       "- 자막 글꼴은 굵은 고딕 ExtraBold, 기본 86px(기존 47px보다 약 1.8배), 흰색에 짙은 그림자. 긴 단지명·숫자는 잘라내거나 두 줄로 넘기지 말고 해당 큐의 글꼴만 너비 910px 안에 비례 축소하세요.",
       "- 자막 배경은 모든 장면에서 X45~1035/Y1468~1638의 동일한 짙은 반투명 둥근 박스를 사용하세요. 위치·높이·기준선을 장면마다 바꾸지 마세요.",
@@ -1029,6 +1034,8 @@ export default function Home() {
 
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
+    setVoiceFileForScript(file ? shortsVoiceScript : null);
+    setSceneBoundaryOverrides(null);
     setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
@@ -1073,6 +1080,8 @@ export default function Home() {
           !shortsVisualReady && "공통 배경을 업로드하세요.",
           !shortsCaptionReady && "내레이션이 비어 있습니다.",
           !voiceFile && "음성 파일을 첨부하세요.",
+          shortsVoiceDigitsRemain && "음성용 대본에 아라비아 숫자가 남아 있습니다.",
+          !!voiceFile && !voiceMatchesScript && "음성용 대본이 변경되었습니다. 수정된 대본으로 음성을 다시 생성·업로드하세요.",
           ...shortsDataIssues
         ].filter(Boolean);
         throw new Error(problems.join(" / ") || "제작 패키지 검수가 완료되지 않았습니다.");
@@ -1421,7 +1430,7 @@ export default function Home() {
         {rawContent.trim().length < 30 && <p className="stagePreviewNote">미리보기: 1. 자료 단계에 원문을 입력하면 GPT 대본 요청서에 자동 포함됩니다.</p>}
         <div className="box">
           <div className="miniHead"><h3>기준 대본 · 화면/자막용</h3><div className="inlineActions"><button className="secondary compact" disabled={rawContent.trim().length < 30} onClick={() => openGPT(shortsScriptPrompt())}>↗ GPT로 다시 만들기</button><button className="secondary compact" disabled={!shortsScript.trim()} onClick={() => copyText(shortsScript.trim(), "기준 대본을 복사했습니다.")}>📋 기준 대본 복사</button></div></div>
-          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => { setShortsScript(e.target.value); setShortsVoiceOverride(null); }} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
+          <textarea className="shortsScriptArea" value={shortsScript} onChange={e => { setShortsScript(e.target.value); setShortsVoiceOverride(null); setSceneBoundaryOverrides(null); }} placeholder="GPT에서 만든 대본을 여기에 붙여넣으세요. 가격·면적은 6.93억, 84㎡처럼 원문 표기를 유지합니다." />
           <div className="tags">
             <span>화면 숫자 원문 유지</span>
             <span className={shortsCharCount >= 210 && shortsCharCount <= 225 ? "ok" : shortsCharCount ? "warn" : ""}>기준 대본 {shortsCharCount}자</span>
@@ -1431,17 +1440,19 @@ export default function Home() {
         </div>
 
         {shortsScript.trim() && <div className="box voiceScriptBox">
-          <div className="miniHead"><h3>AI 음성용 발음·호흡 보정</h3><div className="inlineActions"><button className="secondary compact" onClick={() => setShortsVoiceOverride(null)}>↻ 자동 보정 다시 적용</button><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
-          <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => setShortsVoiceOverride(e.target.value)} />
-          <p className="muted">숫자·단위 변환과 기본 호흡은 자동으로 넣습니다. 단지명 띄어쓰기나 쉼표가 어색하면 이 원고만 직접 손보면 됩니다. 화면용 대본과 자막 숫자는 바뀌지 않습니다.</p>
+          <div className="miniHead"><h3>AI 음성용 발음·호흡 보정</h3><div className="inlineActions"><button className="secondary compact" onClick={() => { setShortsVoiceOverride(null); setSceneBoundaryOverrides(null); }}>↻ 자동 보정 다시 적용</button><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
+          <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => { setShortsVoiceOverride(e.target.value); setSceneBoundaryOverrides(null); }} />
+          <p className="muted">숫자·금액·연월·건수까지 모두 실제 읽는 한글 발음으로 자동 변환합니다. 화면용 대본과 자막의 숫자는 그대로 유지합니다. 이미 음성을 업로드한 후 이 원고를 바꾸면 수정본 음성을 다시 업로드해야 합니다.</p>
+          {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 대본에 숫자(0~9)가 남아 있습니다. 한글로 바꾸거나 자동 보정을 다시 적용해 주세요.</p>}
+          {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">⚠ 음성 대본이 변경되었습니다. 기존 음성 파일로 ZIP을 만들 수 없으니 다시 생성·업로드하세요.</p>}
           <div className="tags">
             <span>1.4x 기준</span>
             <span>목표 30~33초</span>
-            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>음성용 {shortsVoiceCharCount}자</span>
-            <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
+            <span>음성용 발음 표기 {shortsVoiceCharCount}자</span>
+            <span>정확한 시간은 음성 파일을 넣은 뒤 확인</span>
             {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
           </div>
-          <p className={shortsVoiceEstimatedSeconds > 33 ? "voiceWarning" : "muted"}>{shortsVoiceEstimatedSeconds > 33 ? "음성용 변환 후 33초를 넘길 가능성이 있습니다. 숫자·단위는 그대로 두고 다른 문장을 압축하는 것을 권장합니다." : "6.93억 → 6억 9천만원, 84㎡ → 84제곱미터처럼 음성에서만 자연스럽게 읽도록 자동 변환합니다."}</p>
+          <p className="muted">예: 6.93억 → 육억 구천삼백만 원, 84㎡ → 팔십사 제곱미터. 글자 수만으로 음성 길이를 확정하지 않습니다.</p>
         </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
@@ -1549,10 +1560,12 @@ export default function Home() {
 
         <div className="grid2">
           <div className="box assetUploadBox">
-            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
-            <p className="muted">완성 대본 그대로, BGM 없이 MP3/WAV 내레이션만 요청합니다.</p>
+            <div className="miniHead"><h3>② AI 음성</h3><button className="primary compact" disabled={shortsScript.trim().length < 50 || shortsVoiceDigitsRemain} onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div>
+            <p className="muted">한글 발음으로 변환된 음성용 원고를 그대로 사용하고, BGM 없이 MP3/WAV만 요청합니다.</p>
+            {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 원고의 숫자를 모두 한글로 변환한 뒤 생성하세요.</p>}
             <label className="assetDrop">완성 음성파일 넣기<input type="file" accept="audio/*" onChange={e => handleVoiceFile(e.target.files?.[0] || null)} /></label>
-            {voiceFile ? <div className="assetReady"><b>✓ {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.4x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.4배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
+            {voiceFile ? <div className="assetReady"><b>{voiceMatchesScript ? "✓" : "⚠"} {voiceFile.name}</b><span>{voiceDuration ? `원본 ${voiceDuration.toFixed(1)}초 → 1.4x 최종 ${finalVoiceDuration.toFixed(1)}초` : "길이 확인 중"}</span></div> : <p className="muted">원본 음성을 넣으면 1.4배속 최종 길이로 자동 환산해 타임라인과 SRT를 만듭니다.</p>}
+            {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">현재 음성용 대본과 업로드된 음성이 일치하지 않습니다. 다시 제작한 음성을 업로드하세요.</p>}
           </div>
 
           <div className="box assetUploadBox">
@@ -1568,14 +1581,24 @@ export default function Home() {
 
         <div className="box">
           <div className="miniHead"><h3>④ 한 줄 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
-          {sceneTimeline.length > 0 ? <div className="timelineSimple">{sceneTimeline.map(item => <div key={item.scene.order}><b>{item.scene.order}. {item.start.toFixed(1)}~{item.end.toFixed(1)}초</b><span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 장면 시간을 자동 배분합니다.</p>}
-          <p className="muted">SRT는 원문 내레이션을 빠짐없이 보존하면서 20자 안팎의 한 줄 큐로 나누고, 1.4배속 최종 타임라인에 배치합니다. 배경·투명 정보판·자막은 서로 별도 레이어입니다.</p>
+          {sceneTimeline.length > 0 ? <>
+            <p className="muted">처음에는 실제 음성 총길이와 한글 발음 길이로 자동 추정합니다. 음성을 들으면서 1~6번 장면의 끝나는 시각(최종 1.4배속 기준)을 조정하면 다음 장면 시작 시각, SRT, edit_plan.txt가 함께 갱신됩니다. 마지막 7번은 자동으로 전체 종료 시각에 맞춥니다.</p>
+            <div className="timelineSimple">{sceneTimeline.map((item, index) => <div key={item.scene.order}>
+              <b>{item.scene.order}. {item.start.toFixed(2)}~{item.end.toFixed(2)}초 · {item.duration.toFixed(2)}초</b>
+              <span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small>
+              {index < 6 && <label style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>장면 {item.scene.order} 종료 / 다음 장면 시작 (초)
+                <input aria-label={`장면 ${item.scene.order} 종료 시각`} type="number" min="0.1" max={finalVoiceDuration - 0.1} step="0.1" value={Number(item.end.toFixed(2))} onChange={e => updateSceneBoundary(index, e.target.value)} style={{width:92,padding:"4px 6px"}} />
+              </label>}
+            </div>)}</div>
+            {sceneBoundaryOverrides && <button type="button" className="secondary compact" onClick={() => setSceneBoundaryOverrides(null)}>↻ 장면 시간 자동 배분으로 되돌리기</button>}
+          </> : <p className="muted">음성파일을 넣으면 실제 음성 총길이와 한글 발음 길이를 기준으로 장면 시간을 먼저 추정합니다.</p>}
+          <p className="muted">SRT 화면 문구는 원래 숫자 그대로 유지하며, 음성용 한글 발음 길이로 구간 내 시간을 추정합니다. 정밀한 단어별 강제 정렬은 아니므로 마지막 청취 검수는 필요합니다. 배경·정보판·자막은 별도 레이어입니다.</p>
         </div>
 
         <div className="assetChecklist">
           <span className={backgroundReady === backgroundCount ? "ready" : ""}>배경 {backgroundReady}/{backgroundCount}</span>
           <span className={shortsSceneCountReady && shortsDataIssues.length===0 ? "ready" : ""}>코드 정보판 {!shortsSceneCountReady ? `${shortsScenes.length}/7 · 장면표 대기` : shortsDataIssues.length ? "데이터 수정 필요" : "7장 자동 생성 ✓"}</span>
-          <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.4x) ✓" : "✓") : "대기"}</span>
+          <span className={voiceMatchesScript ? "ready" : ""}>음성 {voiceMatchesScript ? (finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초(1.4x) ✓" : "✓") : voiceFile ? "원고 변경 · 재업로드 필요" : "대기"}</span>
           <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>한 줄 SRT {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 확인"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
@@ -1611,7 +1634,7 @@ export default function Home() {
             <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>원문과 일치하는 한 줄 자막 {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 재확인"}</span>
             <span className={shortsVisualReady ? "ready" : ""}>공통 배경 {backgroundReady}/1 {shortsVisualReady ? "✓" : ""}</span>
             <span className={shortsSceneCountReady && shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {!shortsSceneCountReady ? "장면표 대기" : shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
-            <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
+            <span className={voiceMatchesScript ? "ready" : ""}>음성 {voiceMatchesScript ? "✓" : voiceFile ? "재업로드 필요" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
             <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>장면 시간 {shortsLongScenes.length ? "조정 필요 · " + shortsLongScenes.map(x => "장면" + x.scene.order + "(" + x.duration.toFixed(1) + "초)").join(", ") : shortsExtendedGraphScenes.length ? "그래프 7초 예외 허용 ✓" : sceneTimeline.length ? "정상 ✓" : "미확인"}</span>
             <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
@@ -1627,6 +1650,8 @@ export default function Home() {
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
           {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본과 장면 내레이션이 다릅니다. 3단계에서 차이 위치를 확인하고 원본 대본 복원을 적용해 주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
+          {voiceFile && !voiceMatchesScript && <p className="voiceWarning">음성용 원고와 업로드 파일이 달라 ZIP 출력을 중단했습니다. 음성을 다시 만들어 업로드해 주세요.</p>}
+          {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 원고에 아라비아 숫자가 남아 있습니다. 자동 보정을 다시 적용하거나 직접 한글로 수정하세요.</p>}}
 
           <h3>빠른 조립 패키지</h3>
           <div className="packageGrid five">
