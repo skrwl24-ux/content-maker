@@ -765,7 +765,7 @@ export default function Home() {
   }
 
   function shortsSrt() {
-    return oneLineSrt(sceneTimeline);
+    return oneLineSrt(sceneTimeline, line => toKoreanVoiceScript(line).replace(/\s/g, "").length);
   }
 
   function overlayFileName(order: number) {
