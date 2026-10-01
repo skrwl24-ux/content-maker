@@ -665,23 +665,47 @@ export default function Home() {
     try {
       if (file.type !== "image/png" && file.type !== "image/webp") throw new Error("정보판은 투명 PNG 또는 WebP 파일로 올려주세요.");
       const source = await loadImage(await fileToDataUrl(file));
+      // First normalize the entire image. Never clip the bottom of an uploaded information card.
+      const scan = document.createElement("canvas");
+      scan.width = 1080; scan.height = 1920;
+      const scanCtx = scan.getContext("2d", { willReadFrequently: true });
+      if (!scanCtx) throw new Error("정보판 분석을 시작할 수 없습니다.");
+      scanCtx.drawImage(source, 0, 0, 1080, 1920);
+      const pixels = scanCtx.getImageData(0, 0, 1080, 1920).data;
+      let left = 1080, top = 1920, right = -1, bottom = -1;
+      let hasTransparency = false;
+      // Ignore barely visible antialiasing noise, but include soft card shadows in fitting.
+      for (let y = 0; y < 1920; y += 2) {
+        for (let x = 0; x < 1080; x += 2) {
+          const alpha = pixels[(y * 1080 + x) * 4 + 3];
+          if (alpha < 245) hasTransparency = true;
+          if (alpha < 12) continue;
+          left = Math.min(left, x); right = Math.max(right, x + 1);
+          top = Math.min(top, y); bottom = Math.max(bottom, y + 1);
+        }
+      }
+      if (!hasTransparency) throw new Error("정보판이 불투명해 공통 배경을 가립니다. GPT에서 투명 배경(RGBA)으로 다시 제작해주세요.");
+      if (right < left || bottom < top) throw new Error("투명 이미지에서 정보판 내용을 찾을 수 없습니다.");
       const canvas = document.createElement("canvas");
       canvas.width = 1080; canvas.height = 1920;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("정보판 변환에 실패했습니다.");
-      // Ensure that no generated graphic can cover the separate subtitle/UI layer.
-      ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, 1080, 1320); ctx.clip();
-      ctx.drawImage(source, 0, 0, 1080, 1920);
-      ctx.restore();
-      const pixels = ctx.getImageData(0, 0, 1080, 1320).data;
-      let hasAlpha = false;
-      for (let i = 3; i < pixels.length; i += 101 * 4) { if (pixels[i] < 245) { hasAlpha = true; break; } }
-      if (!hasAlpha) throw new Error("정보판이 불투명해 공통 배경을 가립니다. GPT에서 투명 배경(RGBA)으로 다시 제작해주세요.");
+      const needsFit = bottom > 1320 || left < 0 || right > 1080;
+      if (!needsFit) {
+        // Already inside the subtitle safe boundary: retain the artist's original placement.
+        ctx.drawImage(scan, 0, 0);
+      } else {
+        // Preserve every visible pixel (including shadows), aspect ratio and centered position.
+        // Allow a maximum content width of 1000px and content height of 1220px.
+        const scale = Math.min(1, 1000 / (right - left), 1220 / (bottom - top));
+        const dx = 540 - (left + right) * scale / 2;
+        const dy = Math.min(80, top * scale) - top * scale;
+        ctx.drawImage(scan, dx, dy, 1080 * scale, 1920 * scale);
+      }
       const overlay = canvas.toDataURL("image/png");
       setShortsCustomOverlays(prev => prev.map((src, i) => i === index ? overlay : src));
       setShortsPreview(""); setShortsPreviewFrames([]);
-      setShortsOverlayNotice(String(index + 1) + "번 GPT 정보판을 적용했습니다. 그래프와 한글·숫자는 미리보기에서 다시 검토하세요.");
+      setShortsOverlayNotice(String(index + 1) + "번 GPT 정보판을 적용했습니다. 자막 영역을 침범하면 내용이 잘리지 않도록 자동 축소·상향 배치합니다. 한글·숫자는 미리보기에서 검토하세요.");
       setError("");
     } catch (e: any) { setError(e.message || "정보판 업로드에 실패했습니다."); }
   }
@@ -981,7 +1005,7 @@ export default function Home() {
         "GPT에서 만든 개별 투명 정보판을 업로드했다면 그 파일을 우선 사용하며, 없는 장면은 기존 코드 렌더링으로 보완합니다.",
         "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
         "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
-        "Y 1320 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
+        "업로드 정보판은 내용이 잘리지 않도록 Y 1320 이내로 자동 맞춤 처리되며, 자막은 Y 1450~1660에 배치합니다."
       ].join("\n"));
       if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
       if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
@@ -1327,7 +1351,7 @@ export default function Home() {
           </div>)}
         </div>}
         <div className="box masterReferenceBox">
-          <div className="miniHead"><h3>② 집값쓱 스타일 마스터 V1 · 고품질 이미지 제작</h3><span className="muted">요청서 7종 · 사이트에 고정 저장</span></div>
+          <div className="miniHead"><h3>② 집값쓱 스타일 마스터 V2 · 고품질 이미지 제작</h3><span className="muted">요청서 7종 · 사이트에 고정 저장</span></div>
           <p className="muted">먼저 위에서 7장 구성표를 붙여넣어 주세요. 승인한 김포 썸네일은 한 번 등록하면 디자인 기준으로 사용합니다. 다른 지역 영상에 김포의 숫자와 문구를 복사하지 않습니다.</p>
           <div className="masterReferenceLayout">
             {shortsMasterReference
@@ -1354,7 +1378,7 @@ export default function Home() {
               {shortsImagePromptPreview === scene.order && <pre className="masterPromptPreview">{imagePromptForScene(scene.order)}</pre>}
             </div>)}
           </div>
-          <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 Y 1320 아래를 자동으로 투명 처리해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
+          <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 정보판의 투명 영역을 확인하고, Y 1320 아래로 내용이 넘어오면 자르지 않고 비율대로 자동 축소·상향 배치해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
         </div>
         <div className="box">
           <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
