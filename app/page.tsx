@@ -227,6 +227,7 @@ export default function Home() {
   const [bgmMemo, setBgmMemo] = useState("");
   const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
   const [voiceFileForScript, setVoiceFileForScript] = useState<string | null>(null);
+  const [sceneBoundaryOverrides, setSceneBoundaryOverrides] = useState<number[] | null>(null);
   const [shortsMasterReference, setShortsMasterReference] = useState("");
   const [shortsImagePromptPreview, setShortsImagePromptPreview] = useState(0);
   const [shortsCustomOverlays, setShortsCustomOverlays] = useState<string[]>(() => Array(7).fill(""));
@@ -268,7 +269,7 @@ export default function Home() {
   const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
   const resolvedShortsScenes = useMemo(() => resolveOverlayScenes(shortsScenes, rawContent + "\n" + shortsScript), [shortsScenes, rawContent, shortsScript]);
-  const sceneTimeline = useMemo(() => {
+  const autoSceneTimeline = useMemo(() => {
     if (!finalVoiceDuration || !resolvedShortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
     const weights = resolvedShortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
@@ -281,6 +282,27 @@ export default function Home() {
       return { scene, start, end, duration: end - start };
     });
   }, [resolvedShortsScenes, finalVoiceDuration]);
+  const sceneTimeline = useMemo(() => {
+    if (!sceneBoundaryOverrides || sceneBoundaryOverrides.length !== 6 || autoSceneTimeline.length !== 7) return autoSceneTimeline;
+    const bounds = [0, ...sceneBoundaryOverrides, finalVoiceDuration];
+    if (bounds.some((n, index) => !Number.isFinite(n) || (index > 0 && n - bounds[index - 1] <= 0.1))) return autoSceneTimeline;
+    return autoSceneTimeline.map((item, index) => ({
+      ...item, start: bounds[index], end: bounds[index + 1], duration: bounds[index + 1] - bounds[index]
+    }));
+  }, [autoSceneTimeline, sceneBoundaryOverrides, finalVoiceDuration]);
+
+  function updateSceneBoundary(index: number, newValue: string) {
+    if (!newValue.trim() || autoSceneTimeline.length !== 7) return;
+    const time = Number(newValue);
+    if (!Number.isFinite(time) || index < 0 || index >= 6) return;
+    const oldBounds = (sceneBoundaryOverrides ?? autoSceneTimeline.slice(0, -1).map(item => item.end)).slice();
+    const left = index === 0 ? 0 : oldBounds[index - 1];
+    const right = index === 5 ? finalVoiceDuration : oldBounds[index + 1];
+    if (time <= left + 0.1 || time >= right - 0.1) return;
+    oldBounds[index] = time;
+    setSceneBoundaryOverrides(oldBounds);
+  }
+
 
   // Information-heavy graph/comparison scenes may hold for up to seven seconds.
   // Keep six seconds as the limit for the other five scenes.
@@ -396,7 +418,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceFileForScript(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceFileForScript(null); setSceneBoundaryOverrides(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -597,6 +619,7 @@ export default function Home() {
   }
 
   function applyShortsSceneText(text: string) {
+    setSceneBoundaryOverrides(null);
     setShortsSceneText(text);
     setShortsPreview(""); setShortsPreviewFrames([]);
     const parsed = parseShortsScenes(text);
@@ -609,6 +632,7 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
+    setSceneBoundaryOverrides(null);
     setShortsPreview(""); setShortsPreviewFrames([]);
     setShortsScenes(prev => prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene));
   }
@@ -1010,6 +1034,7 @@ export default function Home() {
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
     setVoiceFileForScript(file ? shortsVoiceScript : null);
+    setSceneBoundaryOverrides(null);
     setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
