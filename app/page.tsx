@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
+import { narrationDifference, restoreOriginalNarration } from "@/lib/jibssuk-narration";
 import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
@@ -319,8 +320,11 @@ export default function Home() {
     unsupportedRowValues(s, rawContent + "\n" + shortsScript)
       .map(v => "장면 " + s.order + ": 원문에 없는 값 " + v)
   );
-  const normalizeCheck = (v: string) => v.replace(/[\s.,!?。·:：]/g, "");
-  const shortsScriptReady = !!shortsScript.trim() && normalizeCheck(shortsScenes.map(s => s.narration).join("")) === normalizeCheck(shortsScript);
+  const shortsScriptDifference = useMemo(() =>
+    shortsScript.trim() && shortsScenes.length > 0
+      ? narrationDifference(shortsScript, shortsScenes.map(s => s.narration))
+      : null, [shortsScript, shortsScenes]);
+  const shortsScriptReady = !!shortsScript.trim() && shortsScenes.length > 0 && !shortsScriptDifference;
   const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
@@ -629,6 +633,28 @@ export default function Home() {
     setShortsScenes(prev => prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene));
   }
 
+  function restoreShortsOriginalScript() {
+    const repaired = restoreOriginalNarration(shortsScript, shortsScenes.map(s => s.narration));
+    if (!repaired || repaired.length !== 7) {
+      setError("기준 대본 또는 7장면 내레이션이 부족해 복원할 수 없습니다.");
+      return;
+    }
+    const updated = shortsScenes.map((scene, i) => ({
+      ...scene, narration: repaired[i], subtitle: repaired[i]
+    }));
+    // Keep the editable pasted plan and its parsed scenes in sync after repair.
+    applyShortsSceneText(updated.map(scene => [
+      "[장면 " + scene.order + "]",
+      "내레이션: " + scene.narration,
+      "큰문구: " + scene.headline,
+      "하단자막: " + scene.subtitle,
+      "화면방식: " + scene.screenType,
+      "데이터행: " + (scene.dataRows || "")
+    ].join("\n")).join("\n\n"));
+    setShortsOverlayNotice("7장면 내레이션과 하단 자막을 원본 완성 대본으로 복원했습니다. 큰 문구·데이터행과 재계산된 시간을 확인해 주세요.");
+    setError("");
+  }
+
   function imagePromptForScene(order: number) {
     const scene = resolvedShortsScenes.find(x => x.order === order);
     return buildJibssukImagePrompt({
@@ -835,6 +861,8 @@ export default function Home() {
       "- 7장면 구성 유지. 총 영상 길이와 음성 속도 1.4배속을 유지하세요.",
       "- 장면 3(핵심 수치)과 4(가격 그래프)는 각각 최대 7초, 나머지 장면은 각각 최대 6초로 배분하세요.",
       "- 장면 경계에서 내레이션을 자연스럽게 옮기되 모든 원본 문장은 순서대로 정확히 한 번씩 등장해야 합니다.",
+      "- 내레이션은 [원본 완성 대본]에서 문구를 문자 그대로 잘라 사용하세요. 조사·숫자·단위·기호(예: ~, ㎡, %)·브랜드 멘트의 표기까지 다시 쓰거나 요약하지 마세요.",
+      "- 내레이션 7개만 순서대로 이어서 공백과 문장부호를 제외한 글자가 원본과 동일한지 검산하세요. 누락·중복이 있다면 출력 전에 고치세요.",
       "- 이동한 내레이션에 맞춰 큰 문구·하단 자막·화면 방식·데이터행도 함께 갱신하세요.",
       "- 하단 자막은 해당 장면 내레이션 전체와 동일하게 입력합니다. 실제 영상에서는 사이트가 1줄씩 분할합니다.",
       "- 원문에 없는 새 수치나 데이터는 만들지 마세요. 그래프·표의 데이터행은 해당 장면과 실제로 대응해야 합니다.",
@@ -1456,7 +1484,17 @@ export default function Home() {
           {tasks.map(t => <div className="imageRow" key={t.title}><span>BG</span><div><b>{t.title}</b><p>투명 오버레이 7장 아래에서 계속 고정됩니다.</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>배경 만들기 ↗</button></div>)}
           <p className="muted">데이터행 형식: 풍무푸르지오센트레빌 | 14건 ; 풍무센트럴푸르지오 | 14건. 4번 월별 가격은 원문에서 자동 복원되며, 비교값이 부족하면 임의 생성 없이 정보 카드로 전환합니다. 원문에 없는 숫자는 ZIP 검수에서 차단됩니다.</p>
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
-          {!shortsScriptReady && shortsScenes.length > 0 && <p className="voiceWarning">장면 내레이션 합본과 기준 대본이 다릅니다. 누락·중복된 문장을 수정해주세요.</p>}
+          {!shortsScriptReady && shortsScenes.length > 0 && <>
+            <p className="voiceWarning">장면 내레이션과 기준 대본의 첫 차이 {shortsScriptDifference ? "· 장면 " + shortsScriptDifference.scene + " 부근 (비교 위치 " + shortsScriptDifference.position + ")" : ""}</p>
+            {shortsScriptDifference && <div style={{border:"1px solid #f6d7a7",borderRadius:12,padding:12,fontSize:13,lineHeight:1.55,overflowWrap:"anywhere"}}>
+              <div><b>기준 대본</b> · {shortsScriptDifference.original}</div>
+              <div><b>장면 합본</b> · {shortsScriptDifference.revised}</div>
+            </div>}
+            <div className="inlineActions">
+              <button type="button" className="secondary compact" disabled={shortsScenes.length !== 7} onClick={restoreShortsOriginalScript}>↻ 원본 대본으로 7장면 내레이션 복원</button>
+            </div>
+            <p className="muted">현재 재분배 결과의 장면 경계를 참고해 원본 문구를 빠짐없이 복원하며 하단 자막도 동일하게 맞춥니다. 복원 후 큰 문구·데이터행과 허용 시간을 확인하세요.</p>
+          </>}
         </div>
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={!shortsSceneCountReady} onClick={() => setPhase("images")}>제작자료 준비</button></div>
       </> : analysis ? <>
@@ -1562,7 +1600,7 @@ export default function Home() {
             </div>
           </>}
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
-          {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
+          {!shortsScriptReady && (shortsScenes.length > 0 || !!shortsScript.trim()) && <p className="voiceWarning">원본 대본과 장면 내레이션이 다릅니다. 3단계에서 차이 위치를 확인하고 원본 대본 복원을 적용해 주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
 
           <h3>빠른 조립 패키지</h3>
