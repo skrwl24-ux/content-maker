@@ -1416,7 +1416,9 @@ export default function Home() {
         {shortsScript.trim() && <div className="box voiceScriptBox">
           <div className="miniHead"><h3>AI 음성용 발음·호흡 보정</h3><div className="inlineActions"><button className="secondary compact" onClick={() => setShortsVoiceOverride(null)}>↻ 자동 보정 다시 적용</button><button className="secondary compact" onClick={() => copyText(shortsVoiceScript.trim(), "AI 음성용 대본을 복사했습니다.")}>📋 음성용 복사</button><button className="primary compact" onClick={() => openGPT(shortsVoicePrompt())}>🎙 AI 음성 만들기 ↗</button></div></div>
           <textarea className="voiceScriptEditor" value={shortsVoiceScript} onChange={e => setShortsVoiceOverride(e.target.value)} />
-          <p className="muted">숫자·단위 변환과 기본 호흡은 자동으로 넣습니다. 단지명 띄어쓰기나 쉼표가 어색하면 이 원고만 직접 손보면 됩니다. 화면용 대본과 자막 숫자는 바뀌지 않습니다.</p>
+          <p className="muted">금액·연월·거래 건수까지 AI가 읽을 한글 발음으로 자동 변환합니다. 화면용 대본과 SRT의 아라비아 숫자는 유지합니다. 이미 업로드한 음성은 대본 수정 후 다시 생성해야 합니다.</p>
+          {shortsVoiceDigitsRemain && <p className="voiceWarning">음성용 대본에 아라비아 숫자가 남아 있습니다. 한글로 직접 수정하거나 자동 보정을 다시 적용하세요.</p>}
+          {!!voiceFile && !voiceMatchesScript && <p className="voiceWarning">⚠ 발음용 대본이 변경되어 기존 음성이 만료됐습니다. 수정된 음성을 다시 업로드하세요.</p>}
           <div className="tags">
             <span>1.4x 기준</span>
             <span>목표 30~33초</span>
@@ -1424,7 +1426,7 @@ export default function Home() {
             <span className={shortsVoiceEstimatedSeconds >= 30 && shortsVoiceEstimatedSeconds <= 33 ? "ok" : "warn"}>예상 약 {shortsVoiceEstimatedSeconds.toFixed(1)}초</span>
             {shortsVoiceCharCount !== shortsCharCount && <span>변환 후 {shortsVoiceCharCount > shortsCharCount ? "+" : ""}{shortsVoiceCharCount - shortsCharCount}자</span>}
           </div>
-          <p className={shortsVoiceEstimatedSeconds > 33 ? "voiceWarning" : "muted"}>{shortsVoiceEstimatedSeconds > 33 ? "음성용 변환 후 33초를 넘길 가능성이 있습니다. 숫자·단위는 그대로 두고 다른 문장을 압축하는 것을 권장합니다." : "6.93억 → 6억 9천만원, 84㎡ → 84제곱미터처럼 음성에서만 자연스럽게 읽도록 자동 변환합니다."}</p>
+          <p className="muted">예: 6.93억 → 육억 구천삼백만 원 / 84㎡ → 팔십사 제곱미터. 음성 길이 예측은 참고용이며 실제 녹음 파일의 1.4배속 길이가 기준입니다.</p>
         </div>}
         <div className="actions spread"><button className="secondary" onClick={() => setPhase("input")}>자료 수정</button><button className="primary" disabled={shortsScript.trim().length < 50} onClick={openShortsSceneMaker}>GPT로 장면표 만들기 ↗</button></div>
       </>}
