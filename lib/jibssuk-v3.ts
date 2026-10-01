@@ -62,25 +62,62 @@ export function unsupportedRowValues(scene: OverlayScene, source: string): strin
   });
 }
 
-export function splitOneLineCaptions(source: string, maxChars = 20): string[] {
-  const tokens = String(source || "").trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
-  const lines: string[] = [];
-  let line = "";
-  for (const token of tokens) {
-    if (line && [...line + " " + token].length > maxChars) {
-      lines.push(line);
-      line = "";
-    }
-    if ([...token].length > maxChars) {
-      if (line) { lines.push(line); line = ""; }
-      const chars = [...token];
-      while (chars.length > maxChars) lines.push(chars.splice(0, maxChars).join(""));
-      line = chars.join("");
-    } else {
-      line = line ? line + " " + token : token;
+// Estimate on-screen width rather than splitting a Korean place name or number.
+function captionVisualUnits(value: string): number {
+  return [...value].reduce((sum, ch) => {
+    if (/[가-힣]/.test(ch)) return sum + 1;
+    if (/[A-Za-z0-9]/.test(ch)) return sum + 0.59;
+    if (/\s/.test(ch)) return sum + 0.4;
+    return sum + 0.53;
+  }, 0);
+}
+
+// Make one-line captions at natural spoken phrase boundaries. Preserve every original
+// word, number, punctuation mark and their order; never cut a compound name mid-token.
+export function splitOneLineCaptions(source: string, maxChars = 15): string[] {
+  const normalized = String(source || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return [];
+  const words = normalized.split(" ");
+  const sentences: string[][] = [];
+  let sentence: string[] = [];
+  for (const word of words) {
+    sentence.push(word);
+    if (/[.!?。！？]$/.test(word)) {
+      sentences.push(sentence);
+      sentence = [];
     }
   }
-  if (line) lines.push(line);
+  if (sentence.length) sentences.push(sentence);
+
+  const lines: string[] = [];
+  for (const tokens of sentences) {
+    const n = tokens.length;
+    const dp = Array<number>(n + 1).fill(Infinity);
+    const next = Array<number>(n).fill(0);
+    dp[n] = 0;
+    for (let i = n - 1; i >= 0; i--) {
+      let chunk = "";
+      for (let j = i + 1; j <= n; j++) {
+        chunk = chunk ? chunk + " " + tokens[j - 1] : tokens[j - 1];
+        const size = captionVisualUnits(chunk);
+        // Exception for a single extra-long proper noun: shrink its rendered
+        // font rather than cutting its name or changing the narration.
+        if (size > maxChars + 1 && j > i + 1) break;
+        const ending = tokens[j - 1];
+        const score = 12 + (size - (maxChars - 2)) ** 2 * 1.15
+          + (size < 5 && n > 1 ? 19 : 0)
+          + (j < n && /[,，;；:：]$/.test(ending) ? -8 : 0)
+          + (j < n && /[은는이가을를과와의에도만]$/.test(ending) ? 4 : 0)
+          + dp[j];
+        if (score < dp[i]) { dp[i] = score; next[i] = j; }
+      }
+    }
+    for (let i = 0; i < n;) {
+      const j = next[i] > i ? next[i] : i + 1;
+      lines.push(tokens.slice(i, j).join(" "));
+      i = j;
+    }
+  }
   return lines;
 }
 
@@ -96,20 +133,38 @@ export function oneLineSrt(timeline: TimedScene[]): string {
   let id = 0;
   const entries: string[] = [];
   for (const item of timeline) {
-    const lines = splitOneLineCaptions(item.scene.narration || item.scene.subtitle, 20);
-    const weights = lines.map((x) => Math.max(1, [...x.replace(/\s/g, "")].length));
+    const lines = splitOneLineCaptions(item.scene.narration || item.scene.subtitle);
+    // Prevent several tiny flashes in a dense TOP3 scene. Join short adjacent
+    // phrases only when necessary, keeping original text and sentence order.
+    const maxCues = Math.max(1, Math.floor(item.duration / 0.82));
+    while (lines.length > maxCues) {
+      let best = 0;
+      let bestCost = Infinity;
+      for (let i = 0; i < lines.length - 1; i++) {
+        const cost = captionVisualUnits(lines[i] + " " + lines[i + 1])
+          + (/[.!?。！？]$/.test(lines[i]) ? 25 : 0);
+        if (cost < bestCost) { bestCost = cost; best = i; }
+      }
+      lines.splice(best, 2, lines[best] + " " + lines[best + 1]);
+    }
+    if (!lines.length) continue;
+    const weights = lines.map(x => Math.max(1, captionVisualUnits(x))
+      + (/[.!?。！？]$/.test(x) ? 1 : 0));
     const total = weights.reduce((sum, x) => sum + x, 0);
-    let offset = 0;
+    const base = Math.min(0.62, item.duration / lines.length * 0.75);
+    const flexible = Math.max(0, item.duration - lines.length * base);
+    let cursor = item.start;
     for (let i = 0; i < lines.length; i++) {
-      const start = item.start + item.duration * offset / total;
-      offset += weights[i];
-      const end = i === lines.length - 1 ? item.end : item.start + item.duration * offset / total;
+      const start = cursor;
+      const end = i === lines.length - 1
+        ? item.end
+        : Math.min(item.end, cursor + base + flexible * weights[i] / total);
       entries.push(String(++id) + "\n" + formatSrtTime(start) + " --> " + formatSrtTime(end) + "\n" + lines[i]);
+      cursor = end;
     }
   }
   return entries.join("\n\n");
 }
-
 
 // Older saved scene plans may not contain dataRows. Recover only when names AND values
 // are explicitly present in the supplied source; otherwise keep validation blocking export.
