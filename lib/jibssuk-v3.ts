@@ -14,7 +14,7 @@ export const SCENE_TYPES = [
   "주목 포인트 카드", "주의사항 카드", "집값쓱 엔딩"
 ] as const;
 export const SHORTS_LAYOUT = {
-  width: 1080, height: 1920, cardBottom: 1350,
+  width: 1080, height: 1920, cardBottom: 1320,
   captionTop: 1450, captionBottom: 1660, uiTop: 1720
 } as const;
 
@@ -341,6 +341,7 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
     panel(410, 695);
     titleLines(header, 650, 79, WHITE);
   }
-  // Intentionally zero alpha below 1350: one-line subtitles are a separate layer.
+  // Hard-cut all visual pixels from Y 1320 down: captions and Shorts UI are separate layers.
+  ctx.clearRect(0, SHORTS_LAYOUT.cardBottom, SHORTS_LAYOUT.width, SHORTS_LAYOUT.height - SHORTS_LAYOUT.cardBottom);
   return canvas.toDataURL("image/png");
 }
