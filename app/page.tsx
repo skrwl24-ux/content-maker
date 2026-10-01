@@ -85,7 +85,7 @@ const RECOMMENDATIONS: Record<string, Recommendation[]> = {
     { title: "Cheapest Countries for AI Subscriptions in 2026", brief: "국가별 지역 가격·세금·앱스토어 차이를 비교하는 영문 글입니다." },
   ],
   "집값쓱 쇼츠": [
-    { title: "연봉 5천이면 얼마짜리 아파트 가능할까?", brief: "연봉 5천만원 기준 대출 가능액과 현금 보유액별 가능 가격을 6~7장면으로 설명합니다." },
+    { title: "연봉 5천이면 얼마짜리 아파트 가능할까?", brief: "연봉 5천만원 기준 대출 가능액과 현금 보유액별 가능 가격을 7장면으로 설명합니다." },
     { title: "현금 1억이면 아파트 어디까지 가능할까?", brief: "현금 1억원과 대출 조건에 따라 가능한 가격대를 쇼츠로 구성합니다." },
     { title: "월 대출 100만원 있으면 집 살 때 얼마나 줄어들까?", brief: "기존 대출이 DSR과 주담대 가능액에 미치는 영향을 쉽게 설명합니다." },
     { title: "6억 아파트 사려면 현금 얼마 필요할까?", brief: "6억원 아파트를 예시로 LTV·DSR과 필요한 자금을 30초 안에 정리합니다." },
@@ -494,7 +494,7 @@ export default function Home() {
       "- 음성은 1.5배속으로 사용할 예정",
       "- 완성 영상 목표 30~33초",
       "- 전체 내레이션은 공백 제외 210~225자로 작성",
-      "- 6~7장면으로 자연스럽게 나눌 수 있는 흐름",
+      "- 새로운 고정 배경 정보판 7장면으로 자연스럽게 나눌 수 있는 흐름",
       "- 숫자·단지명·기간은 아래 원문에 있는 정보만 사용",
       "- 가격·면적·퍼센트·영문 약어는 원문의 화면용 표기(예: 6.93억, 84㎡, 9.5%, DSR)를 그대로 유지",
       "- 발음용 변환은 AI 음성 단계에서 별도로 처리하므로 대본에서 임의로 '6억 9천만원', '제곱미터' 등으로 풀어쓰지 말 것",
@@ -520,7 +520,7 @@ export default function Home() {
       "- 공백과 줄바꿈을 모두 제외한 실제 내레이션이 210~225자인지 세고, 범위를 벗어나면 고정 멘트는 유지한 채 중간 설명을 다듬을 것",
       "- '집.값.쓱. 해보겠습니다.' / '차이가 꽤 나죠.' / '근데 여기서 잠깐.' / '[대표 지역명] 집값, 오늘도. 집.값.쓱.' 네 구절의 존재·순서·표기를 확인할 것",
       "- 원문 밖의 숫자·순위·단지명은 없는지, 월 진행 중 집계와 서로 다른 면적·거래 기준을 섞어 단정하지 않았는지 확인할 것",
-      "- 6~7장면으로 끊기 쉬운 짧은 호흡인지, 1.5배속에서도 발음이 뭉개지지 않을지 확인할 것",
+      "- 정확히 7장면으로 끊기 쉬운 짧은 호흡인지, 1.5배속에서도 발음이 뭉개지지 않을지 확인할 것",
       "",
       "[출력 형식]",
       "- 설명이나 제목, 글자 수, 검수 결과를 붙이지 말 것",
@@ -1304,7 +1304,7 @@ export default function Home() {
           <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>한 줄 SRT {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 확인"}</span>
           <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={!voiceFile || !shortsSceneCountReady || !shortsVisualReady} onClick={() => setPhase("review")}>GPT 제작 단계로</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("analysis")}>장면표로 돌아가기</button><button className="primary" disabled={!voiceFile || !shortsSceneCountReady || !shortsVisualReady} onClick={() => setPhase("review")}>7장 정보판 조립 단계로</button></div>
       </> : current ? <>
         <div className="sectionHead"><div><h2>{isShorts ? "4. 이미지" : "이미지 일괄 정리"}</h2><p>{isShorts ? <>장면표에서 <b>새 이미지</b>로 정한 장면만 작업합니다. 나머지 장면은 재사용·텍스트 카드·숫자 카드로 처리합니다.</> : <>ChatGPT 등에서 만든 <b>무문자 배경 이미지</b>를 한꺼번에 올리면 00부터 순서대로 배치하고 문구를 자동 합성합니다.</>}</p></div><span className="counter">{imageCount}/{tasks.length} 업로드</span></div>
         <div className="toolbar box"><input ref={bulkRef} type="file" accept="image/*" multiple onChange={e => handleBulk(e.target.files)} /><button className="secondary" onClick={copyAllPrompts}>📋 전체 이미지 요청서 복사</button><span className="muted">파일명 00, 01, 02… 순으로 저장해두면 자동 정렬이 가장 정확합니다.</span></div>
