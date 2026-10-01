@@ -910,7 +910,7 @@ export default function Home() {
     return canvas.toDataURL("image/png");
   }
 
-  async function composeShortsSceneFrame(scene: ShortsScene, background: string) {
+  async function composeShortsSceneFrame(scene: ShortsScene, background: string, withCaption = true) {
     const canvas = document.createElement("canvas");
     canvas.width = 1080; canvas.height = 1920;
     const ctx = canvas.getContext("2d");
@@ -919,7 +919,8 @@ export default function Home() {
     ctx.drawImage(base, 0, 0, 1080, 1920);
     const overlay = await loadImage(shortsCustomOverlays[scene.order - 1] || await renderShortsOverlay(scene));
     ctx.drawImage(overlay, 0, 0, 1080, 1920);
-    const caption = splitOneLineCaptions(scene.narration || scene.subtitle)[0] || "";
+    // Thumbnail uses exactly the same background and scene-01 overlay, minus subtitles.
+    const caption = withCaption ? (splitOneLineCaptions(scene.narration || scene.subtitle)[0] || "") : "";
     if (caption) {
       // First cue preview. Final video uses every cue from subtitles_full.srt.
       const fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -1036,6 +1037,30 @@ export default function Home() {
     const lower = file.name.toLowerCase();
     if (lower.endsWith(".wav") || file.type.includes("wav")) return `${kind}.wav`;
     return `${kind}.mp3`;
+  }
+
+  async function downloadShortsThumbnail() {
+    setLoading(true); setError("");
+    try {
+      const cover = resolvedShortsScenes.find(scene => scene.order === 1);
+      if (!cover) throw new Error("01번 썸네일 장면을 먼저 준비하세요.");
+      if (!shortsVisualReady) throw new Error("공통 아파트 배경 한 장을 먼저 업로드하세요.");
+
+      // Reuse the first video frame's exact layering, but omit spoken captions.
+      // This is a standalone 1080×1920 PNG and must NOT be added to the ZIP.
+      const background = await composeShortsBackground();
+      const thumbnail = await composeShortsSceneFrame(cover, background, false);
+      const link = document.createElement("a");
+      link.href = thumbnail;
+      link.download = "thumbnail.png";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (e: any) {
+      setError(e.message || "썸네일 PNG 다운로드에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function exportShortsPackage(includeSources = false) {
@@ -1629,6 +1654,15 @@ export default function Home() {
             <button className="primary" onClick={() => exportShortsPackage(false)} disabled={loading || !shortsAssemblyReady}>{loading ? "ZIP 만드는 중..." : "⚡ 빠른 조립 ZIP 다운로드"}</button>
             <button className="secondary" onClick={() => exportShortsPackage(true)} disabled={loading}>{loading ? "준비 중..." : "🗂 원본 포함 백업 ZIP"}</button>
           </div>
+        </div>
+
+        <div className="box">
+          <div className="miniHead"><h3>유튜브 썸네일 · 별도 PNG</h3><span className="muted">1080×1920 · 9:16</span></div>
+          <p className="muted">공통 아파트 배경 + 현재 적용된 01번 썸네일 정보판을 원래 위치 그대로 합성합니다. 01번 영상 장면과 동일한 디자인이며, 영상 하단 내레이션 자막은 넣지 않습니다. ZIP과 별도로 thumbnail.png 파일만 다운로드합니다.</p>
+          <div className="inlineActions">
+            <button type="button" className="primary" disabled={loading || !shortsVisualReady || !resolvedShortsScenes.some(scene => scene.order === 1)} onClick={downloadShortsThumbnail}>{loading ? "준비 중..." : "🖼 썸네일 PNG 별도 다운로드"}</button>
+          </div>
+          {!shortsVisualReady && <p className="muted">01번 장면 구성과 공통 아파트 배경을 준비하면 다운로드할 수 있습니다. 음성 파일이나 ZIP 완성은 필요하지 않습니다.</p>}
         </div>
 
         <div className="box">
