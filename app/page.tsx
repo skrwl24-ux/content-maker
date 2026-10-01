@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 import { narrationDifference, restoreOriginalNarration } from "@/lib/jibssuk-narration";
+import { toKoreanVoiceScript } from "@/lib/jibssuk-voice";
 import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
@@ -241,31 +242,7 @@ export default function Home() {
   const isShorts = contentType === "집값쓱 쇼츠";
   const preset = PRESETS[contentType] || PRESETS.default;
   function normalizeShortsVoiceText(text: string) {
-    return text
-      .replace(/(\d+\.\d+)\s*억(?:원)?/g, (full, raw) => {
-        const value = Number(raw);
-        if (!Number.isFinite(value)) return full;
-        const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
-        const eok = Math.floor(rounded + 1e-9);
-        const tenth = Math.round((rounded - eok) * 10);
-        if (tenth <= 0) return `${eok}억원`;
-        if (eok <= 0) return `${tenth}천만원`;
-        return `${eok}억 ${tenth}천만원`;
-      })
-      .replace(/(\d+(?:\.\d+)?)\s*(?:㎡|m²|m2)\s*(대)?/gi, (_full, num, dae) => `${num}제곱미터${dae ? "대" : ""}`)
-      .replace(/(\d+(?:\.\d+)?)\s*%/g, "$1퍼센트")
-      .replace(/\bTOP\s*3\b/gi, "탑 쓰리")
-      .replace(/\bDSR\b/gi, "디에스알")
-      .replace(/\bLTV\b/gi, "엘티브이")
-      .replace(/\bGTX\b/gi, "지티엑스")
-      .replace(/\bAI\b/gi, "에이아이")
-      .replace(/([가-힣])앤([가-힣])/g, "$1 앤 $2")
-      .replace(/([가-힣])(\d+단지)/g, "$1 $2")
-      .replace(/([가-힣])(푸르지오|래미안|힐스테이트|아이파크|롯데캐슬|더샵|센트럴푸르지오|어바인퍼스트|포레스티아|메가트리아|디에트르|제일풍경채|휴먼시아)/g, "$1 $2")
-      .replace(/각각\s+(?=\d)/g, "각각, ")
-      .replace(/오늘도\s*,?\s*집\.값\.쓱\./g, "오늘도, 집.값.쓱.")
-      .replace(/[ \t]{2,}/g, " ")
-      .trim();
+    return toKoreanVoiceScript(text);
   }
 
   const shortsCharCount = useMemo(() => shortsScript.replace(/\s/g, "").length, [shortsScript]);
