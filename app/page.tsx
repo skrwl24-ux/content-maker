@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
-import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions } from "@/lib/jibssuk-v3";
+import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 
 type Fact = { label: string; value: string; sourceText: string };
 type ImagePlan = { order: number; title: string; keyMessage: string; sourceText: string; imagePrompt: string };
@@ -215,6 +215,8 @@ export default function Home() {
   const [shortsScript, setShortsScript] = useState("");
   const [shortsSceneText, setShortsSceneText] = useState("");
   const [shortsPreview, setShortsPreview] = useState("");
+  const [shortsPreviewFrames, setShortsPreviewFrames] = useState<string[]>([]);
+  const [shortsPreviewIndex, setShortsPreviewIndex] = useState(0);
   const [shortsScenes, setShortsScenes] = useState<ShortsScene[]>([]);
   const [voiceFile, setVoiceFile] = useState<File | null>(null);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
@@ -278,26 +280,27 @@ export default function Home() {
   const graphicCount = useMemo(() => tasks.filter(t => t.assetKind === "graphic").length, [tasks]);
   const backgroundReady = useMemo(() => tasks.filter(t => t.assetKind !== "graphic" && !!t.imageDataUrl).length, [tasks]);
   const graphicReady = useMemo(() => tasks.filter(t => t.assetKind === "graphic" && !!t.imageDataUrl).length, [tasks]);
+  const resolvedShortsScenes = useMemo(() => resolveOverlayScenes(shortsScenes, rawContent + "\n" + shortsScript), [shortsScenes, rawContent, shortsScript]);
   const sceneTimeline = useMemo(() => {
-    if (!finalVoiceDuration || !shortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
-    const weights = shortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
+    if (!finalVoiceDuration || !resolvedShortsScenes.length) return [] as Array<{ scene: ShortsScene; start: number; end: number; duration: number }>;
+    const weights = resolvedShortsScenes.map(s => Math.max(1, normalizeShortsVoiceText(s.narration || s.subtitle || s.headline).replace(/\s/g, "").length));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let cursor = 0;
-    return shortsScenes.map((scene, i) => {
+    return resolvedShortsScenes.map((scene, i) => {
       const duration = i === shortsScenes.length - 1 ? Math.max(0, finalVoiceDuration - cursor) : finalVoiceDuration * (weights[i] / totalWeight);
       const start = cursor;
       const end = i === shortsScenes.length - 1 ? finalVoiceDuration : Math.min(finalVoiceDuration, start + duration);
       cursor = end;
       return { scene, start, end, duration: end - start };
     });
-  }, [shortsScenes, finalVoiceDuration]);
+  }, [resolvedShortsScenes, finalVoiceDuration]);
 
   const shortsLongScenes = useMemo(() => sceneTimeline.filter(item => item.duration > 6), [sceneTimeline]);
   const shortsCaptionReady = useMemo(() => shortsScenes.length > 0 && shortsScenes.every(s => (s.narration || s.subtitle || s.headline).trim().length > 0), [shortsScenes]);
   const shortsVisualReady = tasks.length === 1 && !!tasks[0]?.imageDataUrl;
   const shortsSceneCountReady = shortsScenes.length === 7;
   const shortsDurationReady = finalVoiceDuration > 0 && finalVoiceDuration >= 28 && finalVoiceDuration <= 34;
-  const shortsDataIssues = shortsScenes.flatMap(s => {
+  const shortsDataIssues = resolvedShortsScenes.flatMap(s => {
     const kind = sceneKind(s);
     const rows = parseOverlayRows(s.dataRows || "");
     const issues = (kind === "bar" || kind === "price") && rows.length < 2 ? ["장면 " + s.order + ": 데이터행을 두 개 이상 입력하세요."] : [];
@@ -598,7 +601,7 @@ export default function Home() {
 
   function applyShortsSceneText(text: string) {
     setShortsSceneText(text);
-    setShortsPreview("");
+    setShortsPreview(""); setShortsPreviewFrames([]);
     const parsed = parseShortsScenes(text);
     setShortsScenes(parsed);
     if (parsed.length) {
@@ -609,12 +612,8 @@ export default function Home() {
   }
 
   function updateShortsScene(index: number, fields: Partial<ShortsScene>) {
-    setShortsPreview("");
-    setShortsScenes(prev => {
-      const next = prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene);
-      setTasks(buildShortsImageTasks(next));
-      return next;
-    });
+    setShortsPreview(""); setShortsPreviewFrames([]);
+    setShortsScenes(prev => prev.map((scene, i) => i === index ? { ...scene, ...fields } : scene));
   }
 
   function openShortsScriptMaker() {
@@ -800,11 +799,13 @@ export default function Home() {
 
   async function previewShortsCards() {
     setLoading(true); setError("");
+    if (shortsDataIssues.length) { setError(shortsDataIssues.join(" / ")); setLoading(false); return; }
     try {
       if (!shortsVisualReady || shortsScenes.length !== 7) throw new Error("공통 배경과 7장면을 먼저 준비해주세요.");
       const background = await composeShortsBackground();
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (const scene of shortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      for (const scene of resolvedShortsScenes) frames.push({ order: scene.order, dataUrl: await composeShortsSceneFrame(scene, background) });
+      setShortsPreviewFrames(frames.map(f => f.dataUrl)); setShortsPreviewIndex(0);
       setShortsPreview(await composeShortsContactSheet(frames));
     } catch (e: any) { setError(e.message || "정보판 미리보기 생성에 실패했습니다."); }
     finally { setLoading(false); }
@@ -879,7 +880,7 @@ export default function Home() {
       folder.file("background.png", backgroundMatch[1], { base64: true });
 
       const frames: Array<{ order: number; dataUrl: string }> = [];
-      for (const scene of shortsScenes) {
+      for (const scene of resolvedShortsScenes) {
         const overlay = await renderShortsOverlay(scene);
         const match = overlay.match(/^data:image\/png;base64,(.+)$/);
         if (!match) throw new Error("장면 " + scene.order + " 정보판 PNG 출력에 실패했습니다.");
@@ -900,7 +901,7 @@ export default function Home() {
         folder.file("timeline.txt", shortsTimelineExport());
         if (bgmMemo.trim()) folder.file("bgm_note.txt", bgmMemo.trim());
       }
-      folder.file("overlay_data.json", JSON.stringify(shortsScenes.map(s => ({
+      folder.file("overlay_data.json", JSON.stringify(resolvedShortsScenes.map(s => ({
         order: s.order, headline: cleanSceneField(s.headline), screenType: s.screenType,
         dataRows: parseOverlayRows(s.dataRows || "").map(r => ({ label: r.label, value: r.value }))
       })), null, 2));
@@ -1132,7 +1133,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V12 · 고정 배경 쇼츠 V3</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V13 · 정보판 가독성 V4</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
@@ -1234,7 +1235,15 @@ export default function Home() {
           {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
             <b>{scene.order}</b>
             <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
-            <div style={{display:"grid",gap:6}}><input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} /><textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 14건 ; 단지명 | 13건 (원문값만)" style={{width:"100%",minWidth:0}} /></div>
+            <div style={{display:"grid",gap:6}}>
+              <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} />
+              <textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 실제건수 ; 단지명 | 실제건수" style={{width:"100%",minWidth:0}} />
+              {!scene.dataRows && !!resolvedShortsScenes[i]?.dataRows &&
+                <div style={{fontSize:12,color:"#2365A8",lineHeight:1.4}}>
+                  원문에서 자동 추출: {resolvedShortsScenes[i].dataRows}
+                  <button type="button" className="secondary compact" onClick={() => updateShortsScene(i,{dataRows:resolvedShortsScenes[i].dataRows})}>값 확인·적용</button>
+                </div>}
+            </div>
             <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
             <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
               {SCENE_TYPES.map(type => <option key={type}>{type}</option>)}
@@ -1248,7 +1257,7 @@ export default function Home() {
           {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
           {!shortsScriptReady && shortsScenes.length > 0 && <p className="voiceWarning">장면 내레이션 합본과 기준 대본이 다릅니다. 누락·중복된 문장을 수정해주세요.</p>}
         </div>
-        <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={shortsScenes.length < 6} onClick={() => setPhase("images")}>제작자료 준비</button></div>
+        <div className="actions spread"><button className="secondary" onClick={() => setPhase("script")}>대본 수정</button><button className="primary" disabled={!shortsSceneCountReady} onClick={() => setPhase("images")}>제작자료 준비</button></div>
       </> : analysis ? <>
         <div className="sectionHead"><div><h2>이미지 제작 계획</h2><p>숫자와 문구를 먼저 확정한 뒤 이미지 배경을 준비합니다.</p></div><span className="counter">총 {tasks.length}장</span></div>
         <div className="grid2"><div className="box"><h3>추천 제목</h3><div className="recommended">{analysis.recommendedTitle}</div><div className="candidateList">{analysis.titleCandidates?.slice(0, 5).map(t => <button key={t} onClick={() => setFinalTitle(t)}>{t}</button>)}</div></div><div className="box"><h3>본문에서 찾은 핵심 숫자</h3><div className="tags">{analysis.facts?.length ? analysis.facts.map(f => <span key={f.value}>{f.value}</span>) : <span>숫자 정보 없음</span>}</div><p className="muted">이미지에는 원문에 있는 숫자만 사용하도록 검수합니다.</p></div></div>
@@ -1354,8 +1363,19 @@ export default function Home() {
             <div><span>편집표</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
           </div>
           <p className="muted">빠른 ZIP에는 background.png, overlays/01~07_overlay.png, 미리보기, voice, bgm, 한 줄 subtitles_full.srt, 편집표, 검수용 overlay_data.json을 담습니다. 정보판 PNG에는 자막이 새겨지지 않습니다.</p>
-          <div className="inlineActions"><button className="secondary compact" disabled={loading || !shortsVisualReady || !shortsSceneCountReady} onClick={previewShortsCards}>👁 배경 + 정보판 7장 미리보기</button></div>
-          {shortsPreview && <div className="box" style={{marginTop:12}}><img src={shortsPreview} alt="공통 배경 + 투명 정보판 7장 및 한 줄 자막 미리보기" style={{width:"100%",height:"auto",maxWidth:780}} /></div>}
+          <div className="inlineActions"><button className="secondary compact" disabled={loading || !shortsVisualReady || !shortsSceneCountReady || shortsDataIssues.length>0} onClick={previewShortsCards}>👁 배경 + 정보판 7장 미리보기</button></div>
+          {shortsPreview && <div className="box" style={{marginTop:12}}>
+            <h3>장면별 크게 확인하기</h3>
+            <p className="muted">작은 모아보기에서는 글자가 실제보다 작게 보입니다. 아래에서 장면을 골라 모바일 크기로 확인하세요.</p>
+            <div className="inlineActions" style={{flexWrap:"wrap",gap:8}}>
+              {shortsPreviewFrames.map((_,i)=><button key={i} type="button" className={shortsPreviewIndex===i?"primary compact":"secondary compact"} onClick={()=>setShortsPreviewIndex(i)}>{i+1}번 장면</button>)}
+            </div>
+            {!!shortsPreviewFrames[shortsPreviewIndex] && <div style={{display:"flex",justifyContent:"center",padding:"16px 0"}}>
+              <img src={shortsPreviewFrames[shortsPreviewIndex]} alt={"집값쓱 " +(shortsPreviewIndex+1)+"번 장면 확대 미리보기"} style={{width:"100%",maxWidth:420,aspectRatio:"9 / 16",height:"auto",objectFit:"contain",borderRadius:12}} />
+            </div>}
+            <details><summary style={{cursor:"pointer",fontWeight:700}}>7장면 전체 모아보기</summary>
+              <img src={shortsPreview} alt="7장면 콘택트시트" style={{width:"100%",height:"auto",maxWidth:850,marginTop:10}} /></details>
+          </div>}
           <div className="inlineActions">
             <button className="primary" onClick={() => exportShortsPackage(false)} disabled={loading || !shortsAssemblyReady}>{loading ? "ZIP 만드는 중..." : "⚡ 빠른 조립 ZIP 다운로드"}</button>
             <button className="secondary" onClick={() => exportShortsPackage(true)} disabled={loading}>{loading ? "준비 중..." : "🗂 원본 포함 백업 ZIP"}</button>
