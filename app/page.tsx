@@ -305,7 +305,7 @@ export default function Home() {
       ? narrationDifference(shortsScript, shortsScenes.map(s => s.narration))
       : null, [shortsScript, shortsScenes]);
   const shortsScriptReady = !!shortsScript.trim() && shortsScenes.length > 0 && !shortsScriptDifference;
-  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && !!voiceFile && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
+  const shortsAssemblyReady = shortsSceneCountReady && shortsCaptionReady && shortsVisualReady && shortsDataIssues.length === 0 && shortsScriptReady && voiceMatchesScript && sceneTimeline.length === shortsScenes.length && shortsLongScenes.length === 0;
 
   const factUsage = useMemo(() => {
     const corpus = tasks.map(t => `${t.keyMessage} ${t.title}`).join(" ").toLowerCase();
@@ -396,7 +396,7 @@ export default function Home() {
   }
 
   function resetNew() {
-    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceDuration(0); setError(""); setPhase("home");
+    setProjectId(null); setProjectTitle(""); setRawContent(""); setAnalysis(null); setTasks([]); setCurrentIndex(0); setFinalTitle(""); setFinalBody(""); setShortsScript(""); setShortsSceneText(""); setShortsScenes([]); setShortsCustomOverlays(Array(7).fill("")); setShortsImagePromptPreview(0); setShortsOverlayNotice(""); setVoiceFile(null); setBgmFile(null); setBgmMemo(""); setShortsVoiceOverride(null); setVoiceFileForScript(null); setVoiceDuration(0); setError(""); setPhase("home");
   }
 
   function applyRecommendation(item: Recommendation) {
@@ -1009,6 +1009,7 @@ export default function Home() {
 
   async function handleVoiceFile(file: File | null) {
     setVoiceFile(file);
+    setVoiceFileForScript(file ? shortsVoiceScript : null);
     setShortsPreview("");
     setVoiceDuration(file ? await readAudioDuration(file) : 0);
   }
