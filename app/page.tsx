@@ -1579,7 +1579,17 @@ export default function Home() {
         <div className="box">
           <div className="miniHead"><h3>④ 한 줄 자막·타임라인</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsSceneExport(), "장면표를 복사했습니다.")}>📋 장면표 복사</button>{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsSrt(), "전체대사 SRT를 복사했습니다.")}>📋 전체대사 SRT</button>}{sceneTimeline.length > 0 && <button className="secondary compact" onClick={() => copyText(shortsEditPlanExport(), "편집표를 복사했습니다.")}>📋 edit plan</button>}</div></div>
           {sceneTimeline.length > 0 ? <div className="timelineSimple">{sceneTimeline.map(item => <div key={item.scene.order}><b>{item.scene.order}. {item.start.toFixed(1)}~{item.end.toFixed(1)}초</b><span>{item.scene.headline}</span><small>{item.scene.subtitle} · {item.scene.screenType}</small></div>)}</div> : <p className="muted">음성파일을 넣으면 실제 음성 길이를 기준으로 장면 시간을 자동 배분합니다.</p>}
-          <p className="muted">SRT는 원문 내레이션을 빠짐없이 보존하면서 20자 안팎의 한 줄 큐로 나누고, 1.4배속 최종 타임라인에 배치합니다. 배경·투명 정보판·자막은 서로 별도 레이어입니다.</p>
+          {sceneTimeline.length === 7 && voiceFile && <div style={{marginTop:12,border:"1px solid #dae3ed",padding:12,borderRadius:12}}>
+            <p className="muted">장면 시작/끝은 음성 총길이와 한글 발음 분량으로 먼저 추정합니다. 음성을 들어보고 각 장면 종료 시각(최종 1.4배속 기준)을 조정하면 다음 장면의 시작 시각, SRT 및 edit_plan.txt가 함께 변경됩니다. 마지막 장면은 음성 종료 시각에 자동으로 맞춥니다.</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:10}}>
+              {sceneTimeline.slice(0,6).map((item,index) => <label key={item.scene.order} style={{display:"flex",flexDirection:"column",gap:4,fontSize:13}}>
+                {item.scene.order}번 장면 종료(초)
+                <input aria-label={item.scene.order + "번 장면 종료 시각"} type="number" min={0.1} max={finalVoiceDuration - 0.1} step={0.1} value={Number(item.end.toFixed(2))} onChange={e => updateSceneBoundary(index,e.target.value)} style={{width:105,padding:"5px 8px"}} />
+              </label>)}
+            </div>
+            {sceneBoundaryOverrides && <button type="button" className="secondary compact" style={{marginTop:10}} onClick={() => setSceneBoundaryOverrides(null)}>↻ 시간 자동 배분으로 복원</button>}
+          </div>}
+          <p className="muted">SRT 문구는 화면용 원본 숫자 그대로 유지하고, 음성의 한글 발음 분량으로 큐 시간을 추정합니다. 단어별 강제 정렬은 아니므로 최종 음성 청취로 실제 싱크를 확인하세요. 배경·정보판·자막은 별도 레이어입니다.</p>
         </div>
 
         <div className="assetChecklist">
