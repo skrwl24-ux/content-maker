@@ -1132,7 +1132,7 @@ export default function Home() {
 
   return <main className="wrap">
     <header className="header">
-      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V11 · 빠른 조립 쇼츠</span></button>
+      <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V12 · 고정 배경 쇼츠 V3</span></button>
       <div className="inlineActions">
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
@@ -1140,7 +1140,7 @@ export default function Home() {
     </header>
 
     <section className="hero">
-      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본·AI 음성 → 장면표 → 이미지·그래프·BGM → GPT 제작" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
+      <div><h1>{isShorts ? "집값쓱 쇼츠 제작기" : "AI 이미지는 밖에서, 정리·문구·검수·ZIP은 여기서"}</h1><p>{isShorts ? "자료 → 대본 → 정보판 7장 → 배경·음성 → 고정 배경 조립" : "본문 분석 → 이미지 요청서 → 일괄 업로드 → 정확한 문구 자동 합성 → 검수 → 네이버/쇼츠 규격 ZIP"}</p></div>
       <div className="heroPill">{preset.label}</div>
     </section>
 
@@ -1326,31 +1326,36 @@ export default function Home() {
       </> : null)}
 
       {phase === "review" && (isShorts ? <>
-        <div className="sectionHead"><div><h2>5. GPT로 쇼츠 조립하기</h2><p>사이트가 완성 프레임·전체대사 SRT·편집표까지 만든 뒤 GPT에는 조립만 맡깁니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
+        <div className="sectionHead"><div><h2>5. 집값쓱 V3 조립 패키지</h2><p>공통 배경 1장과 코드로 만든 투명 정보판 7장, 한 줄 SRT를 ZIP으로 출력합니다.</p></div><span className="counter">{finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초 · 1.5x" : "음성 기준"}</span></div>
 
         <div className="box finalPackageBox">
           <div className="miniHead"><h3>자동 최종검사</h3><span className={shortsAssemblyReady ? "ok" : "warn"}>{shortsAssemblyReady ? "빠른 조립 준비 완료" : "수정 필요"}</span></div>
           <div className="assetChecklist">
-            <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/6~7 {shortsSceneCountReady ? "✓" : ""}</span>
-            <span className={shortsCaptionReady ? "ready" : ""}>전체대사 자막 {shortsCaptionReady ? "✓" : "확인"}</span>
-            <span className={shortsVisualReady ? "ready" : ""}>이미지 {imageCount}/{tasks.length} {shortsVisualReady ? "✓" : ""}</span>
+            <span className={shortsSceneCountReady ? "ready" : ""}>장면 {shortsScenes.length}/7 {shortsSceneCountReady ? "✓" : ""}</span>
+            <span className={shortsCaptionReady && shortsScriptReady ? "ready" : ""}>원문과 일치하는 한 줄 자막 {shortsCaptionReady && shortsScriptReady ? "✓" : "대본 재확인"}</span>
+            <span className={shortsVisualReady ? "ready" : ""}>공통 배경 {backgroundReady}/1 {shortsVisualReady ? "✓" : ""}</span>
+            <span className={shortsDataIssues.length === 0 ? "ready" : ""}>정보판 데이터 {shortsDataIssues.length ? shortsDataIssues.length + "건 오류" : "✓"}</span>
             <span className={voiceFile ? "ready" : ""}>음성 {voiceFile ? "✓" : "없음"}</span>
             <span className={shortsDurationReady ? "ready" : ""}>최종 길이 {finalVoiceDuration ? finalVoiceDuration.toFixed(1) + "초" : "미확인"}</span>
             <span className={shortsLongScenes.length === 0 && sceneTimeline.length ? "ready" : ""}>6초 초과 {shortsLongScenes.length ? shortsLongScenes.map(x => "장면" + x.scene.order).join(", ") : sceneTimeline.length ? "없음 ✓" : "미확인"}</span>
             <span className={bgmFile ? "ready" : ""}>BGM {bgmFile ? "✓" : "선택"}</span>
           </div>
-          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 해당 내레이션을 둘로 나누거나 다른 장면으로 분산하면 쇼츠 리듬이 좋아집니다.</p>}
+          {shortsLongScenes.length > 0 && <p className="voiceWarning">6초를 넘는 장면이 있습니다. 장면표에서 내레이션을 분산해주세요.</p>}
+          {shortsDataIssues.map(issue => <p key={issue} className="voiceWarning">{issue}</p>)}
+          {!shortsScriptReady && <p className="voiceWarning">원본 대본 전체와 장면별 내레이션이 서로 다릅니다. 모든 문장을 빠짐없이 한 번씩 넣어주세요.</p>}
           {!shortsDurationReady && finalVoiceDuration > 0 && <p className="muted">권장 최종 길이는 약 28~34초입니다. 현재 {finalVoiceDuration.toFixed(1)}초입니다.</p>}
 
           <h3>빠른 조립 패키지</h3>
           <div className="packageGrid five">
-            <div><span>완성 프레임</span><b>{shortsScenes.length}장</b></div>
+            <div><span>배경 + 정보판</span><b>1 + {shortsScenes.length}장</b></div>
             <div><span>음성</span><b>{voiceFile ? packageAudioFileName("voice", voiceFile) : "없음"}</b></div>
             <div><span>SRT</span><b>{sceneTimeline.length ? "전체대사" : "없음"}</b></div>
             <div><span>BGM</span><b>{bgmFile ? packageAudioFileName("bgm", bgmFile) : "선택"}</b></div>
             <div><span>편집표</span><b>{sceneTimeline.length ? "준비됨" : "없음"}</b></div>
           </div>
-          <p className="muted">빠른 ZIP에는 완성 프레임, 콘택트시트, voice, bgm, subtitles_full.srt, edit_plan.txt, audio_plan.txt, shorts_request.txt만 넣습니다. 원본 이미지는 빼서 GPT가 다시 판단할 자료를 최소화합니다.</p>
+          <p className="muted">빠른 ZIP에는 background.png, overlays/01~07_overlay.png, 미리보기, voice, bgm, 한 줄 subtitles_full.srt, 편집표, 검수용 overlay_data.json을 담습니다. 정보판 PNG에는 자막이 새겨지지 않습니다.</p>
+          <div className="inlineActions"><button className="secondary compact" disabled={loading || !shortsVisualReady || !shortsSceneCountReady} onClick={previewShortsCards}>👁 배경 + 정보판 7장 미리보기</button></div>
+          {shortsPreview && <div className="box" style={{marginTop:12}}><img src={shortsPreview} alt="공통 배경 + 투명 정보판 7장 및 한 줄 자막 미리보기" style={{width:"100%",height:"auto",maxWidth:780}} /></div>}
           <div className="inlineActions">
             <button className="primary" onClick={() => exportShortsPackage(false)} disabled={loading || !shortsAssemblyReady}>{loading ? "ZIP 만드는 중..." : "⚡ 빠른 조립 ZIP 다운로드"}</button>
             <button className="secondary" onClick={() => exportShortsPackage(true)} disabled={loading}>{loading ? "준비 중..." : "🗂 원본 포함 백업 ZIP"}</button>
@@ -1361,9 +1366,9 @@ export default function Home() {
           <div className="miniHead"><h3>GPT 최종 제작 요청</h3><div className="inlineActions"><button className="secondary compact" onClick={() => copyText(shortsVideoPrompt(), "쇼츠 영상 제작 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="primary" onClick={() => openGPT(shortsVideoPrompt())}>GPT로 쇼츠 만들기 ↗</button></div></div>
           <div className="requestSummary">
             <b>1080×1920 · 9:16</b>
-            <span>01_scene.png부터 완성 프레임을 순서대로 조립</span>
-            <span>첫 장면·그래프 장면은 완전 정지</span>
-            <span>전체대사 SRT를 빠짐없이 표시</span>
+            <span>background.png 한 장을 영상 끝까지 고정 + overlays/01~07 정보판만 교체</span>
+            <span>배경 완전 정지, 정보판만 단순 컷 또는 0.2초 페이드</span>
+            <span>전체 대사를 한 줄씩 Y 1450~1660 안전영역에 표시</span>
             <span>edit_plan.txt 시간표를 최우선 적용</span>
             <span>BGM은 audio_plan.txt 기준으로 낮게</span>
           </div>
