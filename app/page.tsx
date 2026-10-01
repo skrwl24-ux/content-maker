@@ -671,10 +671,10 @@ export default function Home() {
       if (!ctx) throw new Error("정보판 변환에 실패했습니다.");
       // Ensure that no generated graphic can cover the separate subtitle/UI layer.
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, 1080, 1350); ctx.clip();
+      ctx.beginPath(); ctx.rect(0, 0, 1080, 1320); ctx.clip();
       ctx.drawImage(source, 0, 0, 1080, 1920);
       ctx.restore();
-      const pixels = ctx.getImageData(0, 0, 1080, 1350).data;
+      const pixels = ctx.getImageData(0, 0, 1080, 1320).data;
       let hasAlpha = false;
       for (let i = 3; i < pixels.length; i += 101 * 4) { if (pixels[i] < 245) { hasAlpha = true; break; } }
       if (!hasAlpha) throw new Error("정보판이 불투명해 공통 배경을 가립니다. GPT에서 투명 배경(RGBA)으로 다시 제작해주세요.");
@@ -981,7 +981,7 @@ export default function Home() {
         "GPT에서 만든 개별 투명 정보판을 업로드했다면 그 파일을 우선 사용하며, 없는 장면은 기존 코드 렌더링으로 보완합니다.",
         "투명 오버레이 자체에는 자막이 들어 있지 않습니다.",
         "자막은 subtitles_full.srt의 1줄짜리 큐를 edit_plan.txt 기준으로 별도 합성합니다.",
-        "Y 1350 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
+        "Y 1320 아래는 정보판 알파 0이어야 하며, 자막은 Y 1450~1660에 배치합니다."
       ].join("\n"));
       if (voiceFile) folder.file(packageAudioFileName("voice", voiceFile), voiceFile);
       if (bgmFile) folder.file(packageAudioFileName("bgm", bgmFile), bgmFile);
@@ -1354,7 +1354,7 @@ export default function Home() {
               {shortsImagePromptPreview === scene.order && <pre className="masterPromptPreview">{imagePromptForScene(scene.order)}</pre>}
             </div>)}
           </div>
-          <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 Y 1350 아래를 자동으로 투명 처리해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
+          <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 Y 1320 아래를 자동으로 투명 처리해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
         </div>
         <div className="box">
           <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
