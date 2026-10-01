@@ -659,34 +659,30 @@ export default function Home() {
   }
 
   function shortsSrt() {
-    return sceneTimeline.map((item, i) => [
-      String(i + 1),
-      `${formatSrtTime(item.start)} --> ${formatSrtTime(item.end)}`,
-      (item.scene.narration || item.scene.subtitle || item.scene.headline).trim()
-    ].join("\n")).join("\n\n");
+    return oneLineSrt(sceneTimeline);
   }
 
-  function sceneFrameFileName(order: number) {
-    return `${String(order).padStart(2, "0")}_scene.png`;
+  function overlayFileName(order: number) {
+    return String(order).padStart(2, "0") + "_overlay.png";
   }
 
   function shortsEditPlanExport() {
-    return sceneTimeline.map(item => {
-      const isGraphic = item.scene.screenType.includes("그래프/숫자 카드");
-      const motion = item.scene.order === 1
-        ? "정지 화면 · 줌/패닝 없음"
-        : isGraphic
-          ? "정지 화면 · 차트 가독성 우선 · 줌/패닝 없음"
-          : "기본 정지 컷 · 필요해도 1~2% 이하의 아주 느린 줌만 허용";
-      return [
-        `장면 ${item.scene.order} · ${item.start.toFixed(1)}~${item.end.toFixed(1)}초`,
-        `파일: ${sceneFrameFileName(item.scene.order)}`,
-        `화면: ${motion}`,
-        `큰 문구: ${item.scene.headline}`,
-        `전체 자막: ${item.scene.narration || item.scene.subtitle || item.scene.headline}`,
-        `원래 화면 방식: ${item.scene.screenType}`
-      ].join("\n");
-    }).join("\n\n");
+    return [
+      "방식: 하나의 background.png를 영상 전 구간에 정지 상태로 표시.",
+      "배경 줌, 패닝, 새 배경 생성 금지. 1080×1920, 9:16.",
+      "투명 PNG는 overlays 폴더의 각 파일을 순서대로 합성. 정보판만 단순 컷 또는 0.2초 페이드.",
+      "자막은 투명 정보판에 포함되지 않음. subtitles_full.srt를 영상 상단 기준 Y 1450~1660에 1줄만 표시.",
+      "Y 1720~1920은 쇼츠 UI 여유 공간으로 비워둘 것.", "",
+      ...sceneTimeline.map(item => [
+        "장면 " + item.scene.order + " · " + item.start.toFixed(3) + "~" + item.end.toFixed(3) + "초",
+        "공통 배경: background.png",
+        "정보판: overlays/" + overlayFileName(item.scene.order),
+        "종류: " + item.scene.screenType,
+        "큰 문구: " + cleanSceneField(item.scene.headline),
+        "내레이션: " + item.scene.narration,
+        "데이터행: " + (item.scene.dataRows || "")
+      ].join("\n"))
+    ].join("\n\n");
   }
 
   function shortsAudioPlanExport() {
@@ -724,81 +720,42 @@ export default function Home() {
     }).join("\n\n");
   }
 
-  function shortsTaskForScene(sceneOrder: number) {
-    return tasks.find(t => t.title.startsWith(`장면 ${sceneOrder} ·`));
+  function shortsBackgroundDataUrl() {
+    const image = tasks.find(t => t.assetKind !== "graphic");
+    return image?.sourceDataUrl || image?.imageDataUrl || "";
   }
 
-  function shortsVisualForScene(sceneIndex: number) {
-    const exact = shortsTaskForScene(shortsScenes[sceneIndex]?.order);
-    const exactSrc = exact?.sourceDataUrl || exact?.imageDataUrl;
-    if (exactSrc) return { src: exactSrc, task: exact };
-
-    for (let i = sceneIndex - 1; i >= 0; i--) {
-      const previous = shortsTaskForScene(shortsScenes[i]?.order);
-      const previousSrc = previous?.sourceDataUrl || previous?.imageDataUrl;
-      if (previousSrc) return { src: previousSrc, task: previous };
-    }
-
-    const first = tasks.find(t => !!(t.sourceDataUrl || t.imageDataUrl));
-    return first ? { src: first.sourceDataUrl || first.imageDataUrl, task: first } : { src: "", task: undefined };
-  }
-
-  async function composeShortsSceneFrame(scene: ShortsScene, sceneIndex: number) {
-    const w = 1080;
-    const h = 1920;
+  async function composeShortsBackground() {
+    const source = shortsBackgroundDataUrl();
+    if (!source) throw new Error("공통 아파트 배경 한 장을 업로드하세요.");
+    const image = await loadImage(source);
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = 1080; canvas.height = 1920;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("장면 프레임을 만들 수 없습니다.");
+    if (!ctx) throw new Error("배경 캔버스를 생성할 수 없습니다.");
+    drawCover(ctx, image, 1080, 1920);
+    return canvas.toDataURL("image/png");
+  }
 
-    const visual = shortsVisualForScene(sceneIndex);
-    if (visual.src) {
-      try {
-        const img = await loadImage(visual.src);
-        drawCover(ctx, img, w, h);
-      } catch {
-        ctx.fillStyle = "#10141d";
-        ctx.fillRect(0, 0, w, h);
-      }
-    } else {
-      ctx.fillStyle = "#10141d";
-      ctx.fillRect(0, 0, w, h);
+  async function composeShortsSceneFrame(scene: ShortsScene, background: string) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("장면 미리보기를 만들 수 없습니다.");
+    const base = await loadImage(background);
+    ctx.drawImage(base, 0, 0, 1080, 1920);
+    const overlay = await loadImage(await renderShortsOverlay(scene));
+    ctx.drawImage(overlay, 0, 0, 1080, 1920);
+    const caption = splitOneLineCaptions(scene.narration || scene.subtitle, 20)[0] || "";
+    if (caption) {
+      ctx.font = '700 47px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      const x = 540; const y = 1510;
+      ctx.fillStyle = "rgba(0,0,0,.78)";
+      ctx.beginPath(); ctx.roundRect(65, 1478, 950, 115, 25); ctx.fill();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#ffffff";
+      ctx.fillText(caption, x, y + 28, 870);
     }
-
-    const isGraphic = scene.screenType.includes("그래프/숫자 카드") || visual.task?.assetKind === "graphic";
-
-    // Keep the lower quarter visually quiet for full narration subtitles.
-    const bottomGrad = ctx.createLinearGradient(0, h * 0.68, 0, h);
-    bottomGrad.addColorStop(0, "rgba(0,0,0,0)");
-    bottomGrad.addColorStop(0.45, "rgba(0,0,0,.28)");
-    bottomGrad.addColorStop(1, "rgba(0,0,0,.72)");
-    ctx.fillStyle = bottomGrad;
-    ctx.fillRect(0, h * 0.68, w, h * 0.32);
-
-    // Graph assets already contain their own chart/title. Other scenes get one strong headline.
-    if (!isGraphic && scene.headline.trim()) {
-      const pad = 72;
-      const fontSize = scene.order === 1 ? 78 : 68;
-      ctx.font = `800 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-      const lines = wrapLines(ctx, scene.headline, w - pad * 2 - 40, 3);
-      const lineH = fontSize * 1.22;
-      const boxH = Math.max(150, lines.length * lineH + 58);
-      const y = scene.screenType.includes("고정 엔딩") ? 560 : 230;
-      ctx.fillStyle = "rgba(0,0,0,.48)";
-      ctx.fillRect(44, y - 26, w - 88, boxH);
-      ctx.textBaseline = "top";
-      ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.06));
-      ctx.strokeStyle = "rgba(0,0,0,.75)";
-      ctx.fillStyle = "#fff";
-      lines.forEach((line, lineIndex) => {
-        const lineY = y + lineIndex * lineH;
-        ctx.strokeText(line, pad, lineY);
-        ctx.fillText(line, pad, lineY);
-      });
-    }
-
-    return canvas.toDataURL("image/png", 0.96);
+    return canvas.toDataURL("image/png");
   }
 
   async function composeShortsContactSheet(frames: Array<{ order: number; dataUrl: string }>) {
@@ -839,31 +796,20 @@ export default function Home() {
 
   function shortsVideoPrompt() {
     return [
-      "[집값쓱 유튜브 쇼츠 최종 조립]",
-      `주제: ${projectTitle || "첨부 제작 패키지의 주제"}`,
-      "",
-      "[가장 중요한 원칙]",
-      "- 새로 기획하거나 디자인하지 말고, ZIP 안의 완성 프레임·SRT·edit_plan을 그대로 조립하는 작업으로 진행",
-      "- 음성 파일은 voice.mp3 또는 voice.wav, BGM은 bgm.mp3 또는 bgm.wav 이름으로 제공됨",
-      "- 장면 순서와 시간은 edit_plan.txt를 최우선으로 적용",
-      "- 화면은 01_scene.png, 02_scene.png... 순서의 완성 프레임 PNG를 그대로 사용",
-      "- subtitles_full.srt의 모든 대사를 빠짐없이 하단 자막으로 표시하고 요약하거나 생략하지 말 것",
-      "",
-      "[영상 기준]",
-      "- 1080×1920, 9:16 세로형 YouTube Shorts",
-      voiceDuration ? `- 첨부 음성 원본 약 ${voiceDuration.toFixed(1)}초를 반드시 1.5배속 적용해 약 ${finalVoiceDuration.toFixed(1)}초 타임라인으로 사용` : "- 첨부 음성은 반드시 1.5배속 적용 후 타임라인 기준으로 사용",
-      "- 첫 장면은 완전 정지 화면. 줌인·줌아웃·패닝 금지",
-      "- 그래프·숫자 장면도 정지 화면으로 두고 차트와 숫자 가독성을 최우선",
-      "- 다른 장면도 과한 모션은 금지하고 단순 컷 전환을 기본으로 사용",
-      "- 하단 자막은 화면 맨 아래에 붙이지 말고 바닥에서 약 250~350px 위의 안전영역에 배치",
-      "- 맨 아래 약 150~200px은 쇼츠 UI 여유 공간으로 비워둘 것",
-      "- BGM은 audio_plan.txt 기준으로 음성보다 충분히 낮게 사용",
-      "- 불필요한 새 이미지, 새 차트, 새 문구, 새로운 숫자 생성 금지",
-      "- 장면 사이 화려한 전환효과 금지. 빠르고 단순한 컷 위주",
-      "- 최종 출력은 제공된 음성과 자막이 정확히 끝나는 지점에서 종료",
-      "",
-      "[편집표]",
-      shortsEditPlanExport()
+      "[집값쓱 쇼츠 V3 · 고정 배경 + 정보판 최종 조립]",
+      "주제: " + (projectTitle || "첨부 패키지의 주제"), "",
+      "[ZIP 내용만 정확하게 조립할 것]",
+      "- background.png는 영상 시작부터 종료까지 한 장으로 고정. 절대 움직이거나 다른 배경으로 교체하지 말 것.",
+      "- overlays/01_overlay.png ~ 07_overlay.png는 투명 RGBA 파일. edit_plan.txt 시간에 맞춰 같은 배경 위에서만 바꿔 표시.",
+      "- 투명 정보판에는 이미 코드로 그린 정확한 한글·숫자와 그래프가 있음. 새 그래프·숫자·문구 생성 금지.",
+      "- 각 정보판이 사라지고 다음 정보판이 나타나는 효과는 0.2초 이내의 페이드 또는 단순 컷만 사용.",
+      "- subtitles_full.srt는 최종 1.5배속 타임라인으로 이미 변환된 1줄 자막. 한 줄씩 빠짐없이 정확하게 표시.",
+      "- 하단 자막은 Y 1450~1660 범위(1080×1920 기준)에 중앙 정렬, 짙은 반투명 배경으로 정보 카드와 겹치지 않게 합성.",
+      "- Y 1720~1920은 쇼츠 UI 영역이므로 비워두기.",
+      "- voice.mp3 또는 voice.wav는 정확히 1.5배속 적용. SRT 속도를 다시 바꾸지 않기.",
+      "- bgm.mp3 또는 bgm.wav는 audio_plan.txt 기준으로 음성보다 충분히 낮게 재생.",
+      "- 모든 레이어는 마지막 음성과 마지막 자막이 끝나는 지점에서 동시에 종료.",
+      "", "[편집표]", shortsEditPlanExport()
     ].join("\n");
   }
 
