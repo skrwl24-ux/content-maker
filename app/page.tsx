@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import { cleanSceneField, parseOverlayRows, unsupportedRowValues, renderShortsOverlay, oneLineSrt, sceneKind, SCENE_TYPES, splitOneLineCaptions, resolveOverlayScenes } from "@/lib/jibssuk-v3";
 import { narrationDifference, restoreOriginalNarration } from "@/lib/jibssuk-narration";
-import { toKoreanVoiceScript } from "@/lib/jibssuk-voice";
+import { toKoreanVoiceScript, hasArabicVoiceDigits } from "@/lib/jibssuk-voice";
 import { JIBSSUK_MASTER_REFERENCE_KEY, JIBSSUK_MASTER_STYLE, JIBSSUK_SCENE_TEMPLATES, buildJibssukImagePrompt } from "@/lib/jibssuk-master-prompts";
 
 type Fact = { label: string; value: string; sourceText: string };
@@ -226,6 +226,7 @@ export default function Home() {
   const [bgmFile, setBgmFile] = useState<File | null>(null);
   const [bgmMemo, setBgmMemo] = useState("");
   const [shortsVoiceOverride, setShortsVoiceOverride] = useState<string | null>(null);
+  const [voiceFileForScript, setVoiceFileForScript] = useState<string | null>(null);
   const [shortsMasterReference, setShortsMasterReference] = useState("");
   const [shortsImagePromptPreview, setShortsImagePromptPreview] = useState(0);
   const [shortsCustomOverlays, setShortsCustomOverlays] = useState<string[]>(() => Array(7).fill(""));
@@ -249,6 +250,8 @@ export default function Home() {
   const shortsEstimatedSeconds = useMemo(() => shortsCharCount ? shortsCharCount / 6.8 : 0, [shortsCharCount]);
   const autoShortsVoiceScript = useMemo(() => normalizeShortsVoiceText(shortsScript), [shortsScript]);
   const shortsVoiceScript = shortsVoiceOverride ?? autoShortsVoiceScript;
+  const shortsVoiceDigitsRemain = hasArabicVoiceDigits(shortsVoiceScript);
+  const voiceMatchesScript = !!voiceFile && voiceFileForScript === shortsVoiceScript && !shortsVoiceDigitsRemain;
   const shortsVoiceCharCount = useMemo(() => shortsVoiceScript.replace(/\s/g, "").length, [shortsVoiceScript]);
   const shortsVoiceEstimatedSeconds = useMemo(() => shortsVoiceCharCount ? shortsVoiceCharCount / 6.8 : 0, [shortsVoiceCharCount]);
   const finalVoiceDuration = voiceDuration ? voiceDuration / SHORTS_PLAYBACK_RATE : 0;
