@@ -1054,6 +1054,8 @@ export default function Home() {
           !shortsVisualReady && "공통 배경을 업로드하세요.",
           !shortsCaptionReady && "내레이션이 비어 있습니다.",
           !voiceFile && "음성 파일을 첨부하세요.",
+          shortsVoiceDigitsRemain && "음성용 대본에 아라비아 숫자가 남아 있습니다.",
+          !!voiceFile && !voiceMatchesScript && "발음용 대본 변경 후 음성 파일을 다시 생성·업로드하세요.",
           ...shortsDataIssues
         ].filter(Boolean);
         throw new Error(problems.join(" / ") || "제작 패키지 검수가 완료되지 않았습니다.");
