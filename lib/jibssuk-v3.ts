@@ -10,8 +10,8 @@ export type OverlayScene = {
 };
 export type TimedScene = { scene: OverlayScene; start: number; end: number; duration: number };
 export const SCENE_TYPES = [
-  "질문 카드", "기준 카드", "거래량 그래프", "가격 비교표",
-  "핵심 숫자 카드", "비교 기준 카드", "고정 엔딩"
+  "썸네일", "대상 소개 카드", "거래량 그래프", "가격 변화 그래프",
+  "주목 포인트 카드", "주의사항 카드", "집값쓱 엔딩"
 ] as const;
 export const SHORTS_LAYOUT = {
   width: 1080, height: 1920, cardBottom: 1350,
@@ -21,12 +21,12 @@ export const SHORTS_LAYOUT = {
 export function sceneKind(scene: OverlayScene): string {
   const kind = scene.screenType || "";
   if (/거래량|막대/.test(kind)) return "bar";
-  if (/가격 비교표|가격표/.test(kind)) return "price";
+  if (/가격 변화|가격 비교표|가격표|라인차트|가격 그래프/.test(kind)) return "price";
   if (/비교 기준|주의|텍스트 카드/.test(kind)) return "notice";
-  if (/기준 카드|조사 기준/.test(kind)) return "criteria";
-  if (/핵심 숫자|강조/.test(kind)) return "highlight";
+  if (/대상 소개|지역 소개|단지 소개|기준 카드|조사 기준/.test(kind)) return "criteria";
+  if (/주목 포인트|핵심 숫자|강조/.test(kind)) return "highlight";
   if (/엔딩/.test(kind)) return "ending";
-  if (/질문/.test(kind)) return "cover";
+  if (/썸네일|질문/.test(kind)) return "cover";
   // Migrate older six/seven-scene plan types without using old AI graphics.
   return ["cover", "criteria", "bar", "price", "highlight", "notice", "ending"][scene.order - 1] || "highlight";
 }
@@ -53,6 +53,7 @@ export function parseOverlayRows(raw: string): Array<{ label: string; value: str
 
 export function unsupportedRowValues(scene: OverlayScene, source: string): string[] {
   const corpus = source.replace(/,/g, "");
+  if (sceneKind(scene) === "criteria") return []; // 소개 카드의 순위/이름 라벨은 금액 데이터가 아님.
   return parseOverlayRows(scene.dataRows || "").map((r) => r.value).filter((value) => {
     const match = value.replace(/,/g, "").match(/^[\d]+(?:\.\d+)?/);
     if (!match) return true;
@@ -247,8 +248,17 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
     titleLines(header, 610, 93, WHITE);
     roundRect(ctx, 215, 995, 650, 15, 7, YELLOW);
   } else if (kind === "criteria") {
-    panel(390, 710, true);
-    text(ctx, "비교 기준", 540, 460, 750, 43, BLUE, "center");
+    panel(315, 890, true);
+    const items = String(scene.dataRows || "").split(/[;\n]/).map(v => v.split("|")[0].trim()).filter(Boolean).slice(0, 3);
+    text(ctx, items.length ? "이번 비교 대상" : "비교 기준", 540, 395, 750, 43, BLUE, "center");
+    if (items.length) {
+      titleLines(header, 474, 56, NAVY, 2);
+      items.forEach((item, i) => {
+        const y = 652 + i * 167;
+        roundRect(ctx, 115, y, 850, 138, 23, i===0?"#FFF1CB":"#E7EFFA");
+        text(ctx, item, 540, y+42, 780, 56, NAVY, "center", 36);
+      });
+    } else {
     const date = header.match(/\d{4}년\s*\d{1,2}월/);
     if (date) {
       text(ctx, date[0], 540, 570, 810, 105, NAVY, "center", 70);
@@ -256,6 +266,7 @@ export async function renderShortsOverlay(scene: OverlayScene): Promise<string> 
       titleLines(rest || "매매 신고 기준", 765, 69, NAVY);
     } else titleLines(header, 660, 86, NAVY);
     roundRect(ctx, 250, 1000, 580, 13, 7, BLUE);
+    }
   } else if (kind === "bar") {
     panel(270, 1025);
     titleLines(header, 336, 60, WHITE, 2);
