@@ -1301,9 +1301,34 @@ export default function Home() {
       {phase === "analysis" && (isShorts ? <>
         <div className="sectionHead"><div><h2>3. 이미지 7장 제작</h2><p>승인된 썸네일 스타일을 기준으로 장면별 GPT 요청서를 만들고, 완성된 투명 정보판을 장면마다 적용합니다.</p></div><span className="counter">{shortsScenes.length || 0}/7장면 설계</span></div>
         {shortsScript.trim().length < 50 && <p className="stagePreviewNote">미리보기: 2. 대본 단계에 완성 대본을 넣으면 이 단계의 GPT 장면표 요청서에 자동 포함됩니다.</p>}
+        <div className="box scenePasteBox">
+          <div className="miniHead"><h3>① GPT로 7장 정보 구성 · 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
+          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 썸네일\n데이터행:"} />
+          <div className="tags"><span className={shortsSceneCountReady ? "ok" : "warn"}>{shortsScenes.length}/7장면</span><span>공통 배경 1개</span><span>GPT 정보판 우선 · 미제작 장면 코드 보완</span><span className={shortsDataIssues.length ? "warn" : "ok"}>숫자 검수 {shortsDataIssues.length ? shortsDataIssues.length + "건 확인 필요" : "✓"}</span></div>
+        </div>
+        {shortsScenes.length > 0 && <div className="sceneTable">
+          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 문구 + 데이터행</span><span>하단 대사</span><span>정보판 종류</span></div>
+          {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
+            <b>{scene.order}</b>
+            <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
+            <div style={{display:"grid",gap:6}}>
+              <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} />
+              <textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 실제건수 ; 단지명 | 실제건수" style={{width:"100%",minWidth:0}} />
+              {!scene.dataRows && !!resolvedShortsScenes[i]?.dataRows &&
+                <div style={{fontSize:12,color:"#2365A8",lineHeight:1.4}}>
+                  원문에서 자동 추출: {resolvedShortsScenes[i].dataRows}
+                  <button type="button" className="secondary compact" onClick={() => updateShortsScene(i,{dataRows:resolvedShortsScenes[i].dataRows})}>값 확인·적용</button>
+                </div>}
+            </div>
+            <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
+            <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
+              {SCENE_TYPES.map(type => <option key={type}>{type}</option>)}
+            </select>
+          </div>)}
+        </div>}
         <div className="box masterReferenceBox">
-          <div className="miniHead"><h3>🎨 집값쓱 스타일 마스터 V1</h3><span className="muted">요청서 7종 · 사이트에 고정 저장</span></div>
-          <p className="muted">방금 승인한 김포 썸네일을 한 번 등록하세요. 이미지의 색감·글씨·로고 디자인만 참고하고, 다른 지역 영상에서는 김포 숫자와 문구를 복사하지 않습니다.</p>
+          <div className="miniHead"><h3>② 집값쓱 스타일 마스터 V1 · 고품질 이미지 제작</h3><span className="muted">요청서 7종 · 사이트에 고정 저장</span></div>
+          <p className="muted">먼저 위에서 7장 구성표를 붙여넣어 주세요. 승인한 김포 썸네일은 한 번 등록하면 디자인 기준으로 사용합니다. 다른 지역 영상에 김포의 숫자와 문구를 복사하지 않습니다.</p>
           <div className="masterReferenceLayout">
             {shortsMasterReference
               ? <img src={shortsMasterReference} alt="집값쓱 승인 마스터 썸네일 미리보기" className="masterReferenceThumb" />
@@ -1331,31 +1356,6 @@ export default function Home() {
           </div>
           <p className="muted">제작한 투명 PNG를 장면별로 올리면 자동 정보판 대신 우선 적용합니다. 사이트가 Y 1350 아래를 자동으로 투명 처리해 자막 공간을 보호합니다. 업로드 이미지는 현재 작업 화면에서 유지되며, 새로고침하면 다시 선택해야 합니다.</p>
         </div>
-        <div className="box scenePasteBox">
-          <div className="miniHead"><h3>GPT 장면 설계 붙여넣기</h3><div className="inlineActions"><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => copyText(shortsSilentPrompt(), "장면표 요청서를 복사했습니다.")}>📋 요청서 복사</button><button className="secondary compact" disabled={shortsScript.trim().length < 50} onClick={() => openGPT(shortsSilentPrompt())}>↗ GPT 열기</button></div></div>
-          <textarea className="smallArea" value={shortsSceneText} onChange={e => applyShortsSceneText(e.target.value)} placeholder={"GPT 결과를 그대로 붙여넣으세요.\n\n[장면 1]\n내레이션: ...\n큰문구: ...\n하단자막: ...\n화면방식: 질문 카드\n데이터행:"} />
-          <div className="tags"><span className={shortsSceneCountReady ? "ok" : "warn"}>{shortsScenes.length}/7장면</span><span>공통 배경 1개</span><span>투명 정보판은 코드 자동 생성</span><span className={shortsDataIssues.length ? "warn" : "ok"}>숫자 검수 {shortsDataIssues.length ? shortsDataIssues.length + "건 확인 필요" : "✓"}</span></div>
-        </div>
-        {shortsScenes.length > 0 && <div className="sceneTable">
-          <div className="sceneTableHead"><span>장면</span><span>내레이션</span><span>큰 문구 + 데이터행</span><span>하단 대사</span><span>정보판 종류</span></div>
-          {shortsScenes.map((scene, i) => <div className="sceneTableRow" key={scene.order}>
-            <b>{scene.order}</b>
-            <input value={scene.narration} onChange={e => updateShortsScene(i, { narration: e.target.value })} />
-            <div style={{display:"grid",gap:6}}>
-              <input value={scene.headline} onChange={e => updateShortsScene(i, { headline: cleanSceneField(e.target.value) })} />
-              <textarea rows={2} value={scene.dataRows || ""} onChange={e => updateShortsScene(i, { dataRows: e.target.value })} placeholder="단지명 | 실제건수 ; 단지명 | 실제건수" style={{width:"100%",minWidth:0}} />
-              {!scene.dataRows && !!resolvedShortsScenes[i]?.dataRows &&
-                <div style={{fontSize:12,color:"#2365A8",lineHeight:1.4}}>
-                  원문에서 자동 추출: {resolvedShortsScenes[i].dataRows}
-                  <button type="button" className="secondary compact" onClick={() => updateShortsScene(i,{dataRows:resolvedShortsScenes[i].dataRows})}>값 확인·적용</button>
-                </div>}
-            </div>
-            <input value={scene.subtitle} onChange={e => updateShortsScene(i, { subtitle: e.target.value })} />
-            <select value={scene.screenType} onChange={e => updateShortsScene(i, { screenType: e.target.value })}>
-              {SCENE_TYPES.map(type => <option key={type}>{type}</option>)}
-            </select>
-          </div>)}
-        </div>}
         <div className="box">
           <div className="miniHead"><h3>공통 아파트 배경 · 단 1장</h3><span className="muted">그래프·숫자·한글은 사이트가 자동 렌더링</span></div>
           {tasks.map(t => <div className="imageRow" key={t.title}><span>BG</span><div><b>{t.title}</b><p>투명 오버레이 7장 아래에서 계속 고정됩니다.</p></div><button className="secondary compact" onClick={() => openGPT(promptFor(t))}>배경 만들기 ↗</button></div>)}
