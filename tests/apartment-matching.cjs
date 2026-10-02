@@ -70,3 +70,14 @@ test("selected real complex never inherits sample apartment prices when trades c
   assert.doesNotMatch(page,/recent \? formatWon\(recent\) : SAMPLE\.recentPrice/);
   assert.doesNotMatch(page,/representativeArea \? "전용 " \+ detail\.representativeArea : SAMPLE\.area/);
 });
+
+
+test("representative snapshot and most recent deal share the same area and six-point window", () => {
+  const server=fs.readFileSync("lib/apartment-server.ts","utf8");
+  const detail=fs.readFileSync("app/api/apartment/complexes/[id]/route.ts","utf8");
+  assert.match(server,/new Set\(monthLabels\(7\)\)/);
+  assert.match(server,/const validMonthly = repMonthly\.filter\(\(r\) => r\.median_price != null\)\.slice\(-6\)/);
+  assert.match(detail,/\.gte\("year_month", startMonth\)/);
+  assert.match(detail,/\.eq\("area_group", areaGroup\)/);
+  assert.match(detail,/areaGroup == null\s*\?\s*\{ data: null, error: null \}/);
+});

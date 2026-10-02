@@ -490,7 +490,9 @@ export async function syncApartmentRegion(regionCode: string) {
     await upsertInChunks(client, "apt_monthly_stats", monthlyRows, "complex_id,area_group,year_month", 400);
 
     const analysisDate = currentAnalysisDate();
-    const sixMonthLabels = new Set(monthLabels(6));
+    // Include the current and previous six calendar months, then keep the last
+    // six valid monthly prices. This matches the six points shown by the editor.
+    const sixMonthLabels = new Set(monthLabels(7));
     const snapshots: JsonRecord[] = [];
 
     for (const complex of complexes) {
@@ -517,7 +519,7 @@ export async function syncApartmentRegion(regionCode: string) {
       const repMonthly = monthlyRows
         .filter((r) => r.complex_id === complex.id && r.area_group === representativeArea && sixMonthLabels.has(String(r.year_month)))
         .sort((a, b) => String(a.year_month).localeCompare(String(b.year_month)));
-      const validMonthly = repMonthly.filter((r) => r.median_price != null);
+      const validMonthly = repMonthly.filter((r) => r.median_price != null).slice(-6);
       const firstMedian = validMonthly.length ? Number(validMonthly[0].median_price) : null;
       const latestMedian = validMonthly.length ? Number(validMonthly[validMonthly.length - 1].median_price) : null;
       const changePct = firstMedian && latestMedian ? ((latestMedian - firstMedian) / firstMedian) * 100 : null;
