@@ -118,7 +118,7 @@ const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; he
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
   "01": { label: "본문 이미지 01", role: "핵심 원리", width: 1600, height: 900, filename: "01_body.png", copy: "핵심 원리를 한눈에 이해시키는 장면" },
   "02": { label: "본문 이미지 02", role: "과정·비교", width: 1600, height: 900, filename: "02_body.png", copy: "원인과 과정 또는 비교를 쉽게 보여주는 장면" },
-  "03": { label: "선택 이미지 03", role: "추가 설명", width: 1600, height: 900, filename: "03_body.png", copy: "추가로 알아두면 좋은 점을 보여주는 보조 장면" },
+  "03": { label: "선택 이미지 03", role: "추가 보상·비교", width: 1600, height: 900, filename: "03_body.png", copy: "02번과 겹치지 않는 재발 방지·추가 비교·관리 포인트를 보여주는 정보 카드" },
 };
 
 function categoryEmoji(category: Category) {
@@ -495,10 +495,10 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
     ? "핵심 과학 원리·구조를 이해시키는 설명 장면. 독자가 왜 그런지 단번에 알 수 있게 하고, 생활 팁 목록이나 02번 보상 카드를 중복하지 않는다."
     : slotId === "02"
       ? "이번 글의 '발견 또는 보상'을 저장하고 싶게 보여주는 본문 정보 이미지. 생활형이면 검증된 예방법·활용법·상황별 비교를, 동물·자연·우리 몸이면 새로운 관찰 포인트·의외의 구조·흔한 오해의 비교를 선택한다. 사과 갈변 글이라면 갈변을 늦추는 레몬즙, 단면 밀착 포장, 신속한 냉장 보관을 짧은 카드로 설명하되 갈변 방지와 식품 안전을 혼동하지 않는다."
-      : "01번 원리와 02번 킥만으로 이해되지 않는 추가 안전·한계·비교가 있을 때만 사용하는 선택 이미지. 글에 없는 새 정보를 만들지 않는다.";
+      : "본문에 확인된 추가 보상 중 02번 킥 카드와 독립된 한 가지를 저장용 정보 카드로 보여준다. 실용 킥은 재발 방지·유지 관리·상황별 비교, 그 외의 주제는 중요한 안전·한계·오해 해소·관찰 포인트를 선택한다. 이미지 01의 원리 또는 02번의 핵심 방법을 반복하지 않으며, 독립적인 정보가 없으면 사용하지 않는다. 글에 없는 새 사실을 만들지 않는다.";
   return legacy
     .replace(`역할: ${info.role}
-이 이미지가 전달할 내용: ${info.copy}`, `역할: ${slotId === "01" ? "핵심 원리" : slotId === "02" ? "이번 글의 발견·보상" : "필요 시 추가 비교"}
+이 이미지가 전달할 내용: ${info.copy}`, `역할: ${slotId === "01" ? "핵심 원리" : slotId === "02" ? "이번 글의 발견·보상" : "추가 보상·비교"}
 이 이미지가 전달할 내용: ${purpose}`)
     .replace("[제작 목표]", `[Paramma V2 · 이미지 기획]
 - 주제: ${topic.title}
@@ -511,6 +511,19 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
 [제작 목표]`);
 }
 
+
+const PARAMMA_IMAGE_PLAN_RULES = `[Paramma V3 · 이미지 장수·03 슬롯 최신 원칙 — 앞선 03 제한보다 우선]
+- 썸네일 00 + 핵심 원리 01 + 이번 글의 킥 02 = 기본 3장. 원리와 별도로 보상에 독립적인 후속 내용이 있으면 03을 적극 검토하여 총 4장(썸네일 포함)을 기획할 것.
+- 이미지 03은 안전상 꼭 필요할 때만 쓰는 슬롯이 아니다. 실용 킥이라면 02번에 직접 해결·제거·활용 방법을, 03번에 재발 방지·유지 관리·조건별 비교 등 다른 가치를 담는다. 비실용 소재라면 오해 해소·관찰 차이·중요한 주의사항 등 독립적인 후속 발견에 활용한다.
+- 02와 03이 같은 팁 목록이나 원리의 반복이 되면 03을 생략한다. 분량을 채우기 위해 이미지를 억지로 추가하거나 본문에 없는 정보를 만들지 말 것.
+- 이미지 03을 사용하는 경우 본문 중 해당 내용 바로 뒤에 [이미지 03] 삽입 위치를 표시하고, 마지막 이미지 기획 메모에도 03번의 독립적인 역할을 한 줄로 명시할 것.
+- 실제 제작 사이트에서 03은 선택 슬롯이다. 03이 필요하다고 판단한 원고라면 사용을 추천하되 모든 글에 강제하지 말 것.`;
+
+const PARAMMA_IMAGE03_RULES = `[Paramma V3 · 선택 이미지 03 최신 지침 — 기존 설명보다 우선]
+- 03번은 단순 장식이나 01 원리·02 핵심 킥을 다시 보여주는 이미지가 아니라, 02 다음에 독자가 별도로 저장하고 싶은 후속 보상 정보 카드로 만든다.
+- 예: 02가 거미줄 제거 방법이면 03은 재발을 줄이는 방충망·틈새·조명 관리. 사과 갈변이라면 02의 갈변 방지법을 03에서 반복하지 않고 본문에 검증된 별도의 안전·상태 비교가 있을 때만 사용한다.
+- 실제 최종 원고에서 확인된 재발 방지·관리·상황별 비교·오해 해소·주의사항 중 한 가지를 선정한다. 본문에 독립적인 후속 내용이 없다면 이미지 내용을 억지로 만들지 말 것.
+- 출력은 1600×900 가로형 단일 이미지로, 한눈에 읽히는 정보 중심. 본문 00~02와 중복되는 큰 질문형 카피나 내용은 사용하지 않는다.`;
 
 const PARAMMA_STORY_BRIDGE_RULES = `[Paramma V3 · 연결형 스토리 구성 — 앞선 구성 규칙보다 우선]
 - 글은 '① 호기심: 일상의 핵심 질문과 답을 먼저 제시하고 선정한 킥을 도입에서 1~2문장으로 짧게 예고 → ② 발견: 신비한 원리와 흥미로운 사실을 충분히 설명 → ③ 자연스러운 전환: 원리와 독자의 실제 상황을 연결해 다음 질문을 이끌어내는 2~4문장 → ④ 보상: 선정한 킥의 구체적인 방법·비교·관찰 포인트 전달 → ⑤ 필요할 때만 안전·한계' 순서로 작성할 것.
@@ -526,7 +539,9 @@ function buildArticlePromptV3(topic: Topic, date = formatToday()) {
     .replace("- 킥은 검색 답을 반복하지 않으면서 독자가 추가로 알아갈 만한 실용 방법, 의외의 차이, 오해 해소, 관찰 포인트 중 주제에 맞는 단 하나로 정할 것.", "- 킥 선정의 우선순위: 주제와 자연스럽게 연결되는 실용적 해결·예방·관리 방법을 먼저 살피고, 맞지 않으면 의외의 차이·오해 해소·관찰 포인트 중 하나를 선택한다. 억지 생활 팁은 금지한다.")
     .replace("③ 보상: 이번 글의 킥을 구체적으로 전달 → ④ 필요할 때만 안전·한계", "③ 자연스러운 전환: 원리와 독자의 일상적 상황을 연결하는 2~4문장 → ④ 보상: 이번 글의 킥을 구체적으로 전달 → ⑤ 필요할 때만 안전·한계")
     .replace("[네이버 검색형 제목]", "[Paramma V3 · 자동 킥 기본 규칙]\n- 검색 조사나 직접 킥 입력이 없는 경우에도 반드시 원고를 끝까지 작성한다.\n- 검색어가 실제 자동완성·검색량 데이터라고 확인하지 않았다면 이를 관측 사실로 말하지 않는다.\n- 과학적 원리만 되풀이하는 대신 독자가 글을 읽고 가져갈 추가적인 보상을 하나 만든다.\n- 이미지 02는 본문에서 실제로 선정한 킥을 저장용 정보 카드로 구체적으로 보여준다. 이미지 01과 중복하지 않는다.\n\n[네이버 검색형 제목]")
-    .replace("[네이버 검색형 제목]", PARAMMA_STORY_BRIDGE_RULES + "\n\n[네이버 검색형 제목]");
+    .replace("[네이버 검색형 제목]", PARAMMA_STORY_BRIDGE_RULES + "\n\n[네이버 검색형 제목]")
+    .replace("- 이미지 03은 안전상 중요한 비교 등 내용상 꼭 필요할 때만 제안. 이미 00~02로 충분하면 생략", "- 이미지 03은 02번 보상과 독립적인 재발 방지·관리·상황별 비교·안전·오해 해소 내용이 검증된 경우 적극 제안. 00~02로 충분하면 생략")
+    .replace("[네이버 검색형 제목]", PARAMMA_IMAGE_PLAN_RULES + "\n\n[네이버 검색형 제목]");
 }
 
 function buildImagePromptV3(topic: Topic, slotId: SlotId) {
@@ -535,7 +550,8 @@ function buildImagePromptV3(topic: Topic, slotId: SlotId) {
   return prompt
     .replace("[Paramma V2 · 이미지 기획]", "[Paramma V3 · 이미지 기획]")
     .replace("- 주제별 킥 참고: " + kickGuide(topic), "- 킥 선정은 카테고리 고정 규칙보다 실제 발행 원고의 검색 의도와 확정된 보상을 우선한다.")
-    .replace("동물·자연·우리 몸이면 새로운 관찰 포인트·의외의 구조·흔한 오해의 비교를 선택한다.", "동물·자연·우리 몸도 주제와 연결되는 검증된 실용 방법이 킥이면 이를 우선 시각화한다. 그런 정보가 부자연스러울 때만 관찰 포인트·의외의 구조·오해 비교로 구성한다.");
+    .replace("동물·자연·우리 몸이면 새로운 관찰 포인트·의외의 구조·흔한 오해의 비교를 선택한다.", "동물·자연·우리 몸도 주제와 연결되는 검증된 실용 방법이 킥이면 이를 우선 시각화한다. 그런 정보가 부자연스러울 때만 관찰 포인트·의외의 구조·오해 비교로 구성한다.")
+    .replace("[제작 목표]", slotId === "03" ? PARAMMA_IMAGE03_RULES + "\n\n[제작 목표]" : "[제작 목표]");
 }
 
 function buildKeywordResearchPrompt(topic: Topic) {
@@ -608,11 +624,18 @@ function articlePromptForWork(work: TopicWork) {
       "- 이미지 02는 선택한 보상을 구체적인 저장용 정보 카드로, 01은 신비한 핵심 원리로 분리할 것."
     ].join("\n") : "";
   const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
-  return work.articlePrompt + legacyOverride + storyBridge + kickContext(work);
+  const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 장수·03 슬롯 최신 원칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
+  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + kickContext(work);
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId) {
   const base = work.slots[slotId].prompt;
+  if (slotId === "03") {
+    const latestRules = base.includes("[Paramma V3 · 선택 이미지 03 최신 지침") ? "" : "\n\n" + PARAMMA_IMAGE03_RULES;
+    const chosenKick = (work.kickMode !== "auto" ? (work.selectedKick || "").trim() : "") || derivedKickFromBody(work.body || "");
+    const kickNote = chosenKick ? "\n\n[이번 글의 확정·본문 킥]\n" + chosenKick + "\n- 03번은 이 킥을 02번에서 설명한 내용을 반복하지 말고, 최종 본문에 있는 후속 보상만 시각화할 것." : "";
+    return base + latestRules + kickNote;
+  }
   if (slotId !== "02") return base;
   const legacyOverride = base.includes("[Paramma V2 · 이미지 기획]")
     ? "\n\n[Paramma V3 최신 이미지 02 지침]\n- 기존 카테고리별 선택보다 최종 본문의 킥을 우선한다. 실용적인 킥이라면 구체적인 방법과 조건을 저장용 정보 카드로 보여주며 원리 이미지 01을 반복하지 말 것."
@@ -1576,11 +1599,14 @@ export default function ParammaBulkPage() {
                       </span>
                     </div>
 
-                    {slotId === "03" && (
-                      <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
-                        {work.optional03 ? "✓ 선택 이미지 03 사용 중 · 선택 해제" : "+ 선택 이미지 03 사용"}
-                      </button>
-                    )}
+                     {slotId === "03" && (
+                       <>
+                         <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
+                           {work.optional03 ? "✓ 이미지 03 추가 보상 사용 중 · 선택 해제" : "+ 이미지 03 추가 보상 카드 사용"}
+                         </button>
+                         <p className={styles.kickHint}>기본 3장, 03 사용 시 총 4장 · 재발 방지·관리·추가 비교처럼 02와 다른 정보가 있을 때 추천</p>
+                       </>
+                     )}
 
                     {optionalInactive && image && (
                       <div className={styles.retained}>등록 이미지 보관 중 · 현재 ZIP에서는 제외</div>
