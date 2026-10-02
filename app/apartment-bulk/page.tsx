@@ -4129,7 +4129,7 @@ export default function ApartmentBulkPage() {
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
-              <h2>1. 본문 먼저 → 2. 완성글 붙여넣기 → 3. 동일한 이야기로 이미지 제작</h2>
+              <h2>1. 본문 → 2. 최종편집에서 생활정보 웹 검증 → 3. 같은 이야기로 이미지 제작</h2>
               <span>{approvedV3
                 ? "🔒 승인한 오늘의 생활 발견이 본문에 직접 반영됩니다. 지도형은 확인된 캡처만 참고합니다."
                 : v3Planner.current.status === "skipped"
@@ -4341,7 +4341,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 자동 검사 · 전체복사</h2>
-                <span>완성글은 한 번만 붙여넣으세요. 대상명·태그·이미지·생활 스토리 일치 여부를 바로 검사하고, 시계열 표와 일반 표를 네이버용으로 정리합니다.</span>
+                <span>완성글을 한 번 붙여넣으면 실거래·태그·이미지 위치를 자동 검사합니다. 이어서 아래 '생활정보 웹 검증하기'에서 장소·영업 여부·거리의 원문 근거를 확인하고, 본문 수정 후 이미지 03을 제작하세요.</span>
               </div>
             </div>
 
