@@ -21,7 +21,7 @@
 .panel{border:1px solid #dce5e9;background:#fff;border-radius:13px;padding:19px;margin:17px 0}
 .panel h2{margin:0 0 7px;font-size:20px;letter-spacing:-.04em}
 .panel>p{font-size:12px;color:#657783;line-height:1.7;margin:0 0 16px}
-.tableWrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:760px}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid #e7edf0;font-size:12px;vertical-align:top}th{color:#617584;background:#f5f8fa;white-space:nowrap}.errorText{color:#aa493a;max-width:170px;overflow-wrap:anywhere}
+.tableWrap{overflow-x:auto}.tableWrap table{border-collapse:collapse;width:100%;min-width:760px}.tableWrap th,.tableWrap td{text-align:left;padding:11px 9px;border-bottom:1px solid #e7edf0;font-size:12px;vertical-align:top}.tableWrap th{color:#617584;background:#f5f8fa;white-space:nowrap}.errorText{color:#aa493a;max-width:170px;overflow-wrap:anywhere}
 .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
 .complex{padding:15px;border:1px solid #e0e8eb;border-radius:10px;display:grid;gap:13px}
 .complex h3{font-size:15px;margin:0 0 5px}.complex small{color:#7a8b94;font-size:11px}
