@@ -513,6 +513,31 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
 }
 
 
+const SPIDERWEB_IMAGE_ARTICLE_RULES = `[거미줄 글 전용 필수 이미지 기획 — 앞선 일반 지침보다 우선]
+- 이번 글은 거미가 끈끈한 거미줄 위를 걷는 이유를 설명한 뒤, 독자가 실제로 가져갈 킥인 '집 안·베란다 거미줄 제거 방법'을 반드시 별도 시각화한다.
+- 이미지 00: 거미는 왜 안 붙는지 보여주는 썸네일.
+- 이미지 01: 거미줄의 종류와 발의 접촉 방식 등 핵심 원리.
+- 이미지 02(필수): 집 안·베란다에 생긴 거미줄을 안전하게 제거하는 방법을 실용적인 3단계 정보 카드로 표현. 원고에서 검증한 내용에 맞춰 거미 유무 먼저 확인 → 부드러운 솔·긴 청소 도구·청소기 노즐 등으로 줄 제거 → 남은 실과 먼지 정리처럼 바로 실행할 순서에 집중한다. 거미 발·생물학적 구조나 재발 방지 내용을 02로 대체하지 말 것.
+- 이미지 03(본문에 재발 관리 내용이 있으면 권장): 방충망·틈새·주변 곤충 유입·실외 조명 등 거미줄 재발을 줄이기 위한 관리 사항. 02번 제거 순서를 반복하지 말 것.
+- 최종 [이미지 기획 메모]에도 이미지 02를 '거미줄 제거 방법 3단계', 이미지 03을 '거미줄 재발 방지 관리'로 서로 다른 문장으로 명확히 작성할 것. 이미지 02가 누락되면 최종 원고 이미지 기획이 불완전하다.
+- 위험한 베란다 난간 밖으로 몸을 내미는 장면, 확인되지 않은 퇴치법, 원고에 없는 새로운 사실은 만들지 않는다.`;
+
+const SPIDERWEB_IMAGE02_RULES = `[이 거미줄 글의 이미지 02 최종 필수 지시 — 다른 이미지 기획과 충돌하면 이 규칙이 우선]
+- 결과물은 '집 안·베란다 거미줄 안전한 제거 방법'을 독자가 저장해 바로 활용할 수 있는 1600×900 실용 정보형 카드 한 장으로 만들 것.
+- 원고의 제거 방법에 맞춰 ① 제거 전 거미 유무 확인 ② 부드러운 솔·긴 청소 도구 또는 청소기 노즐로 거미줄 걷어내기 ③ 남은 실·먼지 정리 순서를 행동 중심의 짧은 한국어 라벨과 실제 청소 장면으로 보여줄 것. 본문에서 확인되지 않은 단정은 추가하지 말 것.
+- 거미가 줄에 안 붙는 원리, 거미 발 확대, 관찰 상식, 재발 방지 팁만으로 이미지를 채우지 말 것. 제거 방법을 시각적으로 보여주는 것이 반드시 주인공이다.
+- 위험한 난간 청소나 몸을 밖으로 내미는 자세를 묘사하지 말 것.
+- 이미지 03은 재발 방지용 별도 카드이므로 이 이미지에 섞지 말 것.`;
+
+const SPIDERWEB_IMAGE03_RULES = `[이 거미줄 글의 이미지 03 최종 역할 — 다른 기획과 충돌하면 이 규칙이 우선]
+- 02번이 '거미줄 제거 방법 3단계'를 담당하므로, 03번을 사용한다면 '같은 장소에 거미줄이 다시 생기는 일을 줄이는 관리'를 별도 정보 카드로 만들 것.
+- 최종 본문에서 확인한 방충망 점검·틈새 관리·곤충 유입과 조명 점검 등을 짧게 정리하되, 원고에 없는 새 사실이나 과장된 보장 문구는 금지.
+- 02번 제거 도구·제거 순서를 이 이미지에 반복하지 말 것.`;
+
+function isSpiderwebRemovalTopic(topic: Topic) {
+  return topic.title.includes("거미줄은 끈끈한데 거미는");
+}
+
 const PARAMMA_IMAGE_PLAN_RULES = `[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙 — 앞선 설명보다 우선]
 - 기본은 00 썸네일 + 01 핵심 원리 + 02 첫 번째 보상 정보 카드, 총 3장(썸네일 포함)이다. 본문에 독립적인 두 번째 실용 정보 또는 후속 발견이 있을 때만 03을 추가해 총 4장으로 기획할 것.
 - 이미지 02는 본문에서 먼저 다룬 해결·제거·활용 방법 등 핵심 실용 킥을 구체적으로 담는다. 실용 킥이 부자연스러운 소재라면 검증된 발견·관찰 포인트를 담는다.
@@ -615,7 +640,7 @@ function kickContext(work: TopicWork, image02 = false) {
   ].filter(Boolean).join("\n");
 }
 
-function articlePromptForWork(work: TopicWork) {
+function articlePromptForWork(work: TopicWork, topic: Topic) {
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
   const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
     ? [
@@ -629,10 +654,11 @@ function articlePromptForWork(work: TopicWork) {
     ].join("\n") : "";
   const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
   const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
-  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + kickContext(work);
+  const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE_ARTICLE_RULES : "";
+  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work);
 }
 
-function imagePromptForWork(work: TopicWork, slotId: SlotId) {
+function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
   const base = work.slots[slotId].prompt;
   const bodyPlans = extractParammaImagePlans(work.body || "");
   const articlePlan = bodyPlans[slotId];
@@ -658,7 +684,8 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId) {
       /(\[이미지 역할\]\r?\n슬롯:\s*03[^\n]*\r?\n역할:\s*)[^\r\n]*/,
       "$1추가 실용 정보 · 예방 · 비교"
     );
-    return effectiveBase + latestRules + kickNote + previousSlot + missingPlan + syncedPlan;
+    const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE03_RULES : "";
+    return effectiveBase + latestRules + kickNote + previousSlot + missingPlan + syncedPlan + topicRules;
   }
 
   if (slotId !== "02") return base + syncedPlan;
@@ -668,7 +695,8 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId) {
   const nextSlot = bodyPlans["03"]
     ? "\n\n[03번과 역할 분리]\n- 이미지 03의 독립적인 후속 정보: " + bodyPlans["03"] + "\n- 이 후속 정보까지 02에 함께 넣지 말고, 02는 본문 첫 번째 보상만 분명하게 보여줄 것."
     : "";
-  return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan;
+  const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE02_RULES : "";
+  return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan + topicRules;
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -883,7 +911,7 @@ export default function ParammaBulkPage() {
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
-  const effectiveArticlePrompt = articlePromptForWork(work);
+  const effectiveArticlePrompt = articlePromptForWork(work, selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
@@ -1188,14 +1216,14 @@ export default function ParammaBulkPage() {
   async function copyArticlePrompt() {
     startTopic(selected.id);
     const current = ensureWork();
-    await copyText(articlePromptForWork(current), `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+    await copyText(articlePromptForWork(current, selected), `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
   }
 
   async function copyImagePrompt(slotId: SlotId) {
     const current = ensureWork();
     const meta = current.slots[slotId];
     const copied = await copyText(
-      imagePromptForWork(current, slotId),
+      imagePromptForWork(current, slotId, selected),
       `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다. ChatGPT 새 채팅에서 Ctrl+V로 붙여넣으세요.`
     );
     if (!copied) return;
@@ -1332,8 +1360,8 @@ export default function ParammaBulkPage() {
         folder.file(SLOT_INFO[slotId].filename, record.blob);
       }
       folder.file("final_post.txt", current.body);
-      folder.file("article_request.txt", articlePromptForWork(current));
-      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId)}`).join("\n\n====================\n\n"));
+      folder.file("article_request.txt", articlePromptForWork(current, selected));
+      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId, selected)}`).join("\n\n====================\n\n"));
       folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -1621,7 +1649,7 @@ export default function ParammaBulkPage() {
                 const meta = work.slots[slotId];
                 const image = images[slotId];
                 const optionalInactive = slotId === "03" && !work.optional03;
-                const effectiveImagePrompt = imagePromptForWork(work, slotId);
+                const effectiveImagePrompt = imagePromptForWork(work, slotId, selected);
                 const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
                 return (
                   <article key={slotId} className={`${styles.imageCard} ${optionalInactive ? styles.inactiveCard : ""}`}>
@@ -1645,6 +1673,9 @@ export default function ParammaBulkPage() {
                        </>
                      )}
 
+                    {isSpiderwebRemovalTopic(selected) && slotId === "02" && (
+                      <p className={styles.kickHint}><b>이 글의 필수 이미지:</b> 집 안·베란다 거미줄 제거 방법 3단계 · 청소 방법을 실제로 보여주는 정보 카드입니다. 03은 재발 방지로 분리합니다.</p>
+                    )}
                     {bodyImagePlans[slotId] && (
                       <p className={styles.kickHint}><b>GPT 본문에서 가져온 기획:</b> {bodyImagePlans[slotId]}{optionalInactive ? " · 03 사용 버튼을 누르면 요청서 제작에 활용할 수 있습니다." : ""}</p>
                     )}
@@ -1685,7 +1716,7 @@ export default function ParammaBulkPage() {
                       )}
                     </div>
 
-                    {bodyImagePlans[slotId] && (
+                    {(bodyImagePlans[slotId] || (isSpiderwebRemovalTopic(selected) && (slotId === "02" || slotId === "03"))) && (
                       <details className={styles.slotPrompt}>
                         <summary>완성 본문 반영된 실제 요청서 미리보기</summary>
                         <textarea value={effectiveImagePrompt} readOnly aria-label={`${slotId} 최종 이미지 요청서`} />
