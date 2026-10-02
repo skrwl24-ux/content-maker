@@ -682,3 +682,59 @@ export async function syncApartmentRegion(regionCode: string) {
     throw error;
   }
 }
+
+
+/**
+ * Recheck ONE existing K-apt record, filling previously unknown non-identity
+ * attributes only. Conflicting verified data and identity fields are never
+ * silently rewritten; raw trades and historical aggregates are untouched.
+ */
+export async function refetchKaptComplexBasics(complexId: string) {
+  const client = createApartmentAdminClient();
+  const key = process.env.DATA_GO_KR_SERVICE_KEY;
+  if (!client || !key) throw new Error("관리자 DB 키와 공공데이터 인증키가 필요합니다.");
+  const { data: current, error: currentError } = await client
+    .from("apt_complexes")
+    .select("id,kapt_code,name,bjd_code,address,road_address,households,use_date,updated_at")
+    .eq("id", complexId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+  if (!current || !current.kapt_code) throw new Error("K-apt 코드가 연결된 기존 단지만 재수집할 수 있습니다.");
+  const basic = await fetchKaptBasic(current.kapt_code, key);
+  if (!basic || Object.keys(basic).length === 0)
+    throw new Error("K-apt 기본정보 응답이 비어 있습니다. 기존 값을 변경하지 않았습니다.");
+  const merged = mergeKaptApartmentDetail({}, basic, current);
+  const conflicts: string[] = [];
+  const normal = (v: unknown) => String(v ?? "").trim().replace(/\s+/g,"");
+  if (basic.kaptName && current.name && normal(basic.kaptName) !== normal(current.name))
+    conflicts.push("단지명 불일치");
+  if (basic.bjdCode && current.bjd_code && normal(basic.bjdCode) !== normal(current.bjd_code))
+    conflicts.push("법정동 코드 불일치");
+  const fields = ["address","road_address","households","use_date"] as const;
+  const fill: Record<string,unknown> = {};
+  for (const field of fields) {
+    const oldValue = current[field];
+    const newValue = merged[field];
+    if ((oldValue === null || oldValue === "") && newValue != null && newValue !== "")
+      fill[field] = newValue;
+    else if (oldValue != null && oldValue !== "" && newValue != null && newValue !== "" &&
+      normal(oldValue) !== normal(newValue)) conflicts.push(field + " 기존값과 신규값 불일치");
+  }
+  // Identity disagreement requires a separate official-source review before
+  // even benign-looking fields can be filled.
+  const identityConflict = conflicts.some(v => v === "단지명 불일치" || v === "법정동 코드 불일치");
+  if (identityConflict) return { status:"hold", complexId, filled:[], conflicts,
+    message:"신원 정보가 서로 달라 기존 DB를 변경하지 않았습니다." };
+  if (Object.keys(fill).length) {
+    const { data: changed, error: updateError } = await client
+      .from("apt_complexes")
+      .update({ ...fill, updated_at:new Date().toISOString() })
+      .eq("id",current.id).eq("updated_at",current.updated_at)
+      .select("id").maybeSingle();
+    if (updateError) throw updateError;
+    if (!changed) throw new Error("조회 이후 단지 정보가 변경되었습니다. 새로 조회한 뒤 다시 시도해 주세요.");
+  }
+  return { status:conflicts.length?"review":"ok", complexId,
+    filled:Object.keys(fill), conflicts,
+    message:conflicts.length?"비어 있던 항목만 보완했습니다. 충돌한 기존값은 유지했습니다.":"기본정보를 재확인했습니다." };
+}

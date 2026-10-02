@@ -160,6 +160,7 @@ type ComplexDetailResponse = {
     use_date?: string | null;
   };
   representativeArea: string | null;
+  quality?: { notes: string[]; trendReady: boolean; matchingPending: boolean };
   monthly: MonthlyStat[];
   latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
   snapshot?: {
@@ -2280,6 +2281,7 @@ export default function ApartmentBulkPage() {
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
   const [selectedComplexName, setSelectedComplexName] = useState("");
+  const [complexQualityNotes, setComplexQualityNotes] = useState<string[]>([]);
   const [autoMapLoading, setAutoMapLoading] = useState(false);
   const [autoMapMessage, setAutoMapMessage] = useState("");
   const [autoMapGenerated, setAutoMapGenerated] = useState(false);
@@ -2790,6 +2792,7 @@ export default function ApartmentBulkPage() {
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
         setSelectedComplexName(detail.complex.name || "");
+        setComplexQualityNotes(detail.quality?.notes || []);
         setRecommendedAngle(detail.snapshot?.recommended_angle || "");
         setArticleThemeMode("auto");
         setOutputs(null);
@@ -3124,6 +3127,7 @@ export default function ApartmentBulkPage() {
     setStationPoint(null);
     setOutputs(null);
     setSelectedComplexName("");
+    setComplexQualityNotes([]);
     setRecommendedAngle("");
     setArticleThemeMode("auto");
     setAutoMapGenerated(false);
@@ -3956,8 +3960,17 @@ export default function ApartmentBulkPage() {
           </div>
           <div className={styles.unmatchedSourceEntry}>
             <span><b>국토부 원자료 매칭 현황</b> · 아직 K-apt 단지와 연결되지 않은 거래는 별도 검토합니다. 실제 무거래와 혼동하지 마세요.</span>
-            <a href="/apartment-bulk/unmatched">미연결 실거래 검토함 →</a>
+            <span className={styles.dataQualityLinks}>
+              <a href="/apartment-bulk/unmatched">미연결 실거래 검토함 →</a>
+              <a href="/apartment-bulk/data-health">데이터 관리 현황판 →</a>
+            </span>
           </div>
+          {!!complexQualityNotes.length && !selectedComplexLoading && (
+            <div className={styles.dataQualityWarnings} role="status">
+              <strong>선택 단지 데이터 확인 사항</strong>
+              {complexQualityNotes.map((note, index) => <p key={index}>• {note}</p>)}
+            </div>
+          )}
 
           {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
           {selectedComplexName && !selectedComplexLoading && (
