@@ -98,3 +98,68 @@ test("never turns a source-free recovered story into a selectable candidate", as
 test("keeps legitimate empty results even if JSON includes extra trailing comma", async () => {
   assert.deepEqual(await parse('[STORY_JSON]{ "candidates": [], }[/STORY_JSON]'), []);
 });
+
+
+test("V3 research includes distinct rules for bulk, school and mega without defaulting to festivals", async () => {
+  const mod = await import("../lib/apartment-story.mjs");
+  const base = {name:"테스트 아파트",region:"경기 테스트시",dataSummary:"최근 6개월 월 대표가격과 거래량",previousTopics:"통학 이야기"};
+  const bulk = mod.makeApartmentV3PlanningPrompt({...base,mode:"bulk"});
+  const school = mod.makeApartmentV3PlanningPrompt({...base,mode:"school"});
+  const mega = mod.makeApartmentV3PlanningPrompt({...base,mode:"mega"});
+  assert.match(bulk, /축제부터 찾지 말 것/);
+  assert.match(bulk, /네이버 검색/);
+  assert.match(bulk, /통학 이야기/);
+  assert.match(school, /32~35평형/);
+  assert.match(school, /학교 배정/);
+  assert.match(mega, /단일 관리단지\/블록 합산/);
+  assert.match(mega, /34평대/);
+  for (const item of [bulk,school,mega]) {
+    assert.match(item, /\[STORY_JSON\]/);
+    assert.match(item, /visualMode/);
+    assert.match(item, /visualFacts/);
+  }
+});
+
+test("V3 candidate preserves editorial topic, story kick and visual mode", async () => {
+  const input = {
+    candidates:[{
+      ...example,
+      topic:"실거래 변화와 아이들 생활권은?",
+      kick:"공개 커뮤니티의 통학 질문을 공식 정보로 다시 확인",
+      visualMode:"map-hybrid",
+      visualFacts:"정확한 학교·공원 위치가 확인되면 지도에만 반영",
+    }]
+  };
+  const result=await parse("[STORY_JSON]"+JSON.stringify(input)+"[/STORY_JSON]");
+  assert.equal(result.length,1);
+  assert.equal(result[0].topic,input.candidates[0].topic);
+  assert.equal(result[0].visualFacts,input.candidates[0].visualFacts);
+  assert.equal(result[0].visualMode,"map-hybrid");
+  assert.ok(result[0].sourceUrl.startsWith("https://"));
+});
+
+test("V3 approved body/visual share topic while map mode avoids invented geography", async () => {
+  const mod=await import("../lib/apartment-story.mjs");
+  const plan={...(await parse(JSON.stringify({candidates:[example]})))[0],
+    topic:"실거래와 지역 생활의 연결",
+    kick:"학군 질문을 정확히 확인",
+    visualMode:"map-hybrid",
+    visualFacts:"공식 학교 안내 자료의 시설명"
+  };
+  const body=mod.makeApprovedStoryBlock(plan);
+  const visual=mod.makeApprovedStoryVisualPrompt(plan,{mode:"school",name:"테스트 학군",region:"테스트시"});
+  assert.match(body,/실거래와 지역 생활의 연결/);
+  assert.match(body,/가격 변동 원인으로/);
+  assert.match(visual,/실거래와 지역 생활의 연결/);
+  assert.match(visual,/가짜 위치 지도\/경로/);
+  assert.match(visual,/본문 이미지 03/);
+  assert.doesNotMatch(body,/닉네임:/);
+});
+
+test("V3 parser preserves existing V2 story research as safe fallbacks", async () => {
+  const result = await parse("[STORY_JSON]"+JSON.stringify({candidates:[example]})+"[/STORY_JSON]");
+  assert.equal(result.length,1);
+  assert.equal(result[0].topic,example.title);
+  assert.equal(result[0].kick,example.facts);
+  assert.equal(result[0].visualMode,"map-hybrid");
+});
