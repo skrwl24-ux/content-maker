@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApartmentReadClient } from "@/lib/apartment-server";
+import { assessApartmentDataQuality } from "@/lib/apartment-data-quality.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
         .maybeSingle();
     if (tradeError) throw tradeError;
 
+    const quality = assessApartmentDataQuality({
+      representativeArea: areaGroup,
+      sixMonthCount: snapshot?.six_month_count ?? 0,
+      analysisDate: snapshot?.analysis_date || null,
+      monthly: monthly || [],
+    });
+
     return NextResponse.json({
+      quality,
       complex,
       analysisDate: snapshot?.analysis_date || null,
       representativeArea: areaGroup == null ? null : areaGroup + "㎡대",
