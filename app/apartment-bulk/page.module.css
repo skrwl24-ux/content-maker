@@ -301,3 +301,7 @@
 .unmatchedSourceEntry{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 15px;padding:11px 13px;background:#f5f8fa;border:1px solid #dce6eb;border-radius:9px;color:#506676;font-size:12px;line-height:1.65}
 .unmatchedSourceEntry b{color:#24465b}
 .unmatchedSourceEntry a{color:#155f70;font-weight:800;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+
+.dataQualityLinks{display:flex;gap:14px;flex-wrap:wrap}
+.dataQualityWarnings{border:1px solid #e8d8b0;background:#fffbf1;border-radius:10px;padding:12px 15px;margin:0 0 15px;color:#594c30;font-size:12px;line-height:1.7}
+.dataQualityWarnings strong{font-size:13px}.dataQualityWarnings p{margin:5px 0 0}
