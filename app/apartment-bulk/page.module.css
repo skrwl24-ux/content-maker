@@ -265,3 +265,35 @@
 .publishAuditReview b{color:#435b73}
 .publishAudit>p{font-size:11px;line-height:1.65;color:#8592a0;margin:8px 0 0}
 @media(max-width:700px){.storyV31Facts p{flex-direction:column;gap:2px}.storyV31Facts b{width:auto}.publishAuditList{grid-template-columns:1fr}.publishAuditHeading{flex-direction:column}}
+
+
+
+/* V3.2: web-sourced neighborhood/lifestyle audit in the shared final editor */
+.lifeAuditPanel{margin:16px 0;padding:18px;border:1px solid #d7e4e9;border-radius:17px;background:#fff}
+.lifeAuditHeading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.lifeAuditHeading>div{display:flex;flex-direction:column;gap:5px}
+.lifeAuditHeading b{font-size:17px;color:#172c40}
+.lifeAuditHeading span,.lifeAuditNote{font-size:12px;line-height:1.7;color:#607184}
+.lifeAuditHeading strong{font-size:12px;color:#126966;white-space:nowrap;background:#e4f3ef;padding:8px 10px;border-radius:99px}
+.lifeAuditActions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.lifeAuditActions button{border:1px solid #d0dee5;border-radius:10px;padding:10px 13px;background:#edf3f7;color:#29485d;font-size:12px;font-weight:800;cursor:pointer}
+.lifeAuditActions button.lifeAuditPrimary{background:#1f5f4a;color:#fff;border-color:#1f5f4a}
+.lifeAuditActions button:disabled{opacity:.45;cursor:not-allowed}
+.lifeAuditLabel{display:flex;flex-direction:column;gap:8px;font-size:12px;color:#243b4e}
+.lifeAuditLabel textarea{box-sizing:border-box;width:100%;min-height:102px;resize:vertical;border:1px solid #cfdae4;border-radius:10px;padding:11px;line-height:1.55;font-size:12px;background:#f9fbfd;color:#243b4e}
+.lifeAuditMessage{padding:10px 12px;margin:10px 0;border-radius:10px;background:#edf5fa;color:#315671;font-size:12px;line-height:1.6}
+.lifeAuditAlert{padding:9px 11px;border:1px solid #edd5ba;border-radius:9px;background:#fff7ed;color:#8d5623;font-size:12px;line-height:1.6}
+.lifeAuditResults{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.lifeAuditCounts{display:flex;flex-wrap:wrap;gap:8px}
+.lifeAuditCounts span{font-size:11px;padding:7px 9px;font-weight:800;border-radius:99px;background:#eef3f7;color:#426174}
+.lifeAuditSummary{font-size:12px;line-height:1.65;color:#426174}
+.lifeAuditItem{display:flex;flex-direction:column;gap:8px;padding:13px;border:1px solid #dce5ea;border-radius:11px;background:#f9fbfc;min-width:0}
+.lifeAuditItemHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lifeAuditItemHead b{font-size:13px;color:#172c40}
+.lifeAuditItemHead span{border-radius:99px;background:#e9f0f4;padding:5px 9px;font-size:11px;font-weight:800;color:#385771}
+.lifeAuditItem p{margin:0;font-size:12px;line-height:1.7;color:#334a5c;overflow-wrap:anywhere}
+.lifeAuditItem p>b{margin-right:8px;color:#213e50}
+.lifeAuditItem a{color:#116a70;text-decoration:underline;text-underline-offset:2px}
+.lifeAuditPick{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:#265a48;cursor:pointer}
+.lifeAuditPick input{accent-color:#1f5f4a}
+@media(max-width:700px){.lifeAuditHeading{flex-direction:column}.lifeAuditActions button{flex:1 1 160px}.lifeAuditPanel{padding:13px}}
