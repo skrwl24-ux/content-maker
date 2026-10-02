@@ -1581,7 +1581,7 @@ function makeLocationImagePrompt(data: ApartmentData) {
 
 
 function apartmentStoryIdentity(data: ApartmentData) {
-  return [normalizeComplexName(data.name), data.region.trim().replace(/\\s+/g, " ")].join("|");
+  return [normalizeComplexName(data.name), data.region.trim().replace(/\s+/g, " ")].join("|");
 }
 
 function emptyApartmentStory(identity = ""): StoryWork {
@@ -2223,6 +2223,8 @@ export default function ApartmentBulkPage() {
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
+  const [storyState, setStoryState] = useState<StoryWork>(() => emptyApartmentStory());
+  const [storyNotice, setStoryNotice] = useState("");
   const [tableHandlingMode, setTableHandlingMode] = useState<TableHandlingMode>("image");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
@@ -2259,9 +2261,18 @@ export default function ApartmentBulkPage() {
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme), [data, monthlyStats, selectedArticleTheme]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
+  const storyIdentity = apartmentStoryIdentity(data);
+  const storyCurrent = storyState.identity === storyIdentity;
+  const storyCandidates = storyCurrent ? storyState.candidates : [];
+  const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
+  const appliedStory = chosenStory && storyState.sourceChecked ? chosenStory : null;
+  const storyResearchPrompt = useMemo(
+    () => makeApartmentStoryResearchPrompt(data, selectedArticleTheme),
+    [data, selectedArticleTheme]
+  );
   const bodyPrompt = useMemo(
-    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme),
-    [data, monthlyStats, recommendedAngle, selectedArticleTheme]
+    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory),
+    [data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -2547,7 +2558,29 @@ export default function ApartmentBulkPage() {
     autoMapMessage,
     nearbyMessage,
     finalBlogText,
+    storyState,
   ]);
+
+  // 독립 단지 편집 시에는 단지·지역별로 보관하고, 발행 큐는 기존 IndexedDB 작업 스냅샷에 저장한다.
+  useEffect(() => {
+    if (activeWorkId || !data.name.trim() || !data.region.trim()) return;
+    try {
+      const raw = window.localStorage.getItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity);
+      const saved = raw ? JSON.parse(raw) as StoryWork : null;
+      setStoryState(saved?.identity === storyIdentity ? saved : emptyApartmentStory(storyIdentity));
+    } catch {
+      setStoryState(emptyApartmentStory(storyIdentity));
+    }
+  }, [activeWorkId, storyIdentity]);
+
+  useEffect(() => {
+    if (activeWorkId || !data.name.trim() || !data.region.trim() || !storyCurrent) return;
+    try {
+      window.localStorage.setItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity, JSON.stringify(storyState));
+    } catch {
+      // 스토리 로컬 저장 실패로 기존 실거래 제작을 막지 않는다.
+    }
+  }, [activeWorkId, data.name, data.region, storyIdentity, storyCurrent, storyState]);
 
   useEffect(() => {
     try {
@@ -2860,6 +2893,8 @@ export default function ApartmentBulkPage() {
     setWorkAttachments([]);
     setWorkProgress("not_started");
     setTop3Work(emptyTop3());
+    setStoryState(emptyApartmentStory());
+    setStoryNotice("");
     setWorkSaveMessage("");
     setStartedWorkIds([]);
     try {
@@ -2922,6 +2957,7 @@ export default function ApartmentBulkPage() {
         autoMapGenerated,
         autoMapMessage,
         nearbyMessage,
+        story: storyCurrent ? storyState : emptyApartmentStory(storyIdentity),
       } : undefined,
     };
   }
@@ -2955,6 +2991,8 @@ export default function ApartmentBulkPage() {
     setAutoMapMessage("");
     setNearbyMessage("");
     setFinalBlogText("");
+    setStoryState(emptyApartmentStory());
+    setStoryNotice("");
   }
 
   async function openDailyWork(slot: DailySlot, scroll = true) {
@@ -2983,6 +3021,7 @@ export default function ApartmentBulkPage() {
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
         setWorkProgress(saved.progress || "preparing");
         setTop3Work(normalizeTop3(saved.top3));
+        if (slot.type !== "bulk") setStoryState(emptyApartmentStory());
 
         if (slot.type === "bulk" && saved.bulk) {
           setData(saved.bulk.data || SAMPLE);
@@ -2998,6 +3037,9 @@ export default function ApartmentBulkPage() {
           setAutoMapMessage(saved.bulk.autoMapMessage || "");
           setNearbyMessage(saved.bulk.nearbyMessage || "");
           setFinalBlogText(saved.body || "");
+          const restoredIdentity = apartmentStoryIdentity(saved.bulk.data || SAMPLE);
+          setStoryState(saved.bulk.story?.identity === restoredIdentity ? saved.bulk.story : emptyApartmentStory(restoredIdentity));
+          setStoryNotice("");
         } else if (slot.type === "bulk") {
           resetBulkWorkspace();
         }
@@ -3014,6 +3056,7 @@ export default function ApartmentBulkPage() {
         setWorkAttachments([]);
         setWorkProgress("preparing");
         setTop3Work(emptyTop3());
+        setStoryState(emptyApartmentStory());
         if (slot.type === "bulk") {
           const queryComplexId = new URLSearchParams(window.location.search).get("complexId");
           if (!queryComplexId || queryComplexId !== slot.complexId) resetBulkWorkspace();
