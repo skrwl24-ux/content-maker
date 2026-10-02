@@ -1,5 +1,6 @@
 export type ApartmentMatchingComplex = {
   id: string;
+  kapt_code?: string | null;
   name: string;
   normalized_name?: string | null;
   region_code: string;
@@ -13,6 +14,8 @@ export type ApartmentMatchingTrade = {
   legalDong: string | null;
   jibun: string | null;
   buildYear?: number | null;
+  buildingDong?: string | null;
+  exclusiveArea?: number | null;
 };
 export declare function normalizeApartmentName(name: string): string;
 export declare function normalizeCadastralLot(value: string | null | undefined): string | null;
