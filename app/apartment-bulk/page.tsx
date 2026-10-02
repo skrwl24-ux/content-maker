@@ -8,6 +8,7 @@ import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
+import LifeVerificationPanel from "./LifeVerificationPanel";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
@@ -1805,7 +1806,10 @@ ${storyBlock}
 [마무리]
 - 앞으로 체크할 것은 매수 권유가 아니라 월 대표값, 거래량, 개별 실거래가, 정비사업 진행 단계 등 실제 데이터 중심으로 작성할 것.
 - 3줄 요약은 정확히 3문장으로 작성할 것.
-- 네이버 태그는 단지명·지역명·핵심 검색어 중심으로 중복 없이 정확히 7개만 작성할 것.
+- 네이버 태그는 중복 없이 8~10개(권장 9개)를 마지막 한 줄에 작성할 것.
+- 태그 구성: 실제 행정 지역명·동네명 + 해당 단지 정확한 명칭 + 아파트·실거래·시세 관련 검색어 + 대표 면적/이번 가격·거래 주제 중 실제 본문에 포함된 항목을 조합할 것.
+- 생활 스토리에 공식·신뢰 자료로 확인한 구체적 장소/시설이 본문에 등장하면 해당 정확한 장소명 태그는 최대 1개만 추가 가능. 본문에 없는 장소·가게·학교·지점·재건축·교통 호재를 검색용 태그로 억지로 추가하지 말 것.
+- 지명·단지명·키워드만 순서 바꿔 중복한 태그, #일상 #소통 같은 글과 무관한 태그는 피할 것.
 - 태그는 마지막 한 줄에 '#백두동성 #산본동아파트'처럼 일반 # 기호를 그대로 사용해 출력할 것.
 - 태그 앞의 #을 '\#'처럼 백슬래시로 이스케이프하지 말 것.
 - 태그에 마크다운 기호나 코드 표시를 붙이지 말 것.
@@ -1814,13 +1818,13 @@ ${storyBlock}
 아래 3가지만 출력할 것.
 1) 최종 제목 1개
 2) 최종 본문
-3) 네이버 태그 7개
+3) 네이버 태그 8~10개(권장 9개)
 
 제목 후보, 검색 과정, 출처 목록, 작성 설명, 내부링크 추천, 기타 부가 설명은 출력하지 말 것.
 
 [출력 직전 자가검수]
 - 제목 1개
-- 태그 정확히 7개
+- 태그 8~10개·중복 없음·본문에 없는 장소 태그 없음
 - 모든 문장·제목·소제목·이미지 위치·요약 사이에 스페이스바 1칸이 들어간 간격용 줄 1개
 - 완전히 비어 있는 빈 줄 0개
 - 코드블록/HTML 사용 없음
@@ -4128,7 +4132,7 @@ export default function ApartmentBulkPage() {
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
-              <h2>1. 본문 먼저 → 2. 완성글 붙여넣기 → 3. 동일한 이야기로 이미지 제작</h2>
+              <h2>1. 본문 → 2. 최종편집에서 생활정보 웹 검증 → 3. 같은 이야기로 이미지 제작</h2>
               <span>{approvedV3
                 ? "🔒 승인한 오늘의 생활 발견이 본문에 직접 반영됩니다. 지도형은 확인된 캡처만 참고합니다."
                 : v3Planner.current.status === "skipped"
@@ -4237,7 +4241,7 @@ export default function ApartmentBulkPage() {
                 <div className={styles.promptHead}>
                   <div>
                     <b>📝 본문 요청서</b>
-                    <span>최종 제목 + 본문(이미지 위치·문단 여백 포함) + 태그 7개만 나오도록 구성합니다.</span>
+                    <span>최종 제목 + 본문(이미지 위치·문단 여백 포함) + 중복 없는 태그 8~10개로 구성합니다.</span>
                   </div>
                 </div>
                 <textarea className={styles.promptBoxCompact} value={bodyPrompt} readOnly />
@@ -4340,7 +4344,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 자동 검사 · 전체복사</h2>
-                <span>완성글은 한 번만 붙여넣으세요. 대상명·태그·이미지·생활 스토리 일치 여부를 바로 검사하고, 시계열 표와 일반 표를 네이버용으로 정리합니다.</span>
+                <span>완성글을 한 번 붙여넣으면 실거래·태그·이미지 위치를 자동 검사합니다. 이어서 아래 '생활정보 웹 검증하기'에서 장소·영업 여부·거리의 원문 근거를 확인하고, 본문 수정 후 이미지 03을 제작하세요.</span>
               </div>
             </div>
 
@@ -4462,6 +4466,19 @@ export default function ApartmentBulkPage() {
                   previousPrice: data.previousPrice,
                   monthly: monthlyStats.slice(-6),
                 } : null}
+              />
+            )}
+            {(contentMode !== "bulk" || !activeWorkId || activeWorkType === "bulk") && (
+              <LifeVerificationPanel
+                mode={contentMode}
+                name={contentMode === "bulk" ? data.name : seriesAudit?.mode === contentMode ? seriesAudit.name : ""}
+                region={contentMode === "bulk" ? data.region : ""}
+                body={finalBlogText}
+                placeName={contentMode === "bulk" ? approvedV3?.placeName || "" : seriesAudit?.mode === contentMode ? seriesAudit.plan?.placeName || "" : ""}
+                onBodyChange={next => {
+                  setFinalBlogText(next);
+                  setNaverCopyMessage("");
+                }}
               />
             )}
             <div className={styles.naverCopyActions}>
