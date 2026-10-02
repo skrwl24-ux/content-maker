@@ -8,6 +8,7 @@ import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
+import LifeVerificationPanel from "./LifeVerificationPanel";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
@@ -4462,6 +4463,19 @@ export default function ApartmentBulkPage() {
                   previousPrice: data.previousPrice,
                   monthly: monthlyStats.slice(-6),
                 } : null}
+              />
+            )}
+            {(contentMode !== "bulk" || !activeWorkId || activeWorkType === "bulk") && (
+              <LifeVerificationPanel
+                mode={contentMode}
+                name={contentMode === "bulk" ? data.name : seriesAudit?.mode === contentMode ? seriesAudit.name : ""}
+                region={contentMode === "bulk" ? data.region : ""}
+                body={finalBlogText}
+                placeName={contentMode === "bulk" ? approvedV3?.placeName || "" : seriesAudit?.mode === contentMode ? seriesAudit.plan?.placeName || "" : ""}
+                onBodyChange={next => {
+                  setFinalBlogText(next);
+                  setNaverCopyMessage("");
+                }}
               />
             )}
             <div className={styles.naverCopyActions}>
