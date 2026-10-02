@@ -13,6 +13,8 @@ import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactShe
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
+import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
+import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
@@ -25,7 +27,7 @@ type ArticleThemeChoice = {
 };
 
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
-type WorkImageSlot = "00" | "01" | "02";
+type WorkImageSlot = string;
 type ContentMode = "bulk" | "school" | "mega";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
 type WorkAttachment = {
@@ -429,12 +431,6 @@ function getDailyTopicSuggestion(
   return available[dailyTopicSeed(dateKey, slotId) % available.length];
 }
 
-const WORK_IMAGE_META: Record<WorkImageSlot, { label: string; role: string; width: number; height: number }> = {
-  "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254 },
-  "01": { label: "핵심 정보", role: "본문 핵심 정보 이미지", width: 1600, height: 900 },
-  "02": { label: "원인·흐름", role: "본문 원인·비교 이미지", width: 1600, height: 900 },
-};
-
 const WORK_DB_NAME = "jibssuk-apartment-work-v1";
 const WORK_STORE_NAME = "dailyWorks";
 
@@ -541,16 +537,17 @@ ${topicGuide}
 
 [이미지 기획]
 본문 마지막에 이미지 제작 메모도 함께 정리할 것.
-- 이미지 00 · 썸네일: 모바일 목록에서 주제를 1초 안에 이해할 수 있는 짧은 후킹 문구
-- 이미지 01 · 핵심 정보: 일정·가격·환율·구조 중 가장 중요한 내용을 한눈에 보여주는 16:9 이미지
-- 이미지 02 · 원인·흐름: 가격이나 환율이 움직이는 연결 구조 또는 비교를 보여주는 16:9 이미지
+- 이미지 00 · 썸네일: 모바일 목록에서 주제를 1초 안에 이해할 수 있는 짧은 후킹 문구.
+- 표마다 원문 순서대로 별도 제작 메모를 만들 것(01, 01-2, 01-3…). 표가 없으면 01은 핵심 정보 이미지.
+- 검증된 날짜별·월별 실제 시세표가 있을 때에만 해당 표를 시세 그래프로 기획하고, 존재하지 않는 1년치 수치를 만들지 말 것.
+- 이미지 02 · 원인·흐름: 가격이나 환율이 움직이는 연결 구조 또는 비교를 보여주는 16:9 이미지.
 - 실제 이미지 생성 프롬프트는 길게 쓰지 말고 각 이미지가 무엇을 보여줄지 1~2문장 기획 메모만 작성할 것.
 
 [최종 출력 순서]
 1. 최종 제목
 2. 네이버 발행용 본문
 3. 태그
-4. 이미지 00~02 기획 메모
+4. 본문 표 개수에 맞춘 이미지 기획 메모(00, 01/01-2…, 02)
 5. 검수 메모: 사용한 주요 출처와 확인 기준일을 짧게 정리
 
 중요: 일반 상식만으로 작성하지 말고 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
@@ -562,29 +559,24 @@ function compactArticleForImagePrompt(body: string) {
   return text.slice(0, 6500) + "\n\n[중간 일부 생략]\n\n" + text.slice(-2500);
 }
 
-function makeSavedWorkImagePrompt(slot: WorkImageSlot, topic: string, body: string, imageNotes: string) {
-  const meta = WORK_IMAGE_META[slot];
+function makeSavedWorkImagePrompt(item: WorkImagePlanItem, topic: string, body: string, imageNotes: string, tables: MarkdownTable[]) {
+  const slot = item.slot;
+  const meta = item;
   const safeTopic = topic.trim() || "블로그 글";
   const article = compactArticleForImagePrompt(body);
   const ratio = meta.width === meta.height ? "1:1 정사각형" : "16:9 가로형";
-  const tables = extractMarkdownTables(body);
-  const timeSeriesTable = tables.find(isTimeSeriesTable);
+  const table = item.tableIndex === null ? null : tables[item.tableIndex];
 
-  if (slot === "01" && timeSeriesTable) {
-    return makeTimeSeriesChartPrompt(safeTopic, timeSeriesTable, imageNotes);
-  }
+  if (item.kind === "chart" && table) return makeTimeSeriesChartPrompt(safeTopic, table, imageNotes, slot);
+  if (item.kind === "table" && table) return makeTableImagePrompt(safeTopic, table, imageNotes, slot);
 
-  if (slot === "01" && tables.length > 0) {
-    return makeTableImagePrompt(safeTopic, tables[0], imageNotes);
-  }
-
-  const slotGuide = slot === "00"
+  const slotGuide = item.kind === "thumbnail"
     ? `[썸네일 구성]
 - 본문 전체를 대표하는 장면 1개를 중심으로 구성
 - 모바일 목록에서도 바로 이해되는 짧은 한글 후킹 문구 1~2줄
 - 본문 제목 전체를 길게 반복하지 말고 핵심 검색어와 궁금증만 남길 것
 - 숫자·날짜를 넣는다면 아래 본문에서 명확히 확인된 값만 사용할 것`
-    : slot === "01"
+    : item.kind === "summary"
       ? `[핵심 정보 이미지 구성]
 - 본문에서 독자가 가장 먼저 기억해야 할 핵심 정보 하나를 시각화
 - 일정 글이면 달력·타임라인, 가격 글이면 핵심 숫자·시장 구분, 환율 글이면 통화쌍·주요 변수처럼 주제에 맞는 구조를 선택
@@ -849,7 +841,7 @@ function isTimeSeriesTable(table: MarkdownTable) {
   return timeSeriesHeading && hasTimeAxis && hasMarketValue && !looksLikeSchedule;
 }
 
-function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string, slot: string) {
   const safeTopic = topic.trim() || table.heading || "블로그 글";
   const tableTitle = table.heading || safeTopic;
   const rowCount = table.rows.length;
@@ -865,7 +857,7 @@ function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: s
 ${safeTopic}
 
 [이미지 역할]
-슬롯 01 · 핵심 정보
+슬롯 ${slot} · ${tableTitle}
 역할: 본문 표 데이터를 한눈에 보여주는 정보 이미지
 
 [표 제목]
@@ -896,7 +888,7 @@ ${markdownTableToText(table)}
 중요: 설명문을 답하지 말고 위 표 데이터를 그대로 반영한 이미지 1장을 바로 제작해줘.`;
 }
 
-function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNotes: string, slot: string) {
   const safeTopic = topic.trim() || table.heading || "블로그 글";
   const chartTitle = table.heading || "최근 시세 흐름";
 
@@ -906,7 +898,7 @@ function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNot
 ${safeTopic}
 
 [이미지 역할]
-슬롯 01 · 최근 시세 그래프
+슬롯 ${slot} · 최근 시세 그래프
 역할: 본문의 기간별 시세 데이터를 주식 시세 앱처럼 한눈에 보여주는 라인차트
 
 [그래프 제목]
@@ -973,8 +965,9 @@ function makeMarkdownTableCard(headers: string[], row: string[]) {
   return details ? `${prefix}${primaryValue}\n${details}` : `${prefix}${primaryValue}`;
 }
 
-function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): NaverBlock[] {
+function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", plannedImages?: WorkImagePlanItem[]): NaverBlock[] {
   const sourceTables = extractMarkdownTables(raw);
+  const plannedTableImages = plannedImages?.filter((item) => item.tableIndex !== null) || [];
   const primaryTimeSeriesTable = sourceTables.find(isTimeSeriesTable) || null;
   const primaryTimeSeriesSignature = primaryTimeSeriesTable
     ? markdownTableSignature(primaryTimeSeriesTable)
@@ -996,6 +989,7 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
   const blocks: NaverBlock[] = [];
   let firstContent = true;
   let timeSeriesImageInserted = false;
+  let plannedTableIndex = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index];
@@ -1031,7 +1025,12 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
       const currentTable: MarkdownTable = { heading: tableHeading, headers, rows };
 
       if (tableMode === "image") {
-        if (primaryTimeSeriesTable) {
+        if (plannedImages) {
+          const planned = plannedTableImages[plannedTableIndex++];
+          const label = planned?.slot || (plannedTableIndex === 1 ? "01" : `01-${plannedTableIndex}`);
+          const chartSuffix = planned?.kind === "chart" ? " 그래프" : "";
+          blocks.push({ type: "image", text: `[이미지 ${label} · ${tableHeading}${chartSuffix}]` });
+        } else if (primaryTimeSeriesTable) {
           const isPrimaryTimeSeries =
             !timeSeriesImageInserted &&
             markdownTableSignature(currentTable) === primaryTimeSeriesSignature;
@@ -1094,7 +1093,34 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
     blocks.push({ type: "body", text: line });
   }
 
-  if (tableMode === "image" && primaryTimeSeriesTable) {
+  if (tableMode === "image" && plannedImages) {
+    const hasSlot = (slot: string) => blocks.some((block) =>
+      block.type === "image" && new RegExp(`^\\[이미지\\s*${slot}(?:\\s|·|\\])`, "i").test(block.text)
+    );
+    if (!hasSlot("00")) {
+      const titleIndex = blocks.findIndex((block) => block.type === "title");
+      if (titleIndex >= 0) blocks.splice(titleIndex + 1, 0, { type: "image", text: "[이미지 00 · 썸네일]" });
+    }
+    const summary = plannedImages.find((item) => item.kind === "summary");
+    if (summary && !hasSlot(summary.slot)) {
+      const firstHeading = blocks.findIndex((block) => block.type === "subheading");
+      const insertion = firstHeading >= 0 ? firstHeading + 1 : Math.min(2, blocks.length);
+      blocks.splice(insertion, 0, { type: "image", text: `[이미지 ${summary.slot} · 핵심 정보]` });
+    }
+    if (plannedImages.some((item) => item.kind === "flow") && !hasSlot("02")) {
+      const headingIndex = blocks.findIndex((block) =>
+        block.type === "subheading" && /(왜|원인|기본 구조|영향|변수|흐름)/.test(block.text)
+      );
+      const firstTableIndex = blocks.findIndex((block) =>
+        block.type === "image" && /^\\[이미지\\s*01(?:-|\\s|·|\\])/.test(block.text)
+      );
+      const start = headingIndex >= 0 ? headingIndex : firstTableIndex;
+      const nextHeading = blocks.findIndex((block, index) => index > start && block.type === "subheading");
+      const tagIndex = blocks.findIndex((block, index) => index > start && block.type === "tags");
+      const insertion = nextHeading >= 0 ? nextHeading : tagIndex >= 0 ? tagIndex : blocks.length;
+      blocks.splice(insertion, 0, { type: "image", text: "[이미지 02 · 원인·흐름]" });
+    }
+  } else if (tableMode === "image" && primaryTimeSeriesTable) {
     const hasThumbnailSlot = blocks.some(
       (block) => block.type === "image" && /^\[이미지\s*00(?:\s|·|\])/i.test(block.text)
     );
