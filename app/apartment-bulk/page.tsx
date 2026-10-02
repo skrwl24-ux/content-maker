@@ -7,6 +7,8 @@ import Top3Workspace from "./Top3Workspace";
 import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
+import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
+import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
@@ -67,6 +69,14 @@ type PublishHistoryItem = {
   complex_name: string | null;
   published_on: string;
 };
+type StoryWork = {
+  identity: string;
+  raw: string;
+  candidates: ApartmentStoryCandidate[];
+  selectedId: string;
+  sourceChecked: boolean;
+};
+
 type DailyWorkSnapshot = {
   top3?: Top3Work;
   workId: string;
@@ -93,6 +103,7 @@ type DailyWorkSnapshot = {
     autoMapGenerated: boolean;
     autoMapMessage: string;
     nearbyMessage: string;
+    story?: StoryWork;
   };
 };
 
@@ -267,6 +278,7 @@ const PUBLISHED_COMPLEX_STORAGE_KEY = "apartment-bulk-published-complexes-v1";
 const PUBLISH_QUEUE_STORAGE_KEY = "apartment-bulk-publish-queue-v2";
 const PUBLISH_QUEUE_WORK_INDEX_KEY = "apartment-bulk-publish-queue-work-index-v2";
 const PUBLISH_QUEUE_ACTIVE_WORK_KEY = "apartment-bulk-publish-queue-active-work-v2";
+const APARTMENT_STORY_STORAGE_PREFIX = "apartment-bulk-story-v1:";
 const PUBLISHED_COMPLEX_NAME_SEEDS = [
   "평촌어바인퍼스트",
   "산성역포레스티아",
@@ -1568,11 +1580,20 @@ function makeLocationImagePrompt(data: ApartmentData) {
 }
 
 
+function apartmentStoryIdentity(data: ApartmentData) {
+  return [normalizeComplexName(data.name), data.region.trim().replace(/\\s+/g, " ")].join("|");
+}
+
+function emptyApartmentStory(identity = ""): StoryWork {
+  return { identity, raw: "", candidates: [], selectedId: "", sourceChecked: false };
+}
+
 function makeBodyPrompt(
   data: ApartmentData,
   monthlyStats: MonthlyStat[],
   recommendedAngle: string,
-  articleTheme: ArticleThemeChoice
+  articleTheme: ArticleThemeChoice,
+  story: ApartmentStoryCandidate | null
 ) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
@@ -1591,6 +1612,22 @@ function makeBodyPrompt(
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
   const lastTradeCount = lastMonthly?.tradeCount ?? null;
   const articleAngle = recommendedAngle.trim();
+  const storyBlock = story ? `[선정한 동네 스토리 — 본문 반영 전에 원문 재확인]
+주제: ${story.title}
+유형: ${story.kind}
+확인된 핵심 사실: ${story.facts}
+단지와의 생활권 연결: ${story.connection}
+연결 문장 초안: ${story.bridge}
+원문 제목: ${story.sourceTitle}
+원문 URL(검증용, 최종 발행본문에는 출력하지 말 것): ${story.sourceUrl}
+원문 발표일: ${story.sourceDate}
+행사·사업 실제 날짜: ${story.eventDate}
+시점 상태: ${story.timing}
+- 이 자료는 별도 조사 결과이다. 최종 원고 작성 시 원문을 다시 확인하고 사실이 불확실하면 해당 내용은 제외할 것.
+- 가격 변동 원인이 아니라 입지·생활권을 이해하는 별도 이야기로 전개할 것.
+- 지역 스토리는 전체 글의 약 15~20% 이내에서 간결하게 쓰고 억지로 고정 소제목을 만들지 말 것.`
+    : `[동네 스토리]
+선정·검증된 스토리가 없음. 지역 행사·뉴스·커뮤니티 정보를 억지로 추가하지 말고 실거래와 확인된 입지 설명을 중심으로 완성할 것.`;
   const today = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -1635,6 +1672,8 @@ ${monthlyLines}
 중요:
 최근 실거래가는 개별 계약 가격이고 월 대표값은 월별 통계값이다.
 두 값을 하나의 가격처럼 섞거나 서로 비교해 상승률을 계산하지 말 것.
+
+${storyBlock}
 
 [최신 정보 확인]
 - 웹 검색이 가능하면 작성 전에 이 단지와 직접 관련된 최신 정보만 확인할 것.
@@ -1704,13 +1743,15 @@ ${monthlyLines}
 ① 지역을 여는 강한 도입 3문장
 ② 최근 6개월 시세 흐름
 ③ 거래량 변화
-④ 입지·생활권
+④ 입지·생활권. 선택한 동네 스토리가 있으면 실제 단지와의 연결을 짧게 짚으며 여기에서 자연스럽게 전개. 없으면 입지만 충실하게 작성
 ⑤ 이 단지만의 핵심 포인트
 ⑥ 앞으로 체크할 것
 ⑦ 짧은 마무리 + 정확히 3줄 요약
 - 세대수·입주년도 같은 기본정보는 별도 스펙표처럼 길게 나열하지 않고 도입이나 관련 섹션에 자연스럽게 녹일 것.
 - ⑤ 핵심 포인트는 단지별 데이터에 따라 반등, 거래 급증·감소, 고점 접근, 가격과 거래량의 엇갈림, 정비사업, 신축·입주 등으로 자유롭게 바꿀 것.
 - 전체 원칙은 '틀은 일정하게, 첫 문장·핵심 포인트·제목은 단지마다 다르게'로 할 것.
+- 동네 이야기는 실거래 상승·하락의 직접 원인이라고 단정하지 말 것. 연결이 부자연스러우면 생략할 것.
+- 지난 행사·예정 행사 등 시점을 정확히 밝히고, 일부 공개 커뮤니티 게시물을 주민 전체 의견으로 일반화하지 말 것.
 - 모바일 가독성을 위해 한 문단은 짧게 유지할 것.
 
 [검색 키워드 사용 원칙]
