@@ -307,6 +307,7 @@ export default function UnmatchedCandidatePage() {
     <main className={styles.page}>
       <header className={styles.heading}>
         <a href="/apartment-bulk" className={styles.back}>← 아파트 콘텐츠메이커</a>
+        <a href="/apartment-bulk/data-health" className={styles.back}>데이터 관리 현황판 →</a>
         <h1>국토부 미연결 실거래 검토함</h1>
         <p>기존 K-apt 단지에 안전하게 연결되지 않은 원자료를 별도로 모았습니다.</p>
       </header>
