@@ -38,6 +38,9 @@ export declare function makeAutomaticLivingStoryBlock(input?: {
   mode?: ApartmentStoryMode; name?: string; region?: string;
 }): string;
 export declare function makeApprovedStoryBlock(plan: ApartmentStoryCandidate | null): string;
+export declare function makeArticleBasedStoryVisualPrompt(input?: {
+  mode?: ApartmentStoryMode; name?: string; region?: string; body?: string; mapProvided?: boolean;
+}): string;
 export declare function makeApprovedStoryVisualPrompt(plan: ApartmentStoryCandidate | null, options?: {
   mode?: ApartmentStoryMode; name?: string; region?: string; mapProvided?: boolean; finalStoryExcerpt?: string;
 }): string;
