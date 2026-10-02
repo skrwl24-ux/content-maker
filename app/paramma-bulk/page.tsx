@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
+import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
@@ -517,7 +518,8 @@ const PARAMMA_IMAGE_PLAN_RULES = `[Paramma V3 · 이미지 장수·03 슬롯 최
 - 이미지 03은 안전상 꼭 필요할 때만 쓰는 슬롯이 아니다. 실용 킥이라면 02번에 직접 해결·제거·활용 방법을, 03번에 재발 방지·유지 관리·조건별 비교 등 다른 가치를 담는다. 비실용 소재라면 오해 해소·관찰 차이·중요한 주의사항 등 독립적인 후속 발견에 활용한다.
 - 02와 03이 같은 팁 목록이나 원리의 반복이 되면 03을 생략한다. 분량을 채우기 위해 이미지를 억지로 추가하거나 본문에 없는 정보를 만들지 말 것.
 - 이미지 03을 사용하는 경우 본문 중 해당 내용 바로 뒤에 [이미지 03] 삽입 위치를 표시하고, 마지막 이미지 기획 메모에도 03번의 독립적인 역할을 한 줄로 명시할 것.
-- 실제 제작 사이트에서 03은 선택 슬롯이다. 03이 필요하다고 판단한 원고라면 사용을 추천하되 모든 글에 강제하지 말 것.`;
+- 실제 제작 사이트에서 03은 선택 슬롯이다. 03이 필요하다고 판단한 원고라면 사용을 추천하되 모든 글에 강제하지 말 것.
+- 사이트 자동 연동을 위해 본문·태그 뒤에 반드시 [이미지 기획 메모] 제목을 별도로 쓰고, 각 이미지를 아래 형식으로 한 줄씩 구체적으로 설명할 것: 이미지 00: 썸네일의 장면, 이미지 01: 핵심 원리의 장면, 이미지 02: 킥의 정보 카드 내용. 03 사용 시 이미지 03: 독립적인 후속 정보, 사용하지 않으면 이미지 03: 생략을 명시할 것.`;
 
 const PARAMMA_IMAGE03_RULES = `[Paramma V3 · 선택 이미지 03 최신 지침 — 기존 설명보다 우선]
 - 03번은 단순 장식이나 01 원리·02 핵심 킥을 다시 보여주는 이미지가 아니라, 02 다음에 독자가 별도로 저장하고 싶은 후속 보상 정보 카드로 만든다.
@@ -630,17 +632,19 @@ function articlePromptForWork(work: TopicWork) {
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId) {
   const base = work.slots[slotId].prompt;
+  const articlePlan = extractParammaImagePlans(work.body || "")[slotId];
+  const syncedPlan = articlePlan ? "\n\n[GPT 완성 본문에서 자동 인식한 이미지 " + slotId + " 기획 — 이미지의 전달 내용은 이 계획을 우선]\n" + articlePlan + "\n- 이미 직접 수정한 요청서의 스타일·크기·형식은 유지하고, 장면과 전달 내용은 위 최종 기획에 맞출 것.\n- 최종 원고에 없는 사실·효과·수치를 새로 만들지 말 것." : "";
   if (slotId === "03") {
     const latestRules = base.includes("[Paramma V3 · 선택 이미지 03 최신 지침") ? "" : "\n\n" + PARAMMA_IMAGE03_RULES;
     const chosenKick = (work.kickMode !== "auto" ? (work.selectedKick || "").trim() : "") || derivedKickFromBody(work.body || "");
     const kickNote = chosenKick ? "\n\n[이번 글의 확정·본문 킥]\n" + chosenKick + "\n- 03번은 이 킥을 02번에서 설명한 내용을 반복하지 말고, 최종 본문에 있는 후속 보상만 시각화할 것." : "";
-    return base + latestRules + kickNote;
+    return base + latestRules + kickNote + syncedPlan;
   }
-  if (slotId !== "02") return base;
+  if (slotId !== "02") return base + syncedPlan;
   const legacyOverride = base.includes("[Paramma V2 · 이미지 기획]")
     ? "\n\n[Paramma V3 최신 이미지 02 지침]\n- 기존 카테고리별 선택보다 최종 본문의 킥을 우선한다. 실용적인 킥이라면 구체적인 방법과 조건을 저장용 정보 카드로 보여주며 원리 이미지 01을 반복하지 말 것."
     : "";
-  return base + legacyOverride + kickContext(work, true);
+  return base + legacyOverride + kickContext(work, true) + syncedPlan;
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -859,6 +863,8 @@ export default function ParammaBulkPage() {
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
+  const bodyImagePlans = useMemo(() => extractParammaImagePlans(work.body), [work.body]);
+  const plannedImageSlots = SLOT_IDS.filter((slotId) => !!bodyImagePlans[slotId]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
   const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
   const availablePoolCount = useMemo(() => {
@@ -1556,9 +1562,16 @@ export default function ParammaBulkPage() {
                 className={styles.bodyEditor}
                 value={work.body}
                 onChange={(e) => patchWork({ body: e.target.value, bodyConfirmed: false })}
-                placeholder="최종 제목 + 본문 + 태그를 붙여넣으세요."
+                placeholder="최종 제목 + 본문 + 태그 + [이미지 기획 메모]를 모두 붙여넣으세요."
               />
             </label>
+            {work.body.trim() && (
+              <p className={styles.kickHint} aria-live="polite">
+                {plannedImageSlots.length
+                  ? "✓ 이미지 기획 자동 인식: " + plannedImageSlots.join(" · ") + " · 각 이미지의 요청서 복사·ChatGPT 열기·ZIP 내보내기 때 반영됩니다. 기존 요청서·등록 이미지는 보존됩니다."
+                  : "아직 이미지 기획 메모를 찾지 못했습니다. GPT 완성 원고 끝의 [이미지 기획 메모]와 이미지 00~03 설명까지 함께 붙여넣으면 자동 연결됩니다."}
+              </p>
+            )}
             <button
               type="button"
               className={`${styles.confirmButton} ${work.bodyConfirmed ? styles.confirmed : ""}`}
@@ -1608,6 +1621,10 @@ export default function ParammaBulkPage() {
                        </>
                      )}
 
+                    {bodyImagePlans[slotId] && (
+                      <p className={styles.kickHint}><b>GPT 본문에서 가져온 기획:</b> {bodyImagePlans[slotId]}{optionalInactive ? " · 03 사용 버튼을 누르면 요청서 제작에 활용할 수 있습니다." : ""}</p>
+                    )}
+
                     {optionalInactive && image && (
                       <div className={styles.retained}>등록 이미지 보관 중 · 현재 ZIP에서는 제외</div>
                     )}
@@ -1644,8 +1661,15 @@ export default function ParammaBulkPage() {
                       )}
                     </div>
 
+                    {bodyImagePlans[slotId] && (
+                      <details className={styles.slotPrompt}>
+                        <summary>완성 본문 반영된 실제 요청서 미리보기</summary>
+                        <textarea value={effectiveImagePrompt} readOnly aria-label={`${slotId} 최종 이미지 요청서`} />
+                      </details>
+                    )}
+
                     <details className={styles.slotPrompt}>
-                      <summary>요청서 확인·수정</summary>
+                      <summary>기본 요청서 확인·직접 수정 (원본 유지)</summary>
                       <textarea
                         value={meta.prompt}
                         onChange={(e) => patchSlot(slotId, { prompt: e.target.value })}
