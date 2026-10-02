@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type SchoolDistrictPreset = {
@@ -261,9 +261,9 @@ function makeSchoolSummaryPrompt(district: SchoolDistrictPreset) {
   ].join("\n");
 }
 
-function makeSchoolPrompts(district: SchoolDistrictPreset, plan: ApartmentStoryCandidate | null) {
-  const theme = plan ? "\n\n[V3 승인된 통일 방향]\n중심 주제: " + plan.topic +
-    "\n스토리 킥: " + plan.kick +
+function makeSchoolPrompts(district: SchoolDistrictPreset, plan: ApartmentStoryCandidate | null, finalBodyText = "") {
+  const theme = plan ? "\n\n" + makeStoryFactSheet(plan) +
+    "\n본문에 사용한 정확한 장소/지점과 동일한 표현만 보조 문구로 활용할 것." +
     "\n썸네일은 학군·34평대 5개 단지 비교라는 핵심을 유지하고 과장된 학교 배정 표현 없이 하나의 궁금증을 제시할 것." : "";
   return {
     thumbnail: makeSchoolThumbnailPrompt(district) + theme,
@@ -272,6 +272,7 @@ function makeSchoolPrompts(district: SchoolDistrictPreset, plan: ApartmentStoryC
     summary: plan
       ? makeApprovedStoryVisualPrompt(plan, {
           mode: "school", name: district.label + " 학군 대표 아파트 5곳", region: district.region,
+          finalStoryExcerpt: extractStoryExcerpt(finalBodyText, plan, district.label),
         })
       : makeSchoolSummaryPrompt(district),
     body: makeSchoolBodyPrompt(district, plan),
@@ -306,7 +307,15 @@ function openChat(prompt: string) {
   window.open("https://chatgpt.com/?q=" + encodeURIComponent(prompt), "_blank", "noopener,noreferrer");
 }
 
-export default function SchoolDistrictWorkspace() {
+export default function SchoolDistrictWorkspace({
+  onPlanChange, finalBodyText = "",
+}: {
+  onPlanChange?: (info: {
+    mode: "school" | "mega"; subjectKey: string; name: string;
+    plan: ApartmentStoryCandidate | null; dataSummary: string;
+  }) => void;
+  finalBodyText?: string;
+}) {
   const [selectedId, setSelectedId] = useState("mokdong");
   const [copied, setCopied] = useState(false);
   const [completedIds, setCompletedIds] = useState<string[]>(["daechi"]);
@@ -325,7 +334,14 @@ export default function SchoolDistrictWorkspace() {
       "\n동네 이야기 하나를 5개 단지 비교 흐름에 연결하되 학교 배정 보장 표현 금지.",
   };
   const planner = useApartmentStoryPlanner(plannerInput);
-  const prompts = useMemo(() => makeSchoolPrompts(district, planner.approved), [district, planner.approved]);
+  const prompts = useMemo(() => makeSchoolPrompts(district, planner.approved, finalBodyText),
+    [district, planner.approved, finalBodyText]);
+  useEffect(() => {
+    onPlanChange?.({
+      mode: "school", subjectKey: district.id, name: district.label,
+      plan: planner.approved, dataSummary: plannerInput.dataSummary,
+    });
+  }, [onPlanChange, district.id, district.label, planner.approved, plannerInput.dataSummary]);
   const doneCount = completedIds.filter((id) => SCHOOL_DISTRICTS.some((item) => item.id === id)).length;
 
   useEffect(() => {
@@ -422,7 +438,7 @@ export default function SchoolDistrictWorkspace() {
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {district.label}</p>
           <h2>{schoolTitle(district)}</h2>
-          <span>{planner.approved ? "승인한 스토리 킥이 본문·썸네일·03 이미지에 연동됐습니다. 34평대 5곳 비교와 가격 이미지는 유지됩니다." : "기존 34평대 5곳 비교·최신 자료 검증이 기본입니다. 위에서 스토리를 승인하면 본문과 마지막 이미지가 함께 바뀝니다."}</span>
+          <span>{planner.approved ? "잠긴 생활 발견 카드가 본문·썸네일·03번 이미지에 연동됩니다. 완성글을 최종편집에 붙이면 03번 이미지 요청서도 실제 문단을 참고합니다." : "기존 34평대 5곳 비교·최신 자료 검증이 기본입니다. 위에서 스토리를 승인하면 본문과 마지막 이미지가 함께 바뀝니다."}</span>
         </div>
 
         <div className={styles.actionGrid}>
