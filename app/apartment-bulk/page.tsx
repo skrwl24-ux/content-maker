@@ -13,6 +13,8 @@ import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactShe
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
+import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
+import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
@@ -25,7 +27,7 @@ type ArticleThemeChoice = {
 };
 
 type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
-type WorkImageSlot = "00" | "01" | "02";
+type WorkImageSlot = string;
 type ContentMode = "bulk" | "school" | "mega";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
 type WorkAttachment = {
@@ -429,12 +431,6 @@ function getDailyTopicSuggestion(
   return available[dailyTopicSeed(dateKey, slotId) % available.length];
 }
 
-const WORK_IMAGE_META: Record<WorkImageSlot, { label: string; role: string; width: number; height: number }> = {
-  "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254 },
-  "01": { label: "핵심 정보", role: "본문 핵심 정보 이미지", width: 1600, height: 900 },
-  "02": { label: "원인·흐름", role: "본문 원인·비교 이미지", width: 1600, height: 900 },
-};
-
 const WORK_DB_NAME = "jibssuk-apartment-work-v1";
 const WORK_STORE_NAME = "dailyWorks";
 
@@ -541,16 +537,17 @@ ${topicGuide}
 
 [이미지 기획]
 본문 마지막에 이미지 제작 메모도 함께 정리할 것.
-- 이미지 00 · 썸네일: 모바일 목록에서 주제를 1초 안에 이해할 수 있는 짧은 후킹 문구
-- 이미지 01 · 핵심 정보: 일정·가격·환율·구조 중 가장 중요한 내용을 한눈에 보여주는 16:9 이미지
-- 이미지 02 · 원인·흐름: 가격이나 환율이 움직이는 연결 구조 또는 비교를 보여주는 16:9 이미지
+- 이미지 00 · 썸네일: 모바일 목록에서 주제를 1초 안에 이해할 수 있는 짧은 후킹 문구.
+- 표마다 원문 순서대로 별도 제작 메모를 만들 것(01, 01-2, 01-3…). 표가 없으면 01은 핵심 정보 이미지.
+- 검증된 날짜별·월별 실제 시세표가 있을 때에만 해당 표를 시세 그래프로 기획하고, 존재하지 않는 1년치 수치를 만들지 말 것.
+- 이미지 02 · 원인·흐름: 가격이나 환율이 움직이는 연결 구조 또는 비교를 보여주는 16:9 이미지.
 - 실제 이미지 생성 프롬프트는 길게 쓰지 말고 각 이미지가 무엇을 보여줄지 1~2문장 기획 메모만 작성할 것.
 
 [최종 출력 순서]
 1. 최종 제목
 2. 네이버 발행용 본문
 3. 태그
-4. 이미지 00~02 기획 메모
+4. 본문 표 개수에 맞춘 이미지 기획 메모(00, 01/01-2…, 02)
 5. 검수 메모: 사용한 주요 출처와 확인 기준일을 짧게 정리
 
 중요: 일반 상식만으로 작성하지 말고 반드시 최신 웹 검색과 사실 검증을 거쳐 완성해줘.`;
@@ -562,29 +559,24 @@ function compactArticleForImagePrompt(body: string) {
   return text.slice(0, 6500) + "\n\n[중간 일부 생략]\n\n" + text.slice(-2500);
 }
 
-function makeSavedWorkImagePrompt(slot: WorkImageSlot, topic: string, body: string, imageNotes: string) {
-  const meta = WORK_IMAGE_META[slot];
+function makeSavedWorkImagePrompt(item: WorkImagePlanItem, topic: string, body: string, imageNotes: string, tables: MarkdownTable[]) {
+  const slot = item.slot;
+  const meta = item;
   const safeTopic = topic.trim() || "블로그 글";
   const article = compactArticleForImagePrompt(body);
   const ratio = meta.width === meta.height ? "1:1 정사각형" : "16:9 가로형";
-  const tables = extractMarkdownTables(body);
-  const timeSeriesTable = tables.find(isTimeSeriesTable);
+  const table = item.tableIndex === null ? null : tables[item.tableIndex];
 
-  if (slot === "01" && timeSeriesTable) {
-    return makeTimeSeriesChartPrompt(safeTopic, timeSeriesTable, imageNotes);
-  }
+  if (item.kind === "chart" && table) return makeTimeSeriesChartPrompt(safeTopic, table, imageNotes, slot);
+  if (item.kind === "table" && table) return makeTableImagePrompt(safeTopic, table, imageNotes, slot);
 
-  if (slot === "01" && tables.length > 0) {
-    return makeTableImagePrompt(safeTopic, tables[0], imageNotes);
-  }
-
-  const slotGuide = slot === "00"
+  const slotGuide = item.kind === "thumbnail"
     ? `[썸네일 구성]
 - 본문 전체를 대표하는 장면 1개를 중심으로 구성
 - 모바일 목록에서도 바로 이해되는 짧은 한글 후킹 문구 1~2줄
 - 본문 제목 전체를 길게 반복하지 말고 핵심 검색어와 궁금증만 남길 것
 - 숫자·날짜를 넣는다면 아래 본문에서 명확히 확인된 값만 사용할 것`
-    : slot === "01"
+    : item.kind === "summary"
       ? `[핵심 정보 이미지 구성]
 - 본문에서 독자가 가장 먼저 기억해야 할 핵심 정보 하나를 시각화
 - 일정 글이면 달력·타임라인, 가격 글이면 핵심 숫자·시장 구분, 환율 글이면 통화쌍·주요 변수처럼 주제에 맞는 구조를 선택
@@ -849,7 +841,7 @@ function isTimeSeriesTable(table: MarkdownTable) {
   return timeSeriesHeading && hasTimeAxis && hasMarketValue && !looksLikeSchedule;
 }
 
-function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: string, slot: string) {
   const safeTopic = topic.trim() || table.heading || "블로그 글";
   const tableTitle = table.heading || safeTopic;
   const rowCount = table.rows.length;
@@ -865,7 +857,7 @@ function makeTableImagePrompt(topic: string, table: MarkdownTable, imageNotes: s
 ${safeTopic}
 
 [이미지 역할]
-슬롯 01 · 핵심 정보
+슬롯 ${slot} · ${tableTitle}
 역할: 본문 표 데이터를 한눈에 보여주는 정보 이미지
 
 [표 제목]
@@ -896,7 +888,7 @@ ${markdownTableToText(table)}
 중요: 설명문을 답하지 말고 위 표 데이터를 그대로 반영한 이미지 1장을 바로 제작해줘.`;
 }
 
-function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNotes: string) {
+function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNotes: string, slot: string) {
   const safeTopic = topic.trim() || table.heading || "블로그 글";
   const chartTitle = table.heading || "최근 시세 흐름";
 
@@ -906,7 +898,7 @@ function makeTimeSeriesChartPrompt(topic: string, table: MarkdownTable, imageNot
 ${safeTopic}
 
 [이미지 역할]
-슬롯 01 · 최근 시세 그래프
+슬롯 ${slot} · 최근 시세 그래프
 역할: 본문의 기간별 시세 데이터를 주식 시세 앱처럼 한눈에 보여주는 라인차트
 
 [그래프 제목]
@@ -973,8 +965,9 @@ function makeMarkdownTableCard(headers: string[], row: string[]) {
   return details ? `${prefix}${primaryValue}\n${details}` : `${prefix}${primaryValue}`;
 }
 
-function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): NaverBlock[] {
+function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", plannedImages?: WorkImagePlanItem[]): NaverBlock[] {
   const sourceTables = extractMarkdownTables(raw);
+  const plannedTableImages = plannedImages?.filter((item) => item.tableIndex !== null) || [];
   const primaryTimeSeriesTable = sourceTables.find(isTimeSeriesTable) || null;
   const primaryTimeSeriesSignature = primaryTimeSeriesTable
     ? markdownTableSignature(primaryTimeSeriesTable)
@@ -996,6 +989,7 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
   const blocks: NaverBlock[] = [];
   let firstContent = true;
   let timeSeriesImageInserted = false;
+  let plannedTableIndex = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index];
@@ -1031,7 +1025,12 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
       const currentTable: MarkdownTable = { heading: tableHeading, headers, rows };
 
       if (tableMode === "image") {
-        if (primaryTimeSeriesTable) {
+        if (plannedImages) {
+          const planned = plannedTableImages[plannedTableIndex++];
+          const label = planned?.slot || (plannedTableIndex === 1 ? "01" : `01-${plannedTableIndex}`);
+          const chartSuffix = planned?.kind === "chart" ? " 그래프" : "";
+          blocks.push({ type: "image", text: `[이미지 ${label} · ${tableHeading}${chartSuffix}]` });
+        } else if (primaryTimeSeriesTable) {
           const isPrimaryTimeSeries =
             !timeSeriesImageInserted &&
             markdownTableSignature(currentTable) === primaryTimeSeriesSignature;
@@ -1094,7 +1093,34 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image"): Na
     blocks.push({ type: "body", text: line });
   }
 
-  if (tableMode === "image" && primaryTimeSeriesTable) {
+  if (tableMode === "image" && plannedImages) {
+    const hasSlot = (slot: string) => blocks.some((block) =>
+      block.type === "image" && new RegExp(`^\\[이미지\\s*${slot}(?:\\s|·|\\])`, "i").test(block.text)
+    );
+    if (!hasSlot("00")) {
+      const titleIndex = blocks.findIndex((block) => block.type === "title");
+      if (titleIndex >= 0) blocks.splice(titleIndex + 1, 0, { type: "image", text: "[이미지 00 · 썸네일]" });
+    }
+    const summary = plannedImages.find((item) => item.kind === "summary");
+    if (summary && !hasSlot(summary.slot)) {
+      const firstHeading = blocks.findIndex((block) => block.type === "subheading");
+      const insertion = firstHeading >= 0 ? firstHeading + 1 : Math.min(2, blocks.length);
+      blocks.splice(insertion, 0, { type: "image", text: `[이미지 ${summary.slot} · 핵심 정보]` });
+    }
+    if (plannedImages.some((item) => item.kind === "flow") && !hasSlot("02")) {
+      const headingIndex = blocks.findIndex((block) =>
+        block.type === "subheading" && /(왜|원인|기본 구조|영향|변수|흐름)/.test(block.text)
+      );
+      const firstTableIndex = blocks.findIndex((block) =>
+        block.type === "image" && (block.text.startsWith("[이미지 01 ") || block.text.startsWith("[이미지 01-") || block.text.startsWith("[이미지 01·"))
+      );
+      const start = headingIndex >= 0 ? headingIndex : firstTableIndex;
+      const nextHeading = blocks.findIndex((block, index) => index > start && block.type === "subheading");
+      const tagIndex = blocks.findIndex((block, index) => index > start && block.type === "tags");
+      const insertion = nextHeading >= 0 ? nextHeading : tagIndex >= 0 ? tagIndex : blocks.length;
+      blocks.splice(insertion, 0, { type: "image", text: "[이미지 02 · 원인·흐름]" });
+    }
+  } else if (tableMode === "image" && primaryTimeSeriesTable) {
     const hasThumbnailSlot = blocks.some(
       (block) => block.type === "image" && /^\[이미지\s*00(?:\s|·|\])/i.test(block.text)
     );
@@ -2428,28 +2454,37 @@ export default function ApartmentBulkPage() {
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
     [activeWorkType, workTopic, workMaterials, dailyDateKey]
   );
-  const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
-    () => ({
-      "00": makeSavedWorkImagePrompt("00", workTopic, workBody, workImageNotes),
-      "01": makeSavedWorkImagePrompt("01", workTopic, workBody, workImageNotes),
-      "02": makeSavedWorkImagePrompt("02", workTopic, workBody, workImageNotes),
-    }),
-    [workTopic, workBody, workImageNotes]
-  );
   const workBodyReadyForImages = workBody.trim().length >= 80;
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
-  const workTimeSeriesTable = useMemo(() => workTables.find(isTimeSeriesTable) || null, [workTables]);
-  const workPrimaryTable = workTimeSeriesTable || workTables[0] || null;
   const workTableCount = workTables.length;
+  const workImagePlan = useMemo(
+    () => makeWorkImagePlan(workTables.map((table) => ({
+      heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
+    }))),
+    [workTables]
+  );
+  const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
+    () => Object.fromEntries(workImagePlan.map((item) => [
+      item.slot, makeSavedWorkImagePrompt(item, workTopic, workBody, workImageNotes, workTables),
+    ])),
+    [workImagePlan, workTopic, workBody, workImageNotes, workTables]
+  );
   const naverTables = useMemo(() => extractMarkdownTables(finalBlogText), [finalBlogText]);
   const markdownTableCount = naverTables.length;
   const naverTimeSeriesTable = useMemo(
-    () => naverTables.find(isTimeSeriesTable) || null,
+    () => naverTables.find(isTimeSeriesTable) || null, [naverTables]
+  );
+  const naverWorkImagePlan = useMemo(
+    () => makeWorkImagePlan(naverTables.map((table) => ({
+      heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
+    }))),
     [naverTables]
   );
+  const usePlannedNaverImages = contentMode === "bulk" && Boolean(activeWorkId) &&
+    ["tip", "moving", "compare", "power"].includes(activeWorkType || "");
   const naverBlocks = useMemo(
-    () => parseNaverBlog(finalBlogText, tableHandlingMode),
-    [finalBlogText, tableHandlingMode]
+    () => parseNaverBlog(finalBlogText, tableHandlingMode, usePlannedNaverImages ? naverWorkImagePlan : undefined),
+    [finalBlogText, tableHandlingMode, usePlannedNaverImages, naverWorkImagePlan]
   );
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
@@ -3846,15 +3881,11 @@ export default function ApartmentBulkPage() {
               {workTableCount > 0 && (
                 <div className={styles.tableImageNotice}>
                   <div>
-                    <b>{workTimeSeriesTable ? "📈 시계열 표 감지됨" : `📊 표 ${workTableCount}개 감지됨`}</b>
-                    <span>
-                      {workTimeSeriesTable
-                        ? `${workTimeSeriesTable.heading || "시계열 데이터"} · ${workTimeSeriesTable.rows.length}개 시점 · 01 이미지 요청서가 증권앱형 라인차트로 자동 변경됩니다.`
-                        : `첫 번째 표 · ${workPrimaryTable?.rows.length || 0}행 × ${workPrimaryTable?.headers.length || 0}열 · 01 이미지 요청서가 표 전용으로 자동 변경됩니다.`}
-                    </span>
+                    <b>📊 표 {workTableCount}개 감지 · 전체 이미지 {workImagePlan.length}장</b>
+                    <span>표마다 01, 01-2, 01-3… 요청서를 독립 생성합니다. 검증된 시계열 표만 그래프로 만들며 네이버 최종편집에도 같은 번호를 사용합니다.</span>
                   </div>
                   <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
-                    {workTimeSeriesTable ? "시세 그래프 GPT 제작" : "표 이미지 GPT 제작"}
+                    {workImagePlan[1]?.kind === "chart" ? "시세 그래프 GPT 제작" : "첫 번째 표 이미지 GPT 제작"}
                   </button>
                 </div>
               )}
@@ -3862,56 +3893,37 @@ export default function ApartmentBulkPage() {
               <section className={styles.actionPanel}>
                 <div className={styles.actionHead}>
                   <p className={styles.eyebrow}>IMAGE REQUESTS</p>
-                  <h2>완성 글을 바탕으로 이미지 3장을 GPT에서 제작합니다.</h2>
+                  <h2>완성 글을 바탕으로 필요한 이미지 {workImagePlan.length}장을 GPT에서 제작합니다.</h2>
                   <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}</span>
                 </div>
                 <div className={styles.actionGrid}>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("00")}>
-                    <span className={styles.actionIcon}>🖼️</span>
-                    <b>00 · 썸네일 GPT 제작</b>
-                    <small>1254×1254 · 글 전체를 읽고 대표 장면과 짧은 후킹 문구 구성</small>
-                  </button>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
-                    <span className={styles.actionIcon}>📊</span>
-                    <b>{workTimeSeriesTable ? "01 · 시세 그래프 GPT 제작" : workTableCount ? "01 · 표 이미지 GPT 제작" : "01 · 핵심 정보 GPT 제작"}</b>
-                    <small>
-                      {workTimeSeriesTable
-                        ? `시계열 표 ${workTimeSeriesTable.rows.length}개 시점 감지 · 1600×900 증권앱형 라인차트로 자동 반영`
-                        : workTableCount
-                          ? `표 ${workTableCount}개 감지 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행을 1600×900 이미지로 자동 반영`
-                          : "1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리"}
-                    </small>
-                  </button>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("02")}>
-                    <span className={styles.actionIcon}>🔗</span>
-                    <b>02 · 원인·흐름 GPT 제작</b>
-                    <small>1600×900 · 원인→과정→결과 또는 주요 변수 관계를 시각화</small>
-                  </button>
+                  {workImagePlan.map((item) => (
+                    <button key={item.slot} type="button" className={styles.actionButton}
+                      disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>
+                      <span className={styles.actionIcon}>{item.kind === "thumbnail" ? "🖼️" : item.kind === "flow" ? "🔗" : item.kind === "chart" ? "📈" : "📊"}</span>
+                      <b>{item.slot} · {item.label} GPT 제작</b>
+                      <small>{item.width}×{item.height} · {item.heading || item.role}</small>
+                    </button>
+                  ))}
                 </div>
               </section>
 
               <details className={styles.advancedDetails}>
-                <summary>이미지 제작 요청서 확인 · 복사</summary>
+                <summary>이미지 제작 요청서 확인 · 복사 ({workImagePlan.length}장)</summary>
                 <div className={styles.advancedBody}>
-                  {(["00", "01", "02"] as WorkImageSlot[]).map((slot) => (
-                    <section className={styles.promptSection} key={slot}>
+                  {workImagePlan.map((item) => (
+                    <section className={styles.promptSection} key={item.slot}>
                       <div className={styles.promptHead}>
                         <div>
-                          <b>{slot} · {slot === "01" && workTimeSeriesTable ? "시세 그래프" : slot === "01" && workTableCount ? "표 이미지" : WORK_IMAGE_META[slot].label} 요청서</b>
-                          <span>
-                            {slot === "01" && workTimeSeriesTable
-                              ? `1600×900 · 시계열 ${workTimeSeriesTable.rows.length}개 시점 라인차트 자동 반영`
-                              : slot === "01" && workTableCount
-                                ? `1600×900 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행 데이터 자동 반영`
-                                : `${WORK_IMAGE_META[slot].width}×${WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영`}
-                          </span>
+                          <b>{item.slot} · {item.label} 요청서</b>
+                          <span>{item.width}×{item.height} · {item.heading || item.role}</span>
                         </div>
                       </div>
-                      <textarea className={styles.promptBoxCompact} value={workImagePrompts[slot]} readOnly />
+                      <textarea className={styles.promptBoxCompact} value={workImagePrompts[item.slot]} readOnly />
                       <div className={styles.promptActionsCompact}>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(slot)}>ChatGPT에서 열기</button>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(slot)}>
-                          {workImagePromptCopied === slot ? "✓ 복사 완료" : "요청서 복사"}
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>ChatGPT에서 열기</button>
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(item.slot)}>
+                          {workImagePromptCopied === item.slot ? "✓ 복사 완료" : "요청서 복사"}
                         </button>
                       </div>
                     </section>
@@ -4381,7 +4393,9 @@ export default function ApartmentBulkPage() {
                   className={styles.naverInput}
                   value={finalBlogText}
                   onChange={(e) => {
-                    setFinalBlogText(e.target.value);
+                    const nextBody = e.target.value;
+                    setFinalBlogText(nextBody);
+                    if (usePlannedNaverImages) setWorkBody(nextBody);
                     setNaverCopyMessage("");
                   }}
                   placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요. 마크다운 표도 그대로 붙여넣어도 됩니다."
