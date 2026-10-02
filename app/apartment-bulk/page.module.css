@@ -189,3 +189,34 @@
   .sharedEditor>summary{padding:15px 16px}
   .sharedEditorBody{padding:0 10px 12px}
 }
+
+/* Optional neighborhood storytelling stage for the existing single-complex workflow. */
+.storyPanel{margin:18px 0;padding:18px 20px;border:1px solid #dce5ed;border-radius:18px;background:#fff;display:flex;flex-direction:column;gap:13px}
+.storyHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:15px}
+.storyHeader h2{margin:4px 0 7px;font-size:19px;color:#18334b}
+.storyHeader span:not(.storyStatus){display:block;font-size:12px;line-height:1.65;color:#66798a}
+.storyStatus{flex-shrink:0;border:1px solid #cde4df;border-radius:99px;background:#eff8f6;padding:5px 10px;color:#196d68;font-size:11px;font-weight:800}
+.storyActions{display:flex;gap:8px;flex-wrap:wrap}
+.storyActions button{border:1px solid #cbdedb;border-radius:11px;padding:10px 13px;background:#f3faf8;color:#126e69;font-size:12px;font-weight:800;cursor:pointer}
+.storyActions button:first-child{background:#0f827f;color:#fff;border-color:#0f827f}
+.storyActions button:disabled{opacity:.45;cursor:not-allowed}
+.storyPanel .workField textarea.storyTextarea{width:100%;min-height:150px;font-weight:500;line-height:1.55}
+.storyNotice{margin:0;border-radius:10px;background:#f1f6fa;padding:10px 12px;font-size:12px;color:#41566b}
+.storyCandidates{display:flex;flex-direction:column;gap:9px}
+.storyCandidates>b,.storyPreview>b{font-size:13px;color:#223e55}
+.storyCandidate,.storyCandidateSelected{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid #e0e8ee;border-radius:13px;background:#fff;cursor:pointer}
+.storyCandidateSelected{border-color:#33a49b;background:#f5fbf9}
+.storyCandidate input,.storyCandidateSelected input{margin-top:4px;accent-color:#0f827f;flex-shrink:0}
+.storyCandidate>div,.storyCandidateSelected>div{min-width:0;display:flex;flex-direction:column;gap:6px}
+.storyCandidate strong,.storyCandidateSelected strong{font-size:13px;color:#213e54}
+.storyCandidate small,.storyCandidateSelected small{font-size:11px;line-height:1.55;color:#667888}
+.storyCandidate p,.storyCandidateSelected p{margin:0;font-size:12px;line-height:1.65;color:#40556a}
+.storyCandidate a,.storyCandidateSelected a{width:fit-content;font-size:12px;font-weight:800;color:#136f7f;text-decoration:underline;overflow-wrap:anywhere}
+.storyPreview{display:flex;flex-direction:column;gap:9px;border-top:1px solid #e8edf1;padding-top:13px}
+.storyPreview p{margin:0;font-size:12px;line-height:1.65;color:#667888}
+.storyPreview textarea{box-sizing:border-box;width:100%;min-height:100px;padding:11px 12px;border:1px solid #d7e4e8;border-radius:11px;resize:vertical;color:#273e54;font:500 13px/1.6 Pretendard,"Noto Sans KR",system-ui,sans-serif}
+.storyConfirm{display:flex;align-items:flex-start;gap:8px;color:#294d55;font-size:12px;font-weight:750;line-height:1.55}
+.storyConfirm input{accent-color:#0f827f;margin-top:3px}
+.storyPreview p.storyResult{color:#176b65;font-size:11px;font-weight:750}
+.storyFootnote{margin:0;font-size:11px;line-height:1.6;color:#768695}
+@media(max-width:700px){.storyPanel{padding:15px 13px}.storyHeader{flex-direction:column}.storyCandidate,.storyCandidateSelected{padding:11px}}

@@ -7,6 +7,8 @@ import Top3Workspace from "./Top3Workspace";
 import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
+import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
+import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
@@ -67,6 +69,14 @@ type PublishHistoryItem = {
   complex_name: string | null;
   published_on: string;
 };
+type StoryWork = {
+  identity: string;
+  raw: string;
+  candidates: ApartmentStoryCandidate[];
+  selectedId: string;
+  sourceChecked: boolean;
+};
+
 type DailyWorkSnapshot = {
   top3?: Top3Work;
   workId: string;
@@ -93,6 +103,7 @@ type DailyWorkSnapshot = {
     autoMapGenerated: boolean;
     autoMapMessage: string;
     nearbyMessage: string;
+    story?: StoryWork;
   };
 };
 
@@ -267,6 +278,7 @@ const PUBLISHED_COMPLEX_STORAGE_KEY = "apartment-bulk-published-complexes-v1";
 const PUBLISH_QUEUE_STORAGE_KEY = "apartment-bulk-publish-queue-v2";
 const PUBLISH_QUEUE_WORK_INDEX_KEY = "apartment-bulk-publish-queue-work-index-v2";
 const PUBLISH_QUEUE_ACTIVE_WORK_KEY = "apartment-bulk-publish-queue-active-work-v2";
+const APARTMENT_STORY_STORAGE_PREFIX = "apartment-bulk-story-v1:";
 const PUBLISHED_COMPLEX_NAME_SEEDS = [
   "평촌어바인퍼스트",
   "산성역포레스티아",
@@ -1568,11 +1580,20 @@ function makeLocationImagePrompt(data: ApartmentData) {
 }
 
 
+function apartmentStoryIdentity(data: ApartmentData) {
+  return [normalizeComplexName(data.name), data.region.trim().replace(/\s+/g, " ")].join("|");
+}
+
+function emptyApartmentStory(identity = ""): StoryWork {
+  return { identity, raw: "", candidates: [], selectedId: "", sourceChecked: false };
+}
+
 function makeBodyPrompt(
   data: ApartmentData,
   monthlyStats: MonthlyStat[],
   recommendedAngle: string,
-  articleTheme: ArticleThemeChoice
+  articleTheme: ArticleThemeChoice,
+  story: ApartmentStoryCandidate | null
 ) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
@@ -1591,6 +1612,22 @@ function makeBodyPrompt(
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
   const lastTradeCount = lastMonthly?.tradeCount ?? null;
   const articleAngle = recommendedAngle.trim();
+  const storyBlock = story ? `[선정한 동네 스토리 — 본문 반영 전에 원문 재확인]
+주제: ${story.title}
+유형: ${story.kind}
+확인된 핵심 사실: ${story.facts}
+단지와의 생활권 연결: ${story.connection}
+연결 문장 초안: ${story.bridge}
+원문 제목: ${story.sourceTitle}
+원문 URL(검증용, 최종 발행본문에는 출력하지 말 것): ${story.sourceUrl}
+원문 발표일: ${story.sourceDate}
+행사·사업 실제 날짜: ${story.eventDate}
+시점 상태: ${story.timing}
+- 이 자료는 별도 조사 결과이다. 최종 원고 작성 시 원문을 다시 확인하고 사실이 불확실하면 해당 내용은 제외할 것.
+- 가격 변동 원인이 아니라 입지·생활권을 이해하는 별도 이야기로 전개할 것.
+- 지역 스토리는 전체 글의 약 15~20% 이내에서 간결하게 쓰고 억지로 고정 소제목을 만들지 말 것.`
+    : `[동네 스토리]
+선정·검증된 스토리가 없음. 지역 행사·뉴스·커뮤니티 정보를 억지로 추가하지 말고 실거래와 확인된 입지 설명을 중심으로 완성할 것.`;
   const today = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -1635,6 +1672,8 @@ ${monthlyLines}
 중요:
 최근 실거래가는 개별 계약 가격이고 월 대표값은 월별 통계값이다.
 두 값을 하나의 가격처럼 섞거나 서로 비교해 상승률을 계산하지 말 것.
+
+${storyBlock}
 
 [최신 정보 확인]
 - 웹 검색이 가능하면 작성 전에 이 단지와 직접 관련된 최신 정보만 확인할 것.
@@ -1704,13 +1743,15 @@ ${monthlyLines}
 ① 지역을 여는 강한 도입 3문장
 ② 최근 6개월 시세 흐름
 ③ 거래량 변화
-④ 입지·생활권
+④ 입지·생활권. 선택한 동네 스토리가 있으면 실제 단지와의 연결을 짧게 짚으며 여기에서 자연스럽게 전개. 없으면 입지만 충실하게 작성
 ⑤ 이 단지만의 핵심 포인트
 ⑥ 앞으로 체크할 것
 ⑦ 짧은 마무리 + 정확히 3줄 요약
 - 세대수·입주년도 같은 기본정보는 별도 스펙표처럼 길게 나열하지 않고 도입이나 관련 섹션에 자연스럽게 녹일 것.
 - ⑤ 핵심 포인트는 단지별 데이터에 따라 반등, 거래 급증·감소, 고점 접근, 가격과 거래량의 엇갈림, 정비사업, 신축·입주 등으로 자유롭게 바꿀 것.
 - 전체 원칙은 '틀은 일정하게, 첫 문장·핵심 포인트·제목은 단지마다 다르게'로 할 것.
+- 동네 이야기는 실거래 상승·하락의 직접 원인이라고 단정하지 말 것. 연결이 부자연스러우면 생략할 것.
+- 지난 행사·예정 행사 등 시점을 정확히 밝히고, 일부 공개 커뮤니티 게시물을 주민 전체 의견으로 일반화하지 말 것.
 - 모바일 가독성을 위해 한 문단은 짧게 유지할 것.
 
 [검색 키워드 사용 원칙]
@@ -2182,6 +2223,8 @@ export default function ApartmentBulkPage() {
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
+  const [storyState, setStoryState] = useState<StoryWork>(() => emptyApartmentStory());
+  const [storyNotice, setStoryNotice] = useState("");
   const [tableHandlingMode, setTableHandlingMode] = useState<TableHandlingMode>("image");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
@@ -2218,9 +2261,18 @@ export default function ApartmentBulkPage() {
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme), [data, monthlyStats, selectedArticleTheme]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
+  const storyIdentity = apartmentStoryIdentity(data);
+  const storyCurrent = storyState.identity === storyIdentity;
+  const storyCandidates = storyCurrent ? storyState.candidates : [];
+  const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
+  const appliedStory = chosenStory && storyState.sourceChecked ? chosenStory : null;
+  const storyResearchPrompt = useMemo(
+    () => makeApartmentStoryResearchPrompt(data, selectedArticleTheme),
+    [data, selectedArticleTheme]
+  );
   const bodyPrompt = useMemo(
-    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme),
-    [data, monthlyStats, recommendedAngle, selectedArticleTheme]
+    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory),
+    [data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -2506,7 +2558,20 @@ export default function ApartmentBulkPage() {
     autoMapMessage,
     nearbyMessage,
     finalBlogText,
+    storyState,
   ]);
+
+  // 독립 단지 편집 시에는 단지·지역별로 보관하고, 발행 큐는 기존 IndexedDB 작업 스냅샷에 저장한다.
+  useEffect(() => {
+    if (activeWorkId || !data.name.trim() || !data.region.trim()) return;
+    try {
+      const raw = window.localStorage.getItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity);
+      const saved = raw ? JSON.parse(raw) as StoryWork : null;
+      setStoryState(saved?.identity === storyIdentity ? saved : emptyApartmentStory(storyIdentity));
+    } catch {
+      setStoryState(emptyApartmentStory(storyIdentity));
+    }
+  }, [activeWorkId, storyIdentity]);
 
   useEffect(() => {
     try {
@@ -2819,6 +2884,8 @@ export default function ApartmentBulkPage() {
     setWorkAttachments([]);
     setWorkProgress("not_started");
     setTop3Work(emptyTop3());
+    setStoryState(emptyApartmentStory());
+    setStoryNotice("");
     setWorkSaveMessage("");
     setStartedWorkIds([]);
     try {
@@ -2881,6 +2948,7 @@ export default function ApartmentBulkPage() {
         autoMapGenerated,
         autoMapMessage,
         nearbyMessage,
+        story: storyCurrent ? storyState : emptyApartmentStory(storyIdentity),
       } : undefined,
     };
   }
@@ -2914,6 +2982,8 @@ export default function ApartmentBulkPage() {
     setAutoMapMessage("");
     setNearbyMessage("");
     setFinalBlogText("");
+    setStoryState(emptyApartmentStory());
+    setStoryNotice("");
   }
 
   async function openDailyWork(slot: DailySlot, scroll = true) {
@@ -2942,6 +3012,7 @@ export default function ApartmentBulkPage() {
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
         setWorkProgress(saved.progress || "preparing");
         setTop3Work(normalizeTop3(saved.top3));
+        if (slot.type !== "bulk") setStoryState(emptyApartmentStory());
 
         if (slot.type === "bulk" && saved.bulk) {
           setData(saved.bulk.data || SAMPLE);
@@ -2957,6 +3028,9 @@ export default function ApartmentBulkPage() {
           setAutoMapMessage(saved.bulk.autoMapMessage || "");
           setNearbyMessage(saved.bulk.nearbyMessage || "");
           setFinalBlogText(saved.body || "");
+          const restoredIdentity = apartmentStoryIdentity(saved.bulk.data || SAMPLE);
+          setStoryState(saved.bulk.story?.identity === restoredIdentity ? saved.bulk.story : emptyApartmentStory(restoredIdentity));
+          setStoryNotice("");
         } else if (slot.type === "bulk") {
           resetBulkWorkspace();
         }
@@ -2973,6 +3047,7 @@ export default function ApartmentBulkPage() {
         setWorkAttachments([]);
         setWorkProgress("preparing");
         setTop3Work(emptyTop3());
+        setStoryState(emptyApartmentStory());
         if (slot.type === "bulk") {
           const queryComplexId = new URLSearchParams(window.location.search).get("complexId");
           if (!queryComplexId || queryComplexId !== slot.complexId) resetBulkWorkspace();
@@ -3079,6 +3154,50 @@ export default function ApartmentBulkPage() {
       if (chatWindow) chatWindow.location.href = url;
       else window.open(url, "_blank", "noopener,noreferrer");
     });
+  }
+
+  // Explicit user updates only: avoid writing stale daily-work state into standalone cache during hydration.
+  function updateApartmentStory(change: (prev: StoryWork) => StoryWork) {
+    const next = change(storyCurrent ? storyState : emptyApartmentStory(storyIdentity));
+    setStoryState(next);
+    if (!activeWorkId) {
+      try {
+        window.localStorage.setItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity, JSON.stringify(next));
+      } catch {
+        // 작업은 계속하고, 브라우저 저장 실패만 허용한다.
+      }
+    }
+  }
+
+  async function copyStoryResearchPrompt() {
+    try {
+      await navigator.clipboard.writeText(storyResearchPrompt);
+      setStoryNotice("동네 스토리 조사 요청서를 복사했습니다.");
+    } catch {
+      setStoryNotice("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+    }
+  }
+
+  function openStoryResearchPrompt() {
+    window.open("https://chatgpt.com/?q=" + encodeURIComponent(storyResearchPrompt), "_blank", "noopener,noreferrer");
+  }
+
+  function importStoryResearch() {
+    try {
+      const candidates = parseApartmentStoryResearch(storyCurrent ? storyState.raw : "");
+      updateApartmentStory(prev => ({
+        ...prev,
+        identity: storyIdentity,
+        candidates,
+        selectedId: "",
+        sourceChecked: false,
+      }));
+      setStoryNotice(candidates.length
+        ? "근거 URL이 있는 후보 " + candidates.length + "개를 가져왔습니다. 원문 확인 후 하나만 선택해 주세요."
+        : "관련성 있는 후보가 없습니다. 스토리를 생략하고 기존 실거래 분석을 작성할 수 있습니다.");
+    } catch (error) {
+      setStoryNotice(error instanceof Error ? error.message : "조사 결과를 읽지 못했습니다.");
+    }
   }
 
   async function copyBodyPrompt() {
@@ -3732,6 +3851,119 @@ export default function ApartmentBulkPage() {
               )}
             </div>
           )}
+
+          <section className={styles.storyPanel}>
+            <div className={styles.storyHeader}>
+              <div>
+                <p className={styles.eyebrow}>NEIGHBORHOOD STORY · OPTIONAL</p>
+                <h2>동네 스토리 조사</h2>
+                <span>실거래가를 보러 온 독자가 동네의 분위기까지 이해하도록, 관련 있는 이야기만 한 개 선정합니다.</span>
+              </div>
+              <span className={styles.storyStatus}>{appliedStory ? "본문 반영 준비" : "선택 기능"}</span>
+            </div>
+            <div className={styles.storyActions}>
+              <button type="button" onClick={openStoryResearchPrompt} disabled={!data.name.trim() || !data.region.trim()}>
+                1. ChatGPT에서 동네 조사
+              </button>
+              <button type="button" onClick={() => void copyStoryResearchPrompt()} disabled={!data.name.trim() || !data.region.trim()}>
+                조사 요청서 복사
+              </button>
+            </div>
+            <label className={styles.workField}>
+              <span>2. ChatGPT 조사 결과 전체 붙여넣기 · STORY_JSON 표시 포함</span>
+              <textarea
+                className={styles.storyTextarea}
+                value={storyCurrent ? storyState.raw : ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  updateApartmentStory(prev => ({
+                    ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
+                    identity: storyIdentity,
+                    raw,
+                    candidates: [],
+                    selectedId: "",
+                    sourceChecked: false,
+                  }));
+                  setStoryNotice("");
+                }}
+                placeholder="ChatGPT 조사 결과를 [STORY_JSON]부터 [/STORY_JSON]까지 붙여넣으세요. 적합한 후보가 없는 경우도 정상적으로 인식합니다."
+              />
+            </label>
+            <div className={styles.storyActions}>
+              <button type="button" disabled={!storyCurrent || !storyState.raw.trim()} onClick={importStoryResearch}>
+                3. 후보 불러오기
+              </button>
+              <button type="button" onClick={() => {
+                updateApartmentStory(prev => ({
+                  ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
+                  identity: storyIdentity,
+                  selectedId: "",
+                  sourceChecked: false,
+                }));
+                setStoryNotice("이번 글은 동네 스토리 없이 실거래 분석으로 작성합니다.");
+              }}>
+                이번 글은 스토리 생략
+              </button>
+            </div>
+            {storyNotice && <p className={styles.storyNotice} role="status">{storyNotice}</p>}
+            {storyCandidates.length > 0 && (
+              <div className={styles.storyCandidates}>
+                <b>4. 스토리 후보 · 실제 관련성 확인 후 1개 선택</b>
+                {storyCandidates.map((candidate, index) => (
+                  <label key={candidate.id} className={storyState.selectedId === candidate.id ? styles.storyCandidateSelected : styles.storyCandidate}>
+                    <input
+                      type="radio"
+                      name="apartment-story-candidate"
+                      checked={storyState.selectedId === candidate.id}
+                      onChange={() => updateApartmentStory(prev => ({ ...prev, selectedId: candidate.id, sourceChecked: false }))}
+                    />
+                    <div>
+                      <strong>{index + 1}번째 후보 · {candidate.title}</strong>
+                      <small>{candidate.kind} · {candidate.timing} · 출처 발표일 {candidate.sourceDate}{candidate.eventDate && candidate.eventDate !== "해당 없음" ? " · 행사·사업일 " + candidate.eventDate : ""}</small>
+                      <p>{candidate.facts}</p>
+                      <p><b>이 단지와 연결되는 이유:</b> {candidate.connection}</p>
+                      {candidate.communityNote && candidate.communityNote !== "없음" && (
+                        <small>공개 커뮤니티 탐색 단서(주민 전체 의견 아님): {candidate.communityNote}</small>
+                      )}
+                      <a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                        원문 출처 확인 ↗ {candidate.sourceTitle || candidate.sourceUrl}
+                      </a>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+            {chosenStory && (
+              <div className={styles.storyPreview}>
+                <b>5. 본문 연결 문장 미리보기</b>
+                <p>가격과 행사를 억지로 인과관계로 연결하지 않고, 입지·생활권 설명에서 자연스럽게 이어지는 문장입니다. 어색하면 수정하세요.</p>
+                <textarea
+                  aria-label="동네 스토리 연결 문장"
+                  value={chosenStory.bridge}
+                  onChange={(e) => {
+                    const bridge = e.target.value;
+                    updateApartmentStory(prev => ({
+                      ...prev,
+                      sourceChecked: false,
+                      candidates: prev.candidates.map(item => item.id === chosenStory.id ? { ...item, bridge } : item),
+                    }));
+                  }}
+                />
+                <label className={styles.storyConfirm}>
+                  <input
+                    type="checkbox"
+                    checked={storyState.sourceChecked}
+                    onChange={(e) => updateApartmentStory(prev => ({ ...prev, sourceChecked: e.target.checked }))}
+                  />
+                  원문 출처·발표일과 실제 행사일·단지의 생활권 연결을 확인했습니다.
+                </label>
+                <p className={styles.storyResult}>{appliedStory
+                  ? "✓ 확인한 스토리 1개가 최종 본문 요청서에 자동 반영됩니다."
+                  : "위 확인을 완료하기 전에는 스토리가 본문 요청서에 반영되지 않습니다."}</p>
+              </div>
+            )}
+            <p className={styles.storyFootnote}>좋은 후보가 없으면 생략합니다. 지난 행사를 다가올 행사처럼 쓰거나 일부 커뮤니티 의견을 지역 전체의 분위기로 단정하지 않습니다.</p>
+          </section>
 
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>

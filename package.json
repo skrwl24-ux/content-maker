@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs && next build",
+    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs tests/apartment-story.cjs && next build",
     "start": "next start"
   },
   "dependencies": {
