@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     if (reason && !REASONS.has(reason)) {
       return NextResponse.json({ error: "후보 분류가 올바르지 않습니다." }, { status: 400 });
     }
-    if (name.length > 40 || /[%_,()[\]\\]/.test(name)) {
+    if (name.length > 40 || /[%_\\]/.test(name)) {
       return NextResponse.json({ error: "검색어는 40자 이하의 단지명으로 입력해 주세요." }, { status: 400 });
     }
     if (!Number.isSafeInteger(pageRaw) || pageRaw < 0 || pageRaw > 200) {
