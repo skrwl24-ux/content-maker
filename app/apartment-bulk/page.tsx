@@ -2195,6 +2195,72 @@ async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Po
   });
 }
 
+async function makeStoryMapCard(
+  data: ApartmentData, mapDataUrl: string, aptPoint: Point, stationPoint: Point,
+  plan: ApartmentStoryCandidate
+) {
+  const image = await loadImage(mapDataUrl);
+  return canvasUrl(1600, 900, (ctx) => {
+    ctx.fillStyle = "#f4f7fb";
+    ctx.fillRect(0, 0, 1600, 900);
+    drawBrand(ctx, 60, 42, true);
+    ctx.fillStyle = "#17243a";
+    ctx.font = `900 37px ${FONT}`;
+    drawWrapped(ctx, data.name + " · 오늘의 스토리 생활권", 60, 121, 1460, 48, 1);
+    ctx.fillStyle = "#607184";
+    ctx.font = `600 20px ${FONT}`;
+    ctx.fillText(data.region + " | 실제 확인된 지도와 정보만 표시", 60, 177);
+
+    const x = 60, y = 216, w = 905, h = 616;
+    roundRect(ctx, x, y, w, h, 24);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = "#e8eef4";
+    ctx.fillRect(x, y, w, h);
+    const bounds = drawContain(ctx, image, x, y, w, h);
+    if (aptPoint) drawMarker(ctx, bounds.x + aptPoint.x * bounds.w, bounds.y + aptPoint.y * bounds.h, "단지", "#ef476f");
+    if (stationPoint) drawMarker(ctx, bounds.x + stationPoint.x * bounds.w, bounds.y + stationPoint.y * bounds.h, data.station || "주요 역", "#118ab2");
+    ctx.restore();
+    roundRect(ctx, x, y, w, h, 24);
+    ctx.strokeStyle = "#d9e2ea";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const rightX = 994, rightY = 216, rightW = 546, rightH = 616, textX = 1031;
+    roundRect(ctx, rightX, rightY, rightW, rightH, 24);
+    ctx.fillStyle = "#10263b";
+    ctx.fill();
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 17px ${FONT}`;
+    ctx.fillText("TODAY'S STORY", textX, 247);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 29px ${FONT}`;
+    drawWrapped(ctx, plan.topic || plan.title, textX, 285, 460, 37, 2);
+
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath(); ctx.moveTo(textX, 397); ctx.lineTo(1501, 397); ctx.stroke();
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 18px ${FONT}`;
+    ctx.fillText("지역에서 발견한 질문", textX, 421);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `600 22px ${FONT}`;
+    drawWrapped(ctx, plan.kick || plan.facts, textX, 455, 456, 30, 3);
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 18px ${FONT}`;
+    ctx.fillText("출처에서 확인한 정보", textX, 583);
+    ctx.fillStyle = "rgba(255,255,255,.94)";
+    ctx.font = `600 20px ${FONT}`;
+    drawWrapped(ctx, plan.visualFacts || plan.facts, textX, 619, 456, 29, 4);
+
+    ctx.fillStyle = "rgba(255,255,255,.64)";
+    ctx.font = `600 15px ${FONT}`;
+    drawWrapped(ctx, "출처: " + (plan.sourceTitle || "원문 확인") + " · 지도 자료의 원본 표기 유지", textX, 785, 462, 19, 2);
+  });
+}
+
 export default function ApartmentBulkPage() {
   const [contentMode, setContentMode] = useState<ContentMode>("bulk");
   const [data, setData] = useState<ApartmentData>(SAMPLE);
@@ -3377,6 +3443,20 @@ export default function ApartmentBulkPage() {
     }
   }
 
+  async function downloadVerifiedStoryMap() {
+    if (!approvedV3 || !mapDataUrl || approvedV3.visualMode !== "map-hybrid") return;
+    setLoading(true);
+    try {
+      const imageUrl = await makeStoryMapCard(data, mapDataUrl, aptPoint, stationPoint, approvedV3);
+      downloadDataUrl(imageUrl, "03_story_visual.png");
+      setMapCopyMessage("✅ 확인된 지도 이미지 + 선택한 스토리 정보로 1600×900 PNG를 만들었습니다.");
+    } catch (error) {
+      setMapCopyMessage(error instanceof Error ? "스토리 지도 생성 실패: " + error.message : "스토리 지도 생성에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function downloadZip() {
     if (!outputs) return;
     const zip = new JSZip();
@@ -4053,7 +4133,18 @@ export default function ApartmentBulkPage() {
               </button>
             </div>
 
-            {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
+            {approvedV3?.visualMode === "map-hybrid" && mapDataUrl && (
+              <div className={styles.storyDirectExport}>
+                <div>
+                  <b>03번 스토리 지도 · 사이트 직접 합성</b>
+                  <span>현재 확인된 지도 캡처를 유지하고, 단지·역 표시와 승인한 스토리 정보를 코드로 배치합니다. 학교·공원 등의 위치를 임의로 추가하지 않습니다.</span>
+                </div>
+                <button type="button" disabled={loading} onClick={() => void downloadVerifiedStoryMap()}>
+                  {loading ? "이미지 제작 중…" : "1600×900 PNG 만들기"}
+                </button>
+              </div>
+            )}
+            {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>
           </section>
 
 
