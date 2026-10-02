@@ -454,11 +454,39 @@ export async function syncApartmentRegion(regionCode: string) {
     if (complexError) throw complexError;
     const complexes = (complexRows || []) as ComplexRow[];
 
+    // Durable operator-approved identity aliases must be applied BEFORE
+    // both the raw-trade upsert and monthly/snapshot calculations. The SQL
+    // trigger separately prevents future imports from silently losing them.
+    const { data: approvedRows, error: approvedError } = await client
+      .from("apt_verified_source_aliases")
+      .select("region_code,legal_dong,jibun,source_apartment_name,build_year,target_complex_id")
+      .eq("region_code", regionCode)
+      .eq("is_active", true);
+    if (approvedError) throw approvedError;
+    const aliasKey = (code: string, dong: string | null, lot: string | null,
+      source: string, year: number | null) =>
+      JSON.stringify([code,dong,lot,source,year]);
+    const approvedAliases = new Map((approvedRows || []).map(row => [
+      aliasKey(row.region_code,row.legal_dong,row.jibun,row.source_apartment_name,row.build_year),
+      row.target_complex_id as string,
+    ]));
+
     const rawTradeMonths = await mapInBatches(recentYearMonths(7), 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
     const normalized = rawTradeMonths
       .flat()
       .map((row) => normalizeTrade(row, regionCode, complexes))
-      .filter((row): row is NormalizedTrade => Boolean(row));
+      .filter((row): row is NormalizedTrade => Boolean(row))
+      .map(row => {
+        const approved = approvedAliases.get(aliasKey(
+          row.region_code,row.legal_dong,row.jibun,row.source_apartment_name,row.build_year
+        ));
+        if (!approved) return row;
+        if (row.complex_id && row.complex_id !== approved) {
+          throw new Error("국토부 원자료의 자동 단지 매칭이 관리자 승인 결과와 충돌합니다: " +
+            row.source_apartment_name + " / " + row.jibun);
+        }
+        return { ...row, complex_id: approved };
+      });
 
     // The current trade API does not always expose a unique transaction id.
     // Preserve otherwise-identical rows by assigning a deterministic occurrence suffix.
