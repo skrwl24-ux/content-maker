@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import styles from "./page.module.css";
+import { parseBloggerOutput } from "@/lib/google-blogger-parser.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
 type VerificationValue = "pending" | "checked" | "na";
@@ -42,14 +43,6 @@ type ScheduleRow = {
   body?: string;
   imageUrls?: Record<string, string>;
   imageMeta?: Record<string, ImageUploadMeta>;
-};
-
-type BloggerOutput = {
-  title: string;
-  description: string;
-  slug: string;
-  labels: string;
-  html: string;
 };
 
 type SeoTopicCandidate = {
@@ -549,6 +542,7 @@ ${relatedLinkText(row, allRows)}
 
 [최종 출력 형식 — 매우 중요]
 아래 마커를 정확히 사용하고, 마커 사이 내용만 출력할 것.
+각 마커는 원문 그대로 독립된 줄에 작성할 것. 항목 전체를 다른 태그나 인용 블록으로 감싸거나 역슬래시를 추가하지 말 것.
 코드블록은 사용하지 말 것.
 
 [FINAL_TITLE]
@@ -606,22 +600,6 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
 - 한글, 워터마크, 타사 편집툴 로고 금지.
 
 중요: 여러 장 합본이 아니라 슬롯 ${slot.id}에 사용할 이미지 한 장만 바로 생성해줘.`;
-}
-
-function parseSection(raw: string, name: string) {
-  const pattern = new RegExp("\\[" + name + "\\]\\s*([\\s\\S]*?)(?=\\n\\[[A-Z_]+\\]|$)", "i");
-  return raw.match(pattern)?.[1]?.trim() || "";
-}
-
-function parseBloggerOutput(raw: string): BloggerOutput {
-  const htmlMatch = raw.match(/\[BLOGGER_HTML\]\s*([\s\S]*?)\s*\[\/BLOGGER_HTML\]/i);
-  return {
-    title: parseSection(raw, "FINAL_TITLE"),
-    description: parseSection(raw, "META_DESCRIPTION"),
-    slug: parseSection(raw, "SLUG"),
-    labels: parseSection(raw, "LABELS"),
-    html: (htmlMatch?.[1] || "").replace(/^```html\s*/i, "").replace(/```$/i, "").trim(),
-  };
 }
 
 function htmlToPlain(html: string) {
@@ -859,9 +837,11 @@ export default function GoogleBlogSchedulePage() {
   const differentiatePrompt = selected ? buildDifferentiatePrompt(selected, selectedSimilarTopics) : "";
   const differentiateChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(differentiatePrompt);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(articlePrompt);
-  const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || ""), [selected?.body]);
+  const bloggerOutput = useMemo(() => parseBloggerOutput(selected?.body || "", selected?.slug || ""), [selected?.body, selected?.slug]);
   const finalBloggerHtml = selected ? replaceImagePlaceholders(bloggerOutput.html, selected) : bloggerOutput.html;
   const imageReadyCount = selected ? IMAGE_SLOTS.filter(slot => extractImageUrl(selected.imageUrls?.[slot.id] || "")).length : 0;
+  const missingImageSlots = selected ? IMAGE_SLOTS.filter(slot => !extractImageUrl(selected.imageUrls?.[slot.id] || "")) : IMAGE_SLOTS;
+  const publishReady = bloggerOutput.valid && missingImageSlots.length === 0 && !/\[IMAGE\s+0[0-5]\s+—[^\]]+\]/i.test(finalBloggerHtml);
   const selectedImageBytes = selected ? Object.values(selected.imageMeta || {}).reduce((sum, meta) => sum + (meta.optimizedBytes || 0), 0) : 0;
 
   async function loadPublishHistory() {
@@ -1314,8 +1294,10 @@ export default function GoogleBlogSchedulePage() {
   }
 
   async function copyBloggerRich() {
-    if (!finalBloggerHtml) {
-      setCopyMessage("ChatGPT 완성본을 먼저 붙여넣어 주세요.");
+    if (!publishReady) {
+      setCopyMessage(bloggerOutput.errors.length
+        ? "⚠️ 원고 형식을 먼저 수정하세요: " + bloggerOutput.errors.join(" / ")
+        : "⚠️ 이미지 6개를 모두 연결한 뒤 복사할 수 있습니다.");
       return;
     }
     try {
@@ -1337,8 +1319,10 @@ export default function GoogleBlogSchedulePage() {
   }
 
   async function copyHtmlCode() {
-    if (!finalBloggerHtml) {
-      setCopyMessage("ChatGPT 완성본을 먼저 붙여넣어 주세요.");
+    if (!publishReady) {
+      setCopyMessage(bloggerOutput.errors.length
+        ? "⚠️ 원고 형식을 먼저 수정하세요: " + bloggerOutput.errors.join(" / ")
+        : "⚠️ 이미지 6개를 모두 연결한 뒤 복사할 수 있습니다.");
       return;
     }
     await copyText(finalBloggerHtml, "✅ 이미지가 반영된 Blogger HTML 코드 복사 완료 · HTML 보기에서 붙여넣으세요.");
@@ -1899,7 +1883,7 @@ export default function GoogleBlogSchedulePage() {
               </div>
               <button
                 className={styles.completeBtn}
-                disabled={!selected.body?.trim()}
+                disabled={!publishReady}
                 onClick={() => completeRow(selected)}
               >
                 ✓ 발행 완료 표시
@@ -2018,22 +2002,32 @@ export default function GoogleBlogSchedulePage() {
             </div>
 
             <div className={styles.metaGrid}>
-              <div><span>최종 제목</span><b>{bloggerOutput.title || "완성본을 붙여넣으면 표시됩니다."}</b><button disabled={!bloggerOutput.title} onClick={() => void copyText(bloggerOutput.title, "최종 제목을 복사했습니다.")}>복사</button></div>
-              <div><span>검색 설명</span><b>{bloggerOutput.description || "META_DESCRIPTION"}</b><button disabled={!bloggerOutput.description} onClick={() => void copyText(bloggerOutput.description, "검색 설명을 복사했습니다.")}>복사</button></div>
-              <div><span>슬러그</span><b>{bloggerOutput.slug || "SLUG"}</b><button disabled={!bloggerOutput.slug} onClick={() => void copyText(bloggerOutput.slug, "슬러그를 복사했습니다.")}>복사</button></div>
-              <div><span>라벨</span><b>{bloggerOutput.labels || "LABELS"}</b><button disabled={!bloggerOutput.labels} onClick={() => void copyText(bloggerOutput.labels, "라벨을 복사했습니다.")}>복사</button></div>
+              <div><span>최종 제목</span><b>{bloggerOutput.valid ? bloggerOutput.title : "원고 형식 확인 필요"}</b><button disabled={!bloggerOutput.valid} onClick={() => void copyText(bloggerOutput.title, "최종 제목을 복사했습니다.")}>복사</button></div>
+              <div><span>검색 설명</span><b>{bloggerOutput.valid ? bloggerOutput.description : "원고 형식 확인 필요"}</b><button disabled={!bloggerOutput.valid} onClick={() => void copyText(bloggerOutput.description, "검색 설명을 복사했습니다.")}>복사</button></div>
+              <div><span>슬러그</span><b>{bloggerOutput.valid ? bloggerOutput.slug : "원고 형식 확인 필요"}</b><button disabled={!bloggerOutput.valid} onClick={() => void copyText(bloggerOutput.slug, "슬러그를 복사했습니다.")}>복사</button></div>
+              <div><span>라벨</span><b>{bloggerOutput.valid ? bloggerOutput.labels : "원고 형식 확인 필요"}</b><button disabled={!bloggerOutput.valid} onClick={() => void copyText(bloggerOutput.labels, "라벨을 복사했습니다.")}>복사</button></div>
             </div>
+            {Boolean(selected.body?.trim()) && !bloggerOutput.valid && (
+              <div className={styles.copyMessage} role="alert" style={{ color: "#a12720" }}>
+                ⚠️ 원고 분리 오류: {bloggerOutput.errors.join(" / ")} 원고를 확인한 뒤 다시 붙여넣어 주세요.
+              </div>
+            )}
+            {bloggerOutput.valid && missingImageSlots.length > 0 && (
+              <div className={styles.copyMessage} role="status">
+                이미지 미연결 슬롯: {missingImageSlots.map(slot => slot.id).join(", ")} · 모두 연결해야 최종 발행 복사가 활성화됩니다.
+              </div>
+            )}
 
             <div className={styles.bloggerActions}>
-              <button className={styles.bloggerPrimary} disabled={!finalBloggerHtml} onClick={() => void copyBloggerRich()}>이미지 포함 전체복사</button>
-              <button disabled={!finalBloggerHtml} onClick={() => void copyHtmlCode()}>이미지 포함 HTML 복사</button>
+              <button className={styles.bloggerPrimary} disabled={!publishReady} onClick={() => void copyBloggerRich()}>이미지 포함 전체복사</button>
+              <button disabled={!publishReady} onClick={() => void copyHtmlCode()}>이미지 포함 HTML 복사</button>
               <span>이미지 {imageReadyCount}/6 연결 · URL이 없는 슬롯은 자리표시자가 그대로 남습니다.</span>
             </div>
             {copyMessage && <div className={styles.copyMessage}>{copyMessage}</div>}
 
             <div className={styles.previewPane}>
               <div className={styles.previewHead}><b>Blogger 최종 미리보기</b><span>{finalBloggerHtml ? `이미지 ${imageReadyCount}/6 반영` : "완성본 대기"}</span></div>
-              {finalBloggerHtml ? (
+              {bloggerOutput.valid && finalBloggerHtml ? (
                 <iframe
                   title="Blogger preview"
                   sandbox=""
