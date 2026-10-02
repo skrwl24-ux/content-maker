@@ -512,12 +512,21 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
 }
 
 
+const PARAMMA_STORY_BRIDGE_RULES = `[Paramma V3 · 연결형 스토리 구성 — 앞선 구성 규칙보다 우선]
+- 글은 '① 호기심: 일상의 핵심 질문과 답을 먼저 제시하고 선정한 킥을 도입에서 1~2문장으로 짧게 예고 → ② 발견: 신비한 원리와 흥미로운 사실을 충분히 설명 → ③ 자연스러운 전환: 원리와 독자의 실제 상황을 연결해 다음 질문을 이끌어내는 2~4문장 → ④ 보상: 선정한 킥의 구체적인 방법·비교·관찰 포인트 전달 → ⑤ 필요할 때만 안전·한계' 순서로 작성할 것.
+- 원리에서 보상으로 바로 뛰어넘지 말고, 킥 소제목 직전에는 본문의 대상·현상과 보상의 연관성을 보여주는 자연스러운 연결 문단을 쓸 것. 소제목과 전환 문단을 형식적으로 반복하지 말 것.
+- 원리와 발견 약 60%, 보상 약 30~40%를 권장하되 주제와 검증된 자료에 따라 유연하게 조절할 것. 흥미로운 핵심 원리를 지나치게 줄이거나 억지 생활 팁으로 분량을 늘리지 말 것.
+- 사용자가 킥을 직접 확정했거나 검색 조사에서 킥을 정한 경우에도 도입 예고와 전환 문단을 동일하게 적용하고, 확정한 킥을 임의로 바꾸지 말 것.
+- 이미지 01은 신비한 핵심 원리를, 이미지 02는 전환 뒤 등장하는 실제 보상을 저장용 정보 카드로 보여주고 두 이미지를 중복하지 말 것.`;
+
 function buildArticlePromptV3(topic: Topic, date = formatToday()) {
   return buildArticlePrompt(topic, date)
-    .replace("[Paramma V2 · 호기심 → 발견 → 보상]", "[Paramma V3 · 검색 의도 → 호기심 → 발견 → 보상]")
+    .replace("[Paramma V2 · 호기심 → 발견 → 보상]", "[Paramma V3 · 검색 의도 → 호기심 → 발견 → 자연스러운 전환 → 보상]")
     .replace("- 원고를 쓰기 전에 이 글의 핵심 독자 질문과 '이번 글만의 킥' 하나를 웹 검증을 바탕으로 내부 선정할 것.", "- 별도의 킥 입력이 없다면 글 작성 전에 웹에서 주제의 핵심 질문과 관련된 추가 검색 의도를 살펴 '이번 글만의 킥' 하나를 자동 선정할 것. 사용자에게 킥 선정을 요구하거나 원고 생성을 중단하지 말 것.")
     .replace("- 킥은 검색 답을 반복하지 않으면서 독자가 추가로 알아갈 만한 실용 방법, 의외의 차이, 오해 해소, 관찰 포인트 중 주제에 맞는 단 하나로 정할 것.", "- 킥 선정의 우선순위: 주제와 자연스럽게 연결되는 실용적 해결·예방·관리 방법을 먼저 살피고, 맞지 않으면 의외의 차이·오해 해소·관찰 포인트 중 하나를 선택한다. 억지 생활 팁은 금지한다.")
-    .replace("[네이버 검색형 제목]", "[Paramma V3 · 자동 킥 기본 규칙]\n- 검색 조사나 직접 킥 입력이 없는 경우에도 반드시 원고를 끝까지 작성한다.\n- 검색어가 실제 자동완성·검색량 데이터라고 확인하지 않았다면 이를 관측 사실로 말하지 않는다.\n- 과학적 원리만 되풀이하는 대신 독자가 글을 읽고 가져갈 추가적인 보상을 하나 만든다.\n- 이미지 02는 본문에서 실제로 선정한 킥을 저장용 정보 카드로 구체적으로 보여준다. 이미지 01과 중복하지 않는다.\n\n[네이버 검색형 제목]");
+    .replace("③ 보상: 이번 글의 킥을 구체적으로 전달 → ④ 필요할 때만 안전·한계", "③ 자연스러운 전환: 원리와 독자의 일상적 상황을 연결하는 2~4문장 → ④ 보상: 이번 글의 킥을 구체적으로 전달 → ⑤ 필요할 때만 안전·한계")
+    .replace("[네이버 검색형 제목]", "[Paramma V3 · 자동 킥 기본 규칙]\n- 검색 조사나 직접 킥 입력이 없는 경우에도 반드시 원고를 끝까지 작성한다.\n- 검색어가 실제 자동완성·검색량 데이터라고 확인하지 않았다면 이를 관측 사실로 말하지 않는다.\n- 과학적 원리만 되풀이하는 대신 독자가 글을 읽고 가져갈 추가적인 보상을 하나 만든다.\n- 이미지 02는 본문에서 실제로 선정한 킥을 저장용 정보 카드로 구체적으로 보여준다. 이미지 01과 중복하지 않는다.\n\n[네이버 검색형 제목]")
+    .replace("[네이버 검색형 제목]", PARAMMA_STORY_BRIDGE_RULES + "\n\n[네이버 검색형 제목]");
 }
 
 function buildImagePromptV3(topic: Topic, slotId: SlotId) {
@@ -598,7 +607,8 @@ function articlePromptForWork(work: TopicWork) {
       "- 생활 팁이 맞지 않는 주제라면 의외의 비교·관찰 포인트·오해 해소를 보상으로 삼을 것.",
       "- 이미지 02는 선택한 보상을 구체적인 저장용 정보 카드로, 01은 신비한 핵심 원리로 분리할 것."
     ].join("\n") : "";
-  return work.articlePrompt + legacyOverride + kickContext(work);
+  const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
+  return work.articlePrompt + legacyOverride + storyBridge + kickContext(work);
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId) {
@@ -1514,7 +1524,7 @@ export default function ParammaBulkPage() {
             <details className={styles.promptDetails}>
               <summary>본문 요청서 확인·수정</summary>
               <textarea value={work.articlePrompt} onChange={(e) => patchWork({ articlePrompt: e.target.value })} />
-              <p className={styles.kickHint}>킥·검색 메모는 요청서 복사 및 ChatGPT 열기 시 이 기본 요청서 뒤에 자동으로 추가됩니다.</p>
+              <p className={styles.kickHint}>킥·검색 메모와 최신 연결형 스토리 규칙은 요청서 복사·ChatGPT 열기·ZIP 내보내기 시 자동 반영됩니다.</p>
             </details>
 
             <label className={styles.bodyLabel}>
