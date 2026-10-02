@@ -96,3 +96,57 @@ test("regional sync reconciles unsupported month/area stats after successful ups
   assert.match(migration,/REVOKE ALL ON FUNCTION public\.cleanup_apartment_monthly_stats\(text, text\[\]\) FROM anon, authenticated/);
   assert.match(migration,/NOT EXISTS \(/);
 });
+
+
+test("missing K-apt details never erase a previously known address, households or move-in date", async () => {
+  const { mergeKaptApartmentDetail }=await import("../lib/apartment-detail-merge.mjs");
+  const old={
+    name:"장항호수마을2단지현대",
+    address:"경기도 고양시 일산동구 장항동 881 장항호수마을2단지현대",
+    road_address:"경기도 고양시 일산동구 노루목로 100",
+    households:1144, use_date:"1994-10-29", bjd_code:"4128510400",legal_dong:"장항동",
+  };
+  const result=mergeKaptApartmentDetail({kaptName:"장항호수마을2단지현대",as3:"장항동"},null,old);
+  assert.equal(result.address,old.address);
+  assert.equal(result.road_address,old.road_address);
+  assert.equal(result.households,1144);
+  assert.equal(result.use_date,"1994-10-29");
+  assert.equal(result.detailsReceived,false);
+  const partial=mergeKaptApartmentDetail(
+    {kaptName:"장항호수마을2단지현대",as3:"장항동"},
+    {kaptName:"장항호수마을2단지현대",hoCnt:"1,200",kaptAddr:""},
+    old,
+  );
+  assert.equal(partial.households,1200);
+  assert.equal(partial.address,old.address);
+  assert.equal(partial.use_date,old.use_date);
+});
+
+test("unknown household counts and invalid K-apt dates remain null, never fake 0", async () => {
+  const { mergeKaptApartmentDetail }=await import("../lib/apartment-detail-merge.mjs");
+  const row={kaptName:"군포율곡",as3:"금정동"};
+  const missing=mergeKaptApartmentDetail(row,null,null);
+  assert.equal(missing.households,null);
+  assert.equal(missing.address,null);
+  assert.equal(missing.use_date,null);
+  const bad=mergeKaptApartmentDetail(row,{hoCnt:"0",kaptUsedate:"20261340"},null);
+  assert.equal(bad.households,null);
+  assert.equal(bad.use_date,null);
+  const fallback=mergeKaptApartmentDetail(
+    {...row,kaptAddr:"경기도 군포시 금정동 876 군포율곡",hoCnt:"1,000",kaptUsedate:"19940430"},null,null,
+  );
+  assert.equal(fallback.households,1000);
+  assert.equal(fallback.use_date,"1994-04-30");
+  assert.match(fallback.address,/금정동 876/);
+});
+
+test("regional K-apt sync retains past detail data and tracks missing upstream responses", () => {
+  const server=fs.readFileSync("lib/apartment-server.ts","utf8");
+  assert.match(server,/mergeKaptApartmentDetail/);
+  assert.match(server,/const existingByCode = new Map/);
+  assert.ok(server.indexOf('select("kapt_code,name,legal_dong,bjd_code,address,road_address,households,use_date")') <
+            server.indexOf('await upsertInChunks(client, "apt_complexes"'));
+  assert.match(server,/if \(!raw\) return null;/);
+  assert.match(server,/kapt_detail_missing_count: kaptDetailEmpty/);
+  assert.match(server,/kapt_address_missing_count: kaptAddressMissing/);
+});

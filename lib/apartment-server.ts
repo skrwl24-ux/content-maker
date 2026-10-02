@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { matchApartmentTrade, normalizeApartmentName } from "./apartment-trade-matching.mjs";
+import { mergeKaptApartmentDetail } from "./apartment-detail-merge.mjs";
 export { normalizeApartmentName } from "./apartment-trade-matching.mjs";
 
 const FALLBACK_SUPABASE_URL = "https://ygrgamfvykuyhijogxou.supabase.co";
@@ -89,7 +90,10 @@ function text(v: unknown) {
 }
 
 function numberValue(v: unknown) {
-  const n = Number(String(v ?? "").replace(/,/g, "").trim());
+  // Number("") === 0, but absent API fields are unknown, not real zero values.
+  const raw = String(v ?? "").replace(/,/g, "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -394,6 +398,20 @@ export async function syncApartmentRegion(regionCode: string) {
     const kaptList = await fetchKaptList(region.sido_code, publicKey);
     const regionKapt = kaptList.filter((row) => text(row.bjdCode).startsWith(regionCode));
 
+    // The per-complex K-apt detail endpoint may fail or return only part of a
+    // record. Read existing verified fields BEFORE upserting so a transient
+    // upstream failure cannot erase address, households or use date.
+    const { data: existingRows, error: existingError } = await client
+      .from("apt_complexes")
+      .select("kapt_code,name,legal_dong,bjd_code,address,road_address,households,use_date")
+      .eq("region_code", regionCode);
+    if (existingError) throw existingError;
+    const existingByCode = new Map(
+      (existingRows || []).filter(row => row.kapt_code).map(row => [row.kapt_code as string, row])
+    );
+    let kaptDetailErrors = 0;
+    let kaptDetailEmpty = 0;
+
     const enriched = await mapInBatches(regionKapt, 5, async (row) => {
       const kaptCode = text(row.kaptCode);
       let basic: JsonRecord | null = null;
@@ -401,25 +419,24 @@ export async function syncApartmentRegion(regionCode: string) {
         try {
           basic = await fetchKaptBasic(kaptCode, publicKey);
         } catch {
-          basic = null;
+          kaptDetailErrors++;
         }
+        if (!basic) kaptDetailEmpty++;
       }
-      const bjdCode = text(basic?.bjdCode || row.bjdCode);
-      const used = text(basic?.kaptUsedate);
-      const useDate = /^\d{8}$/.test(used) ? used.slice(0, 4) + "-" + used.slice(4, 6) + "-" + used.slice(6, 8) : null;
+      const merged = mergeKaptApartmentDetail(row, basic, existingByCode.get(kaptCode));
       return {
         kapt_code: kaptCode || null,
-        name: text(basic?.kaptName || row.kaptName),
-        normalized_name: normalizeApartmentName(text(basic?.kaptName || row.kaptName)),
+        name: merged.name,
+        normalized_name: normalizeApartmentName(merged.name || ""),
         sido: text(row.as1 || region.sido_name) || null,
         sigungu: text(row.as2 || region.region_name) || null,
-        legal_dong: text(row.as3) || null,
-        bjd_code: bjdCode || null,
+        legal_dong: merged.legal_dong,
+        bjd_code: merged.bjd_code,
         region_code: regionCode,
-        address: text(basic?.kaptAddr) || null,
-        road_address: text(basic?.doroJuso) || null,
-        households: intValue(basic?.hoCnt),
-        use_date: useDate,
+        address: merged.address,
+        road_address: merged.road_address,
+        households: merged.households,
+        use_date: merged.use_date,
         source: "kapt",
         match_status: "pending",
         updated_at: new Date().toISOString(),
@@ -427,6 +444,7 @@ export async function syncApartmentRegion(regionCode: string) {
     });
 
     const validComplexes = enriched.filter((row) => row.kapt_code && row.name) as JsonRecord[];
+    const kaptAddressMissing = validComplexes.filter(row => !row.address).length;
     await upsertInChunks(client, "apt_complexes", validComplexes, "kapt_code", 200);
 
     const { data: complexRows, error: complexError } = await client
@@ -584,6 +602,9 @@ export async function syncApartmentRegion(regionCode: string) {
       matched_trade_count: activeTrades.length,
       candidate_count: candidateCount,
       priority_count: priorityCount,
+      kapt_detail_missing_count: kaptDetailEmpty,
+      kapt_detail_error_count: kaptDetailErrors,
+      kapt_address_missing_count: kaptAddressMissing,
     }).eq("id", run.id);
 
     return {
@@ -594,6 +615,9 @@ export async function syncApartmentRegion(regionCode: string) {
       trades: normalized.length,
       matchedTrades: activeTrades.length,
       obsoleteMonthlyRowsRemoved: Number(removedObsoleteMonthly || 0),
+      kaptDetailEmpty,
+      kaptDetailErrors,
+      kaptAddressMissing,
       candidates: candidateCount,
       priorityCandidates: priorityCount,
     };
