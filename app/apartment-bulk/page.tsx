@@ -2574,15 +2574,6 @@ export default function ApartmentBulkPage() {
   }, [activeWorkId, storyIdentity]);
 
   useEffect(() => {
-    if (activeWorkId || !data.name.trim() || !data.region.trim() || !storyCurrent) return;
-    try {
-      window.localStorage.setItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity, JSON.stringify(storyState));
-    } catch {
-      // 스토리 로컬 저장 실패로 기존 실거래 제작을 막지 않는다.
-    }
-  }, [activeWorkId, data.name, data.region, storyIdentity, storyCurrent, storyState]);
-
-  useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("apartment-bulk-theme-history-v1") || "[]");
       if (Array.isArray(saved)) {
@@ -3165,6 +3156,19 @@ export default function ApartmentBulkPage() {
     });
   }
 
+  // Explicit user updates only: avoid writing stale daily-work state into standalone cache during hydration.
+  function updateApartmentStory(change: (prev: StoryWork) => StoryWork) {
+    const next = change(storyCurrent ? storyState : emptyApartmentStory(storyIdentity));
+    setStoryState(next);
+    if (!activeWorkId) {
+      try {
+        window.localStorage.setItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity, JSON.stringify(next));
+      } catch {
+        // 작업은 계속하고, 브라우저 저장 실패만 허용한다.
+      }
+    }
+  }
+
   async function copyStoryResearchPrompt() {
     try {
       await navigator.clipboard.writeText(storyResearchPrompt);
@@ -3181,7 +3185,7 @@ export default function ApartmentBulkPage() {
   function importStoryResearch() {
     try {
       const candidates = parseApartmentStoryResearch(storyCurrent ? storyState.raw : "");
-      setStoryState(prev => ({
+      updateApartmentStory(prev => ({
         ...prev,
         identity: storyIdentity,
         candidates,
@@ -3872,7 +3876,7 @@ export default function ApartmentBulkPage() {
                 value={storyCurrent ? storyState.raw : ""}
                 onChange={(e) => {
                   const raw = e.target.value;
-                  setStoryState(prev => ({
+                  updateApartmentStory(prev => ({
                     ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
                     identity: storyIdentity,
                     raw,
@@ -3890,7 +3894,7 @@ export default function ApartmentBulkPage() {
                 3. 후보 불러오기
               </button>
               <button type="button" onClick={() => {
-                setStoryState(prev => ({
+                updateApartmentStory(prev => ({
                   ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
                   identity: storyIdentity,
                   selectedId: "",
@@ -3911,7 +3915,7 @@ export default function ApartmentBulkPage() {
                       type="radio"
                       name="apartment-story-candidate"
                       checked={storyState.selectedId === candidate.id}
-                      onChange={() => setStoryState(prev => ({ ...prev, selectedId: candidate.id, sourceChecked: false }))}
+                      onChange={() => updateApartmentStory(prev => ({ ...prev, selectedId: candidate.id, sourceChecked: false }))}
                     />
                     <div>
                       <strong>{index + 1}번째 후보 · {candidate.title}</strong>
@@ -3938,7 +3942,7 @@ export default function ApartmentBulkPage() {
                   value={chosenStory.bridge}
                   onChange={(e) => {
                     const bridge = e.target.value;
-                    setStoryState(prev => ({
+                    updateApartmentStory(prev => ({
                       ...prev,
                       sourceChecked: false,
                       candidates: prev.candidates.map(item => item.id === chosenStory.id ? { ...item, bridge } : item),
@@ -3949,7 +3953,7 @@ export default function ApartmentBulkPage() {
                   <input
                     type="checkbox"
                     checked={storyState.sourceChecked}
-                    onChange={(e) => setStoryState(prev => ({ ...prev, sourceChecked: e.target.checked }))}
+                    onChange={(e) => updateApartmentStory(prev => ({ ...prev, sourceChecked: e.target.checked }))}
                   />
                   원문 출처·발표일과 실제 행사일·단지의 생활권 연결을 확인했습니다.
                 </label>
