@@ -29,11 +29,11 @@ export default function PublicationCheckPanel({
           <b>발행 전 자동 검사 · V3.1</b>
           <span>완성글을 붙여넣으면 사이트의 월별 실거래·개별 계약 데이터와 가격·거래량·증감 수치를 자동 대조합니다. 이미지 위치와 태그도 함께 검사합니다.</span>
         </div>
-        <strong>{!result.ready ? "원고 대기" : warnings.length ? "확인 " + warnings.length + "건" : "텍스트 구조 확인"}</strong>
+        <strong>{!result.ready ? "원고 대기" : warnings.length ? "수치·형식 불일치 " + warnings.length + "건" : reviews.length ? "자동 대조 · 범위 안내" : "자동 대조 통과"}</strong>
       </div>
       {result.ready && (
         <div className={styles.publishAuditStats}>
-          <span>형식 검사 통과 {passes.length}</span>
+          <span>자동 검사 통과 {passes.length}</span>
           <span>수정·확인 {warnings.length}</span>
           <span>추가 확인 {reviews.length}</span>
         </div>
