@@ -8,7 +8,7 @@ import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
@@ -2371,10 +2371,23 @@ export default function ApartmentBulkPage() {
   };
   const v3Planner = useApartmentStoryPlanner(plannerInput);
   const approvedV3 = v3Planner.approved;
+  const autoArticleVisualPrompt = useMemo(() =>
+    !approvedV3 && v3Planner.current.status !== "skipped"
+      ? makeArticleBasedStoryVisualPrompt({
+          mode: "bulk", name: data.name, region: data.region,
+          body: finalBlogText, mapProvided: Boolean(mapDataUrl),
+        })
+      : "",
+    [approvedV3, v3Planner.current.status, data.name, data.region, finalBlogText, mapDataUrl]);
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme) +
     (approvedV3 ? "\n\n" + makeStoryFactSheet(approvedV3) +
-      "\n썸네일은 실제 실거래 숫자 한 가지와 중심 주제를 보여줄 것. 생활 발견은 보조 후킹으로만 사용하고 위 카드에 없는 장소·거리·가격을 새로 만들지 말 것." : ""),
-    [data, monthlyStats, selectedArticleTheme, approvedV3]);
+      "\n썸네일은 실제 실거래 숫자 한 가지와 중심 주제를 보여줄 것. 생활 발견은 보조 후킹으로만 사용하고 위 카드에 없는 장소·거리·가격을 새로 만들지 말 것."
+      : autoArticleVisualPrompt
+        ? "\n\n[V3.1 완성 원고와 같은 이야기로 썸네일 연결]\n" +
+          compactArticleForImagePrompt(finalBlogText).slice(0, 2600) +
+          "\n가격 숫자는 위 원본 실거래 데이터에서만 사용하고, 보조 생활 후킹은 완성 원고에 이미 등장한 장소/생활 장면 하나만 사용. 새로운 장소·도보시간·가격을 생성하지 말 것."
+        : "\n\n[제작 순서 안내] 자동 생활 발견 모드에서는 본문을 먼저 작성하여 최종편집에 붙여넣으면 썸네일도 그 글의 이야기와 연동됩니다."),
+    [data, monthlyStats, selectedArticleTheme, approvedV3, autoArticleVisualPrompt, finalBlogText]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() =>
     approvedV3
@@ -2382,8 +2395,8 @@ export default function ApartmentBulkPage() {
           mode: "bulk", name: data.name, region: data.region, mapProvided: Boolean(mapDataUrl),
           finalStoryExcerpt: extractStoryExcerpt(finalBlogText, approvedV3, data.name),
         })
-      : makeLocationImagePrompt(data),
-    [approvedV3, data, mapDataUrl, finalBlogText]);
+      : autoArticleVisualPrompt || makeLocationImagePrompt(data),
+    [approvedV3, data, mapDataUrl, finalBlogText, autoArticleVisualPrompt]);
   const storyCurrent = storyState.identity === storyIdentity;
   const storyCandidates = storyCurrent ? storyState.candidates : [];
   const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
@@ -3273,7 +3286,7 @@ export default function ApartmentBulkPage() {
 
   function openLocationImagePromptInChatGPT() {
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(locationImagePrompt);
-    if (approvedV3 && (approvedV3.visualMode !== "map-hybrid" || !mapDataUrl)) {
+    if ((approvedV3 && (approvedV3.visualMode !== "map-hybrid" || !mapDataUrl)) || (autoArticleVisualPrompt && !mapDataUrl)) {
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
@@ -4115,7 +4128,7 @@ export default function ApartmentBulkPage() {
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
-              <h2>이미지 3장과 본문을 ChatGPT에서 만듭니다.</h2>
+              <h2>1. 본문 먼저 → 2. 완성글 붙여넣기 → 3. 동일한 이야기로 이미지 제작</h2>
               <span>{approvedV3
                 ? "🔒 승인한 오늘의 생활 발견이 본문에 직접 반영됩니다. 지도형은 확인된 캡처만 참고합니다."
                 : v3Planner.current.status === "skipped"
@@ -4124,38 +4137,32 @@ export default function ApartmentBulkPage() {
             </div>
 
             <div className={styles.actionGrid}>
-              <button type="button" className={styles.actionButton} onClick={openThumbnailPromptInChatGPT}>
-                <span className={styles.actionIcon}>🖼️</span>
-                <b>1. 썸네일 만들기</b>
-                <small>1254×1254 · ChatGPT 요청서 자동 입력</small>
+              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
+                <span className={styles.actionIcon}>📝</span>
+                <b>1. {approvedV3 ? "승인된 생활 스토리로 본문 만들기" : v3Planner.current.status === "skipped" ? "데이터 분석 본문 만들기" : "가격 + 생활 이야기 본문 만들기"}</b>
+                <small>먼저 본문 제작 → 완성글을 아래 네이버 최종편집에 붙여넣기</small>
               </button>
 
-              <button
-                type="button"
-                className={styles.actionButton}
-                disabled={!monthlyStats.length}
-                onClick={openPriceImagePromptInChatGPT}
-              >
+              <button type="button" className={styles.actionButton} onClick={openThumbnailPromptInChatGPT}>
+                <span className={styles.actionIcon}>🖼️</span>
+                <b>2. 썸네일 만들기</b>
+                <small>{autoArticleVisualPrompt ? "실제 완성글의 생활 스토리 자동 반영" : "1254×1254 · 본문을 먼저 붙여넣으면 이야기도 연동"}</small>
+              </button>
+
+              <button type="button" className={styles.actionButton} disabled={!monthlyStats.length} onClick={openPriceImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>📈</span>
-                <b>2. 시세 그래프 만들기</b>
+                <b>3. 시세 그래프 만들기</b>
                 <small>6개월 월별 가격 + 거래건수 자동 입력</small>
               </button>
 
-              <button
-                type="button"
-                className={styles.actionButton}
-                disabled={!mapDataUrl && !approvedV3}
-                onClick={openLocationImagePromptInChatGPT}
-              >
+              <button type="button" className={styles.actionButton}
+                disabled={!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt}
+                onClick={openLocationImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>🗺️</span>
-                <b>3. {approvedV3 ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>
-                <small>{approvedV3 ? "선정된 주제 · 사실 · 이미지 형식 자동 반영" : mapDataUrl ? "지도 캡처 자동 복사 → 새 채팅에서 Ctrl+V" : "지도 준비 중"}</small>
-              </button>
-
-              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
-                <span className={styles.actionIcon}>📝</span>
-                <b>4. {approvedV3 ? "승인된 생활 스토리로 본문 만들기" : v3Planner.current.status === "skipped" ? "데이터 분석 본문 만들기" : "가격 + 생활 이야기 본문 만들기"}</b>
-                <small>실거래 먼저 · 확인 가능한 생활 장면 하나 · 네이버 태그</small>
+                <b>4. {approvedV3 || autoArticleVisualPrompt ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>
+                <small>{approvedV3 ? "승인된 사실 카드에서 직접 제작"
+                  : autoArticleVisualPrompt ? "완성글에 나온 실제 생활 장면 자동 반영"
+                  : mapDataUrl ? "지도 캡처 참고 · 본문을 먼저 붙여넣으면 연동" : "지도 또는 완성글 대기 중"}</small>
               </button>
             </div>
 
