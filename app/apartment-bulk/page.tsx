@@ -2199,10 +2199,66 @@ async function makeStoryMapCard(
   data: ApartmentData, mapDataUrl: string, aptPoint: Point, stationPoint: Point,
   plan: ApartmentStoryCandidate
 ) {
-  // Preserve the source map without asking GPT to invent geometry.
-  // The story layer is composed separately after its rendering is validated.
-  void plan;
-  return makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
+  const image = await loadImage(mapDataUrl);
+  return canvasUrl(1600, 900, (ctx) => {
+    ctx.fillStyle = "#f4f7fb";
+    ctx.fillRect(0, 0, 1600, 900);
+    drawBrand(ctx, 60, 42, true);
+    ctx.fillStyle = "#17243a";
+    ctx.font = `900 37px ${FONT}`;
+    drawWrapped(ctx, data.name + " · 오늘의 스토리 생활권", 60, 121, 1460, 48, 1);
+    ctx.fillStyle = "#607184";
+    ctx.font = `600 20px ${FONT}`;
+    ctx.fillText(data.region + " | 실제 확인된 지도와 정보만 표시", 60, 177);
+
+    const x = 60, y = 216, w = 905, h = 616;
+    roundRect(ctx, x, y, w, h, 24);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = "#e8eef4";
+    ctx.fillRect(x, y, w, h);
+    const bounds = drawContain(ctx, image, x, y, w, h);
+    if (aptPoint) drawMarker(ctx, bounds.x + aptPoint.x * bounds.w, bounds.y + aptPoint.y * bounds.h, "단지", "#ef476f");
+    if (stationPoint) drawMarker(ctx, bounds.x + stationPoint.x * bounds.w, bounds.y + stationPoint.y * bounds.h, data.station || "주요 역", "#118ab2");
+    ctx.restore();
+    roundRect(ctx, x, y, w, h, 24);
+    ctx.strokeStyle = "#d9e2ea";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const rightX = 994, rightY = 216, rightW = 546, rightH = 616, textX = 1031;
+    roundRect(ctx, rightX, rightY, rightW, rightH, 24);
+    ctx.fillStyle = "#10263b";
+    ctx.fill();
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 17px ${FONT}`;
+    ctx.fillText("TODAY'S STORY", textX, 247);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 29px ${FONT}`;
+    drawWrapped(ctx, plan.topic || plan.title, textX, 285, 460, 37, 2);
+
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath(); ctx.moveTo(textX, 397); ctx.lineTo(1501, 397); ctx.stroke();
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 18px ${FONT}`;
+    ctx.fillText("지역에서 발견한 질문", textX, 421);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `600 22px ${FONT}`;
+    drawWrapped(ctx, plan.kick || plan.facts, textX, 455, 456, 30, 3);
+
+    ctx.fillStyle = "#74e2d5";
+    ctx.font = `800 18px ${FONT}`;
+    ctx.fillText("출처에서 확인한 정보", textX, 583);
+    ctx.fillStyle = "rgba(255,255,255,.94)";
+    ctx.font = `600 20px ${FONT}`;
+    drawWrapped(ctx, plan.visualFacts || plan.facts, textX, 619, 456, 29, 4);
+
+    ctx.fillStyle = "rgba(255,255,255,.64)";
+    ctx.font = `600 15px ${FONT}`;
+    drawWrapped(ctx, "출처: " + (plan.sourceTitle || "원문 확인") + " · 지도 자료의 원본 표기 유지", textX, 785, 462, 19, 2);
+  });
 }
 
 export default function ApartmentBulkPage() {
