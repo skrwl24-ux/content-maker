@@ -150,3 +150,33 @@ test("regional K-apt sync retains past detail data and tracks missing upstream r
   assert.match(server,/kapt_detail_missing_count: kaptDetailEmpty/);
   assert.match(server,/kapt_address_missing_count: kaptAddressMissing/);
 });
+
+
+test("MOLIT-only source candidates never flow into publishable complex IDs", () => {
+  const migration=fs.readFileSync(
+    "supabase/migrations/20261002_unmatched_molit_candidates.sql","utf8"
+  );
+  const sync=fs.readFileSync("lib/apartment-server.ts","utf8");
+  const api=fs.readFileSync("app/api/apartment/unmatched-candidates/route.ts","utf8");
+  const ui=fs.readFileSync("app/apartment-bulk/unmatched/page.tsx","utf8");
+  const main=fs.readFileSync("app/apartment-bulk/page.tsx","utf8");
+  assert.match(migration,/CREATE TABLE IF NOT EXISTS public\.apt_unmatched_source_candidates/);
+  assert.match(migration,/WHERE t\.region_code=p_region_code AND t\.complex_id IS NULL/);
+  assert.match(migration,/md5\(jsonb_build_array\(/);
+  assert.match(migration,/review_status text NOT NULL DEFAULT 'needs_review'/);
+  assert.match(migration,/ON CONFLICT\(candidate_key\) DO UPDATE SET/);
+  assert.match(migration,/is_active=false/);
+  assert.match(migration,/TO service_role/);
+  assert.match(migration,/GRANT SELECT ON public\.apt_unmatched_source_candidates TO anon, authenticated/);
+  assert.doesNotMatch(migration,/UPDATE public\.apt_trades/);
+  assert.doesNotMatch(migration,/INSERT INTO public\.apt_complexes/);
+  assert.match(sync,/"refresh_apartment_unmatched_candidates"/);
+  assert.ok(sync.indexOf('"refresh_apartment_unmatched_candidates"') >
+            sync.indexOf('await upsertInChunks(client, "apt_candidate_snapshots"'));
+  assert.match(api, /\.eq\("is_active", true\)/);
+  assert.match(api, /createApartmentReadClient/);
+  assert.doesNotMatch(api, /createApartmentAdminClient/);
+  assert.match(ui, /검증 요청서 복사/);
+  assert.match(ui, /자동 연결·발행 기능은 없습니다/);
+  assert.match(main, /href="\/apartment-bulk\/unmatched"/);
+});

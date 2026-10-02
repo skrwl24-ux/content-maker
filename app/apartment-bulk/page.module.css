@@ -297,3 +297,7 @@
 .lifeAuditPick{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:#265a48;cursor:pointer}
 .lifeAuditPick input{accent-color:#1f5f4a}
 @media(max-width:700px){.lifeAuditHeading{flex-direction:column}.lifeAuditActions button{flex:1 1 160px}.lifeAuditPanel{padding:13px}}
+
+.unmatchedSourceEntry{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 15px;padding:11px 13px;background:#f5f8fa;border:1px solid #dce6eb;border-radius:9px;color:#506676;font-size:12px;line-height:1.65}
+.unmatchedSourceEntry b{color:#24465b}
+.unmatchedSourceEntry a{color:#155f70;font-weight:800;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
