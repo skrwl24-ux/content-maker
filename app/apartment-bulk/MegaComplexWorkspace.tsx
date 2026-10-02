@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type MegaComplexPreset = {
@@ -93,7 +93,7 @@ function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | 
     "6. 역·상권·학교·공원 등 생활권",
     ...(plan ? ["7. 스토리 킥과 연결된 실생활 질문 하나에 검증된 자료로 답할 것. 규모나 축제가 집값의 직접 원인인 것처럼 단정하지 말 것."] : []),
     "8. 최근 거래에서 체크할 포인트",
-    "8. 3줄 요약",
+    "9. 3줄 요약",
     "",
     "[34평대 안내]",
     "※ 단지마다 전용·공급면적 구조가 달라 실제 표기 평형은 32~35평 정도 차이가 있을 수 있습니다. 이번 글에서는 비슷한 크기의 대표 평형을 편의상 '34평대'로 묶어 봤습니다.",
@@ -303,7 +303,15 @@ function openChat(prompt: string) {
   window.open("https://chatgpt.com/?q=" + encodeURIComponent(prompt), "_blank", "noopener,noreferrer");
 }
 
-export default function MegaComplexWorkspace() {
+export default function MegaComplexWorkspace({
+  onPlanChange, finalBodyText = "",
+}: {
+  onPlanChange?: (info: {
+    mode: "school" | "mega"; subjectKey: string; name: string;
+    plan: ApartmentStoryCandidate | null; dataSummary: string;
+  }) => void;
+  finalBodyText?: string;
+}) {
   const [selectedId, setSelectedId] = useState(MEGA_COMPLEXES[0].id);
   const [copied, setCopied] = useState(false);
   const [completedIds, setCompletedIds] = useState<string[]>([]);
@@ -325,16 +333,23 @@ export default function MegaComplexWorkspace() {
   const planner = useApartmentStoryPlanner(plannerInput);
   const prompts = useMemo(() => ({
     thumbnail: thumbnailPrompt(complex) + (planner.approved
-      ? "\n\n[V3 승인된 통일 주제]\n중심 주제: " + planner.approved.topic +
-        "\n스토리 킥: " + planner.approved.kick +
+      ? "\n\n" + makeStoryFactSheet(planner.approved) +
+        "\n이 단지에서 누릴 생활은 카드와 동일한 장소/지점을 사용하고 검증되지 않은 거리를 추가하지 말 것." +
         "\n썸네일에서 실제 검증된 단지 규모나 34평대 가격 중 강한 숫자 한 개만 부각." : ""),
     scale: scalePrompt(complex),
     price: pricePrompt(complex),
     location: planner.approved ? makeApprovedStoryVisualPrompt(planner.approved, {
       mode: "mega", name: complex.name, region: complex.region,
+      finalStoryExcerpt: extractStoryExcerpt(finalBodyText, planner.approved, complex.name),
     }) : locationPrompt(complex),
     body: bodyPrompt(complex, planner.approved),
-  }), [complex, planner.approved]);
+  }), [complex, planner.approved, finalBodyText]);
+  useEffect(() => {
+    onPlanChange?.({
+      mode: "mega", subjectKey: complex.id, name: complex.name,
+      plan: planner.approved, dataSummary: plannerInput.dataSummary,
+    });
+  }, [onPlanChange, complex.id, complex.name, planner.approved, plannerInput.dataSummary]);
   const doneCount = completedIds.filter((id) => MEGA_COMPLEXES.some((item) => item.id === id)).length;
 
   useEffect(() => {
@@ -428,7 +443,7 @@ export default function MegaComplexWorkspace() {
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {complex.name}</p>
           <h2>{complex.households} 초대형단지 · 34평대 가격과 실제 생활은?</h2>
-          <span>{planner.approved ? "승인한 주제가 본문·썸네일·03번 스토리 비주얼에 연동됐습니다. 기존 규모·가격 이미지는 유지됩니다." : "기존 규모·매매·전세 검증이 기본입니다. 스토리를 승인하면 본문과 마지막 이미지에 적용됩니다."}</span>
+          <span>{planner.approved ? "잠긴 생활 발견 카드가 본문·썸네일·03번 이미지에 연동됩니다. 완성글을 최종편집에 붙이면 마지막 이미지도 실제 문단을 참고합니다." : "기존 규모·매매·전세 검증이 기본입니다. 스토리를 승인하면 본문과 마지막 이미지에 적용됩니다."}</span>
         </div>
 
         <div className={styles.actionGrid}>
