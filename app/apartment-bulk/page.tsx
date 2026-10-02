@@ -1,13 +1,14 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
 import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import PublicationCheckPanel from "./PublicationCheckPanel";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
@@ -2292,6 +2293,19 @@ export default function ApartmentBulkPage() {
   const [workPromptCopied, setWorkPromptCopied] = useState(false);
   const [workImagePromptCopied, setWorkImagePromptCopied] = useState<WorkImageSlot | "">("");
   const [finalBlogText, setFinalBlogText] = useState("");
+  const [seriesAudit, setSeriesAudit] = useState<{
+    mode: "school" | "mega"; subjectKey: string; name: string;
+    plan: ApartmentStoryCandidate | null; dataSummary: string;
+  } | null>(null);
+  const updateSeriesAudit = useCallback((info: {
+    mode: "school" | "mega"; subjectKey: string; name: string;
+    plan: ApartmentStoryCandidate | null; dataSummary: string;
+  }) => {
+    setSeriesAudit(prev =>
+      prev?.mode === info.mode && prev?.subjectKey === info.subjectKey &&
+      prev?.plan === info.plan && prev?.dataSummary === info.dataSummary ? prev : info
+    );
+  }, []);
   const [storyState, setStoryState] = useState<StoryWork>(() => emptyApartmentStory());
   const [storyNotice, setStoryNotice] = useState("");
   const [tableHandlingMode, setTableHandlingMode] = useState<TableHandlingMode>("image");
@@ -2351,18 +2365,18 @@ export default function ApartmentBulkPage() {
   const v3Planner = useApartmentStoryPlanner(plannerInput);
   const approvedV3 = v3Planner.approved;
   const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme) +
-    (approvedV3 ? "\n\n[V3 이번 글의 승인된 중심 주제]\n" + approvedV3.topic +
-      "\n본문 스토리 킥: " + approvedV3.kick +
-      "\n썸네일은 실거래 숫자와 중심 주제를 연결하되 확인되지 않은 수치나 축제 정보를 후킹으로 만들지 말 것." : ""),
+    (approvedV3 ? "\n\n" + makeStoryFactSheet(approvedV3) +
+      "\n썸네일은 실제 실거래 숫자 한 가지와 중심 주제를 보여줄 것. 생활 발견은 보조 후킹으로만 사용하고 위 카드에 없는 장소·거리·가격을 새로 만들지 말 것." : ""),
     [data, monthlyStats, selectedArticleTheme, approvedV3]);
   const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
   const locationImagePrompt = useMemo(() =>
     approvedV3
       ? makeApprovedStoryVisualPrompt(approvedV3, {
           mode: "bulk", name: data.name, region: data.region, mapProvided: Boolean(mapDataUrl),
+          finalStoryExcerpt: extractStoryExcerpt(finalBlogText, approvedV3, data.name),
         })
       : makeLocationImagePrompt(data),
-    [approvedV3, data, mapDataUrl]);
+    [approvedV3, data, mapDataUrl, finalBlogText]);
   const storyCurrent = storyState.identity === storyIdentity;
   const storyCandidates = storyCurrent ? storyState.candidates : [];
   const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
@@ -3682,8 +3696,8 @@ export default function ApartmentBulkPage() {
       </section>
       )}
 
-      {contentMode === "school" && <SchoolDistrictWorkspace />}
-      {contentMode === "mega" && <MegaComplexWorkspace />}
+      {contentMode === "school" && <SchoolDistrictWorkspace onPlanChange={updateSeriesAudit} finalBodyText={finalBlogText} />}
+      {contentMode === "mega" && <MegaComplexWorkspace onPlanChange={updateSeriesAudit} finalBodyText={finalBlogText} />}
 
       {contentMode === "bulk" && activeWorkId && activeWorkSlot && (
         <section id="active-work" className={styles.activeWorkPanel}>
@@ -4416,6 +4430,15 @@ export default function ApartmentBulkPage() {
               </div>
             </div>
 
+            {(contentMode !== "bulk" || !activeWorkId || activeWorkType === "bulk") && (
+              <PublicationCheckPanel
+                mode={contentMode}
+                name={contentMode === "bulk" ? data.name : seriesAudit?.mode === contentMode ? seriesAudit.name : ""}
+                body={finalBlogText}
+                plan={contentMode === "bulk" ? approvedV3 : seriesAudit?.mode === contentMode ? seriesAudit.plan : null}
+                dataSummary={contentMode === "bulk" ? plannerInput.dataSummary : seriesAudit?.mode === contentMode ? seriesAudit.dataSummary : ""}
+              />
+            )}
             <div className={styles.naverCopyActions}>
               <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
                 ③ 서식 포함 전체복사
