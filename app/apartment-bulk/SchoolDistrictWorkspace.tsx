@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt, safeStoryDisplayText } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type SchoolDistrictPreset = {
@@ -276,7 +276,7 @@ function makeSchoolPrompts(district: SchoolDistrictPreset, plan: ApartmentStoryC
     thumbnail: makeSchoolThumbnailPrompt(district) + theme +
       (autoVisual
         ? "\n\n[V3.1 완성 원고에 등장한 생활 장면과 썸네일 일치]\n" +
-          finalBodyText.slice(0, 2100) +
+          safeStoryDisplayText(finalBodyText.slice(0, 2100), null) +
           "\n학군 5단지·34평대 비교가 주제이며, 생활 명소는 보조 후킹 한 개만. 근거 없는 이동 수치는 사용하지 말 것."
         : ""),
     price: makeSchoolPricePrompt(district),
