@@ -4088,7 +4088,7 @@ export default function ApartmentBulkPage() {
                 </button>
               </div>
             )}
-            {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>
+            {mapCopyMessage && <div className={styles.mapCopyNotice}>{mapCopyMessage}</div>}
           </section>
 
 
