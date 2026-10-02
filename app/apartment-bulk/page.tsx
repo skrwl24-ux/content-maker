@@ -3165,6 +3165,37 @@ export default function ApartmentBulkPage() {
     });
   }
 
+  async function copyStoryResearchPrompt() {
+    try {
+      await navigator.clipboard.writeText(storyResearchPrompt);
+      setStoryNotice("동네 스토리 조사 요청서를 복사했습니다.");
+    } catch {
+      setStoryNotice("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+    }
+  }
+
+  function openStoryResearchPrompt() {
+    window.open("https://chatgpt.com/?q=" + encodeURIComponent(storyResearchPrompt), "_blank", "noopener,noreferrer");
+  }
+
+  function importStoryResearch() {
+    try {
+      const candidates = parseApartmentStoryResearch(storyCurrent ? storyState.raw : "");
+      setStoryState(prev => ({
+        ...prev,
+        identity: storyIdentity,
+        candidates,
+        selectedId: "",
+        sourceChecked: false,
+      }));
+      setStoryNotice(candidates.length
+        ? "근거 URL이 있는 후보 " + candidates.length + "개를 가져왔습니다. 원문 확인 후 하나만 선택해 주세요."
+        : "관련성 있는 후보가 없습니다. 스토리를 생략하고 기존 실거래 분석을 작성할 수 있습니다.");
+    } catch (error) {
+      setStoryNotice(error instanceof Error ? error.message : "조사 결과를 읽지 못했습니다.");
+    }
+  }
+
   async function copyBodyPrompt() {
     try {
       await navigator.clipboard.writeText(bodyPrompt);
