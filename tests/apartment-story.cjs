@@ -321,3 +321,22 @@ test("V3.1 unapproved auto-story image prompt follows the actual article for the
     mode:"mega",name:"산본 테스트아파트",region:"경기",body:"",
   }),"");
 });
+
+
+test("V3.1 automatic story fallback is actually wired to all three article actions and image prompts", () => {
+  const fs = require("node:fs");
+  const files = {
+    bulk: fs.readFileSync("app/apartment-bulk/page.tsx", "utf8"),
+    school: fs.readFileSync("app/apartment-bulk/SchoolDistrictWorkspace.tsx", "utf8"),
+    mega: fs.readFileSync("app/apartment-bulk/MegaComplexWorkspace.tsx", "utf8"),
+  };
+  for (const source of Object.values(files)) {
+    assert.match(source, /makeAutomaticLivingStoryBlock/);
+    assert.match(source, /makeArticleBasedStoryVisualPrompt/);
+    assert.match(source, /status !== "skipped"/);
+  }
+  assert.match(files.bulk, /autoArticleVisualPrompt \|\| makeLocationImagePrompt/);
+  assert.match(files.bulk, /본문 먼저 → 2\. 완성글 붙여넣기/);
+  assert.match(files.school, /autoVisual \|\| makeSchoolSummaryPrompt/);
+  assert.match(files.mega, /autoVisual \|\| locationPrompt/);
+});
