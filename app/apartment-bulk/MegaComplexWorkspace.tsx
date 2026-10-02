@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt, safeStoryDisplayText } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type MegaComplexPreset = {
@@ -346,7 +346,7 @@ export default function MegaComplexWorkspace({
         "\n이 단지에서 누릴 생활은 카드와 동일한 장소/지점을 사용하고 검증되지 않은 거리를 추가하지 말 것." +
         "\n썸네일에서 실제 검증된 단지 규모나 34평대 가격 중 강한 숫자 한 개만 부각."
       : autoVisual
-        ? "\n\n[V3.1 완성 원고 기반 썸네일]\n" + finalBodyText.slice(0, 2100) +
+        ? "\n\n[V3.1 완성 원고 기반 썸네일]\n" + safeStoryDisplayText(finalBodyText.slice(0, 2100), null) +
           "\n단지 규모/가격의 검증 숫자 한 개를 중심으로. 생활 이야기는 실제 원고에 나온 하나만 보조 후킹으로 사용하고 새 거리·수치를 만들지 말 것."
         : ""),
     scale: scalePrompt(complex),
