@@ -3848,6 +3848,119 @@ export default function ApartmentBulkPage() {
             </div>
           )}
 
+          <section className={styles.storyPanel}>
+            <div className={styles.storyHeader}>
+              <div>
+                <p className={styles.eyebrow}>NEIGHBORHOOD STORY · OPTIONAL</p>
+                <h2>동네 스토리 조사</h2>
+                <span>실거래가를 보러 온 독자가 동네의 분위기까지 이해하도록, 관련 있는 이야기만 한 개 선정합니다.</span>
+              </div>
+              <span className={styles.storyStatus}>{appliedStory ? "본문 반영 준비" : "선택 기능"}</span>
+            </div>
+            <div className={styles.storyActions}>
+              <button type="button" onClick={openStoryResearchPrompt} disabled={!data.name.trim() || !data.region.trim()}>
+                1. ChatGPT에서 동네 조사
+              </button>
+              <button type="button" onClick={() => void copyStoryResearchPrompt()} disabled={!data.name.trim() || !data.region.trim()}>
+                조사 요청서 복사
+              </button>
+            </div>
+            <label className={styles.workField}>
+              <span>2. ChatGPT 조사 결과 전체 붙여넣기 · STORY_JSON 표시 포함</span>
+              <textarea
+                className={styles.storyTextarea}
+                value={storyCurrent ? storyState.raw : ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setStoryState(prev => ({
+                    ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
+                    identity: storyIdentity,
+                    raw,
+                    candidates: [],
+                    selectedId: "",
+                    sourceChecked: false,
+                  }));
+                  setStoryNotice("");
+                }}
+                placeholder="ChatGPT 조사 결과를 [STORY_JSON]부터 [/STORY_JSON]까지 붙여넣으세요. 적합한 후보가 없는 경우도 정상적으로 인식합니다."
+              />
+            </label>
+            <div className={styles.storyActions}>
+              <button type="button" disabled={!storyCurrent || !storyState.raw.trim()} onClick={importStoryResearch}>
+                3. 후보 불러오기
+              </button>
+              <button type="button" onClick={() => {
+                setStoryState(prev => ({
+                  ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
+                  identity: storyIdentity,
+                  selectedId: "",
+                  sourceChecked: false,
+                }));
+                setStoryNotice("이번 글은 동네 스토리 없이 실거래 분석으로 작성합니다.");
+              }}>
+                이번 글은 스토리 생략
+              </button>
+            </div>
+            {storyNotice && <p className={styles.storyNotice} role="status">{storyNotice}</p>}
+            {storyCandidates.length > 0 && (
+              <div className={styles.storyCandidates}>
+                <b>4. 스토리 후보 · 실제 관련성 확인 후 1개 선택</b>
+                {storyCandidates.map((candidate, index) => (
+                  <label key={candidate.id} className={storyState.selectedId === candidate.id ? styles.storyCandidateSelected : styles.storyCandidate}>
+                    <input
+                      type="radio"
+                      name="apartment-story-candidate"
+                      checked={storyState.selectedId === candidate.id}
+                      onChange={() => setStoryState(prev => ({ ...prev, selectedId: candidate.id, sourceChecked: false }))}
+                    />
+                    <div>
+                      <strong>{index + 1}번째 후보 · {candidate.title}</strong>
+                      <small>{candidate.kind} · {candidate.timing} · 출처 발표일 {candidate.sourceDate}{candidate.eventDate && candidate.eventDate !== "해당 없음" ? " · 행사·사업일 " + candidate.eventDate : ""}</small>
+                      <p>{candidate.facts}</p>
+                      <p><b>이 단지와 연결되는 이유:</b> {candidate.connection}</p>
+                      {candidate.communityNote && candidate.communityNote !== "없음" && (
+                        <small>공개 커뮤니티 탐색 단서(주민 전체 의견 아님): {candidate.communityNote}</small>
+                      )}
+                      <a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                        원문 출처 확인 ↗ {candidate.sourceTitle || candidate.sourceUrl}
+                      </a>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+            {chosenStory && (
+              <div className={styles.storyPreview}>
+                <b>5. 본문 연결 문장 미리보기</b>
+                <p>가격과 행사를 억지로 인과관계로 연결하지 않고, 입지·생활권 설명에서 자연스럽게 이어지는 문장입니다. 어색하면 수정하세요.</p>
+                <textarea
+                  aria-label="동네 스토리 연결 문장"
+                  value={chosenStory.bridge}
+                  onChange={(e) => {
+                    const bridge = e.target.value;
+                    setStoryState(prev => ({
+                      ...prev,
+                      sourceChecked: false,
+                      candidates: prev.candidates.map(item => item.id === chosenStory.id ? { ...item, bridge } : item),
+                    }));
+                  }}
+                />
+                <label className={styles.storyConfirm}>
+                  <input
+                    type="checkbox"
+                    checked={storyState.sourceChecked}
+                    onChange={(e) => setStoryState(prev => ({ ...prev, sourceChecked: e.target.checked }))}
+                  />
+                  원문 출처·발표일과 실제 행사일·단지의 생활권 연결을 확인했습니다.
+                </label>
+                <p className={styles.storyResult}>{appliedStory
+                  ? "✓ 확인한 스토리 1개가 최종 본문 요청서에 자동 반영됩니다."
+                  : "위 확인을 완료하기 전에는 스토리가 본문 요청서에 반영되지 않습니다."}</p>
+              </div>
+            )}
+            <p className={styles.storyFootnote}>좋은 후보가 없으면 생략합니다. 지난 행사를 다가올 행사처럼 쓰거나 일부 커뮤니티 의견을 지역 전체의 분위기로 단정하지 않습니다.</p>
+          </section>
+
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
