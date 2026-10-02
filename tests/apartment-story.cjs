@@ -405,3 +405,107 @@ test("V3.1 bulk transaction audit names numbers that disagree with source data",
   assert.match(numeric?.detail || "", /99건/);
   assert.match(numeric?.detail || "", /44.4%/);
 });
+
+
+test("V3.2 lifestyle research request includes current article and separates transaction claims", async () => {
+  const mod = await import("../lib/apartment-life-audit.mjs");
+  const name = "호매실마을13단지";
+  const body = "수원 호매실마을13단지 가격은 5.23억입니다.\n호매실 인근 문화시설이 현재 운영 중이라는 주장입니다.";
+  const prompt = mod.makeLifeVerificationPrompt({name,region:"경기 수원시 권선구",body});
+  assert.ok(prompt.includes(body));
+  assert.ok(prompt.includes(mod.lifeAuditRequestId(name,body)));
+  assert.match(prompt,/웹 검색을 사용/);
+  assert.match(prompt,/가격·거래량·변화율.*제외/);
+  assert.match(prompt,/영업시간|운영 여부/);
+  assert.match(prompt,/지도|도보시간/);
+  assert.match(prompt,/\[LOCAL_AUDIT_JSON\]/);
+});
+
+test("V3.2 fact-check result needs a matching current article and real web access", async () => {
+  const mod = await import("../lib/apartment-life-audit.mjs");
+  const name = "호매실마을13단지";
+  const body = "호매실마을13단지 생활권으로 확인했습니다.\n예전에는 도보 10분이라는 설명이 있었습니다.";
+  const data = {
+    requestId: mod.lifeAuditRequestId(name,body), subjectName:name,
+    webAccess:"available", summary:"출처 2곳 대조", checkedAt:"2026-10-02",
+    checks:[
+      {
+        topic:"경로",status:"unverified",
+        original:"예전에는 도보 10분이라는 설명이 있었습니다.",
+        recommendedText:"",finding:"실제 경로자료를 확인하지 못함",
+        sourceTitle:"",sourceUrl:"",sourceDate:"확인 불가",
+      },
+      {
+        topic:"시설",status:"confirmed",
+        original:"호매실마을13단지 생활권으로 확인했습니다.",recommendedText:"",
+        finding:"공식 안내 확인",sourceTitle:"시설 안내",
+        sourceUrl:"https://www.suwon.go.kr/example",sourceDate:"2026-09-01",
+      },
+    ],
+  };
+  const raw="[LOCAL_AUDIT_JSON]\n"+JSON.stringify(data)+"\n[/LOCAL_AUDIT_JSON]";
+  const report=mod.parseLifeVerificationResult(raw,{name,body});
+  assert.equal(report.checks.length,2);
+  assert.equal(report.checks[0].status,"unverified");
+  assert.equal(report.checks[0].matchCount,1);
+  assert.equal(report.checks[1].status,"confirmed");
+  assert.equal(report.checks[1].sourceUrl,"https://www.suwon.go.kr/example");
+  assert.throws(()=>mod.parseLifeVerificationResult(raw,{name,body:body+" 바뀜"}),/일치하지 않습니다/);
+  assert.throws(()=>mod.parseLifeVerificationResult(raw,{name:"다른 단지",body}),/일치하지 않습니다/);
+  assert.throws(()=>mod.parseLifeVerificationResult(
+    "[LOCAL_AUDIT_JSON]\n"+JSON.stringify({...data,webAccess:"unavailable"})+"\n[/LOCAL_AUDIT_JSON]",
+    {name,body}
+  ),/실제 웹 검색 결과가 없습니다/);
+  const badSource=mod.parseLifeVerificationResult(
+    JSON.stringify({...data,checks:[{...data.checks[1],sourceUrl:"http://not-https.example"}]}),
+    {name,body}
+  );
+  assert.equal(badSource.checks[0].status,"unverified");
+  assert.equal(badSource.checks[0].sourceUrl,"");
+});
+
+test("V3.2 applies explicitly selected corrections only to the exact original sentence", async () => {
+  const mod=await import("../lib/apartment-life-audit.mjs");
+  const name="호매실마을13단지";
+  const body="호매실마을13단지 생활정보입니다.\n현재 A 매장은 영업 중입니다.\n공원까지 도보 10분입니다.";
+  const data={
+    requestId:mod.lifeAuditRequestId(name,body),subjectName:name,webAccess:"available",
+    summary:"영업 공지와 경로정보 확인",checkedAt:"2026-10-02",
+    checks:[
+      {topic:"영업",status:"update",original:"현재 A 매장은 영업 중입니다.",
+       recommendedText:"공식 공지에 따르면 A 매장은 이전했습니다.",finding:"업체 공지",
+       sourceTitle:"이전 안내",sourceUrl:"https://example.org/store",sourceDate:"2026-09-30"},
+      {topic:"경로",status:"unverified",original:"공원까지 도보 10분입니다.",
+       recommendedText:"",finding:"경로 근거 없음",sourceTitle:"",sourceUrl:"",sourceDate:""},
+    ],
+  };
+  const report=mod.parseLifeVerificationResult(JSON.stringify(data),{name,body});
+  const noApproval=mod.applyLifeVerificationChanges(body,report,[]);
+  assert.equal(noApproval.body,body);
+  assert.equal(noApproval.applied,0);
+  const selected=report.checks.map(x=>x.id);
+  const fixed=mod.applyLifeVerificationChanges(body,report,selected);
+  assert.equal(fixed.applied,2);
+  assert.ok(fixed.body.includes("매장은 이전했습니다."));
+  assert.ok(!fixed.body.includes("도보 10분"));
+  assert.equal(mod.applyLifeVerificationChanges(body+" 수정됨",report,selected).applied,0);
+  const duplicate=mod.applyLifeVerificationChanges(body+"\n현재 A 매장은 영업 중입니다.",report,selected);
+  assert.equal(duplicate.applied,0);
+  const unverifiedRewrite=mod.parseLifeVerificationResult(JSON.stringify({
+    ...data,checks:[{...data.checks[1],recommendedText:"공원에 바로 걸어서 갈 수 있습니다."}]
+  }),{name,body});
+  assert.equal(mod.applyLifeVerificationChanges(body,unverifiedRewrite,[unverifiedRewrite.checks[0].id]).applied,0);
+});
+
+test("V3.2 lifestyle review is connected to the final article and happens before final copy", () => {
+  const fs = require("node:fs");
+  const page=fs.readFileSync("app/apartment-bulk/page.tsx","utf8");
+  const panel=fs.readFileSync("app/apartment-bulk/LifeVerificationPanel.tsx","utf8");
+  assert.match(page,/import LifeVerificationPanel/);
+  assert.ok(page.indexOf("<LifeVerificationPanel") < page.indexOf('className={styles.naverCopyActions}'));
+  assert.match(page, /body=\{finalBlogText\}/);
+  assert.match(page, /onBodyChange=\{next =>/);
+  assert.match(panel,/ChatGPT에서 생활정보 웹 검증/);
+  assert.match(panel, /parseLifeVerificationResult/);
+  assert.match(panel,/applyLifeVerificationChanges/);
+});
