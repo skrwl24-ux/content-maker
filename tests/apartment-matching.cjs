@@ -238,3 +238,34 @@ test("approved source record drift is blocked before any monthly/snapshot overwr
  assert.match(guard,/Manual review is required/);
  assert.match(guard,/Automatic apartment matching conflicts with approved source alias/);
 });
+
+test("Gunpo shared parcel 875 never combines 351~359 and 360~368 K-apt complexes", async () => {
+  const mod=await modulePromise;
+  const first={id:"first",kapt_code:"A43575803",name:"산본주공퇴계1차아파트",
+    normalized_name:"산본주공퇴계1차",region_code:"41410",legal_dong:"금정동",
+    address:null,use_date:null};
+  const second={id:"second",kapt_code:"A43582405",name:"금정퇴계2차",
+    normalized_name:"금정퇴계2차",region_code:"41410",legal_dong:"금정동",
+    address:"경기도 군포시 금정동 875 금정퇴계2차",use_date:"1995-04-22"};
+  const input=(name,buildingDong,exclusiveArea,buildYear)=>({
+    name,regionCode:"41410",legalDong:"금정동",jibun:"875",
+    buildingDong,exclusiveArea,buildYear,
+  });
+  const one="퇴계주공(351~359동)",two="퇴계주공(360~368동)";
+  assert.equal(mod.matchApartmentTrade(input(one,"351",42.75,1993),[first,second])?.id,"first");
+  assert.equal(mod.matchApartmentTrade(input(one,null,41.85,1993),[first,second])?.id,"first");
+  assert.equal(mod.matchApartmentTrade(input(two,"368",37.67,1995),[first,second])?.id,"second");
+  assert.equal(mod.matchApartmentTrade(input(two,null,39.87,1995),[first,second])?.id,"second");
+  assert.equal(mod.matchApartmentTrade(input(one,"351",42.75,1993),[second]),null);
+  assert.equal(mod.matchApartmentTrade(input(two,"361",39.87,1995),[first]),null);
+  assert.equal(mod.matchApartmentTrade(input(one,"365",42.75,1993),[first,second]),null);
+  assert.equal(mod.matchApartmentTrade(input(two,"355",39.87,1995),[first,second]),null);
+  assert.equal(mod.matchApartmentTrade(input(one,"351",39.87,1993),[first,second]),null);
+  assert.equal(mod.matchApartmentTrade(input(two,"360",42.75,1995),[first,second]),null);
+  assert.equal(mod.matchApartmentTrade(input(one,"351",42.75,1995),[first,second]),null);
+  assert.equal(mod.matchApartmentTrade(input("퇴계주공",null,42.75,1993),[first,second]),null);
+});
+test("raw MOLIT building number and area must reach the source identity matcher", () => {
+  const server=fs.readFileSync("lib/apartment-server.ts","utf8");
+  assert.match(server,/buildingDong: text\(item\.aptDong\) \|\| null, exclusiveArea: area/);
+});

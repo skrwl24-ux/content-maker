@@ -310,6 +310,7 @@ function normalizeTrade(item: Record<string, string>, regionCode: string, comple
   const buildYear = intValue(item.buildYear);
   const matched = matchApartmentTrade({
     name: aptName, regionCode, legalDong, jibun, buildYear,
+    buildingDong: text(item.aptDong) || null, exclusiveArea: area,
   }, complexes);
   const aptSeq = text(item.aptSeq) || normalizeApartmentName(aptName);
   const cancelled = Boolean(text(item.cdealType) || text(item.cdealDay));
