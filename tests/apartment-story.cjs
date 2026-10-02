@@ -256,7 +256,7 @@ test("V3.1 final-copy audit catches mismatched name, missing tags, unknown trave
   assert.ok(wrong.checks.some(item => item.status === "warning" && item.label.includes("거리·시간")));
 });
 
-test("V3.1 final-copy audit recognizes three markers, seven tags, matching exact place", async () => {
+test("V3.1 final-copy audit recognizes three markers, 8–10 tags, matching exact place", async () => {
   const mod = await import("../lib/apartment-publish-check.mjs");
   const plan = {...(await parse(JSON.stringify({candidates:[example]})))[0],
     placeName:"성심당 본점",
@@ -269,7 +269,7 @@ test("V3.1 final-copy audit recognizes three markers, seven tags, matching exact
     "성심당 본점이 어떤 위치에 있는지도 함께 확인할 만합니다.",
     "[이미지 02 — 가격 비교]",
     "[이미지 03 — 오늘의 스토리]",
-    "#대전 #테스트아파트 #실거래 #시세 #생활권 #성심당 #아파트",
+    "#대전 #테스트아파트 #실거래 #시세 #생활권 #성심당 #아파트 #대전아파트",
   ].join("\n");
   const result = mod.auditApartmentArticle({mode:"bulk",name:"대전 테스트아파트",body:draft,plan});
   assert.equal(result.checks.filter(item => item.status === "warning").length,0);
@@ -336,7 +336,7 @@ test("V3.1 automatic story fallback is actually wired to all three article actio
     assert.match(source, /status !== "skipped"/);
   }
   assert.match(files.bulk, /autoArticleVisualPrompt \|\| makeLocationImagePrompt/);
-  assert.match(files.bulk, /본문 먼저 → 2\. 완성글 붙여넣기/);
+  assert.match(files.bulk, /본문 → 2\. 최종편집에서 생활정보 웹 검증/);
   assert.match(files.school, /autoVisual \|\| makeSchoolSummaryPrompt/);
   assert.match(files.mega, /autoVisual \|\| locationPrompt/);
 });
@@ -508,4 +508,46 @@ test("V3.2 lifestyle review is connected to the final article and happens before
   assert.match(panel,/ChatGPT에서 생활정보 웹 검증/);
   assert.match(panel, /parseLifeVerificationResult/);
   assert.match(panel,/applyLifeVerificationChanges/);
+});
+
+
+test("V3.3 Naver hashtag policy accepts 8 to 10 unique tags but rejects 7, 11 and duplicates", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const article = tags => [
+    "호매실마을13단지 전용 59㎡대 아파트 실거래 분석입니다.",
+    "[이미지 01 — 가격]",
+    "[이미지 02 — 실거래]",
+    "[이미지 03 — 생활정보]",
+    tags.join(" "),
+  ].join("\n");
+  const basic = ["#수원아파트", "#권선구아파트", "#호매실동", "#호매실마을13단지", "#아파트실거래가", "#전용59㎡", "#아파트가격변동"];
+  const extra = ["#호매실아파트시세", "#수원실거래", "#호매실생활권", "#실거래분석"];
+  for (const n of [8, 9, 10]) {
+    const result = mod.auditApartmentArticle({mode: "bulk", name: "호매실마을13단지", body: article([...basic, ...extra].slice(0,n))});
+    const tags = result.checks.find(item => item.label === "네이버 태그");
+    assert.equal(tags?.status, "pass", "tag count " + n);
+    assert.match(tags.detail, new RegExp(String(n)));
+  }
+  for (const n of [7, 11]) {
+    const result = mod.auditApartmentArticle({mode:"bulk",name:"호매실마을13단지",body:article([...basic,...extra].slice(0,n))});
+    assert.equal(result.checks.find(item=>item.label==="네이버 태그")?.status,"warning", "tag count " + n);
+  }
+  const duplicates=mod.auditApartmentArticle({
+    mode:"bulk",name:"호매실마을13단지",body:article([...basic, "#수원아파트"]),
+  });
+  assert.equal(duplicates.checks.find(item=>item.label==="네이버 태그")?.status,"warning");
+  assert.match(duplicates.checks.find(item=>item.label==="네이버 태그")?.detail || "", /중복|반복/);
+});
+
+test("V3.3 three apartment article modes request 8 to 10 source-relevant tags", () => {
+  const fs=require("node:fs");
+  for(const path of [
+    "app/apartment-bulk/page.tsx",
+    "app/apartment-bulk/SchoolDistrictWorkspace.tsx",
+    "app/apartment-bulk/MegaComplexWorkspace.tsx",
+  ]) {
+    const src=fs.readFileSync(path,"utf8");
+    assert.match(src,/네이버 태그[^\n]*8~10개/);
+    assert.doesNotMatch(src,/네이버 태그 7개/);
+  }
 });
