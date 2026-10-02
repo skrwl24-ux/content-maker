@@ -2454,28 +2454,37 @@ export default function ApartmentBulkPage() {
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
     [activeWorkType, workTopic, workMaterials, dailyDateKey]
   );
-  const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
-    () => ({
-      "00": makeSavedWorkImagePrompt("00", workTopic, workBody, workImageNotes),
-      "01": makeSavedWorkImagePrompt("01", workTopic, workBody, workImageNotes),
-      "02": makeSavedWorkImagePrompt("02", workTopic, workBody, workImageNotes),
-    }),
-    [workTopic, workBody, workImageNotes]
-  );
   const workBodyReadyForImages = workBody.trim().length >= 80;
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
-  const workTimeSeriesTable = useMemo(() => workTables.find(isTimeSeriesTable) || null, [workTables]);
-  const workPrimaryTable = workTimeSeriesTable || workTables[0] || null;
   const workTableCount = workTables.length;
+  const workImagePlan = useMemo(
+    () => makeWorkImagePlan(workTables.map((table) => ({
+      heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
+    }))),
+    [workTables]
+  );
+  const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
+    () => Object.fromEntries(workImagePlan.map((item) => [
+      item.slot, makeSavedWorkImagePrompt(item, workTopic, workBody, workImageNotes, workTables),
+    ])),
+    [workImagePlan, workTopic, workBody, workImageNotes, workTables]
+  );
   const naverTables = useMemo(() => extractMarkdownTables(finalBlogText), [finalBlogText]);
   const markdownTableCount = naverTables.length;
   const naverTimeSeriesTable = useMemo(
-    () => naverTables.find(isTimeSeriesTable) || null,
+    () => naverTables.find(isTimeSeriesTable) || null, [naverTables]
+  );
+  const naverWorkImagePlan = useMemo(
+    () => makeWorkImagePlan(naverTables.map((table) => ({
+      heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
+    }))),
     [naverTables]
   );
+  const usePlannedNaverImages = contentMode === "bulk" && Boolean(activeWorkId) &&
+    ["tip", "moving", "compare", "power"].includes(activeWorkType || "");
   const naverBlocks = useMemo(
-    () => parseNaverBlog(finalBlogText, tableHandlingMode),
-    [finalBlogText, tableHandlingMode]
+    () => parseNaverBlog(finalBlogText, tableHandlingMode, usePlannedNaverImages ? naverWorkImagePlan : undefined),
+    [finalBlogText, tableHandlingMode, usePlannedNaverImages, naverWorkImagePlan]
   );
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
@@ -3872,15 +3881,11 @@ export default function ApartmentBulkPage() {
               {workTableCount > 0 && (
                 <div className={styles.tableImageNotice}>
                   <div>
-                    <b>{workTimeSeriesTable ? "📈 시계열 표 감지됨" : `📊 표 ${workTableCount}개 감지됨`}</b>
-                    <span>
-                      {workTimeSeriesTable
-                        ? `${workTimeSeriesTable.heading || "시계열 데이터"} · ${workTimeSeriesTable.rows.length}개 시점 · 01 이미지 요청서가 증권앱형 라인차트로 자동 변경됩니다.`
-                        : `첫 번째 표 · ${workPrimaryTable?.rows.length || 0}행 × ${workPrimaryTable?.headers.length || 0}열 · 01 이미지 요청서가 표 전용으로 자동 변경됩니다.`}
-                    </span>
+                    <b>📊 표 {workTableCount}개 감지 · 전체 이미지 {workImagePlan.length}장</b>
+                    <span>표마다 01, 01-2, 01-3… 요청서를 독립 생성합니다. 검증된 시계열 표만 그래프로 만들며 네이버 최종편집에도 같은 번호를 사용합니다.</span>
                   </div>
                   <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
-                    {workTimeSeriesTable ? "시세 그래프 GPT 제작" : "표 이미지 GPT 제작"}
+                    {workImagePlan[1]?.kind === "chart" ? "시세 그래프 GPT 제작" : "첫 번째 표 이미지 GPT 제작"}
                   </button>
                 </div>
               )}
@@ -3888,56 +3893,37 @@ export default function ApartmentBulkPage() {
               <section className={styles.actionPanel}>
                 <div className={styles.actionHead}>
                   <p className={styles.eyebrow}>IMAGE REQUESTS</p>
-                  <h2>완성 글을 바탕으로 이미지 3장을 GPT에서 제작합니다.</h2>
+                  <h2>완성 글을 바탕으로 필요한 이미지 {workImagePlan.length}장을 GPT에서 제작합니다.</h2>
                   <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}</span>
                 </div>
                 <div className={styles.actionGrid}>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("00")}>
-                    <span className={styles.actionIcon}>🖼️</span>
-                    <b>00 · 썸네일 GPT 제작</b>
-                    <small>1254×1254 · 글 전체를 읽고 대표 장면과 짧은 후킹 문구 구성</small>
-                  </button>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("01")}>
-                    <span className={styles.actionIcon}>📊</span>
-                    <b>{workTimeSeriesTable ? "01 · 시세 그래프 GPT 제작" : workTableCount ? "01 · 표 이미지 GPT 제작" : "01 · 핵심 정보 GPT 제작"}</b>
-                    <small>
-                      {workTimeSeriesTable
-                        ? `시계열 표 ${workTimeSeriesTable.rows.length}개 시점 감지 · 1600×900 증권앱형 라인차트로 자동 반영`
-                        : workTableCount
-                          ? `표 ${workTableCount}개 감지 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행을 1600×900 이미지로 자동 반영`
-                          : "1600×900 · 일정·가격·환율 등 본문의 핵심 정보를 한눈에 정리"}
-                    </small>
-                  </button>
-                  <button type="button" className={styles.actionButton} disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT("02")}>
-                    <span className={styles.actionIcon}>🔗</span>
-                    <b>02 · 원인·흐름 GPT 제작</b>
-                    <small>1600×900 · 원인→과정→결과 또는 주요 변수 관계를 시각화</small>
-                  </button>
+                  {workImagePlan.map((item) => (
+                    <button key={item.slot} type="button" className={styles.actionButton}
+                      disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>
+                      <span className={styles.actionIcon}>{item.kind === "thumbnail" ? "🖼️" : item.kind === "flow" ? "🔗" : item.kind === "chart" ? "📈" : "📊"}</span>
+                      <b>{item.slot} · {item.label} GPT 제작</b>
+                      <small>{item.width}×{item.height} · {item.heading || item.role}</small>
+                    </button>
+                  ))}
                 </div>
               </section>
 
               <details className={styles.advancedDetails}>
-                <summary>이미지 제작 요청서 확인 · 복사</summary>
+                <summary>이미지 제작 요청서 확인 · 복사 ({workImagePlan.length}장)</summary>
                 <div className={styles.advancedBody}>
-                  {(["00", "01", "02"] as WorkImageSlot[]).map((slot) => (
-                    <section className={styles.promptSection} key={slot}>
+                  {workImagePlan.map((item) => (
+                    <section className={styles.promptSection} key={item.slot}>
                       <div className={styles.promptHead}>
                         <div>
-                          <b>{slot} · {slot === "01" && workTimeSeriesTable ? "시세 그래프" : slot === "01" && workTableCount ? "표 이미지" : WORK_IMAGE_META[slot].label} 요청서</b>
-                          <span>
-                            {slot === "01" && workTimeSeriesTable
-                              ? `1600×900 · 시계열 ${workTimeSeriesTable.rows.length}개 시점 라인차트 자동 반영`
-                              : slot === "01" && workTableCount
-                                ? `1600×900 · 첫 번째 표 ${workPrimaryTable?.rows.length || 0}행 데이터 자동 반영`
-                                : `${WORK_IMAGE_META[slot].width}×${WORK_IMAGE_META[slot].height} · 완성 글 내용 자동 반영`}
-                          </span>
+                          <b>{item.slot} · {item.label} 요청서</b>
+                          <span>{item.width}×{item.height} · {item.heading || item.role}</span>
                         </div>
                       </div>
-                      <textarea className={styles.promptBoxCompact} value={workImagePrompts[slot]} readOnly />
+                      <textarea className={styles.promptBoxCompact} value={workImagePrompts[item.slot]} readOnly />
                       <div className={styles.promptActionsCompact}>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(slot)}>ChatGPT에서 열기</button>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(slot)}>
-                          {workImagePromptCopied === slot ? "✓ 복사 완료" : "요청서 복사"}
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>ChatGPT에서 열기</button>
+                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(item.slot)}>
+                          {workImagePromptCopied === item.slot ? "✓ 복사 완료" : "요청서 복사"}
                         </button>
                       </div>
                     </section>
@@ -4407,7 +4393,9 @@ export default function ApartmentBulkPage() {
                   className={styles.naverInput}
                   value={finalBlogText}
                   onChange={(e) => {
-                    setFinalBlogText(e.target.value);
+                    const nextBody = e.target.value;
+                    setFinalBlogText(nextBody);
+                    if (usePlannedNaverImages) setWorkBody(nextBody);
                     setNaverCopyMessage("");
                   }}
                   placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요. 마크다운 표도 그대로 붙여넣어도 됩니다."
