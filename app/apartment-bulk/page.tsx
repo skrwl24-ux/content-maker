@@ -1112,7 +1112,7 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", pla
         block.type === "subheading" && /(왜|원인|기본 구조|영향|변수|흐름)/.test(block.text)
       );
       const firstTableIndex = blocks.findIndex((block) =>
-        block.type === "image" && /^\\[이미지\\s*01(?:-|\\s|·|\\])/.test(block.text)
+        block.type === "image" && (block.text.startsWith("[이미지 01 ") || block.text.startsWith("[이미지 01-") || block.text.startsWith("[이미지 01·"))
       );
       const start = headingIndex >= 0 ? headingIndex : firstTableIndex;
       const nextHeading = blocks.findIndex((block, index) => index > start && block.type === "subheading");
