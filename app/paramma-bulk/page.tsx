@@ -499,7 +499,7 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
       : "본문에 확인된 추가 보상 중 02번 킥 카드와 독립된 한 가지를 저장용 정보 카드로 보여준다. 실용 킥은 재발 방지·유지 관리·상황별 비교, 그 외의 주제는 중요한 안전·한계·오해 해소·관찰 포인트를 선택한다. 이미지 01의 원리 또는 02번의 핵심 방법을 반복하지 않으며, 독립적인 정보가 없으면 사용하지 않는다. 글에 없는 새 사실을 만들지 않는다.";
   return legacy
     .replace(`역할: ${info.role}
-이 이미지가 전달할 내용: ${info.copy}`, `역할: ${slotId === "01" ? "핵심 원리" : slotId === "02" ? "이번 글의 발견·보상" : "추가 보상·비교"}
+이 이미지가 전달할 내용: ${info.copy}`, `역할: ${slotId === "01" ? "핵심 원리" : slotId === "02" ? "이번 글의 발견·보상" : "추가 실용 정보 · 예방 · 비교"}
 이 이미지가 전달할 내용: ${purpose}`)
     .replace("[제작 목표]", `[Paramma V2 · 이미지 기획]
 - 주제: ${topic.title}
@@ -653,7 +653,12 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId) {
     const missingPlan = work.body.trim() && !bodyPlans["03"]
       ? "\n\n[선택 슬롯 사용 확인]\n- 완성 본문 이미지 기획 메모에서 03의 독립적인 내용을 찾지 못했다. 본문에 후속 정보가 실제로 있는지 확인하고 없으면 03은 생성하지 말 것."
       : "";
-    return base + latestRules + kickNote + previousSlot + missingPlan + syncedPlan;
+    // 기존 저장 원본은 그대로 두고 복사·ChatGPT 전송본의 03 역할 표기만 최신화한다.
+    const effectiveBase = base.replace(
+      /(\[이미지 역할\]\r?\n슬롯:\s*03[^\n]*\r?\n역할:\s*)[^\r\n]*/,
+      "$1추가 실용 정보 · 예방 · 비교"
+    );
+    return effectiveBase + latestRules + kickNote + previousSlot + missingPlan + syncedPlan;
   }
 
   if (slotId !== "02") return base + syncedPlan;
