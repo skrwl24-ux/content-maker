@@ -64,8 +64,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       mismatches:[] as string[],reason:"조회할 대표 면적의 월별 자료가 없습니다."};
     const recentSix = normalizedMonthly.slice(-6);
     if (areaGroup != null && recentSix.length) {
-      const firstKey = String(recentSix[0].month);
-      const lastKey = String(recentSix[recentSix.length - 1].month);
+      const firstKey = String(recentSix[0].month).slice(0, 7);
+      const lastKey = String(recentSix[recentSix.length - 1].month).slice(0, 7);
       const [year, month] = lastKey.split("-").map(Number);
       const next = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7) + "-01";
       const {data: tradeRows, count: total, error: rawError} = await supabase
