@@ -163,3 +163,117 @@ test("V3 parser preserves existing V2 story research as safe fallbacks", async (
   assert.equal(result[0].kick,example.facts);
   assert.equal(result[0].visualMode,"map-hybrid");
 });
+
+
+test("V3.1 research asks for lived discovery, landmark access, source and a strict JSON sample", async () => {
+  const mod = await import("../lib/apartment-story.mjs");
+  const prompt = mod.makeApartmentV3PlanningPrompt({
+    mode:"bulk", name:"대전 테스트아파트",region:"대전 중구",
+    dataSummary:"실거래 6.5억 / 6개월 거래 흐름",
+    previousTopics:"학원가", regionalHints:"성심당 본점 · 자료일 2026-09-15"
+  });
+  assert.match(prompt, /성심당/);
+  assert.match(prompt, /discovery/);
+  assert.match(prompt, /placeName/);
+  assert.match(prompt, /accessSourceUrl/);
+  assert.match(prompt, /storyDraft/);
+  assert.match(prompt, /성심당 본점 · 자료일/);
+  const sample = prompt.split("\n[STORY_JSON]\n")[1].split("\n[/STORY_JSON]\n")[0];
+  assert.ok(JSON.parse(sample).candidates.length === 1);
+});
+
+test("V3.1 imports exact destination and editor's living discovery fields", async () => {
+  const input = {
+    candidates:[{...example,
+      topic:"대전 테스트 아파트 매매 흐름",
+      discovery:"단지에서 성심당 본점까지의 실제 교통 생활권을 이해할 수 있다.",
+      placeName:"성심당 본점",
+      accessInfo:"거리 미확인",
+      accessSourceUrl:"",
+      storyDraft:"가격 흐름을 살펴봤습니다. 지역 생활권에서는 성심당 본점도 알아볼 만합니다.",
+      visualMode:"map-hybrid",
+      visualFacts:"성심당 본점의 정확한 위치 확인 후 표시"
+    }]
+  };
+  const [story] = await parse("[STORY_JSON]" + JSON.stringify(input) + "[/STORY_JSON]");
+  assert.equal(story.placeName, "성심당 본점");
+  assert.equal(story.discovery,input.candidates[0].discovery);
+  assert.equal(story.storyDraft,input.candidates[0].storyDraft);
+  assert.equal(story.accessSourceUrl,"");
+});
+
+test("V3.1 fact lock masks route numbers without an independent source in article AND image", async () => {
+  const mod = await import("../lib/apartment-story.mjs");
+  const plan = {...(await parse(JSON.stringify({candidates:[example]})))[0],
+    topic:"대전의 매매 흐름과 성심당 생활권",
+    discovery:"성심당 본점까지 도보 10분 안에 갈 수 있다",
+    placeName:"성심당 본점",
+    accessInfo:"도보 10분",
+    accessSourceUrl:"",
+    storyDraft:"아파트에서 성심당 본점까지 도보 10분이라고 합니다.",
+    visualFacts:"성심당 본점까지 도보 10분",
+  };
+  const sheet = mod.makeStoryFactSheet(plan);
+  const body = mod.makeApprovedStoryBlock(plan);
+  const visual = mod.makeApprovedStoryVisualPrompt(plan,{mode:"bulk",
+    name:"대전 테스트 아파트",region:"대전",finalStoryExcerpt:"본문에 도보 10분이라고 써 있었습니다."
+  });
+  assert.doesNotMatch(sheet,/10분/);
+  assert.doesNotMatch(body,/10분/);
+  assert.doesNotMatch(visual,/10분/);
+  assert.match(sheet,/독립적인 경로 근거/);
+  assert.match(visual,/이동거리·시간 미확인/);
+  const sourced = {...plan,accessSourceUrl:"https://www.example.org/real-route"};
+  assert.match(mod.makeStoryFactSheet(sourced),/도보 10분/);
+});
+
+test("V3.1 finished article excerpt requires the exact subject and destination", async () => {
+  const mod = await import("../lib/apartment-story.mjs");
+  const plan = {...(await parse(JSON.stringify({candidates:[example]})))[0],
+    placeName:"성심당 본점",
+  };
+  const body = "대전 테스트아파트 최근 거래가격 6.5억.\n가격 흐름과 함께 성심당 본점 접근성도 살펴봅니다.\n거리는 경로 확인이 필요합니다.";
+  assert.match(mod.extractStoryExcerpt(body,plan,"대전 테스트아파트"),/성심당 본점/);
+  assert.equal(mod.extractStoryExcerpt(body,plan,"다른 아파트"),"");
+  assert.equal(mod.extractStoryExcerpt(body,{...plan,placeName:"다른 지점"},"대전 테스트아파트"),"");
+});
+
+test("V3.1 final-copy audit catches mismatched name, missing tags, unknown travel claims", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const plan = {...(await parse(JSON.stringify({candidates:[example]})))[0],
+    placeName:"성심당 본점",
+    accessInfo:"",
+    accessSourceUrl:"",
+  };
+  const wrong = mod.auditApartmentArticle({
+    mode:"bulk", name:"대전 테스트아파트", plan,
+    body:"다른 아파트 6.5억.\n[이미지 01]\n도보 10분 거리입니다.\n[이미지 03]\n#아파트 #시세",
+  });
+  assert.equal(wrong.ready,true);
+  assert.ok(wrong.checks.some(item => item.status === "warning" && item.label.includes("현재 대상")));
+  assert.ok(wrong.checks.some(item => item.status === "warning" && item.label.includes("이미지 위치")));
+  assert.ok(wrong.checks.some(item => item.status === "warning" && item.label.includes("태그")));
+  assert.ok(wrong.checks.some(item => item.status === "warning" && item.label.includes("거리·시간")));
+});
+
+test("V3.1 final-copy audit recognizes three markers, seven tags, matching exact place", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const plan = {...(await parse(JSON.stringify({candidates:[example]})))[0],
+    placeName:"성심당 본점",
+    accessInfo:"",
+    accessSourceUrl:"",
+  };
+  const draft = [
+    "대전 테스트아파트 최근 실거래 6.5억.",
+    "[이미지 01 — 가격]",
+    "성심당 본점이 어떤 위치에 있는지도 함께 확인할 만합니다.",
+    "[이미지 02 — 가격 비교]",
+    "[이미지 03 — 오늘의 스토리]",
+    "#대전 #테스트아파트 #실거래 #시세 #생활권 #성심당 #아파트",
+  ].join("\n");
+  const result = mod.auditApartmentArticle({mode:"bulk",name:"대전 테스트아파트",body:draft,plan});
+  assert.equal(result.checks.filter(item => item.status === "warning").length,0);
+  assert.ok(result.checks.some(item => item.status === "review" && item.label.includes("실거래")));
+  assert.ok(result.checks.some(item => item.status === "pass" && item.label.includes("태그")));
+  assert.ok(result.checks.some(item => item.status === "pass" && item.label.includes("장소")));
+});
