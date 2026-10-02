@@ -2409,11 +2409,18 @@ export default function ApartmentBulkPage() {
     () => makeApartmentStoryResearchPrompt(data, selectedArticleTheme),
     [data, selectedArticleTheme]
   );
+  // An unlinked complex is NOT proof of zero sales. Block publication prompts
+  // until a real monthly series for this selected complex exists.
+  const selectedComplexNeedsMatching = Boolean(selectedComplexName &&
+    !monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0));
   const bodyPrompt = useMemo(
-    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
-      v3Planner.handled ? null : appliedStory, approvedV3,
-      v3Planner.current.status !== "skipped"),
-    [data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled, v3Planner.current.status]
+    () => selectedComplexNeedsMatching
+      ? "[실거래 데이터 매칭 대기]\n" + data.name +
+        "의 최근 6개월 거래 원자료가 이 단지에 아직 연결되지 않았습니다. 실제 무거래 0건으로 판단하거나 샘플 가격으로 본문을 작성하지 마세요. 데이터 재동기화 후 다시 열어주세요."
+      : makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
+        v3Planner.handled ? null : appliedStory, approvedV3,
+        v3Planner.current.status !== "skipped"),
+    [selectedComplexNeedsMatching, data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled, v3Planner.current.status]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -2770,11 +2777,11 @@ export default function ApartmentBulkPage() {
           ...SAMPLE,
           name: detail.complex.name || SAMPLE.name,
           region: region || SAMPLE.region,
-          area: detail.representativeArea ? "전용 " + detail.representativeArea : SAMPLE.area,
-          recentPrice: recent ? formatWon(recent) : SAMPLE.recentPrice,
-          previousPrice: firstMedian ? "6개월 전 대표값 " + formatWon(firstMedian) : SAMPLE.previousPrice,
-          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : SAMPLE.households,
-          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : SAMPLE.moveIn,
+          area: detail.representativeArea ? "전용 " + detail.representativeArea : "",
+          recentPrice: recent != null && Number.isFinite(recent) ? formatWon(recent) : "",
+          previousPrice: firstMedian != null && Number.isFinite(firstMedian) ? "6개월 전 대표값 " + formatWon(firstMedian) : "",
+          households: detail.complex.households ? detail.complex.households.toLocaleString("ko-KR") + "세대" : "",
+          moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : "",
           station: "",
           locationLine: "",
           question: "",
@@ -3950,7 +3957,9 @@ export default function ApartmentBulkPage() {
 
           {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
           {selectedComplexName && !selectedComplexLoading && (
-            <div className={styles.autoLoad}><b>{selectedComplexName}</b> 실거래 데이터가 자동으로 입력됐습니다.</div>
+            <div className={styles.autoLoad}><b>{selectedComplexName}</b> {selectedComplexNeedsMatching
+              ? "실거래 원본 매칭 대기 · 현재 0건은 실제 무거래를 뜻하지 않습니다. 원자료 연결·재동기화 전에는 시세 글을 생성하지 마세요."
+              : "확인된 월별 실거래 데이터가 자동으로 입력됐습니다."}</div>
           )}
 
           <div className={styles.grid2}>
@@ -4141,26 +4150,26 @@ export default function ApartmentBulkPage() {
             </div>
 
             <div className={styles.actionGrid}>
-              <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openBodyPromptInChatGPT}>
                 <span className={styles.actionIcon}>📝</span>
                 <b>1. {approvedV3 ? "승인된 생활 스토리로 본문 만들기" : v3Planner.current.status === "skipped" ? "데이터 분석 본문 만들기" : "가격 + 생활 이야기 본문 만들기"}</b>
                 <small>먼저 본문 제작 → 완성글을 아래 네이버 최종편집에 붙여넣기</small>
               </button>
 
-              <button type="button" className={styles.actionButton} onClick={openThumbnailPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openThumbnailPromptInChatGPT}>
                 <span className={styles.actionIcon}>🖼️</span>
                 <b>2. 썸네일 만들기</b>
                 <small>{autoArticleVisualPrompt ? "실제 완성글의 생활 스토리 자동 반영" : "1254×1254 · 본문을 먼저 붙여넣으면 이야기도 연동"}</small>
               </button>
 
-              <button type="button" className={styles.actionButton} disabled={!monthlyStats.length} onClick={openPriceImagePromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching || !monthlyStats.some(item => item.medianPrice != null)} onClick={openPriceImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>📈</span>
                 <b>3. 시세 그래프 만들기</b>
                 <small>6개월 월별 가격 + 거래건수 자동 입력</small>
               </button>
 
               <button type="button" className={styles.actionButton}
-                disabled={!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt}
+                disabled={selectedComplexNeedsMatching || (!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt)}
                 onClick={openLocationImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>🗺️</span>
                 <b>4. {approvedV3 || autoArticleVisualPrompt ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>

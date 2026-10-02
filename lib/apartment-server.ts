@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { matchApartmentTrade, normalizeApartmentName } from "./apartment-trade-matching.mjs";
+export { normalizeApartmentName } from "./apartment-trade-matching.mjs";
 
 const FALLBACK_SUPABASE_URL = "https://ygrgamfvykuyhijogxou.supabase.co";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_FPIPh89R0_78FfWzagT7hw_PGWSNE21";
@@ -94,16 +96,6 @@ function numberValue(v: unknown) {
 function intValue(v: unknown) {
   const n = numberValue(v);
   return n == null ? null : Math.trunc(n);
-}
-
-export function normalizeApartmentName(name: string) {
-  return String(name || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/아파트/g, "")
-    .replace(/\bapt\b/g, "")
-    .replace(/[\s·ㆍ.\-_,()[\]{}]/g, "")
-    .trim();
 }
 
 function xmlDecode(value: string) {
@@ -298,40 +290,6 @@ function safeDate(year: number | null, month: number | null, day: number | null)
   return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : null;
 }
 
-function levenshtein(a: string, b: string) {
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    let last = i - 1;
-    prev[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const old = prev[j];
-      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, last + (a[i - 1] === b[j - 1] ? 0 : 1));
-      last = old;
-    }
-  }
-  return prev[b.length];
-}
-
-function similarity(a: string, b: string) {
-  const max = Math.max(a.length, b.length);
-  return max ? 1 - levenshtein(a, b) / max : 1;
-}
-
-function matchComplex(tradeName: string, legalDong: string | null, complexes: ComplexRow[]) {
-  const normalized = normalizeApartmentName(tradeName);
-  const sameDong = legalDong ? complexes.filter((c) => c.legal_dong === legalDong) : [];
-  const pool = sameDong.length ? sameDong : complexes;
-  const exact = pool.filter((c) => c.normalized_name === normalized);
-  if (exact.length === 1) return exact[0];
-  const scored = pool
-    .map((c) => ({ complex: c, score: similarity(normalized, c.normalized_name) }))
-    .sort((a, b) => b.score - a.score);
-  if (scored[0] && scored[0].score >= 0.88 && (!scored[1] || scored[0].score - scored[1].score >= 0.05)) return scored[0].complex;
-  return null;
-}
-
 function normalizeTrade(item: Record<string, string>, regionCode: string, complexes: ComplexRow[]): NormalizedTrade | null {
   const aptName = text(item.aptNm);
   const area = numberValue(item.excluUseAr);
@@ -343,9 +301,12 @@ function normalizeTrade(item: Record<string, string>, regionCode: string, comple
   if (!aptName || area == null || dealAmount == null || !contractDate || !year || !month) return null;
 
   const legalDong = text(item.umdNm) || null;
-  const matched = matchComplex(aptName, legalDong, complexes);
   const floor = intValue(item.floor);
   const jibun = text(item.jibun) || null;
+  const buildYear = intValue(item.buildYear);
+  const matched = matchApartmentTrade({
+    name: aptName, regionCode, legalDong, jibun, buildYear,
+  }, complexes);
   const aptSeq = text(item.aptSeq) || normalizeApartmentName(aptName);
   const cancelled = Boolean(text(item.cdealType) || text(item.cdealDay));
   const priceWon = Math.round(dealAmount * 10000);
@@ -366,7 +327,7 @@ function normalizeTrade(item: Record<string, string>, regionCode: string, comple
     price_won: priceWon,
     floor,
     jibun,
-    build_year: intValue(item.buildYear),
+    build_year: buildYear,
     cancelled,
     cancellation_date: null,
     source_trade_key: key,
