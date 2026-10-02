@@ -31,6 +31,7 @@ export type ApartmentStoryVisualMode = ApartmentStoryCandidate["visualMode"];
 export declare function makeApartmentV3PlanningPrompt(input: {
   mode: ApartmentStoryMode; name: string; region: string; dataSummary: string; previousTopics?: string; regionalHints?: string;
 }): string;
+export declare function safeStoryDisplayText(value: string | undefined, plan: ApartmentStoryCandidate | null): string;
 export declare function makeStoryFactSheet(plan: ApartmentStoryCandidate | null): string;
 export declare function extractStoryExcerpt(body: string, plan: ApartmentStoryCandidate | null, name?: string): string;
 export declare function makeApprovedStoryBlock(plan: ApartmentStoryCandidate | null): string;
