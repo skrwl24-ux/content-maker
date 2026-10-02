@@ -4456,6 +4456,12 @@ export default function ApartmentBulkPage() {
                 body={finalBlogText}
                 plan={contentMode === "bulk" ? approvedV3 : seriesAudit?.mode === contentMode ? seriesAudit.plan : null}
                 dataSummary={contentMode === "bulk" ? plannerInput.dataSummary : seriesAudit?.mode === contentMode ? seriesAudit.dataSummary : ""}
+                sourceData={contentMode === "bulk" ? {
+                  area: data.area,
+                  recentPrice: data.recentPrice,
+                  previousPrice: data.previousPrice,
+                  monthly: monthlyStats.slice(-6),
+                } : null}
               />
             )}
             <div className={styles.naverCopyActions}>
