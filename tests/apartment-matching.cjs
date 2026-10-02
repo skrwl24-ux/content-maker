@@ -214,7 +214,7 @@ test("V2 review keeps source reports private and requires two deliberate phases"
   assert.match(api,/stage_apartment_identity_review/);
   assert.match(api,/approve_apartment_identity_review/);
   assert.match(api,/confirmedSourceName\.trim\(\)/);
-  assert.match(api,/new Set\(hosts\)\.size<2/);
+  assert.match(api,/new Set\(authorities\)\.size<2/);
   assert.doesNotMatch(api,/CRON_SECRET/);
   assert.match(targets,/createApartmentReadClient/);
   assert.match(targets,/\.eq\("region_code",c\.region_code\)\.eq\("legal_dong",c\.legal_dong\)/);
@@ -227,4 +227,14 @@ test("V2 review keeps source reports private and requires two deliberate phases"
   const aggregation=sync.indexOf("const activeTrades = normalized.filter");
   assert.ok(approvedLookup>0 && upsert>approvedLookup && aggregation>upsert);
   assert.match(sync,/if \(row\.complex_id && row\.complex_id !== approved\)/);
+});
+
+
+test("approved source record drift is blocked before any monthly/snapshot overwrite", () => {
+ const guard=fs.readFileSync(
+  "supabase/migrations/20261002_identity_review_v2_upstream_guard.sql","utf8"
+ );
+ assert.match(guard,/v_old_key<>v_key AND EXISTS/);
+ assert.match(guard,/Manual review is required/);
+ assert.match(guard,/Automatic apartment matching conflicts with approved source alias/);
 });

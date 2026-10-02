@@ -67,8 +67,13 @@ function parseReport(value:unknown):Audit {
     parsed.explanation.length>3000)throw new Error("근거 설명은 30~3,000자로 작성해 주세요.");
   if(!Array.isArray(parsed.sources)||parsed.sources.length<2||parsed.sources.length>6||
     !parsed.sources.every(officialSource))throw new Error("서로 다른 공식 기관의 해당 단지 근거 URL 2~6개와 확인한 사실을 기재해 주세요.");
-  const hosts=(parsed.sources as EvidenceSource[]).map(s=>new URL(s.url).hostname);
-  if(new Set(hosts).size<2)throw new Error("서로 다른 공식 출처 호스트가 최소 2개 필요합니다.");
+  const authorities=(parsed.sources as EvidenceSource[]).map(s=>{
+    const hostname=new URL(s.url).hostname.toLowerCase();
+    if(hostname==="k-apt.go.kr"||hostname.endsWith(".k-apt.go.kr"))return "k-apt.go.kr";
+    if(hostname==="gov.kr"||hostname.endsWith(".gov.kr"))return "gov.kr";
+    return hostname.split(".").slice(-3).join(".");
+  });
+  if(new Set(authorities).size<2)throw new Error("서로 다른 공식 기관의 근거 자료가 최소 2개 필요합니다.");
   if(!/^[a-f0-9]{32}$/.test(parsed.candidateKey as string) ||
     !uuid.test(parsed.targetComplexId as string) ||
     String(parsed.regionCode).length!==5)
