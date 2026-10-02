@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type MegaComplexPreset = {
@@ -44,7 +44,7 @@ function researchRules(complex: MegaComplexPreset) {
   ].join("\n");
 }
 
-function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | null) {
+function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | null, autoDiscover = true) {
   return [
     "네이버 블로그용 수도권 초대형 아파트 단지 분석글을 최종 발행본으로 작성해줘.",
     "",
@@ -57,7 +57,10 @@ function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | 
     "",
     researchRules(complex),
     "",
-    ...(plan ? [makeApprovedStoryBlock(plan), ""] : []),
+    ...(plan ? [makeApprovedStoryBlock(plan), ""]
+      : autoDiscover ? [makeAutomaticLivingStoryBlock({
+          mode: "mega", name: complex.name, region: complex.region,
+        }), ""] : []),
     "[이번 글의 핵심 방향 — 최우선]",
     "- 초대형단지라는 규모 자체만 보여주지 말고 '이 지역에서 이 정도 규모의 단지는 실제 가격·거래·생활권이 어떻게 움직일까?'를 중심으로 쓸 것.",
     "- 제목과 첫 문장은 단지명만으로 시작하지 말고 가능하면 상위 지역명 또는 대표 생활권을 먼저 열어 검색 범위를 넓힐 것.",
@@ -91,7 +94,7 @@ function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | 
     "4. 최근 6개월 가격·거래량 흐름",
     "5. 단지 규모가 실제 생활에 주는 장점과 불편",
     "6. 역·상권·학교·공원 등 생활권",
-    ...(plan ? ["7. 스토리 킥과 연결된 실생활 질문 하나에 검증된 자료로 답할 것. 규모나 축제가 집값의 직접 원인인 것처럼 단정하지 말 것."] : []),
+    ...(plan || autoDiscover ? ["7. 단지 규모·입지에서 자연스럽게 연결되는 실거주 생활 발견 한 가지: 지역 명소·카페·공원 또는 단지 내 동별 생활 동선에서 실제 단지와 관계가 검증되는 질문 하나를 소제목으로 만들고 3~5문장으로 답할 것. 가격 변동과 억지 인과관계 금지. 적절한 출처가 없으면 실제 확인한 입지만 설명."] : []),
     "8. 최근 거래에서 체크할 포인트",
     "9. 3줄 요약",
     "",
@@ -107,7 +110,7 @@ function bodyPrompt(complex: MegaComplexPreset, plan: ApartmentStoryCandidate | 
     "[이미지 위치]",
     "도입 뒤: [이미지 01 — 초대형단지 규모 핵심]",
     "가격 흐름 뒤: [이미지 02 — 34평대 가격·거래 흐름]",
-    plan ? "스토리 설명 뒤: [이미지 03 — 오늘의 스토리 비주얼]" : "입지 설명 뒤: [이미지 03 — 입지·생활권]",
+    plan ? "스토리 설명 뒤: [이미지 03 — 오늘의 스토리 비주얼]" : autoDiscover ? "검증된 생활 이야기 뒤: [이미지 03 — 실제 생활 발견 또는 입지·생활권]" : "입지 설명 뒤: [이미지 03 — 입지·생활권]",
     "",
     "[출력 스타일]",
     "- 한 문장 = 한 문단",
@@ -331,19 +334,29 @@ export default function MegaComplexWorkspace({
       "\n규모로부터 실제 거주에 연결되는 공개 질문을 찾고 단일단지/합산형을 혼동하지 말 것.",
   };
   const planner = useApartmentStoryPlanner(plannerInput);
+  const autoDiscover = !planner.approved && planner.current.status !== "skipped";
+  const autoVisual = useMemo(() => !planner.approved && autoDiscover
+    ? makeArticleBasedStoryVisualPrompt({
+        mode: "mega", name: complex.name, region: complex.region, body: finalBodyText,
+      }) : "",
+    [planner.approved, autoDiscover, complex.name, complex.region, finalBodyText]);
   const prompts = useMemo(() => ({
     thumbnail: thumbnailPrompt(complex) + (planner.approved
       ? "\n\n" + makeStoryFactSheet(planner.approved) +
         "\n이 단지에서 누릴 생활은 카드와 동일한 장소/지점을 사용하고 검증되지 않은 거리를 추가하지 말 것." +
-        "\n썸네일에서 실제 검증된 단지 규모나 34평대 가격 중 강한 숫자 한 개만 부각." : ""),
+        "\n썸네일에서 실제 검증된 단지 규모나 34평대 가격 중 강한 숫자 한 개만 부각."
+      : autoVisual
+        ? "\n\n[V3.1 완성 원고 기반 썸네일]\n" + finalBodyText.slice(0, 2100) +
+          "\n단지 규모/가격의 검증 숫자 한 개를 중심으로. 생활 이야기는 실제 원고에 나온 하나만 보조 후킹으로 사용하고 새 거리·수치를 만들지 말 것."
+        : ""),
     scale: scalePrompt(complex),
     price: pricePrompt(complex),
     location: planner.approved ? makeApprovedStoryVisualPrompt(planner.approved, {
       mode: "mega", name: complex.name, region: complex.region,
       finalStoryExcerpt: extractStoryExcerpt(finalBodyText, planner.approved, complex.name),
-    }) : locationPrompt(complex),
-    body: bodyPrompt(complex, planner.approved),
-  }), [complex, planner.approved, finalBodyText]);
+    }) : autoVisual || locationPrompt(complex),
+    body: bodyPrompt(complex, planner.approved, autoDiscover),
+  }), [complex, planner.approved, finalBodyText, autoVisual, autoDiscover]);
   useEffect(() => {
     onPlanChange?.({
       mode: "mega", subjectKey: complex.id, name: complex.name,
@@ -443,19 +456,21 @@ export default function MegaComplexWorkspace({
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {complex.name}</p>
           <h2>{complex.households} 초대형단지 · 34평대 가격과 실제 생활은?</h2>
-          <span>{planner.approved ? "잠긴 생활 발견 카드가 본문·썸네일·03번 이미지에 연동됩니다. 완성글을 최종편집에 붙이면 마지막 이미지도 실제 문단을 참고합니다." : "기존 규모·매매·전세 검증이 기본입니다. 스토리를 승인하면 본문과 마지막 이미지에 적용됩니다."}</span>
+          <span>{planner.approved ? "🔒 승인한 생활 발견이 본문·썸네일·03번 이미지에 연동됩니다."
+            : autoDiscover ? "🔎 기본 ON · 스토리를 따로 승인하지 않아도 본문 만들기에서 실제 대단지·지역 생활 이야기 한 개를 조사합니다. 완성글을 붙여넣으면 마지막 이미지도 연동됩니다."
+            : "데이터 집중 모드: 단지 규모·매매·전세·거래량 중심으로 작성합니다."}</span>
         </div>
 
         <div className={styles.actionGrid}>
           <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.body)}>
             <span className={styles.actionIcon}>📝</span>
             <b>본문 만들기</b>
-            <small>최신 실거래·전세·거래량까지 확인</small>
+            <small>{autoDiscover ? "실거래·전세·거래량 + 실제 생활 이야기" : "최신 실거래·전세·거래량 확인"}</small>
           </button>
           <button type="button" className={styles.actionButton} onClick={() => void copyAllImages()}>
             <span className={styles.actionIcon}>🖼️</span>
             <b>{copied ? "✓ 이미지 요청서 복사됨" : "이미지 4장 요청서 전체복사"}</b>
-            <small>00 썸네일 + 01 규모 + 02 가격 + 03 {planner.approved ? "스토리" : "입지"}</small>
+            <small>00 썸네일 + 01 규모 + 02 가격 + 03 {planner.approved || autoVisual ? "스토리" : "입지"}</small>
           </button>
         </div>
 
@@ -466,7 +481,7 @@ export default function MegaComplexWorkspace({
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}><b>00. 썸네일</b><small>1254×1254</small></button>
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.scale)}><b>01. 단지 규모</b><small>1600×900</small></button>
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}><b>02. 가격·거래</b><small>1600×900</small></button>
-              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.location)}><b>03. {planner.approved ? "스토리 비주얼" : "입지·생활권"}</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.location)}><b>03. {planner.approved || autoVisual ? "스토리 비주얼" : "입지·생활권"}</b><small>1600×900</small></button>
             </div>
           </div>
         </details>
