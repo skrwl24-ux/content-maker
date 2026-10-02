@@ -277,3 +277,47 @@ test("V3.1 final-copy audit recognizes three markers, seven tags, matching exact
   assert.ok(result.checks.some(item => item.status === "pass" && item.label.includes("태그")));
   assert.ok(result.checks.some(item => item.status === "pass" && item.label.includes("장소")));
 });
+
+
+test("V3.1 default body instructions search for a real living story even without an approved card", async () => {
+  const mod=await import("../lib/apartment-story.mjs");
+  for(const mode of ["bulk","school","mega"]){
+    const guide=mod.makeAutomaticLivingStoryBlock({
+      mode,name:"테스트 단지",region:"테스트지역",
+    });
+    assert.match(guide,/기본 ON/);
+    assert.match(guide,/실거래|매매|가격/);
+    assert.match(guide,/실생활|생활 이야기|생활 장면/);
+    assert.match(guide,/3~5문장/);
+    assert.match(guide,/검증|근거/);
+    assert.match(guide,/거리를|이동거리|소요시간/);
+    assert.match(guide,/성심당/);
+    assert.match(guide,/없거나 웹 검색이 불가능하면|찾지 못하거나 웹 검색이 불가능하면/);
+  }
+});
+
+test("V3.1 unapproved auto-story image prompt follows the actual article for the current complex", async () => {
+  const mod=await import("../lib/apartment-story.mjs");
+  const body=[
+    "군포 산본 테스트아파트 실거래 분석",
+    "최근 6개월 월 대표값을 분석했습니다.",
+    "여기 살면 무엇이 다를까?",
+    "검증된 자료를 바탕으로 철쭉동산의 계절 풍경을 살펴볼 수 있습니다.",
+    "다만 도보 10분은 경로 근거가 없어 확인이 필요합니다.",
+    "#군포 #산본",
+  ].join("\n");
+  const prompt=mod.makeArticleBasedStoryVisualPrompt({
+    mode:"bulk",name:"산본 테스트아파트",region:"경기 군포시",body,
+  });
+  assert.match(prompt,/철쭉동산/);
+  assert.match(prompt,/실제 본문과 연동/);
+  assert.doesNotMatch(prompt,/10분/);
+  assert.match(prompt,/이동거리·시간 미확인/);
+  assert.match(prompt,/새로운 명소|전혀 새로운 명소/);
+  assert.equal(mod.makeArticleBasedStoryVisualPrompt({
+    mode:"bulk",name:"다른 아파트",region:"경기",body,
+  }),"");
+  assert.equal(mod.makeArticleBasedStoryVisualPrompt({
+    mode:"mega",name:"산본 테스트아파트",region:"경기",body:"",
+  }),"");
+});
