@@ -489,6 +489,15 @@ export async function syncApartmentRegion(regionCode: string) {
     })) as unknown as JsonRecord[];
     await upsertInChunks(client, "apt_monthly_stats", monthlyRows, "complex_id,area_group,year_month", 400);
 
+    // A transaction may move from one apartment to another after better lot matching.
+    // Prune orphaned month/area rows only AFTER the new raw trades and aggregates
+    // were successfully upserted; never delete the underlying government data.
+    const { data: removedObsoleteMonthly, error: cleanupError } = await client.rpc(
+      "cleanup_apartment_monthly_stats",
+      { p_region_code: regionCode, p_months: monthLabels(7) }
+    );
+    if (cleanupError) throw cleanupError;
+
     const analysisDate = currentAnalysisDate();
     // Include the current and previous six calendar months, then keep the last
     // six valid monthly prices. This matches the six points shown by the editor.
@@ -584,6 +593,7 @@ export async function syncApartmentRegion(regionCode: string) {
       complexes: complexes.length,
       trades: normalized.length,
       matchedTrades: activeTrades.length,
+      obsoleteMonthlyRowsRemoved: Number(removedObsoleteMonthly || 0),
       candidates: candidateCount,
       priorityCandidates: priorityCount,
     };

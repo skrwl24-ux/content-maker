@@ -81,3 +81,18 @@ test("representative snapshot and most recent deal share the same area and six-p
   assert.match(detail,/\.eq\("area_group", areaGroup\)/);
   assert.match(detail,/areaGroup == null\s*\?\s*\{ data: null, error: null \}/);
 });
+
+
+test("regional sync reconciles unsupported month/area stats after successful upserts", () => {
+  const server=fs.readFileSync("lib/apartment-server.ts","utf8");
+  const migration=fs.readFileSync("supabase/migrations/20261002_cleanup_apartment_monthly_stats.sql","utf8");
+  const upsert=server.indexOf('await upsertInChunks(client, "apt_monthly_stats"');
+  const cleanup=server.indexOf('"cleanup_apartment_monthly_stats"');
+  const snapshots=server.indexOf('const analysisDate = currentAnalysisDate();');
+  assert.ok(upsert>0 && cleanup>upsert && snapshots>cleanup);
+  assert.match(server,/p_region_code: regionCode, p_months: monthLabels\(7\)/);
+  assert.match(server,/if \(cleanupError\) throw cleanupError/);
+  assert.match(migration,/GRANT EXECUTE ON FUNCTION public\.cleanup_apartment_monthly_stats\(text, text\[\]\) TO service_role/);
+  assert.match(migration,/REVOKE ALL ON FUNCTION public\.cleanup_apartment_monthly_stats\(text, text\[\]\) FROM anon, authenticated/);
+  assert.match(migration,/NOT EXISTS \(/);
+});
