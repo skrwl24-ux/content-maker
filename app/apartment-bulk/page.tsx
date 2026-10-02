@@ -6,6 +6,8 @@ import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
 import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
+import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
@@ -1593,7 +1595,8 @@ function makeBodyPrompt(
   monthlyStats: MonthlyStat[],
   recommendedAngle: string,
   articleTheme: ArticleThemeChoice,
-  story: ApartmentStoryCandidate | null
+  story: ApartmentStoryCandidate | null,
+  plannedStory: ApartmentStoryCandidate | null
 ) {
   const value = (text: string, fallback = "확인 필요") => text.trim() || fallback;
   const monthly = monthlyStats.slice(-6);
@@ -1612,7 +1615,7 @@ function makeBodyPrompt(
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
   const lastTradeCount = lastMonthly?.tradeCount ?? null;
   const articleAngle = recommendedAngle.trim();
-  const storyBlock = story ? `[선정한 동네 스토리 — 본문 반영 전에 원문 재확인]
+  const storyBlock = plannedStory ? makeApprovedStoryBlock(plannedStory) : story ? `[선정한 동네 스토리 — 본문 반영 전에 원문 재확인]
 주제: ${story.title}
 유형: ${story.kind}
 확인된 핵심 사실: ${story.facts}
@@ -1772,7 +1775,7 @@ ${storyBlock}
 [이미지 2 — 최근 6개월 시세 그래프]
 
 입지와 생활권 설명 전후:
-[이미지 3 — 입지 인포그래픽]
+[이미지 3 — ${plannedStory ? "선정한 스토리 비주얼" : "입지 인포그래픽"}]
 
 각 이미지 문구는 반드시 한 줄 단독으로 출력할 것.
 
@@ -2258,10 +2261,42 @@ export default function ApartmentBulkPage() {
     () => selectArticleTheme(monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle),
     [monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle]
   );
-  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme), [data, monthlyStats, selectedArticleTheme]);
-  const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
-  const locationImagePrompt = useMemo(() => makeLocationImagePrompt(data), [data]);
   const storyIdentity = apartmentStoryIdentity(data);
+  const plannerInput = {
+    mode: "bulk" as const,
+    subjectKey: activeWorkId || storyIdentity,
+    name: data.name,
+    region: data.region,
+    dataSummary: [
+      "대표 면적: " + data.area,
+      "최근 실거래: " + data.recentPrice,
+      "비교 가격: " + data.previousPrice,
+      "세대수: " + data.households,
+      "입주년도: " + data.moveIn,
+      "주요 역: " + data.station,
+      "기존 입지 메모: " + data.locationLine,
+      "기존 데이터에서 감지된 글 관점: " + selectedArticleTheme.label + " / " + selectedArticleTheme.angle,
+      "최근 6개월 월별 값: ",
+      ...monthlyStats.slice(-6).map(item => item.month + " / 월 대표가격: " +
+        (item.medianPrice == null ? "거래 없음" : formatWon(item.medianPrice)) +
+        " / 거래량 " + item.tradeCount + "건"),
+    ].join("\n"),
+  };
+  const v3Planner = useApartmentStoryPlanner(plannerInput);
+  const approvedV3 = v3Planner.approved;
+  const thumbnailPrompt = useMemo(() => makeThumbnailPrompt(data, monthlyStats, selectedArticleTheme) +
+    (approvedV3 ? "\n\n[V3 이번 글의 승인된 중심 주제]\n" + approvedV3.topic +
+      "\n본문 스토리 킥: " + approvedV3.kick +
+      "\n썸네일은 실거래 숫자와 중심 주제를 연결하되 확인되지 않은 수치나 축제 정보를 후킹으로 만들지 말 것." : ""),
+    [data, monthlyStats, selectedArticleTheme, approvedV3]);
+  const priceImagePrompt = useMemo(() => makePriceImagePrompt(data, monthlyStats), [data, monthlyStats]);
+  const locationImagePrompt = useMemo(() =>
+    approvedV3
+      ? makeApprovedStoryVisualPrompt(approvedV3, {
+          mode: "bulk", name: data.name, region: data.region, mapProvided: Boolean(mapDataUrl),
+        })
+      : makeLocationImagePrompt(data),
+    [approvedV3, data, mapDataUrl]);
   const storyCurrent = storyState.identity === storyIdentity;
   const storyCandidates = storyCurrent ? storyState.candidates : [];
   const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
@@ -2271,8 +2306,9 @@ export default function ApartmentBulkPage() {
     [data, selectedArticleTheme]
   );
   const bodyPrompt = useMemo(
-    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory),
-    [data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory]
+    () => makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
+      v3Planner.handled ? null : appliedStory, approvedV3),
+    [data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -3148,8 +3184,12 @@ export default function ApartmentBulkPage() {
   }
 
   function openLocationImagePromptInChatGPT() {
-    const chatWindow = window.open("about:blank", "_blank");
     const url = "https://chatgpt.com/?q=" + encodeURIComponent(locationImagePrompt);
+    if (approvedV3 && (approvedV3.visualMode !== "map-hybrid" || !mapDataUrl)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const chatWindow = window.open("about:blank", "_blank");
     void copyMapCaptureToClipboard().finally(() => {
       if (chatWindow) chatWindow.location.href = url;
       else window.open(url, "_blank", "noopener,noreferrer");
@@ -3852,6 +3892,10 @@ export default function ApartmentBulkPage() {
             </div>
           )}
 
+          <StoryPlanningPanel input={plannerInput} planner={v3Planner} />
+
+          <details className={styles.advancedDetails}>
+            <summary>이전 V2 동네 스토리 조사 (기존 저장한 자료 보기)</summary>
           <section className={styles.storyPanel}>
             <div className={styles.storyHeader}>
               <div>
@@ -3964,12 +4008,13 @@ export default function ApartmentBulkPage() {
             )}
             <p className={styles.storyFootnote}>좋은 후보가 없으면 생략합니다. 지난 행사를 다가올 행사처럼 쓰거나 일부 커뮤니티 의견을 지역 전체의 분위기로 단정하지 않습니다.</p>
           </section>
+          </details>
 
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
               <h2>이미지 3장과 본문을 ChatGPT에서 만듭니다.</h2>
-              <span>입지 이미지는 자동 준비된 네이버 지도 캡처를 클립보드에 복사한 뒤 새 채팅에서 Ctrl+V만 하면 됩니다.</span>
+              <span>{approvedV3 ? "승인된 주제에 맞춰 마지막 이미지는 스토리 비주얼로 제작합니다. 지도형은 확인된 캡처가 있을 때만 참고합니다." : "기존 입지 이미지는 자동 준비된 네이버 지도 캡처를 복사한 뒤 새 채팅에서 Ctrl+V로 참고할 수 있습니다."}</span>
             </div>
 
             <div className={styles.actionGrid}>
@@ -3993,12 +4038,12 @@ export default function ApartmentBulkPage() {
               <button
                 type="button"
                 className={styles.actionButton}
-                disabled={!mapDataUrl}
+                disabled={!mapDataUrl && !approvedV3}
                 onClick={openLocationImagePromptInChatGPT}
               >
                 <span className={styles.actionIcon}>🗺️</span>
-                <b>3. 입지 이미지 만들기</b>
-                <small>{mapDataUrl ? "지도 캡처 자동 복사 → 새 채팅에서 Ctrl+V" : "지도 준비 중"}</small>
+                <b>3. {approvedV3 ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>
+                <small>{approvedV3 ? "선정된 주제 · 사실 · 이미지 형식 자동 반영" : mapDataUrl ? "지도 캡처 자동 복사 → 새 채팅에서 Ctrl+V" : "지도 준비 중"}</small>
               </button>
 
               <button type="button" className={styles.actionButton} onClick={openBodyPromptInChatGPT}>
@@ -4049,14 +4094,14 @@ export default function ApartmentBulkPage() {
               <section className={styles.promptSection}>
                 <div className={styles.promptHead}>
                   <div>
-                    <b>🗺️ 입지 이미지 요청서</b>
-                    <span>네이버 지도는 위치 관계 참고용으로만 사용하도록 요청합니다.</span>
+                    <b>🗺️ {approvedV3 ? "스토리 비주얼 요청서" : "입지 이미지 요청서"}</b>
+                    <span>{approvedV3 ? "선정 주제와 이미지 유형에 맞는 검증 자료만 표시합니다." : "네이버 지도는 위치 관계 참고용으로만 사용하도록 요청합니다."}</span>
                   </div>
                 </div>
                 <textarea className={styles.promptBoxCompact} value={locationImagePrompt} readOnly />
                 <div className={styles.promptActionsCompact}>
                   <button type="button" onClick={() => void copyLocationImagePrompt()}>
-                    {locationPromptCopied ? "✓ 복사 완료" : "입지 요청서 복사"}
+                    {locationPromptCopied ? "✓ 복사 완료" : approvedV3 ? "스토리 이미지 요청서 복사" : "입지 요청서 복사"}
                   </button>
                   <button type="button" disabled={!mapDataUrl} onClick={() => void copyMapCaptureToClipboard()}>
                     지도 캡처 복사
