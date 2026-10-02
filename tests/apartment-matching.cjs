@@ -180,3 +180,51 @@ test("MOLIT-only source candidates never flow into publishable complex IDs", () 
   assert.match(ui, /자동 연결·발행 기능은 없습니다/);
   assert.match(main, /href="\/apartment-bulk\/unmatched"/);
 });
+
+
+test("V2 review keeps source reports private and requires two deliberate phases", () => {
+  const tables=fs.readFileSync("supabase/migrations/20261002_identity_review_v2_tables.sql","utf8");
+  const snapshots=fs.readFileSync("supabase/migrations/20261002_identity_review_v2_snapshot.sql","utf8");
+  const approval=fs.readFileSync("supabase/migrations/20261002_identity_review_v2_approval.sql","utf8");
+  const api=fs.readFileSync("app/api/apartment/unmatched-candidates/review/route.ts","utf8");
+  const targets=fs.readFileSync("app/api/apartment/unmatched-candidates/targets/route.ts","utf8");
+  const page=fs.readFileSync("app/apartment-bulk/unmatched/page.tsx","utf8");
+  const sync=fs.readFileSync("lib/apartment-server.ts","utf8");
+
+  assert.match(tables,/CREATE TABLE IF NOT EXISTS public\.apt_identity_review_decisions/);
+  assert.match(tables,/CREATE TABLE IF NOT EXISTS public\.apt_verified_source_aliases/);
+  assert.match(tables,/BEFORE INSERT OR UPDATE OF complex_id,region_code,legal_dong,jibun,source_apartment_name,build_year/);
+  assert.match(tables,/NEW\.complex_id:=v_target/);
+  assert.match(tables,/REVOKE ALL ON public\.apt_identity_review_decisions FROM PUBLIC, anon, authenticated/);
+  assert.match(snapshots,/CREATE OR REPLACE FUNCTION public\.rebuild_verified_apartment_snapshot/);
+  assert.match(snapshots,/representative_area_group/);
+  assert.match(snapshots,/ON CONFLICT\(analysis_date,complex_id\) DO UPDATE SET/);
+  assert.match(approval,/CREATE OR REPLACE FUNCTION public\.stage_apartment_identity_review/);
+  assert.match(approval,/CREATE OR REPLACE FUNCTION public\.approve_apartment_identity_review/);
+  const stage=approval.slice(approval.indexOf("CREATE OR REPLACE FUNCTION public.stage_apartment_identity_review"),
+    approval.indexOf("CREATE OR REPLACE FUNCTION public.approve_apartment_identity_review"));
+  assert.doesNotMatch(stage,/UPDATE public\.apt_trades/);
+  assert.match(approval,/IF c\.same_lot_kapt_count>1/);
+  assert.match(approval,/FOR UPDATE/);
+  assert.match(approval,/IF v_linked<>v_current_count THEN RAISE EXCEPTION/);
+  assert.match(approval,/PERFORM public\.refresh_apartment_unmatched_candidates/);
+  assert.match(approval,/public\.rebuild_verified_apartment_snapshot/);
+  assert.match(api,/timingSafeEqual/);
+  assert.match(api,/APARTMENT_REVIEW_SECRET \|\| process\.env\.APARTMENT_SYNC_SECRET/);
+  assert.match(api,/stage_apartment_identity_review/);
+  assert.match(api,/approve_apartment_identity_review/);
+  assert.match(api,/confirmedSourceName\.trim\(\)/);
+  assert.match(api,/new Set\(hosts\)\.size<2/);
+  assert.doesNotMatch(api,/CRON_SECRET/);
+  assert.match(targets,/createApartmentReadClient/);
+  assert.match(targets,/\.eq\("region_code",c\.region_code\)\.eq\("legal_dong",c\.legal_dong\)/);
+  assert.match(page,/검증 결과 붙여넣기·승인/);
+  assert.match(page,/관리자 최종 승인 · 실거래 재연결/);
+  assert.match(page,/type="password" value=\{adminSecret\}/);
+  assert.doesNotMatch(page,/localStorage\.setItem\([^)]*adminSecret/);
+  const approvedLookup=sync.indexOf('.from("apt_verified_source_aliases")');
+  const upsert=sync.indexOf('await upsertInChunks(client, "apt_trades"');
+  const aggregation=sync.indexOf("const activeTrades = normalized.filter");
+  assert.ok(approvedLookup>0 && upsert>approvedLookup && aggregation>upsert);
+  assert.match(sync,/if \(row\.complex_id && row\.complex_id !== approved\)/);
+});

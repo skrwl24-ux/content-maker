@@ -35,3 +35,42 @@
 .pagination{display:flex;justify-content:center;align-items:center;gap:15px;margin-top:25px}
 .pagination span{font-size:13px;color:#5a6c78}
 @media(max-width:690px){.page{padding:22px 13px 70px}.heading h1{font-size:23px}.controlPanel{padding:12px}.filters label{flex:1 1 100%}.filters label.search{flex:1 1 100%}.filters button{width:100%}.card{padding:13px}.cardHeader{flex-direction:column;gap:8px}.reason{max-width:none}.cardFooter button{width:100%}}
+
+.cardButtons{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.reviewPanel{margin:0 0 22px;border:1px solid #aac9d0;border-radius:13px;padding:19px;background:#f9fbfc;box-shadow:0 2px 10px #18364a0b}
+.reviewHeading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #dce5e9;padding-bottom:13px}
+.reviewHeading strong{font-size:17px;font-weight:800;letter-spacing:-.04em}
+.reviewHeading p{font-size:12px;line-height:1.7;margin:7px 0 0;color:#607483}
+.reviewHeading button{border:1px solid #c9d7df;background:white;border-radius:8px;padding:8px 12px;white-space:nowrap;cursor:pointer}
+.reviewCaution{color:#4e6476;font-size:12px;line-height:1.8;padding:12px;background:#ecf2f5;border-radius:8px;margin:16px 0}
+.targetSearch{display:flex;gap:8px;align-items:flex-end;margin-bottom:12px}
+.targetSearch label{flex:1;display:flex;flex-direction:column;gap:7px;color:#304e60;font-size:12px;font-weight:800;min-width:0}
+.reviewPanel input:not([type=checkbox]),.reviewPanel select,.reviewPanel textarea{font:inherit;color:#203c4e;border-radius:8px;border:1px solid #c9d8e0;padding:9px 11px;background:white;box-sizing:border-box;width:100%;font-size:13px}
+.reviewPanel input:not([type=checkbox]),.reviewPanel select{height:42px}
+.reviewPanel textarea{min-height:180px;resize:vertical;line-height:1.65}
+.reviewPanel button{border-radius:8px;min-height:39px;padding:9px 13px;font-size:12px;font-weight:800;cursor:pointer}
+.reviewPanel button:disabled{opacity:.43;cursor:not-allowed}
+.targetSearch button,.reviewAction{border:1px solid #236874;color:#fff;background:#236874}
+.reviewAction{width:100%;margin-top:10px;margin-bottom:13px}
+.reviewLabel{display:flex;flex-direction:column;gap:8px;color:#304e60;font-size:12px;font-weight:800;margin:12px 0}
+.targetComparison{padding:13px 15px;border:1px solid #d8e4e9;border-radius:9px;background:white;margin:13px 0}
+.targetComparison>b{font-size:12px}
+.targetComparison>div{display:flex;gap:13px;border-top:1px solid #e6edf0;padding-top:9px;margin-top:9px;align-items:baseline}
+.targetComparison>div span{font-size:11px;font-weight:800;min-width:41px;color:#4d6d7e}
+.targetComparison>div p{flex:1;font-size:12px;line-height:1.6;margin:0;overflow-wrap:anywhere}
+.targetComparison small{display:block;margin-top:12px;font-size:11px;color:#6b7d87;line-height:1.7}
+.stagedReview{padding:14px;border:1px solid #aac7bd;border-radius:10px;background:#f2f8f5;margin-top:13px}
+.stagedReview>b,.explicitApproval>b{font-size:13px;color:#295643}
+.stagedReview>p,.explicitApproval>p{font-size:12px;line-height:1.7;color:#526a5e;margin:9px 0}
+.explicitApproval{border-top:1px solid #c8dfd3;padding-top:13px;margin-top:13px}
+.explicitApproval label:not(.explicitCheckbox){display:flex;flex-direction:column;gap:7px;font-size:12px;font-weight:800;color:#344f42}
+.explicitCheckbox{display:flex;gap:9px;align-items:flex-start;margin:12px 0;cursor:pointer;font-size:12px;line-height:1.7;color:#335542}
+.explicitCheckbox input{width:18px;height:18px;flex-shrink:0;accent-color:#236d53}
+.approveButton{width:100%;background:#1f6a50;color:white;border:1px solid #1f6a50}
+.reviewMessage{font-size:12px;line-height:1.7;color:#235f49;padding:10px 12px;background:#edf5f0;border-radius:8px}
+.reviewError{font-size:12px;line-height:1.7;color:#8b3030;padding:10px 12px;background:#fcf0f0;border:1px solid #f1d5d5;border-radius:8px}
+.approvalDone{border:1px solid #aecfba;border-radius:10px;background:#eff7f1;padding:17px;margin-top:15px}
+.approvalDone>b{font-size:15px;color:#28563b}
+.approvalDone p{font-size:13px;color:#375b45;line-height:1.7}
+.approvalDone a{font-size:12px;font-weight:800;color:#1b664c}
+@media(max-width:690px){.targetSearch{flex-wrap:wrap}.targetSearch label{flex:1 1 100%}.targetSearch button{width:100%}.reviewPanel{padding:12px}.reviewHeading{flex-direction:column}.cardButtons{width:100%}.cardButtons button{flex:1 1 100%}}
