@@ -307,7 +307,7 @@ export default function StoryPlanningPanel({
           <a className={styles.storyV31Link} href={chosen.sourceUrl} target="_blank" rel="noopener noreferrer">
             확인할 원문 ↗ {chosen.sourceTitle || chosen.sourceUrl} · 자료일 {chosen.sourceDate || "불명"}
           </a>
-          {current.editedAccessSourceUrl && (
+          {isHttps(current.editedAccessSourceUrl || "") && (
             <a className={styles.storyV31Link} href={current.editedAccessSourceUrl} target="_blank" rel="noopener noreferrer">이동 경로 근거 열기 ↗</a>
           )}
           <details className={styles.advancedDetails}>
