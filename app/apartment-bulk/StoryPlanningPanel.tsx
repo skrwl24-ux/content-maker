@@ -116,8 +116,8 @@ export function useApartmentStoryPlanner(input: PlanningInput) {
         visualMode: current.visualMode || chosen.visualMode,
         visualFacts: cleaned(current.editedVisualFacts) || chosen.visualFacts || chosen.facts,
         discovery: cleaned(current.editedDiscovery) || chosen.discovery || chosen.kick,
-        placeName: cleaned(current.editedPlaceName) || chosen.placeName || "",
-        accessInfo: cleaned(current.editedAccessInfo) || chosen.accessInfo || "",
+        placeName: typeof current.editedPlaceName === "string" ? current.editedPlaceName.trim() : chosen.placeName || "",
+        accessInfo: typeof current.editedAccessInfo === "string" ? current.editedAccessInfo.trim() : chosen.accessInfo || "",
         accessSourceUrl: isHttps(cleaned(current.editedAccessSourceUrl)) ? cleaned(current.editedAccessSourceUrl) : "",
         storyDraft: cleaned(current.editedStoryDraft) || chosen.storyDraft || "",
       }
@@ -298,7 +298,7 @@ export default function StoryPlanningPanel({
           <p className={styles.storyV31Discovery}>{current.editedDiscovery || chosen.discovery || chosen.kick}</p>
           <div className={styles.storyV31Facts}>
             <p><b>장소/지점</b> {current.editedPlaceName || "특정 장소 없이 지역의 생활 질문을 다룹니다."}</p>
-            <p><b>접근성</b> {current.editedAccessInfo || "거리·시간 미확인: 실제 경로 확인 전까지 숫자 생략"}</p>
+            <p><b>접근성</b> {current.editedAccessInfo || "거리·시간 미확인: 실제 경로 확인 전까지 숫자 생략"}{current.editedAccessInfo && !current.editedAccessSourceUrl ? " (별도 경로 근거 없으면 수치 자동 제외)" : ""}</p>
             <p><b>검증 사실</b> {current.editedFacts || chosen.facts}</p>
             <p><b>입지 연결</b> {chosen.connection}</p>
             <p><b>본문 전환</b> {current.editedBridge || chosen.bridge}</p>
