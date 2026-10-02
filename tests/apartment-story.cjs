@@ -340,3 +340,68 @@ test("V3.1 automatic story fallback is actually wired to all three article actio
   assert.match(files.school, /autoVisual \|\| makeSchoolSummaryPrompt/);
   assert.match(files.mega, /autoVisual \|\| locationPrompt/);
 });
+
+
+test("V3.1 bulk final-copy audit automatically reconciles HoMaeSil prices, counts and rate with loaded transaction source", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const body = [
+    "수원 호매실마을13단지, 6개월 월별 가격폭은?",
+    "호매실마을13단지 전용 59㎡대의 최근 흐름입니다.",
+    "4월 4억 5,000만원에서 9월 5억 2,300만원까지 월 대표값 차이는 7,300만원입니다.",
+    "변화율은 +16.2%입니다.",
+    "5월 4억 6,400만원, 6월 4억 6,500만원, 7월 4억 8,300만원, 8월 4억 9,700만원, 9월 5억 2,300만원입니다.",
+    "4월 10건, 5월 13건, 6월 17건, 7월 20건, 8월 11건, 9월 11건입니다.",
+    "7월에서 8월은 거래량이 9건 감소했고, 8월에서 9월 가격 차이는 2,600만원입니다.",
+    "[이미지 01 — 가격]",
+    "[이미지 02 — 거래]",
+    "[이미지 03 — 생활]",
+    "#수원 #권선구 #호매실동 #호매실마을13단지 #실거래 #아파트시세 #59㎡",
+  ].join("\n");
+  const result = mod.auditApartmentArticle({
+    mode: "bulk", name: "호매실마을13단지", body,
+    sourceData: {
+      area: "전용 59㎡대",
+      recentPrice: "5.23억",
+      previousPrice: "4.64억",
+      monthly: [
+        {month:"2026-04", medianPrice:450000000, tradeCount:10},
+        {month:"2026-05", medianPrice:464000000, tradeCount:13},
+        {month:"2026-06", medianPrice:465000000, tradeCount:17},
+        {month:"2026-07", medianPrice:483000000, tradeCount:20},
+        {month:"2026-08", medianPrice:497000000, tradeCount:11},
+        {month:"2026-09", medianPrice:523000000, tradeCount:11},
+      ],
+    },
+  });
+  const numeric = result.checks.find(item => item.label === "실거래 수치 자동 대조");
+  assert.equal(numeric?.status, "pass");
+  assert.match(numeric?.detail || "", /가격/);
+  assert.match(numeric?.detail || "", /거래량/);
+  assert.match(numeric?.detail || "", /변화율/);
+  assert.ok(result.checks.some(item => item.status === "pass" && item.label === "대표 면적"));
+});
+
+test("V3.1 bulk transaction audit names numbers that disagree with source data", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const body = [
+    "호매실마을13단지 전용 59㎡대입니다.",
+    "최근 가격은 5.80억이며 거래량은 99건, 변화율은 +44.4%입니다.",
+    "[이미지 01]", "[이미지 02]", "[이미지 03]",
+    "#수원 #권선구 #호매실 #호매실마을13단지 #실거래 #시세 #아파트",
+  ].join("\n");
+  const result = mod.auditApartmentArticle({
+    mode:"bulk", name:"호매실마을13단지", body,
+    sourceData:{
+      area:"전용 59㎡대", recentPrice:"5.23억", previousPrice:"4.64억",
+      monthly:[
+        {month:"2026-04",medianPrice:450000000,tradeCount:10},
+        {month:"2026-09",medianPrice:523000000,tradeCount:11},
+      ],
+    },
+  });
+  const numeric = result.checks.find(item => item.label === "실거래 수치 자동 대조");
+  assert.equal(numeric?.status, "warning");
+  assert.match(numeric?.detail || "", /5.80억/);
+  assert.match(numeric?.detail || "", /99건/);
+  assert.match(numeric?.detail || "", /44.4%/);
+});
