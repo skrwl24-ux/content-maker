@@ -6,16 +6,17 @@ import type { ApartmentStoryCandidate, ApartmentStoryMode } from "../../lib/apar
 import styles from "./page.module.css";
 
 export default function PublicationCheckPanel({
-  mode, name, body, plan, dataSummary = "",
+  mode, name, body, plan, dataSummary = "", sourceData = null,
 }: {
   mode: ApartmentStoryMode;
   name: string;
   body: string;
   plan: ApartmentStoryCandidate | null;
   dataSummary?: string;
+  sourceData?: { area?: string; recentPrice?: string; previousPrice?: string; monthly?: Array<{ month: string; medianPrice: number | null; tradeCount: number }> } | null;
 }) {
-  const result = useMemo(() => auditApartmentArticle({ mode, name, body, plan, dataSummary }),
-    [mode, name, body, plan, dataSummary]);
+  const result = useMemo(() => auditApartmentArticle({ mode, name, body, plan, dataSummary, sourceData }),
+    [mode, name, body, plan, dataSummary, sourceData]);
   const warnings = result.checks.filter(item => item.status === "warning");
   const reviews = result.checks.filter(item => item.status === "review");
   const passes = result.checks.filter(item => item.status === "pass");
@@ -24,7 +25,7 @@ export default function PublicationCheckPanel({
       <div className={styles.publishAuditHeading}>
         <div>
           <b>발행 전 자동 검사 · V3.1</b>
-          <span>완성글을 붙여넣으면 이미지 위치·태그·장소명·새로운 이동 숫자를 즉시 대조합니다.</span>
+          <span>완성글을 붙여넣으면 이미지 위치·태그뿐 아니라 가격·거래량·변화율도 사이트 원본 실거래 데이터와 자동 대조합니다.</span>
         </div>
         <strong>{!result.ready ? "원고 대기" : warnings.length ? "확인 " + warnings.length + "건" : "텍스트 구조 확인"}</strong>
       </div>
@@ -32,7 +33,7 @@ export default function PublicationCheckPanel({
         <div className={styles.publishAuditStats}>
           <span>형식 검사 통과 {passes.length}</span>
           <span>수정·확인 {warnings.length}</span>
-          <span>원문 직접 확인 {reviews.length}</span>
+          <span>외부 원문 확인 {reviews.length}</span>
         </div>
       )}
       <div className={styles.publishAuditList}>
@@ -44,7 +45,7 @@ export default function PublicationCheckPanel({
           </div>
         ))}
       </div>
-      <p>이 검사는 원고의 문자열과 잠근 기획 카드를 비교합니다. 실제 실거래 계약, 가게 영업 여부, 외부 원문·지도·사진 내용까지 자동 검증한 것은 아닙니다.</p>
+      <p>일반 아파트의 가격·거래량·변화율은 사이트에 불러온 구조화 실거래 원본과 자동 대조합니다. 외부 가게 영업 여부·지도·사진·경로 원문은 별도 검증 영역입니다.</p>
     </section>
   );
 }
