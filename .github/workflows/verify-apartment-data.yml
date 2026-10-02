@@ -1,0 +1,21 @@
+name: Verify apartment data changes
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/apartment-data-health-20261002]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package.json
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
