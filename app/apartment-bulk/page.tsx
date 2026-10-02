@@ -8,6 +8,7 @@ import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
+import type { SourceAudit } from "../../lib/apartment-numeric-audit.mjs";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
@@ -96,6 +97,7 @@ type DailyWorkSnapshot = {
   bulk?: {
     data: ApartmentData;
     monthlyStats: MonthlyStat[];
+    numericSource?: NumericSource | null;
     mapDataUrl: string;
     aptPoint: Point;
     stationPoint: Point;
@@ -128,6 +130,13 @@ type Point = { x: number; y: number } | null;
 type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
+type NumericSource = {
+  name: string;
+  areaText: string;
+  analysisDate: string | null;
+  latestTradePrice: number | null;
+  sourceAudit: SourceAudit | null;
+};
 type NaverBlock = {
   type: "title" | "subheading" | "body" | "image" | "tags" | "card";
   text: string;
@@ -160,6 +169,8 @@ type ComplexDetailResponse = {
   };
   representativeArea: string | null;
   monthly: MonthlyStat[];
+  analysisDate?: string | null;
+  sourceAudit?: SourceAudit | null;
   latestTrade: { date: string; price: number; area: number; floor: number | null } | null;
   snapshot?: {
     first_median_price?: number | string | null;
@@ -2274,6 +2285,7 @@ export default function ApartmentBulkPage() {
   const [data, setData] = useState<ApartmentData>(SAMPLE);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
+  const [numericSource, setNumericSource] = useState<NumericSource | null>(null);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
   const [selectedComplexName, setSelectedComplexName] = useState("");
   const [autoMapLoading, setAutoMapLoading] = useState(false);
@@ -2684,6 +2696,7 @@ export default function ApartmentBulkPage() {
     top3Work,
     data,
     monthlyStats,
+    numericSource,
     mapDataUrl,
     aptPoint,
     stationPoint,
@@ -2778,6 +2791,13 @@ export default function ApartmentBulkPage() {
         };
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
+        setNumericSource({
+          name: nextData.name,
+          areaText: nextData.area,
+          analysisDate: detail.analysisDate || null,
+          latestTradePrice: detail.latestTrade?.price ?? null,
+          sourceAudit: detail.sourceAudit ?? null,
+        });
         setSelectedComplexName(detail.complex.name || "");
         setRecommendedAngle(detail.snapshot?.recommended_angle || "");
         setArticleThemeMode("auto");
@@ -3075,6 +3095,7 @@ export default function ApartmentBulkPage() {
       bulk: isBulk ? {
         data,
         monthlyStats,
+        numericSource,
         mapDataUrl,
         aptPoint,
         stationPoint,
@@ -3108,6 +3129,7 @@ export default function ApartmentBulkPage() {
   function resetBulkWorkspace() {
     setData(SAMPLE);
     setMonthlyStats([]);
+    setNumericSource(null);
     setMapDataUrl("");
     setAptPoint(null);
     setStationPoint(null);
@@ -3154,6 +3176,7 @@ export default function ApartmentBulkPage() {
         if (slot.type === "bulk" && saved.bulk) {
           setData(saved.bulk.data || SAMPLE);
           setMonthlyStats(saved.bulk.monthlyStats || []);
+          setNumericSource(saved.bulk.numericSource || null);
           setMapDataUrl(saved.bulk.mapDataUrl || "");
           setAptPoint(saved.bulk.aptPoint || null);
           setStationPoint(saved.bulk.stationPoint || null);
@@ -4456,6 +4479,18 @@ export default function ApartmentBulkPage() {
                 body={finalBlogText}
                 plan={contentMode === "bulk" ? approvedV3 : seriesAudit?.mode === contentMode ? seriesAudit.plan : null}
                 dataSummary={contentMode === "bulk" ? plannerInput.dataSummary : seriesAudit?.mode === contentMode ? seriesAudit.dataSummary : ""}
+                autoStoryEnabled={contentMode !== "bulk" || v3Planner.current.status !== "skipped"}
+                numericReference={contentMode === "bulk" ? (() => {
+                  const valid = numericSource?.name === data.name.trim()
+                    && numericSource?.areaText === data.area.trim()
+                    && selectedComplexName === data.name.trim();
+                  return {
+                    monthly: monthlyStats,
+                    latestTradePrice: valid ? numericSource?.latestTradePrice ?? null : null,
+                    sourceKind: valid ? "db" as const : "input" as const,
+                    sourceAudit: valid ? numericSource?.sourceAudit ?? null : null,
+                  };
+                })() : null}
               />
             )}
             <div className={styles.naverCopyActions}>

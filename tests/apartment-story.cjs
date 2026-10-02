@@ -340,3 +340,129 @@ test("V3.1 automatic story fallback is actually wired to all three article actio
   assert.match(files.school, /autoVisual \|\| makeSchoolSummaryPrompt/);
   assert.match(files.mega, /autoVisual \|\| locationPrompt/);
 });
+
+
+test("publication audit checks real six-month article money, monthly counts, differences and rate", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const monthly = [
+    {month:"2026-04", medianPrice:450000000, tradeCount:10},
+    {month:"2026-05", medianPrice:464000000, tradeCount:13},
+    {month:"2026-06", medianPrice:465000000, tradeCount:17},
+    {month:"2026-07", medianPrice:483000000, tradeCount:20},
+    {month:"2026-08", medianPrice:497000000, tradeCount:11},
+    {month:"2026-09", medianPrice:523000000, tradeCount:11},
+  ];
+  const body = [
+    "수원 호매실마을13단지, 6개월 월별 가격폭은?",
+    "4월 4억 5,000만원에서 9월 5억 2,300만원까지 월 대표값의 고저 차이는 7,300만원(+16.2%)입니다.",
+    "5월에는 4억 6,400만원, 6월에는 4억 6,500만원입니다.",
+    "8월 월 대표값은 4억 9,700만원입니다.",
+    "8월에서 9월 사이에는 2,600만원의 차이가 발생했습니다.",
+    "4월 거래량 10건, 5월 13건, 6월 17건, 7월에는 20건을 기록했습니다.",
+    "8월에는 11건으로 줄어들며 전월보다 9건 감소했습니다.",
+    "9월은 10월 2일 현재까지 11건으로 확인됩니다.",
+    "최근 개별 실거래가는 5억 2,300만원입니다.",
+    "[이미지 01 — 썸네일]",
+    "[이미지 02 — 그래프]",
+    "[이미지 03 — 스토리 비주얼]",
+    "#수원 #호매실 #호매실마을13단지 #실거래가 #아파트 #가격 #거래량",
+  ].join("\n");
+  const sourceAudit = {status:"matched",comparedMonths:6,rawTradeCount:82,mismatches:[],reason:""};
+  const result = mod.auditApartmentArticle({
+    mode:"bulk",name:"호매실마을13단지",body,autoStoryEnabled:true,
+    numericReference:{monthly,latestTradePrice:523000000,sourceKind:"db",sourceAudit},
+  });
+  assert.equal(result.checks.some(x=>x.status==="warning" && /숫자|원본|계약/.test(x.label)),false,
+    JSON.stringify(result.checks,null,2));
+  assert.ok(result.checks.some(x=>x.status==="pass" && x.label.includes("숫자 자동 대조")));
+  assert.ok(result.checks.some(x=>x.status==="pass" && x.label.includes("개별 계약 재계산")));
+  assert.ok(result.checks.some(x=>x.label.includes("자동 생활 스토리 모드")));
+  assert.equal(result.checks.some(x=>x.label==="데이터형 글"),false);
+});
+
+test("publication audit points out the wrong month, wrong delta and wrong rate without a 63-numbers manual checklist", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const monthly = [
+    {month:"2026-04",medianPrice:450000000,tradeCount:10},
+    {month:"2026-05",medianPrice:464000000,tradeCount:13},
+    {month:"2026-06",medianPrice:465000000,tradeCount:17},
+    {month:"2026-07",medianPrice:483000000,tradeCount:20},
+    {month:"2026-08",medianPrice:497000000,tradeCount:11},
+    {month:"2026-09",medianPrice:523000000,tradeCount:11},
+  ];
+  const body = [
+    "호매실마을13단지",
+    "5월 월 대표값은 4억 7,000만원입니다.",
+    "8월에서 9월 사이에 2,500만원의 차이가 있습니다.",
+    "최근 6개월 변화율은 +15.2%입니다.",
+    "7월 거래량은 19건입니다.",
+    "8월은 11건으로 전월보다 8건 감소했습니다.",
+    "[이미지 01 — 썸네일]","[이미지 02 — 그래프]","[이미지 03 — 생활]",
+    "#수원 #권선구 #호매실동 #호매실마을13단지 #실거래 #아파트 #시세",
+  ].join("\n");
+  const result=mod.auditApartmentArticle({mode:"bulk",name:"호매실마을13단지",body,
+    numericReference:{monthly,sourceKind:"input"}});
+  const warning=result.checks.find(x=>x.label.includes("실거래 숫자 불일치"));
+  assert.ok(warning,JSON.stringify(result.checks));
+  assert.match(warning.detail,/5월 대표값/);
+  assert.match(warning.detail,/4억 6,400만원/);
+  assert.match(warning.detail,/2,500만원/);
+  assert.match(warning.detail,/15\.2%/);
+  assert.match(warning.detail,/7월 거래량/);
+  assert.match(warning.detail,/전월 대비 거래량 차이/);
+  assert.equal(result.checks.some(x=>x.detail.includes("숫자 63곳")),false);
+});
+
+test("recomputes stored month counts and median from actual noncancelled records", async () => {
+  const mod = await import("../lib/apartment-numeric-audit.mjs");
+  const monthly = [
+    {month:"2026-04",tradeCount:2,medianPrice:450000000},
+    {month:"2026-05",tradeCount:3,medianPrice:464000000},
+  ];
+  const rows = [
+    {contract_date:"2026-04-09",price_won:440000000},
+    {contract_date:"2026-04-20",price_won:460000000},
+    {contract_date:"2026-05-01",price_won:460000000},
+    {contract_date:"2026-05-13",price_won:464000000},
+    {contract_date:"2026-05-29",price_won:468000000},
+    {contract_date:"2026-05-30",price_won:900000000,cancelled:true},
+  ];
+  const good=mod.reconcileMonthlyWithTrades(monthly,rows);
+  assert.equal(good.status,"matched",JSON.stringify(good));
+  assert.equal(good.rawTradeCount,5);
+  const wrong=mod.reconcileMonthlyWithTrades([{...monthly[1],tradeCount:4,medianPrice:470000000}],rows);
+  assert.equal(wrong.status,"mismatch");
+  assert.ok(wrong.mismatches.some(x=>x.includes("거래수")));
+  assert.ok(wrong.mismatches.some(x=>x.includes("대표가격")));
+  assert.equal(mod.reconcileMonthlyWithTrades(monthly,rows,{truncated:true}).status,"unavailable");
+});
+
+test("rounded two-decimal 억 figures are not treated as exact won amounts", async () => {
+  const mod=await import("../lib/apartment-numeric-audit.mjs");
+  const checks=mod.auditArticleFigures({
+    body:"테스트아파트 5월 월 대표값은 4.65억입니다.\n9월은 10월 2일 현재까지 11건입니다.",
+    monthly:[{month:"2026-05",medianPrice:464500000,tradeCount:13},
+             {month:"2026-09",medianPrice:523000000,tradeCount:11}],
+  });
+  assert.equal(checks.some(x=>x.status==="warning"),false,JSON.stringify(checks));
+});
+
+
+test("relative previous-month deltas work in both Korean sentence orders", async () => {
+  const mod = await import("../lib/apartment-numeric-audit.mjs");
+  const monthly = [
+    {month:"2026-07",medianPrice:483000000,tradeCount:20},
+    {month:"2026-08",medianPrice:497000000,tradeCount:11},
+  ];
+  const good = mod.auditArticleFigures({
+    body:"8월은 전월보다 9건 적은 11건입니다.\n8월은 전월보다 1,400만원 높아졌습니다.",monthly,
+  });
+  assert.equal(good.some(item=>item.status==="warning"),false,JSON.stringify(good));
+  const wrong = mod.auditArticleFigures({
+    body:"8월은 전월보다 8건 적은 11건입니다.\n8월은 전월보다 1,300만원 높아졌습니다.",monthly,
+  });
+  const mismatch = wrong.find(item=>item.status==="warning");
+  assert.ok(mismatch);
+  assert.match(mismatch.detail,/거래량 차이/);
+  assert.match(mismatch.detail,/가격 차이/);
+});
