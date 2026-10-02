@@ -34,6 +34,9 @@ export declare function makeApartmentV3PlanningPrompt(input: {
 export declare function safeStoryDisplayText(value: string | undefined, plan: ApartmentStoryCandidate | null): string;
 export declare function makeStoryFactSheet(plan: ApartmentStoryCandidate | null): string;
 export declare function extractStoryExcerpt(body: string, plan: ApartmentStoryCandidate | null, name?: string): string;
+export declare function makeAutomaticLivingStoryBlock(input?: {
+  mode?: ApartmentStoryMode; name?: string; region?: string;
+}): string;
 export declare function makeApprovedStoryBlock(plan: ApartmentStoryCandidate | null): string;
 export declare function makeApprovedStoryVisualPrompt(plan: ApartmentStoryCandidate | null, options?: {
   mode?: ApartmentStoryMode; name?: string; region?: string; mapProvided?: boolean; finalStoryExcerpt?: string;
