@@ -8,7 +8,7 @@ import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
 import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
-import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt } from "../../lib/apartment-story.mjs";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
@@ -2237,24 +2237,26 @@ async function makeStoryMapCard(
     ctx.fillText("TODAY'S STORY", textX, 247);
     ctx.fillStyle = "#ffffff";
     ctx.font = `900 29px ${FONT}`;
-    drawWrapped(ctx, plan.topic || plan.title, textX, 285, 460, 37, 2);
+    drawWrapped(ctx, safeStoryDisplayText(plan.topic || plan.title, plan), textX, 285, 460, 37, 2);
 
     ctx.strokeStyle = "rgba(255,255,255,.18)";
     ctx.beginPath(); ctx.moveTo(textX, 397); ctx.lineTo(1501, 397); ctx.stroke();
 
     ctx.fillStyle = "#74e2d5";
     ctx.font = `800 18px ${FONT}`;
-    ctx.fillText("지역에서 발견한 질문", textX, 421);
+    ctx.fillText("이곳에 살면 알게 되는 것", textX, 421);
     ctx.fillStyle = "#ffffff";
     ctx.font = `600 22px ${FONT}`;
-    drawWrapped(ctx, plan.kick || plan.facts, textX, 455, 456, 30, 3);
+    drawWrapped(ctx, safeStoryDisplayText(plan.discovery || plan.kick || plan.facts, plan), textX, 455, 456, 30, 3);
 
     ctx.fillStyle = "#74e2d5";
     ctx.font = `800 18px ${FONT}`;
     ctx.fillText("출처에서 확인한 정보", textX, 583);
     ctx.fillStyle = "rgba(255,255,255,.94)";
     ctx.font = `600 20px ${FONT}`;
-    drawWrapped(ctx, plan.visualFacts || plan.facts, textX, 619, 456, 29, 4);
+    const accessible = plan.accessSourceUrl && plan.accessInfo ? plan.accessInfo : "거리·시간은 경로 확인 후 안내";
+    const detail = [plan.placeName, accessible, plan.visualFacts || plan.facts].filter(Boolean).join(" · ");
+    drawWrapped(ctx, safeStoryDisplayText(detail, plan), textX, 619, 456, 29, 4);
 
     ctx.fillStyle = "rgba(255,255,255,.64)";
     ctx.font = `600 15px ${FONT}`;
