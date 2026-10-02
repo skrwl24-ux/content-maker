@@ -92,3 +92,15 @@ test("a changed article yields its new image plan rather than stale cached text"
   assert.equal((await extract(base + "거미줄 제거"))["02"], "거미줄 제거");
   assert.equal((await extract(base + "베란다 안전 청소"))["02"], "베란다 안전 청소");
 });
+
+test("does not mistake an image description ending in 구성 for another plan heading", async () => {
+  const body = [
+    "[이미지 기획 메모]",
+    "- 이미지 00: 거미와 실을 대비하는 썸네일 구성",
+    "- 이미지 01: 끈끈한 실과 그렇지 않은 실의 비교 구성",
+    "- 이미지 02: 제거 방법 정보 카드",
+    "[검수 메모]"
+  ].join("\n");
+  assert.equal((await extract(body))["00"], "거미와 실을 대비하는 썸네일 구성");
+  assert.equal((await extract(body))["01"], "끈끈한 실과 그렇지 않은 실의 비교 구성");
+});
