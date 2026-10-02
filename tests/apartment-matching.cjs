@@ -269,3 +269,13 @@ test("raw MOLIT building number and area must reach the source identity matcher"
   const server=fs.readFileSync("lib/apartment-server.ts","utf8");
   assert.match(server,/buildingDong: text\(item\.aptDong\) \|\| null, exclusiveArea: area/);
 });
+
+test("unreviewed government building range cannot be erased by a unique cadastral lot", async () => {
+  const mod=await modulePromise;
+  const c=complex("한빛아파트","901","existing");
+  const ranged=trade("한빛(101~109동)","901",{buildingDong:"105"});
+  assert.equal(mod.matchApartmentTrade(ranged,[c]),null);
+  const precise={...c,name:"한빛(101~109동)",normalized_name:"한빛(101~109동)"};
+  assert.equal(mod.matchApartmentTrade(ranged,[precise])?.id,"existing");
+  assert.equal(mod.matchApartmentTrade({...ranged,buildingDong:"111"},[precise]),null);
+});
