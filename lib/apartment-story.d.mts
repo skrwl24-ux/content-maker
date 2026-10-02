@@ -13,3 +13,7 @@ export type ApartmentStoryCandidate = {
   communityNote: string;
 };
 export declare function parseApartmentStoryResearch(raw: string): ApartmentStoryCandidate[];
+export declare function makeApartmentStoryResearchPrompt(
+  data: { name: string; region: string; area: string; station: string; locationLine: string },
+  articleTheme: { label: string; angle: string }
+): string;
