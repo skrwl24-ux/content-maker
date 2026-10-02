@@ -4314,16 +4314,16 @@ export default function ApartmentBulkPage() {
 
       <details className={styles.sharedEditor}>
         <summary>
-          <span><b>네이버 최종편집</b><small>단지 · 학군 · 초대형단지 공통</small></span>
-          <strong>완성글 붙여넣기</strong>
+          <span><b>네이버 최종편집 · 발행 전 검사</b><small>단지 · 학군 · 초대형단지 공통</small></span>
+          <strong>완성글 붙여넣기 → 자동 검수</strong>
         </summary>
         <div className={styles.sharedEditorBody}>
           <section className={styles.naverEditor}>
             <div className={styles.naverEditorHead}>
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
-                <h2>5. 네이버 최종 편집 · 전체복사</h2>
-                <span>완성글을 작업 화면에 한 번 붙여넣으면 여기에도 자동 반영됩니다. 시계열 표는 최근 시세 그래프 자리로, 일반 표는 선택한 방식에 맞춰 자동 정리합니다.</span>
+                <h2>5. 네이버 최종 편집 · 자동 검사 · 전체복사</h2>
+                <span>완성글은 한 번만 붙여넣으세요. 대상명·태그·이미지·생활 스토리 일치 여부를 바로 검사하고, 시계열 표와 일반 표를 네이버용으로 정리합니다.</span>
               </div>
             </div>
 
