@@ -3954,6 +3954,10 @@ export default function ApartmentBulkPage() {
             <div><b>단지 데이터</b><span>샘플: 산본 퇴계아파트</span></div>
             <button type="button" onClick={() => { setData(SAMPLE); setOutputs(null); }}>샘플값 복원</button>
           </div>
+          <div className={styles.unmatchedSourceEntry}>
+            <span><b>국토부 원자료 매칭 현황</b> · 아직 K-apt 단지와 연결되지 않은 거래는 별도 검토합니다. 실제 무거래와 혼동하지 마세요.</span>
+            <a href="/apartment-bulk/unmatched">미연결 실거래 검토함 →</a>
+          </div>
 
           {selectedComplexLoading && <div className={styles.autoLoad}>후보 단지 데이터를 불러오는 중…</div>}
           {selectedComplexName && !selectedComplexLoading && (

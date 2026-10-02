@@ -589,6 +589,19 @@ export async function syncApartmentRegion(regionCode: string) {
     }
 
     await upsertInChunks(client, "apt_candidate_snapshots", snapshots, "analysis_date,complex_id", 300);
+
+    // Refresh the independent source-only review queue AFTER raw trades and
+    // monthly statistics have been reconciled. Never auto-create a verified
+    // K-apt complex from an unmatched MOLIT apartment name or parcel.
+    const { data: sourceQueueRefresh, error: sourceQueueError } = await client.rpc(
+      "refresh_apartment_unmatched_candidates",
+      { p_region_code: regionCode, p_analysis_date: analysisDate }
+    );
+    if (sourceQueueError) throw sourceQueueError;
+    const unmatchedSourceGroups = Number(
+      (sourceQueueRefresh as Record<string, unknown> | null)?.activeCandidatesUpserted || 0
+    );
+
     const candidateCount = snapshots.filter((s) => s.candidate_status !== "hold").length;
     const priorityCount = snapshots.filter((s) => s.candidate_status === "priority").length;
 
@@ -615,6 +628,7 @@ export async function syncApartmentRegion(regionCode: string) {
       trades: normalized.length,
       matchedTrades: activeTrades.length,
       obsoleteMonthlyRowsRemoved: Number(removedObsoleteMonthly || 0),
+      unmatchedSourceGroups,
       kaptDetailEmpty,
       kaptDetailErrors,
       kaptAddressMissing,
