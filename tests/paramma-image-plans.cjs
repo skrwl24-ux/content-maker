@@ -104,3 +104,18 @@ test("does not mistake an image description ending in 구성 for another plan he
   assert.equal((await extract(body))["00"], "거미와 실을 대비하는 썸네일 구성");
   assert.equal((await extract(body))["01"], "끈끈한 실과 그렇지 않은 실의 비교 구성");
 });
+
+
+test("recognizes the new optional 03 role label and captures its following content", async () => {
+  const body = [
+    "[이미지 기획 메모]",
+    "- 이미지 02: 집 안 거미줄 안전하게 제거하기",
+    "- 이미지 03 · 추가 실용 정보 · 예방 · 비교",
+    "  - 거미줄이 다시 생기는 일을 줄이는 관리법",
+    "[검수 메모]"
+  ].join("\n");
+  assert.deepEqual(await extract(body), {
+    "02": "집 안 거미줄 안전하게 제거하기",
+    "03": "추가 실용 정보 · 예방 · 비교 — 거미줄이 다시 생기는 일을 줄이는 관리법"
+  });
+});
