@@ -118,8 +118,8 @@ const SLOT_IDS: SlotId[] = ["00", "01", "02", "03"];
 const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
   "01": { label: "본문 이미지 01", role: "핵심 원리", width: 1600, height: 900, filename: "01_body.png", copy: "핵심 원리를 한눈에 이해시키는 장면" },
-  "02": { label: "본문 이미지 02", role: "과정·비교", width: 1600, height: 900, filename: "02_body.png", copy: "원인과 과정 또는 비교를 쉽게 보여주는 장면" },
-  "03": { label: "선택 이미지 03", role: "추가 보상·비교", width: 1600, height: 900, filename: "03_body.png", copy: "02번과 겹치지 않는 재발 방지·추가 비교·관리 포인트를 보여주는 정보 카드" },
+  "02": { label: "본문 이미지 02", role: "이번 글의 발견·보상", width: 1600, height: 900, filename: "02_body.png", copy: "최종 본문의 첫 번째 실용 킥 또는 발견을 저장하기 좋은 정보형 카드로 보여주는 장면" },
+  "03": { label: "선택 이미지 03", role: "추가 실용 정보 · 예방 · 비교", width: 1600, height: 900, filename: "03_body.png", copy: "완성 본문에 독립된 후속 정보가 있는 경우 재발 방지·유지 관리·상황별 비교 등을 보여주는 두 번째 저장용 정보 카드" },
 };
 
 function categoryEmoji(category: Category) {
@@ -513,19 +513,21 @@ function buildImagePrompt(topic: Topic, slotId: SlotId) {
 }
 
 
-const PARAMMA_IMAGE_PLAN_RULES = `[Paramma V3 · 이미지 장수·03 슬롯 최신 원칙 — 앞선 03 제한보다 우선]
-- 썸네일 00 + 핵심 원리 01 + 이번 글의 킥 02 = 기본 3장. 원리와 별도로 보상에 독립적인 후속 내용이 있으면 03을 적극 검토하여 총 4장(썸네일 포함)을 기획할 것.
-- 이미지 03은 안전상 꼭 필요할 때만 쓰는 슬롯이 아니다. 실용 킥이라면 02번에 직접 해결·제거·활용 방법을, 03번에 재발 방지·유지 관리·조건별 비교 등 다른 가치를 담는다. 비실용 소재라면 오해 해소·관찰 차이·중요한 주의사항 등 독립적인 후속 발견에 활용한다.
-- 02와 03이 같은 팁 목록이나 원리의 반복이 되면 03을 생략한다. 분량을 채우기 위해 이미지를 억지로 추가하거나 본문에 없는 정보를 만들지 말 것.
-- 이미지 03을 사용하는 경우 본문 중 해당 내용 바로 뒤에 [이미지 03] 삽입 위치를 표시하고, 마지막 이미지 기획 메모에도 03번의 독립적인 역할을 한 줄로 명시할 것.
-- 실제 제작 사이트에서 03은 선택 슬롯이다. 03이 필요하다고 판단한 원고라면 사용을 추천하되 모든 글에 강제하지 말 것.
-- 사이트 자동 연동을 위해 본문·태그 뒤에 반드시 [이미지 기획 메모] 제목을 별도로 쓰고, 각 이미지를 아래 형식으로 한 줄씩 구체적으로 설명할 것: 이미지 00: 썸네일의 장면, 이미지 01: 핵심 원리의 장면, 이미지 02: 킥의 정보 카드 내용. 03 사용 시 이미지 03: 독립적인 후속 정보, 사용하지 않으면 이미지 03: 생략을 명시할 것.`;
+const PARAMMA_IMAGE_PLAN_RULES = `[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙 — 앞선 설명보다 우선]
+- 기본은 00 썸네일 + 01 핵심 원리 + 02 첫 번째 보상 정보 카드, 총 3장(썸네일 포함)이다. 본문에 독립적인 두 번째 실용 정보 또는 후속 발견이 있을 때만 03을 추가해 총 4장으로 기획할 것.
+- 이미지 02는 본문에서 먼저 다룬 해결·제거·활용 방법 등 핵심 실용 킥을 구체적으로 담는다. 실용 킥이 부자연스러운 소재라면 검증된 발견·관찰 포인트를 담는다.
+- 이미지 03의 역할은 '추가 실용 정보 · 예방 · 비교'다. 02에서 직접 해결·제거 방법을 다뤘다면 03은 본문에 검증된 재발 방지·유지 관리·상황별 비교 중 별개의 후속 내용을 선택한다. 예: 02 거미줄 제거 방법 → 03 거미줄 재발 줄이는 관리. 비실용 소재라면 독립된 관찰 차이·오해 해소·중요한 주의사항으로 활용한다.
+- 01의 원리, 02의 핵심 방법이나 팁 목록을 03에서 반복하지 말 것. 본문에 실제로 설명되지 않은 효능·예방법·수치·새 사실을 추가하지 말 것.
+- 03의 독립적인 내용이 원고에 없다면 03을 억지로 제작하지 말고 기획 메모에 '이미지 03: 생략'으로 표시할 것. 사용할 때는 후속 정보 문단 바로 뒤에 [이미지 03] 위치를 넣을 것.
+- 사이트 자동 연동을 위해 본문·태그 뒤에 [이미지 기획 메모] 제목을 쓰고, 이미지 00·01·02 및 03의 서로 다른 구체적인 전달 내용을 각 한 줄로 작성할 것. 03을 사용하지 않는다면 이미지 03: 생략을 명시할 것.`;
 
-const PARAMMA_IMAGE03_RULES = `[Paramma V3 · 선택 이미지 03 최신 지침 — 기존 설명보다 우선]
-- 03번은 단순 장식이나 01 원리·02 핵심 킥을 다시 보여주는 이미지가 아니라, 02 다음에 독자가 별도로 저장하고 싶은 후속 보상 정보 카드로 만든다.
-- 예: 02가 거미줄 제거 방법이면 03은 재발을 줄이는 방충망·틈새·조명 관리. 사과 갈변이라면 02의 갈변 방지법을 03에서 반복하지 않고 본문에 검증된 별도의 안전·상태 비교가 있을 때만 사용한다.
-- 실제 최종 원고에서 확인된 재발 방지·관리·상황별 비교·오해 해소·주의사항 중 한 가지를 선정한다. 본문에 독립적인 후속 내용이 없다면 이미지 내용을 억지로 만들지 말 것.
-- 출력은 1600×900 가로형 단일 이미지로, 한눈에 읽히는 정보 중심. 본문 00~02와 중복되는 큰 질문형 카피나 내용은 사용하지 않는다.`;
+const PARAMMA_IMAGE03_RULES = `[Paramma V3 · 03 추가 실용 정보·예방·비교 최종 기준 — 앞선 03 역할보다 우선]
+- 03은 본문에 확인된 독립적인 두 번째 정보가 있을 때만 제작하는 선택 슬롯이다. 02가 해결·제거·활용 같은 첫 번째 실용 킥이라면, 03은 재발 방지·유지 관리·상황별 비교 등 다음 단계의 실용 정보를 정보형 카드로 보여줄 것.
+- 예: 본문에서 02가 집 안 거미줄 제거 방법을 다뤘다면, 03은 본문에 확인된 거미줄 재발 줄이는 관리 방법에 집중한다. 사과 갈변의 02가 갈변 지연법이면, 03은 본문에 따로 설명한 안전·상태 비교가 있을 때만 사용한다.
+- 주제상 실용적인 후속 정보가 부자연스러우면 본문에 있는 관찰 포인트·오해 해소·중요한 주의사항 중 02와 독립적인 한 가지만 선정한다.
+- 01의 과학 원리나 02의 핵심 방법을 다시 요약하거나 같은 팁 목록을 반복하지 않는다. 최종 원고에 없는 사실·예방법·효과·수치는 임의로 만들지 않는다.
+- 독립적인 후속 정보가 최종 원고에 없다면 03을 생성하지 않고 생략한다.
+- 1600×900, 16:9 가로형 단일 이미지. 큰 사진 배경이나 질문형 썸네일보다 한눈에 저장·활용할 수 있는 명확한 정보 구성에 집중한다.`;
 
 const PARAMMA_STORY_BRIDGE_RULES = `[Paramma V3 · 연결형 스토리 구성 — 앞선 구성 규칙보다 우선]
 - 글은 '① 호기심: 일상의 핵심 질문과 답을 먼저 제시하고 선정한 킥을 도입에서 1~2문장으로 짧게 예고 → ② 발견: 신비한 원리와 흥미로운 사실을 충분히 설명 → ③ 자연스러운 전환: 원리와 독자의 실제 상황을 연결해 다음 질문을 이끌어내는 2~4문장 → ④ 보상: 선정한 킥의 구체적인 방법·비교·관찰 포인트 전달 → ⑤ 필요할 때만 안전·한계' 순서로 작성할 것.
@@ -626,25 +628,42 @@ function articlePromptForWork(work: TopicWork) {
       "- 이미지 02는 선택한 보상을 구체적인 저장용 정보 카드로, 01은 신비한 핵심 원리로 분리할 것."
     ].join("\n") : "";
   const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
-  const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 장수·03 슬롯 최신 원칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
+  const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
   return work.articlePrompt + legacyOverride + storyBridge + imagePlan + kickContext(work);
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId) {
   const base = work.slots[slotId].prompt;
-  const articlePlan = extractParammaImagePlans(work.body || "")[slotId];
-  const syncedPlan = articlePlan ? "\n\n[GPT 완성 본문에서 자동 인식한 이미지 " + slotId + " 기획 — 이미지의 전달 내용은 이 계획을 우선]\n" + articlePlan + "\n- 이미 직접 수정한 요청서의 스타일·크기·형식은 유지하고, 장면과 전달 내용은 위 최종 기획에 맞출 것.\n- 최종 원고에 없는 사실·효과·수치를 새로 만들지 말 것." : "";
+  const bodyPlans = extractParammaImagePlans(work.body || "");
+  const articlePlan = bodyPlans[slotId];
+  const syncedPlan = articlePlan
+    ? "\n\n[GPT 완성 본문에서 자동 인식한 이미지 " + slotId + " 기획 — 이미지의 전달 내용은 이 계획을 우선]\n" + articlePlan + "\n- 이미 직접 수정한 요청서의 스타일·크기·형식은 유지하고, 장면과 전달 내용은 위 최종 기획에 맞출 것.\n- 최종 원고에 없는 사실·효과·수치를 새로 만들지 말 것."
+    : "";
+
   if (slotId === "03") {
-    const latestRules = base.includes("[Paramma V3 · 선택 이미지 03 최신 지침") ? "" : "\n\n" + PARAMMA_IMAGE03_RULES;
+    const latestRules = base.includes("[Paramma V3 · 03 추가 실용 정보·예방·비교 최종 기준")
+      ? "" : "\n\n" + PARAMMA_IMAGE03_RULES;
     const chosenKick = (work.kickMode !== "auto" ? (work.selectedKick || "").trim() : "") || derivedKickFromBody(work.body || "");
-    const kickNote = chosenKick ? "\n\n[이번 글의 확정·본문 킥]\n" + chosenKick + "\n- 03번은 이 킥을 02번에서 설명한 내용을 반복하지 말고, 최종 본문에 있는 후속 보상만 시각화할 것." : "";
-    return base + latestRules + kickNote + syncedPlan;
+    const kickNote = chosenKick
+      ? "\n\n[이번 글의 확정·본문 킥]\n" + chosenKick + "\n- 이 킥을 02번에서 설명한 내용을 반복하지 말고, 최종 본문의 독립적인 후속 보상만 시각화할 것."
+      : "";
+    const previousSlot = bodyPlans["02"]
+      ? "\n\n[02번과 분리할 내용 — 반드시 확인]\n- 이미지 02 기획: " + bodyPlans["02"] + "\n- 이 해결 방법이나 팁 목록을 03에 되풀이하지 말고, 실제 본문에 있는 다음 단계의 정보만 시각화할 것."
+      : "\n\n[02번과 분리할 내용]\n- 02가 첫 번째 실용 킥 또는 발견을 맡고, 03은 별도의 두 번째 정보만 다룬다.";
+    const missingPlan = work.body.trim() && !bodyPlans["03"]
+      ? "\n\n[선택 슬롯 사용 확인]\n- 완성 본문 이미지 기획 메모에서 03의 독립적인 내용을 찾지 못했다. 본문에 후속 정보가 실제로 있는지 확인하고 없으면 03은 생성하지 말 것."
+      : "";
+    return base + latestRules + kickNote + previousSlot + missingPlan + syncedPlan;
   }
+
   if (slotId !== "02") return base + syncedPlan;
   const legacyOverride = base.includes("[Paramma V2 · 이미지 기획]")
     ? "\n\n[Paramma V3 최신 이미지 02 지침]\n- 기존 카테고리별 선택보다 최종 본문의 킥을 우선한다. 실용적인 킥이라면 구체적인 방법과 조건을 저장용 정보 카드로 보여주며 원리 이미지 01을 반복하지 말 것."
     : "";
-  return base + legacyOverride + kickContext(work, true) + syncedPlan;
+  const nextSlot = bodyPlans["03"]
+    ? "\n\n[03번과 역할 분리]\n- 이미지 03의 독립적인 후속 정보: " + bodyPlans["03"] + "\n- 이 후속 정보까지 02에 함께 넣지 말고, 02는 본문 첫 번째 보상만 분명하게 보여줄 것."
+    : "";
+  return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan;
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -1615,9 +1634,9 @@ export default function ParammaBulkPage() {
                      {slotId === "03" && (
                        <>
                          <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
-                           {work.optional03 ? "✓ 이미지 03 추가 보상 사용 중 · 선택 해제" : "+ 이미지 03 추가 보상 카드 사용"}
+                           {work.optional03 ? "✓ 이미지 03 추가 실용 정보 사용 중 · 선택 해제" : "+ 이미지 03 추가 실용 정보·예방·비교"}
                          </button>
-                         <p className={styles.kickHint}>기본 3장, 03 사용 시 총 4장 · 재발 방지·관리·추가 비교처럼 02와 다른 정보가 있을 때 추천</p>
+                         <p className={styles.kickHint}>기본 3장 · 최종 본문에 02와 독립된 재발 방지·관리·비교 정보가 있을 때만 03을 추가해 총 4장</p>
                        </>
                      )}
 
