@@ -1655,9 +1655,9 @@ ${today}
 참고 관점: ${articleAngle || "없음 — GPT가 최근 6개월 데이터에서 직접 선정"}
 
 [이번 글의 주제 — 최우선]
-주제 유형: ${articleTheme.label}
-핵심 관점: ${articleTheme.angle}
-- 제목, 도입부, ⑤ 이 단지만의 핵심 포인트는 이 주제를 중심으로 작성할 것.
+주제 유형: ${plannedStory ? plannedStory.topic : articleTheme.label}
+핵심 관점: ${plannedStory ? "실거래 분석 + " + plannedStory.kick : articleTheme.angle}
+- ${plannedStory ? "V3 승인된 중심 주제를 제목·도입·본문 전개·마지막 이미지에 일관되게 반영하되, 실거래 가격·거래량을 본문 중심으로 유지할 것." : "제목, 도입부, ⑤ 이 단지만의 핵심 포인트는 이 주제를 중심으로 작성할 것."}
 - 선택 주제가 '가격 변화'가 아닌데 가격 상승폭만 다시 메인 제목으로 가져오지 말 것.
 - 데이터가 선택 주제를 뒷받침하지 못할 때만 가장 가까운 다른 주제로 최소 조정할 것.
 
