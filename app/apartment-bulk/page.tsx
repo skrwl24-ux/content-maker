@@ -2384,7 +2384,7 @@ export default function ApartmentBulkPage() {
       "\n썸네일은 실제 실거래 숫자 한 가지와 중심 주제를 보여줄 것. 생활 발견은 보조 후킹으로만 사용하고 위 카드에 없는 장소·거리·가격을 새로 만들지 말 것."
       : autoArticleVisualPrompt
         ? "\n\n[V3.1 완성 원고와 같은 이야기로 썸네일 연결]\n" +
-          compactArticleForImagePrompt(finalBlogText).slice(0, 2600) +
+          safeStoryDisplayText(compactArticleForImagePrompt(finalBlogText).slice(0, 2600), null) +
           "\n가격 숫자는 위 원본 실거래 데이터에서만 사용하고, 보조 생활 후킹은 완성 원고에 이미 등장한 장소/생활 장면 하나만 사용. 새로운 장소·도보시간·가격을 생성하지 말 것."
         : "\n\n[제작 순서 안내] 자동 생활 발견 모드에서는 본문을 먼저 작성하여 최종편집에 붙여넣으면 썸네일도 그 글의 이야기와 연동됩니다."),
     [data, monthlyStats, selectedArticleTheme, approvedV3, autoArticleVisualPrompt, finalBlogText]);
