@@ -446,3 +446,23 @@ test("rounded two-decimal 억 figures are not treated as exact won amounts", asy
   });
   assert.equal(checks.some(x=>x.status==="warning"),false,JSON.stringify(checks));
 });
+
+
+test("relative previous-month deltas work in both Korean sentence orders", async () => {
+  const mod = await import("../lib/apartment-numeric-audit.mjs");
+  const monthly = [
+    {month:"2026-07",medianPrice:483000000,tradeCount:20},
+    {month:"2026-08",medianPrice:497000000,tradeCount:11},
+  ];
+  const good = mod.auditArticleFigures({
+    body:"8월은 전월보다 9건 적은 11건입니다.\n8월은 전월보다 1,400만원 높아졌습니다.",monthly,
+  });
+  assert.equal(good.some(item=>item.status==="warning"),false,JSON.stringify(good));
+  const wrong = mod.auditArticleFigures({
+    body:"8월은 전월보다 8건 적은 11건입니다.\n8월은 전월보다 1,300만원 높아졌습니다.",monthly,
+  });
+  const mismatch = wrong.find(item=>item.status==="warning");
+  assert.ok(mismatch);
+  assert.match(mismatch.detail,/거래량 차이/);
+  assert.match(mismatch.detail,/가격 차이/);
+});
