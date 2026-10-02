@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
+import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
+import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
+import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 
 type SchoolDistrictPreset = {
   id: string;
@@ -47,12 +50,12 @@ function commonResearchRules(district: SchoolDistrictPreset) {
   ].join("\n");
 }
 
-function makeSchoolBodyPrompt(district: SchoolDistrictPreset) {
+function makeSchoolBodyPrompt(district: SchoolDistrictPreset, plan: ApartmentStoryCandidate | null) {
   return [
     "네이버 블로그용 학군 아파트 비교글을 최종 발행본으로 작성해줘.",
     "",
     "[글 제목]",
-    schoolTitle(district),
+    plan ? plan.topic : schoolTitle(district),
     "",
     "[지역]",
     district.region,
@@ -62,6 +65,7 @@ function makeSchoolBodyPrompt(district: SchoolDistrictPreset) {
     "",
     commonResearchRules(district),
     "",
+    ...(plan ? [makeApprovedStoryBlock(plan), ""] : []),
     "[대표 단지 5곳 선정]",
     "- 최신 웹 자료를 확인해 이 학군에서 실제로 많이 비교되는 대표 아파트 5곳을 선정할 것.",
     "- 학원가 접근성, 단지 인지도, 세대수, 주거환경, 32~35평형 비교 가능 여부를 함께 고려할 것.",
@@ -74,7 +78,8 @@ function makeSchoolBodyPrompt(district: SchoolDistrictPreset) {
     "4. 단지별 설명: 최근 매매·전세 + 학원가 접근성 + 단지 성격",
     "5. 전세로 들어갈 때 체크할 점: 신규·갱신, 구축 수리상태 등",
     "6. 학원가 접근성 비교: 아이가 실제로 다닐 동선을 중심으로 설명",
-    "7. 마지막 정리: 가격만이 아니라 학원가 거리·주거환경·대단지 여부·정비사업 기대 등을 함께 봐야 한다는 내용",
+    ...(plan ? ["7. 오늘의 스토리 킥: 다섯 단지 비교 생활권과 실제로 연결된 질문 하나에 검증된 사실로 답할 것. 일부 온라인 의견을 전체 학부모 의견처럼 쓰지 말 것."] : []),
+    "8. 마지막 정리: 가격만이 아니라 학원가 거리·주거환경·대단지 여부·정비사업 기대 등을 함께 봐야 한다는 내용",
     "",
     "[34평대 안내문]",
     "도입 초반에 아래 취지의 문장을 한 번만 자연스럽게 넣어줘.",
@@ -83,7 +88,7 @@ function makeSchoolBodyPrompt(district: SchoolDistrictPreset) {
     "[이미지 위치]",
     "가격 비교 설명 뒤: [이미지 01 — 34평대 매매·전세 비교]",
     "학원가 접근 설명 뒤: [이미지 02 — 학원가 접근 비교]",
-    "마무리 정리 뒤: [이미지 03 — 핵심 정리]",
+    plan ? "스토리 설명 뒤: [이미지 03 — 오늘의 스토리 비주얼]" : "마무리 정리 뒤: [이미지 03 — 핵심 정리]",
     "",
     "[출력 스타일]",
     "- 제목 → 본문 → 이미지 위치 → 태그 순서",
@@ -205,6 +210,7 @@ function makeSchoolAcademyPrompt(district: SchoolDistrictPreset) {
     "- 정확한 도보 시간이 신뢰할 만한 자료에서 확인되면 시간으로 표시한다.",
     "- 정확한 시간이 불확실하면 '초근접 / 도보권 / 이동 필요'처럼 과장 없는 정성 표현을 사용한다.",
     "- 실제 지도 서비스의 타일·로고·폰트·UI를 복제하지 말고 단순화한 부동산 입지 인포그래픽으로 새로 구성한다.",
+    "- 지도/좌표를 확인하지 못했다면 실제 도로·방위·단지 위치를 임의로 배치하지 말고 확인된 비교사항을 도식과 설명 카드로 표시한다.",
     "",
     "[핵심 문구]",
     "같은 " + district.label + " 학군이라도 실제 학원 동선은 단지마다 다릅니다.",
@@ -255,13 +261,20 @@ function makeSchoolSummaryPrompt(district: SchoolDistrictPreset) {
   ].join("\n");
 }
 
-function makeSchoolPrompts(district: SchoolDistrictPreset) {
+function makeSchoolPrompts(district: SchoolDistrictPreset, plan: ApartmentStoryCandidate | null) {
+  const theme = plan ? "\n\n[V3 승인된 통일 방향]\n중심 주제: " + plan.topic +
+    "\n스토리 킥: " + plan.kick +
+    "\n썸네일은 학군·34평대 5개 단지 비교라는 핵심을 유지하고 과장된 학교 배정 표현 없이 하나의 궁금증을 제시할 것." : "";
   return {
-    thumbnail: makeSchoolThumbnailPrompt(district),
+    thumbnail: makeSchoolThumbnailPrompt(district) + theme,
     price: makeSchoolPricePrompt(district),
     academy: makeSchoolAcademyPrompt(district),
-    summary: makeSchoolSummaryPrompt(district),
-    body: makeSchoolBodyPrompt(district),
+    summary: plan
+      ? makeApprovedStoryVisualPrompt(plan, {
+          mode: "school", name: district.label + " 학군 대표 아파트 5곳", region: district.region,
+        })
+      : makeSchoolSummaryPrompt(district),
+    body: makeSchoolBodyPrompt(district, plan),
   };
 }
 
@@ -301,7 +314,18 @@ export default function SchoolDistrictWorkspace() {
     () => SCHOOL_DISTRICTS.find((item) => item.id === selectedId) || SCHOOL_DISTRICTS[1],
     [selectedId]
   );
-  const prompts = useMemo(() => makeSchoolPrompts(district), [district]);
+  const plannerInput = {
+    mode: "school" as const,
+    subjectKey: district.id,
+    name: district.label + " 학군 대표 아파트 5곳",
+    region: district.region,
+    dataSummary: "비교 대상: 학원가 기준 " + district.academyAnchor +
+      "\n34평대는 32~35평형을 하나의 비교 그룹으로 정의. 최근 매매/전세와 실제 계약일은 별도 확인. " +
+      "\n이번 학군 기존 글 제목: " + schoolTitle(district) +
+      "\n동네 이야기 하나를 5개 단지 비교 흐름에 연결하되 학교 배정 보장 표현 금지.",
+  };
+  const planner = useApartmentStoryPlanner(plannerInput);
+  const prompts = useMemo(() => makeSchoolPrompts(district, planner.approved), [district, planner.approved]);
   const doneCount = completedIds.filter((id) => SCHOOL_DISTRICTS.some((item) => item.id === id)).length;
 
   useEffect(() => {
@@ -332,7 +356,7 @@ export default function SchoolDistrictWorkspace() {
       "===== 02 학원가 접근 =====",
       prompts.academy,
       "",
-      "===== 03 핵심 정리 =====",
+      "===== 03 스토리 비주얼 또는 핵심 정리 =====",
       prompts.summary,
     ].join("\n");
     try {
@@ -392,11 +416,13 @@ export default function SchoolDistrictWorkspace() {
         })}
       </div>
 
+      <StoryPlanningPanel input={plannerInput} planner={planner} />
+
       <section className={styles.actionPanel}>
         <div className={styles.actionHead}>
           <p className={styles.eyebrow}>SELECTED · {district.label}</p>
           <h2>{schoolTitle(district)}</h2>
-          <span>본문과 이미지 요청서는 모두 최신 웹 확인 + 34평대 통합 기준이 자동으로 들어갑니다.</span>
+          <span>{planner.approved ? "승인한 스토리 킥이 본문·썸네일·03 이미지에 연동됐습니다. 34평대 5곳 비교와 가격 이미지는 유지됩니다." : "기존 34평대 5곳 비교·최신 자료 검증이 기본입니다. 위에서 스토리를 승인하면 본문과 마지막 이미지가 함께 바뀝니다."}</span>
         </div>
 
         <div className={styles.actionGrid}>
@@ -408,7 +434,7 @@ export default function SchoolDistrictWorkspace() {
           <button type="button" className={styles.actionButton} onClick={() => void copyAllImagePrompts()}>
             <span className={styles.actionIcon}>🖼️</span>
             <b>{copied ? "✓ 이미지 요청서 복사됨" : "이미지 4장 요청서 전체복사"}</b>
-            <small>00 썸네일 + 01 가격 + 02 학원가 + 03 정리</small>
+            <small>00 썸네일 + 01 가격 + 02 학원가 + 03 {planner.approved ? "스토리" : "정리"}</small>
           </button>
         </div>
 
@@ -419,7 +445,7 @@ export default function SchoolDistrictWorkspace() {
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.thumbnail)}><b>00. 썸네일</b><small>1254×1254</small></button>
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.price)}><b>01. 가격 비교</b><small>1600×900</small></button>
               <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.academy)}><b>02. 학원가 접근</b><small>1600×900</small></button>
-              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.summary)}><b>03. 핵심 정리</b><small>1600×900</small></button>
+              <button type="button" className={styles.actionButton} onClick={() => openChat(prompts.summary)}><b>03. {planner.approved ? "스토리 비주얼" : "핵심 정리"}</b><small>1600×900</small></button>
             </div>
           </div>
         </details>
