@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   lifeAuditRequestId, makeLifeVerificationPrompt,
-  parseLifeVerificationResult, applyLifeVerificationChanges,
+  parseLifeVerificationResult, applyLifeVerificationChanges, isLifeVerificationChangeApplicable,
 } from "../../lib/apartment-life-audit.mjs";
 import type { ApartmentStoryMode } from "../../lib/apartment-story.mjs";
 import styles from "./page.module.css";
@@ -64,9 +64,27 @@ export default function LifeVerificationPanel({
   function importReport() {
     try {
       const parsed = parseLifeVerificationResult(raw, { name, body }) as LifeReport;
+      // A parsed report is tied to this exact draft. Apply unique, sourced
+      // corrections (or unsupported-claim deletions) in one guarded pass.
+      const applicable = parsed.checks
+        .filter(item => item.matchCount === 1 && isLifeVerificationChangeApplicable(item))
+        .map(item => item.id);
+      if (applicable.length) {
+        const result = applyLifeVerificationChanges(body, parsed, applicable);
+        if (result.applied) {
+          onBodyChange(result.body);
+          setReport(null);
+          setSelected([]);
+          setRaw("");
+          setMessage(result.applied + "곳의 안전한 수정 문장을 본문에 자동 반영했습니다." +
+            (result.skipped ? " " + result.skipped + "곳은 원문 불일치로 적용하지 않았습니다." : "") +
+            " 가격·거래 데이터는 별도 자동 검사가 계속 대조합니다.");
+          return;
+        }
+      }
       setReport(parsed);
       setSelected([]);
-      setMessage("검증 결과를 가져왔습니다. GPT가 제시한 원문 링크와 수정 문장을 확인한 뒤 필요한 항목만 적용하세요.");
+      setMessage("검증 결과를 읽었습니다. 자동 수정할 문장이 없거나 현재 본문과 정확히 일치하지 않습니다.");
     } catch (error) {
       setReport(null);
       setSelected([]);
@@ -99,7 +117,7 @@ export default function LifeVerificationPanel({
     <section className={styles.lifeAuditPanel} aria-live="polite">
       <div className={styles.lifeAuditHeading}>
         <div>
-          <b>생활정보 웹 검증하기 · V3.2</b>
+          <b>생활정보 웹 검증하기 · V3.3</b>
           <span>맛집·카페 운영 여부, 실제 장소, 지도 위치, 거리·도보시간을 GPT 웹 검색으로 별도 확인하는 단계입니다.</span>
         </div>
         <strong>{!available ? "완성글 대기" : report && !stale ? "결과 " + claims.length + "건" : "웹 조사 가능"}</strong>
@@ -110,13 +128,13 @@ export default function LifeVerificationPanel({
         <button type="button" disabled={!available} onClick={() => void copyPrompt()}>검증 요청서 복사</button>
       </div>
       <label className={styles.lifeAuditLabel}>
-        <b>② GPT 검증 결과 붙여넣기</b>
+        <b>② GPT 검증 결과 붙여넣기 · 안전한 수정 자동 반영</b>
         <textarea value={raw} onChange={event => setRaw(event.target.value)}
           placeholder="[LOCAL_AUDIT_JSON]부터 [/LOCAL_AUDIT_JSON]까지 GPT의 검증 결과 전체를 붙여넣으세요."
           rows={4}/>
       </label>
       <div className={styles.lifeAuditActions}>
-        <button type="button" disabled={!available || !raw.trim()} onClick={importReport}>검증 결과 읽기</button>
+        <button type="button" disabled={!available || !raw.trim()} onClick={importReport}>검증 결과 읽고 본문 자동 수정</button>
       </div>
       {message && <p className={styles.lifeAuditMessage}>{message}</p>}
       {report && stale && <p className={styles.lifeAuditAlert}>검증 이후 원고 또는 대상 단지가 변경됐습니다. 이전 결과는 적용할 수 없으니 현재 본문으로 다시 조사해 주세요.</p>}
@@ -130,9 +148,7 @@ export default function LifeVerificationPanel({
           <p className={styles.lifeAuditSummary}>{report.checkedAt ? report.checkedAt + " 조사 · " : ""}{report.summary}</p>
           {!claims.length && <p className={styles.lifeAuditNote}>GPT가 이 원고에서 별도로 조사할 외부 생활정보 주장을 찾지 못했습니다. 숫자 검사는 위 발행 전 자동 검사를 참고하세요.</p>}
           {claims.map(item => {
-            const canApply = item.matchCount === 1 &&
-              (item.status === "update" && !!item.sourceUrl && item.recommendedText !== item.original ||
-               item.status === "unverified" && item.recommendedText === "");
+            const canApply = item.matchCount === 1 && isLifeVerificationChangeApplicable(item);
             return (
               <article className={styles.lifeAuditItem} key={item.id}>
                 <div className={styles.lifeAuditItemHead}>
