@@ -15,7 +15,6 @@ import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
 import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
-type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
 type ArticleThemeMode = "auto" | ArticleThemeId;
 type ArticleThemeChoice = {
@@ -113,8 +112,6 @@ type ApartmentData = {
   moveIn: string;
   station: string;
   locationLine: string;
-  question: string;
-  thumbnailTone: ThumbnailTone;
 };
 
 type Point = { x: number; y: number } | null;
@@ -162,8 +159,6 @@ const SAMPLE: ApartmentData = {
   moveIn: "1993년 6월",
   station: "수리산역",
   locationLine: "수리산역·학교·공원을 가까이 누리는 생활권",
-  question: "",
-  thumbnailTone: "auto",
 };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
@@ -1362,28 +1357,6 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], a
   const changeRate = first?.medianPrice && last?.medianPrice
     ? (delta! / first.medianPrice) * 100
     : null;
-  const userMainCopy = data.question.trim();
-  const toneLabel: Record<ThumbnailTone, string> = {
-    auto: "자동 추천",
-    standard: "정석형",
-    hook: "후킹형",
-    humor: "유머형",
-  };
-  const toneInstruction: Record<ThumbnailTone, string> = {
-    auto: "정석형·후킹형·유머형 3가지를 내부적으로 비교한 뒤 가장 잘 맞는 1픽을 선택할 것.",
-    standard: "정석형만 사용. 데이터가 바로 이해되는 안정적이고 신뢰감 있는 문구를 선택할 것.",
-    hook: "후킹형만 사용. 실제 데이터에 근거한 놀람·의문·반전 표현으로 클릭을 유도하되 과장하지 말 것.",
-    humor: "유머형만 사용. 부동산 신뢰감을 해치지 않는 선에서 가볍고 재치 있는 문구를 선택할 것.",
-  };
-  const mainCopyBlock = userMainCopy
-    ? `\n[사용자 지정 메인 문구]\n${userMainCopy}\n- 사용자가 직접 입력한 문구이므로 이 문구를 우선 사용하되, 숫자나 사실이 제공 데이터와 충돌하면 데이터에 맞게 최소 수정할 것.\n`
-    : "";
-  const selectedCopyGuide = userMainCopy
-    ? userMainCopy
-    : data.thumbnailTone === "auto"
-      ? "정석형·후킹형·유머형 3가지를 내부적으로 비교해 고른 최종 1픽"
-      : `${toneLabel[data.thumbnailTone]} 톤으로 고른 최종 1픽`;
-
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
 
 [기본 정보]
@@ -1406,14 +1379,12 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], a
 첫 유효월 거래량: ${first ? first.tradeCount + "건" : "확인 필요"}
 최근 유효월 거래량: ${last ? last.tradeCount + "건" : "확인 필요"}
 
-${mainCopyBlock}
 [이번 글의 주제 방향]
 주제: ${articleTheme.label}
 관점: ${articleTheme.angle}
 
 [썸네일 톤 선택]
-${toneLabel[data.thumbnailTone]}
-${toneInstruction[data.thumbnailTone]}
+자동 추천 · 정석형·후킹형·유머형을 내부 비교한 뒤 실제 데이터에 가장 맞는 최종 1개만 선택할 것.
 
 [썸네일 제작 방향 — 최우선]
 이번 썸네일은 광고 배너나 분양 홍보물처럼 보이지 않게 한다.
@@ -1423,10 +1394,7 @@ ${toneInstruction[data.thumbnailTone]}
 텍스트와 장식 요소를 최소화하고 생활감 있는 주거 이미지를 활용한다.
 
 [썸네일 메인 문구 생성 규칙]
-- 사용자가 메인 문구를 직접 입력했다면 그 문구를 우선 사용한다.
-- 입력값이 비어 있으면 위 [썸네일 톤 선택]을 최우선으로 따를 것.
-- 자동 추천이면 ① 정석형 ② 후킹형 ③ 가벼운 재치형을 내부적으로 비교한 뒤 최종 1개만 사용할 것.
-- 정석형·후킹형·유머형 중 하나를 직접 선택했다면 선택한 톤 안에서 가장 좋은 문구를 만들 것.
+- 정석형·후킹형·가벼운 재치형을 내부적으로 비교한 뒤 이 단지의 확인된 주제와 데이터에 가장 맞는 최종 문구 1개만 사용할 것.
 - 후보나 선택 과정을 이미지에 표시하지 말 것.
 - 지역명 또는 대표 생활권을 자연스럽게 활용할 수 있다.
 - 단지명만 덩그러니 보여주기보다 지역 맥락이 함께 느껴지게 할 것.
@@ -1975,7 +1943,6 @@ export default function ApartmentBulkPage() {
   const [workBody, setWorkBody] = useState("");
   const [workImageNotes, setWorkImageNotes] = useState("");
   const [workAttachments, setWorkAttachments] = useState<WorkAttachment[]>([]);
-  const [workProgress, setWorkProgress] = useState<WorkProgress>("not_started");
   const [top3Work, setTop3Work] = useState<Top3Work>(emptyTop3);
   const workOpeningRef = useRef(false);
   const [startedWorkIds, setStartedWorkIds] = useState<string[]>([]);
@@ -2325,7 +2292,6 @@ export default function ApartmentBulkPage() {
     workBody,
     workImageNotes,
     workAttachments,
-    workProgress,
     top3Work,
     data,
     monthlyStats,
@@ -2379,8 +2345,6 @@ export default function ApartmentBulkPage() {
           moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : "",
           station: "",
           locationLine: "",
-          question: "",
-          thumbnailTone: "auto",
         };
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
@@ -2609,7 +2573,6 @@ export default function ApartmentBulkPage() {
       setWorkBody("");
       setWorkImageNotes("");
       setWorkAttachments([]);
-      setWorkProgress("not_started");
       setTop3Work(emptyTop3());
       setWorkSaveMessage("");
     }
@@ -2626,7 +2589,6 @@ export default function ApartmentBulkPage() {
     setWorkBody("");
     setWorkImageNotes("");
     setWorkAttachments([]);
-    setWorkProgress("not_started");
     setTop3Work(emptyTop3());
     setWorkSaveMessage("");
     setStartedWorkIds([]);
@@ -2674,7 +2636,7 @@ export default function ApartmentBulkPage() {
       body: isBulk ? finalBlogText : workBody,
       imageNotes: workImageNotes,
       attachments: workAttachments,
-      progress: workProgress,
+      progress: activeWorkType === "bulk" ? (finalBlogText.trim() ? "review" : monthlyStats.length ? "drafting" : "preparing") : workBody.trim() ? "images" : "preparing",
       top3: top3Work,
       updatedAt: new Date().toISOString(),
       bulk: isBulk ? {
@@ -2750,7 +2712,6 @@ export default function ApartmentBulkPage() {
         }
         setWorkImageNotes(saved.imageNotes || "");
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
-        setWorkProgress(saved.progress || "preparing");
         setTop3Work(normalizeTop3(saved.top3));
 
         if (slot.type === "bulk" && saved.bulk) {
@@ -2781,7 +2742,6 @@ export default function ApartmentBulkPage() {
         }
         setWorkImageNotes("");
         setWorkAttachments([]);
-        setWorkProgress("preparing");
         setTop3Work(emptyTop3());
         if (slot.type === "bulk") {
           const queryComplexId = new URLSearchParams(window.location.search).get("complexId");
@@ -3256,13 +3216,7 @@ export default function ApartmentBulkPage() {
               <code>{activeWorkId}</code>
             </div>
             <div className={styles.activeWorkMeta}>
-              <select value={workProgress} onChange={(e) => setWorkProgress(e.target.value as WorkProgress)}>
-                <option value="not_started">미시작</option>
-                <option value="preparing">자료 준비</option>
-                <option value="drafting">본문 작성</option>
-                <option value="images">이미지 작업</option>
-                <option value="review">검수</option>
-              </select>
+              <span>진행 상태 자동 관리</span>
               <button type="button" onClick={() => void persistActiveWork()}>지금 저장</button>
               <span>{workSaveMessage || "변경 내용 자동 저장"}</span>
             </div>
@@ -3496,18 +3450,6 @@ export default function ApartmentBulkPage() {
           <div className={styles.autoLoad}>
             이번 글 추천 주제: <b>{selectedArticleTheme.label}</b> · {selectedArticleTheme.angle}
           </div>
-          <SelectField
-            label="썸네일 문구 톤"
-            value={data.thumbnailTone}
-            onChange={(v) => update("thumbnailTone", v)}
-            options={[
-              { value: "auto", label: "자동 추천 · 정석/후킹/유머 중 1픽" },
-              { value: "standard", label: "정석형 · 깔끔하고 신뢰감 있게" },
-              { value: "hook", label: "후킹형 · 놀람/의문/반전" },
-              { value: "humor", label: "유머형 · 재치 한 스푼" },
-            ]}
-          />
-          <Field label="썸네일 메인 문구 (비워두면 선택 톤으로 GPT 추천)" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
           {(nearbyMessage || autoMapMessage) && (
