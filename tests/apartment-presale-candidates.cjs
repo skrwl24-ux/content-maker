@@ -38,6 +38,8 @@ test("candidate selection seeds only preliminary leads and never grants fact-che
 test("official builder facts distinguish large complexes, apt counts, new and old application", async () => {
   const { getPresaleCandidate } = await helpers();
   assert.match(getPresaleCandidate("godeok-gangil-3").supply, /신규 청약 215호 계획/);
+  assert.match(getPresaleCandidate("banpo-dh-claest").supply, /5,007세대/);
+  assert.doesNotMatch(getPresaleCandidate("banpo-dh-claest").topic, /5,002가구/);
   assert.match(getPresaleCandidate("gyeonggi-gwangju-lotte-2").supply, /1,249세대/);
   assert.match(getPresaleCandidate("hyangnam-lotte-signature").supply, /1,542세대/);
   assert.match(getPresaleCandidate("forena-jije").supply, /1,098가구/);
