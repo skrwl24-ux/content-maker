@@ -2,10 +2,11 @@
 
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
+import dynamic from "next/dynamic";
 import styles from "./page.module.css";
-import Top3Workspace from "./Top3Workspace";
-import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
-import MegaComplexWorkspace from "./MegaComplexWorkspace";
+const Top3Workspace = dynamic(() => import("./Top3Workspace"), { ssr: false });
+const SchoolDistrictWorkspace = dynamic(() => import("./SchoolDistrictWorkspace"), { ssr: false });
+const MegaComplexWorkspace = dynamic(() => import("./MegaComplexWorkspace"), { ssr: false });
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
 import LifeVerificationPanel from "./LifeVerificationPanel";
