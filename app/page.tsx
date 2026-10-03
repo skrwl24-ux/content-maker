@@ -1363,7 +1363,8 @@ export default function Home() {
     <header className="header">
       <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V13 · 정보판 가독성 V4</span></button>
       <div className="inlineActions">
-        <a className="presaleNavLink" href="/apartment-presale">🏙️ 분양정보 제작실</a>
+        <a className="presaleNavLink" href="/apartment-presale/discover">🔎 관심 분양 찾기</a>
+        <a className="presaleNavLink" href="/apartment-presale">🏙️ 분양 제작실</a>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
       </div>
@@ -1376,10 +1377,10 @@ export default function Home() {
 
     {phase === "home" && <section className="presaleSpotlight">
       <div><span>집값쓱 · 주력 제작 기능</span><h2>신규 아파트 분양 글, 처음부터 발행까지</h2>
-        <p>단지명 하나로 공식 공고 조사부터 시작합니다. 질문형 제목 · 핵심 POINT · 목차 · 공급·분양가 · 이 단지만의 킥 · 전경 · 이미지 3장.</p>
+        <p>조사해 놓은 관심 분양 후보에서 단지를 고르세요. 질문형 제목 · 핵심 POINT · 목차 · 공급·분양가 · 이 단지만의 킥 · 전경 · 이미지 3장.</p>
         <small>공식자료와 과거 추정치를 분리하고, 독립 검증·네이버 편집·ZIP까지 한 화면에서 진행합니다.</small>
       </div>
-      <a href="/apartment-presale">분양정보 글 제작 시작 →</a>
+      <a href="/apartment-presale/discover">관심 분양 후보부터 고르기 →</a>
     </section>}
     {error && <div className="error">{error}</div>}
 
