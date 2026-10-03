@@ -3587,7 +3587,7 @@ export default function ApartmentBulkPage() {
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT CONTENT STUDIO</p>
           <h1>오늘 만들 콘텐츠만 고르면<br />작업 화면이 깔끔하게 열립니다.</h1>
-          <p>단지 대량발행 · 학군 아파트 · 수도권 초대형단지를 한 곳에서 작업합니다.</p>
+          <p>단지 대량발행 · 신규 분양정보 · 학군 아파트 · 수도권 초대형단지를 한 곳에서 작업합니다.</p>
         </div>
         <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
       </section>
@@ -3614,6 +3614,10 @@ export default function ApartmentBulkPage() {
           </div>
           <div className={styles.dailyBoardActions}>
             <div className={styles.dailyProgressText}>{dailyDoneCount === 7 ? "7개 완료 · 갈아끼우기 준비" : nextDailySlot ? `다음 · ${nextDailySlot.id}번 ${DAILY_TYPE_META[nextDailySlot.type].short}` : "발행 큐 완료"}</div>
+            <button type="button" onClick={() => {
+              const settings = document.getElementById("daily-type-settings") as HTMLDetailsElement | null;
+              if (settings) { settings.open = true; settings.scrollIntoView({ behavior: "smooth", block: "center" }); }
+            }}>분양정보 글 유형 선택 ↓</button>
           </div>
         </div>
 
@@ -3629,6 +3633,7 @@ export default function ApartmentBulkPage() {
             const description =
               slot.type === "bulk" ? (slot.complexId ? "실거래 후보 데이터로 자동 선정" : "후보 데이터 확인 중") :
               slot.type === "top3" ? "지역 검색 유입을 노리는 순위형 글" :
+              slot.type === "presale" ? "전경·핵심 POINT·공급·분양조건·청약 체크" :
               slot.type === "tip" ? "오래 검색되는 부동산·재테크 정보" :
               slot.type === "power" ? "당일 시장 흐름을 깊게 설명" :
               DAILY_TYPE_META[slot.type].label;
@@ -3686,8 +3691,8 @@ export default function ApartmentBulkPage() {
           })}
         </div>
 
-        <details className={styles.dailySettings}>
-          <summary>구성 직접 바꾸기</summary>
+        <details id="daily-type-settings" className={styles.dailySettings}>
+          <summary>구성 직접 바꾸기 · 신규 분양정보 선택</summary>
           <div className={styles.dailySettingsGrid}>
             {dailySlots.map((slot) => (
               <label key={slot.id}>
