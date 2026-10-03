@@ -7,6 +7,7 @@ import {
   makePresaleImagePlan, makePresaleImagePrompt, auditPresaleArticle, parsePresaleArticle,
 } from "../../lib/apartment-presale.mjs";
 import type { PresaleArticleBlock } from "../../lib/apartment-presale.mjs";
+import { makePresaleCandidateSeed } from "../../lib/apartment-presale-candidates.mjs";
 import styles from "./page.module.css";
 
 type ImageSlot = "00" | "01" | "02";
@@ -173,16 +174,17 @@ export default function PresalePage() {
     const qs = new URLSearchParams(window.location.search);
     const workId = (qs.get("workId") || "main").slice(0, 100);
     const initialTopic = (qs.get("topic") || "").slice(0, 180);
+    const candidateSeed = makePresaleCandidateSeed((qs.get("candidate") || "").slice(0, 100));
+    const initialDraft = { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic, ...(candidateSeed || {}) };
     void loadDraft(workId).then((saved) => {
       if (disposed) return;
-      setDraft(saved ? { ...emptyDraft(), ...saved, dateKey: saved.dateKey || todayLocal(), images: saved.images || {} } :
-        { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic });
+      setDraft(saved ? { ...emptyDraft(), ...saved, dateKey: saved.dateKey || todayLocal(), images: saved.images || {} } : initialDraft);
       setId(workId);
       setHydrated(true);
       setSaveStatus(saved ? "저장된 작업 복원됨" : "새 분양 작업 시작");
     }).catch(() => {
       if (disposed) return;
-      setDraft({ ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic });
+      setDraft(initialDraft);
       setId(workId);
       setHydrated(true);
       setSaveStatus("저장소 접근 불가 · 이 브라우저의 저장 권한을 확인하세요.");
@@ -319,6 +321,7 @@ export default function PresalePage() {
         <a href="/" className={styles.brand}>← 콘텐츠메이커</a>
         <nav className={styles.toplinks}>
           <span className={styles.primaryTag}>주력 · 분양정보</span>
+          <a href="/apartment-presale/discover">관심 분양 리스트 ↗</a>
           <a href="/apartment-bulk">기존 아파트 분석 ↗</a>
         </nav>
       </div>
@@ -329,6 +332,7 @@ export default function PresalePage() {
           <p>공식공고 조사 → 질문형 도입·POINT·목차 → 공급·가격·킥 → 이미지 3장 → 네이버 최종편집</p>
         </div>
         <div className={styles.heroAside}>
+          <a href="/apartment-presale/discover" style={{ color: "white", fontWeight: 900, textDecoration: "underline" }}>오늘의 분양 후보 12곳 보기 →</a>
           <b>신규 분양정보 제작실</b>
           <span>작성 기준일 · {draft.dateKey || "불러오는 중"}</span>
           <small>{saveStatus}</small>
@@ -352,6 +356,7 @@ export default function PresalePage() {
                   update("topic", "고덕강일3단지 본청약 예정｜공급물량·분양가·토지임대료 확인");
                 }}>고덕강일 예시 입력</button>
               </header>
+              <p className={styles.softNotice}>단지명을 직접 찾을 필요 없이 <a href="/apartment-presale/discover" style={{ color: "#127a70", fontWeight: 900 }}>조사된 관심 분양 리스트</a>에서 후보를 선택하면 제목·킥·근거 출발점을 자동으로 채웁니다. 최신 공고는 아래에서 재확인합니다.</p>
               <div className={styles.twoFields}>
                 <label className={styles.field}>분양 단지·글 주제 <input value={draft.topic} onChange={(e) => update("topic", e.target.value)}
                   placeholder="예: 고덕강일3단지 본청약 예정" /></label>

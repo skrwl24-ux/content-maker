@@ -1,0 +1,36 @@
+export type PresaleCandidateStage = "planned" | "later" | "watch" | "notice" | "followup";
+export type PresaleCandidate = {
+  id: string;
+  name: string;
+  region: string;
+  area: "서울" | "경기" | "인천";
+  stage: PresaleCandidateStage;
+  status: string;
+  schedule: string;
+  supply: string;
+  supplyNote: string;
+  interest: string;
+  kick: string;
+  topic: string;
+  sourceUrl: string;
+  sourceLabel: string;
+  officialUrl: string;
+  officialLabel: string;
+  caution: string;
+};
+export const PRESALE_CANDIDATE_SNAPSHOT_DATE: string;
+export const PRESALE_CANDIDATES: PresaleCandidate[];
+export function getPresaleCandidate(id: string): PresaleCandidate | null;
+export function getPresaleCandidateCounts(): Record<"total" | PresaleCandidateStage, number>;
+export function makePresaleCandidateSeed(id: string): {
+  topic: string;
+  sourceStatus: "unchecked";
+  sourceDate: string;
+  facts: string;
+  sourceReviewed: false;
+  finalReviewed: false;
+  sourceUrl: string;
+  kick: string;
+  materials: string;
+} | null;
+export function makePresaleDiscoveryPrompt(dateKey: string): string;

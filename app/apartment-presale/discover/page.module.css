@@ -1,0 +1,59 @@
+.page{min-height:100vh;background:#f3f7f7;color:#18333b;padding:24px 22px 85px}
+.topbar,.hero,.pageInner{max-width:1240px;width:100%;margin-left:auto;margin-right:auto}
+.topbar{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:19px}
+.brand{color:#234a48;text-decoration:none;font-size:17px;font-weight:900}
+.links{display:flex;gap:16px;font-size:13px}.links a{color:#4b6866;text-decoration:none;font-weight:800}
+.hero{border-radius:23px;padding:39px 42px;background:linear-gradient(125deg,#153239,#16635d 87%);color:white;box-shadow:0 15px 38px #0a4d4523}
+.eyebrow{display:block;color:#a5f6dc;font-size:12px;letter-spacing:2px;font-weight:900;margin-bottom:12px}
+.hero h1{font-size:clamp(31px,4vw,44px);margin:0 0 13px;letter-spacing:-1.5px;line-height:1.2}
+.hero p{max-width:770px;color:#e0f1ed;font-size:14px;line-height:1.7;margin:0 0 19px}
+.heroActions{display:flex;flex-wrap:wrap;gap:9px}
+.whiteButton,.ghostButton{font-size:13px;font-weight:850;border-radius:11px;padding:12px 16px}
+.whiteButton{border:1px solid white;background:white;color:#135f52}.ghostButton{color:white;background:#ffffff10;border:1px solid #ffffff55}
+.pageInner{margin-top:19px}
+.snapshot{display:flex;gap:20px;align-items:center;justify-content:space-between;background:white;border:1px solid #dce7e3;border-radius:16px;padding:19px 22px}
+.snapshot>div:first-child{display:flex;flex-direction:column;gap:5px}
+.snapshot small{color:#66817c;font-size:12px;font-weight:800}.snapshot strong{color:#235c52;font-size:21px}.snapshot span{font-size:12px;color:#6c817e}
+.snapshotNumbers{display:flex;gap:23px;text-align:center}
+.snapshotNumbers>b{display:flex;flex-direction:column;gap:5px;color:#206d5c;font-size:25px}
+.snapshotNumbers small{font-size:11px;color:#7b908b;font-weight:750}
+.sourceWarning{font-size:12px;line-height:1.6;color:#806d52;background:#fffbef;border:1px solid #eee1b9;border-radius:9px;padding:11px 14px;margin:11px 0 20px}
+.filterPanel{background:white;border:1px solid #dde8e5;border-radius:16px;padding:20px 22px;margin-bottom:16px}
+.filterTitle{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:16px}
+.filterTitle h2{font-size:21px;letter-spacing:-.55px;margin:0}.filterTitle span{font-size:12px;color:#78908a}
+.searchLabel{display:flex;flex-direction:column;gap:7px;font-weight:800;color:#506b68;font-size:12px}
+.searchLabel input{width:100%;border:1px solid #d4e0dd;background:#fcfdfd;padding:12px 14px;border-radius:11px;font-size:14px;color:#173d38;outline:none}
+.searchLabel input:focus{border-color:#128a77;box-shadow:0 0 0 3px #0d8e7d18}
+.filterRow{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-top:14px}
+.filterGroup{display:flex;gap:6px;flex-wrap:wrap}
+.filterButton,.filterActive,.areaButton,.areaActive{font-size:12px;border-radius:9px;font-weight:850;padding:8px 10px}
+.filterButton,.areaButton{border:1px solid #d9e6e1;background:white;color:#617c75}
+.filterActive,.areaActive{border:1px solid #1b7d6b;background:#1b7d6b;color:white}
+.resultsHead{margin-top:17px;border-top:1px solid #edf2f1;padding-top:13px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#688079;font-weight:850}
+.resultsHead button,.noResults button{border:0;background:none;color:#137f70;font-weight:850;font-size:12px}
+.candidateGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.card{min-width:0;background:white;border:1px solid #d9e7e3;border-radius:18px;box-shadow:0 7px 22px #244b4510;padding:22px 23px;display:flex;flex-direction:column}
+.cardTop{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.region{font-size:12px;font-weight:800;color:#738e83}.status{font-size:11px;font-weight:850;color:#126758;background:#e9f5f0;border-radius:7px;padding:6px 9px}
+.card h3{font-size:21px;color:#1a343c;margin:0 0 6px;letter-spacing:-.65px}
+.schedule{font-size:12px;color:#59766d;line-height:1.5;margin:0 0 16px;font-weight:750}
+.supply{display:flex;flex-direction:column;gap:6px;padding:14px 15px;border-radius:10px;background:#f0f8f5}
+.supply small{font-size:11px;color:#64887c;font-weight:800}
+.supply strong{font-size:17px;color:#175646;line-height:1.5;letter-spacing:-.25px}
+.supply span{font-size:12px;color:#587a72;line-height:1.5}
+.interest{color:#4e6e68;font-size:13px;line-height:1.65;margin:15px 0}
+.kick{border-left:3px solid #45a88b;padding:8px 12px;margin:0 0 12px;background:#fbfefd}
+.kick small{color:#148373;font-weight:900;font-size:11px}.kick p{font-size:13px;line-height:1.65;color:#335b54;margin:5px 0 0}
+.caution{font-size:12px;line-height:1.6;color:#95704c;background:#fffbf3;border-radius:8px;padding:9px 11px;margin:0 0 16px}
+.sources{display:flex;flex-direction:column;gap:8px;margin-top:auto;margin-bottom:15px;padding-top:6px;min-width:0}
+.sources a{font-size:12px;color:#277567;line-height:1.5;overflow-wrap:anywhere;text-decoration:underline;text-decoration-color:#add4c7;text-underline-offset:3px}
+.startButton{display:block;text-align:center;padding:12px 15px;border-radius:11px;background:#116f60;color:white;text-decoration:none;font-size:14px;font-weight:900}
+.startButton:hover{background:#0a554c}
+.footerGuide{padding:22px 23px;border:1px solid #d8e6e1;background:white;border-radius:16px;margin-top:19px}
+.footerGuide h2{margin:0 0 10px;color:#215b50;font-size:17px}.footerGuide p{color:#5a7870;font-size:12px;line-height:1.75;margin:9px 0}
+.noResults{grid-column:1/-1;text-align:center;background:white;border:1px dashed #b6cec4;border-radius:15px;padding:43px 16px;color:#28554e}
+.noResults p{font-size:12px;color:#729084;line-height:1.7}
+.notice{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;max-width:min(700px,94vw);z-index:120;border-radius:12px;background:#1c4240;color:white;display:flex;gap:18px;align-items:center;padding:12px 17px;box-shadow:0 12px 32px #152e2a30;font-size:12px;line-height:1.5}
+.notice button{font-size:21px;color:white;background:none;border:0;padding:0}
+@media(max-width:860px){.candidateGrid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.page{padding:14px 11px 70px}.topbar{flex-wrap:wrap}.links{gap:11px}.hero{padding:28px 22px}.hero h1{font-size:30px}.snapshot{align-items:start;flex-direction:column}.snapshotNumbers{gap:24px}.filterPanel{padding:17px 14px}.filterTitle{align-items:start;flex-direction:column}.filterRow{flex-direction:column;gap:10px}.card{padding:19px 17px}.card h3{font-size:19px}.heroActions button{flex:1 1 100%}}
