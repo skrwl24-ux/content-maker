@@ -57,7 +57,7 @@ test("official research and independent review include provenance without invent
   const input = { topic: "고덕강일3단지", dateKey: "2026-10-04", sources: "SH 공식공고 URL 후보", materials: "일정 변경은 추가 확인", facts: "[검증 결과]\n공식 모집공고 미확인", kick: "토지임대료 확인", article: "검수할 원고" };
   const research = makePresaleResearchPrompt(input);
   assert.match(research, /공식 모집공고가 없으면/);
-  assert.match(research, /전체 단지 세대수 \/ 사전예약/);
+  assert.match(research, /단지 전체 세대수 \/ 사전예약/);
   assert.match(research, /\[검증 결과\]/);
   assert.match(research, /SH 공식공고 URL 후보/);
   const writing = makePresaleProjectPrompt(input);
