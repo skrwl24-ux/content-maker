@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs tests/apartment-story.cjs tests/apartment-matching.cjs tests/apartment-data-quality.cjs tests/work-image-plan.cjs tests/google-blogger-parser.cjs && next build",
+    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs tests/apartment-story.cjs tests/apartment-matching.cjs tests/apartment-data-quality.cjs tests/work-image-plan.cjs tests/apartment-presale.cjs tests/google-blogger-parser.cjs && next build",
     "start": "next start"
   },
   "dependencies": {
