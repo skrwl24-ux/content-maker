@@ -1381,7 +1381,7 @@ export default function Home() {
       </div>
       <a href="/apartment-presale">분양정보 글 제작 시작 →</a>
     </section>}
-    {error && <div className="error">{error}</div>
+    {error && <div className="error">{error}</div>}
 
     <section className="panel">
       <div className="steps">{(isShorts ? ["자료", "대본", "이미지 7장", "제작자료", "GPT 제작"] : ["자료입력", "분석", "이미지", "검수", "완료"]).map((x, i) => {
