@@ -160,8 +160,10 @@ export default function PresalePage() {
     [imagePlan, draft.topic, draft.article, draft.imageNotes]);
   const imageDone = IMAGE_SLOTS.filter((slot) => Boolean(draft.images[slot])).length;
   const introReady = draft.topic.trim().length > 1;
-  const sourceReady = draft.sourceReviewed && draft.sourceStatus !== "unchecked" &&
-    (draft.sourceStatus === "prior" || Boolean(draft.sourceUrl.trim()));
+  const sourceReady = draft.sourceReviewed && Boolean(draft.sourceDate) && (
+    draft.sourceStatus === "published" ? Boolean(draft.sourceUrl.trim()) :
+    draft.sourceStatus === "prior" && Boolean(draft.sourceUrl.trim() || draft.facts.trim())
+  );
   const articleReady = draft.article.trim().length >= 300;
   const missing = articleAudit.checks.filter((item) => !item.ok);
   const readyForFinal = articleAudit.passed && draft.finalReviewed && sourceReady;
@@ -203,9 +205,10 @@ export default function PresalePage() {
   function update<K extends keyof PresaleDraft>(field: K, value: PresaleDraft[K]) {
     setDraft((prev) => ({
       ...prev, [field]: value,
-      sourceReviewed: ["topic", "sourceStatus", "sourceUrl", "sourceDate", "facts"].includes(field)
+      sourceReviewed: ["topic", "sourceStatus", "sourceUrl", "sourceDate", "facts", "materials"].includes(field)
         ? false : prev.sourceReviewed,
-      finalReviewed: field === "article" ? false : prev.finalReviewed,
+      finalReviewed: ["topic", "sourceStatus", "sourceUrl", "sourceDate", "facts", "materials", "kick", "article"].includes(field)
+        ? false : prev.finalReviewed,
     }));
   }
   async function copyPrompt(value: string, name: string) {
@@ -285,7 +288,7 @@ export default function PresalePage() {
       });
       IMAGE_SLOTS.forEach((slot) => {
         const image = safeBase64(draft.images[slot] || "");
-        if (image) zip.file("images/" + slot + "-" + SLOT_NAMES[slot].replace(/[^a-zA-Z0-9-]/g, "") +
+        if (image) zip.file("images/" + ({ "00": "00-thumbnail", "01": "01-supply", "02": "02-cost-kick" } as Record<ImageSlot, string>)[slot] +
           "." + image.ext, image.base64, { base64: true });
       });
       if (draft.sitePhotoRights) {
@@ -379,8 +382,8 @@ export default function PresalePage() {
                     placeholder="예: 분양가 외에 매월 발생하는 토지임대료" /></label>
                 <label className={styles.checkLabel}><input type="checkbox" checked={draft.sourceReviewed}
                   onChange={(e) => update("sourceReviewed", e.target.checked)} />
-                  <span>공고 상태와 입력 자료의 기준일·물량·추정/확정 표기를 원문과 직접 대조했습니다.</span></label>
-                <p className={styles.hint}>이 체크는 운영자의 수동 확인입니다. 사이트가 공식 자료를 자동으로 열람했다고 표시하지 않습니다.</p>
+                  <span>공고 상태, 위 자료 날짜 및 물량·추정/확정 표기를 원문과 직접 대조했습니다.</span></label>
+                <p className={styles.hint}>발행 단계로 진행하려면 확인한 자료 날짜를 입력해야 합니다. 이 체크는 운영자의 수동 확인이며 사이트가 공식 자료를 자동 열람했다는 뜻이 아닙니다.</p>
               </div>
             </section>
 
