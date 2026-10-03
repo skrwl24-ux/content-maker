@@ -31,6 +31,7 @@ export declare function parseLifeVerificationResult(raw: string, input?: {
   name?: string;
   body?: string;
 }): LifeVerificationReport;
+export declare function isLifeVerificationChangeApplicable(item: Pick<LifeCheck, "status" | "original" | "recommendedText" | "sourceUrl">): boolean;
 export declare function applyLifeVerificationChanges(
   body: string, report: LifeVerificationReport | null, selectedIds: string[]
 ): { body: string; applied: number; skipped: number };
