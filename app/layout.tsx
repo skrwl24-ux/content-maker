@@ -12,8 +12,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         {children}
         <a
-          href="/apartment-bulk"
-          aria-label="아파트 단지 대량발행 모드 열기"
+          href="/apartment-presale"
+          aria-label="분양정보 주력 제작실 열기"
           style={{
             position: "fixed",
             right: 18,
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             boxShadow: "0 10px 28px rgba(15,130,127,.28)",
           }}
         >
-          🏢 아파트 단지 대량발행
+          🏙️ 신규 분양정보 제작
         </a>
       </body>
     </html>
