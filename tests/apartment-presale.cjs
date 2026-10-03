@@ -18,6 +18,9 @@ test("presale writing prompt follows evidence-first benchmarked structure", asyn
   assert.match(prompt, /금회 신규 공급 물량/);
   assert.match(prompt, /확정\/예정\/과거 추정치\/미확인/);
   assert.match(prompt, /핵심 POINT/);
+  assert.match(prompt, /조사 중단 금지/);
+  assert.match(prompt, /인근 최근 실거래/);
+  assert.match(prompt, /반복되는 미확인/);
   assert.match(prompt, /\[분양 핵심 POINT\]/);
   assert.match(prompt, /\[\/분양 핵심 POINT\]/);
   assert.match(prompt, /짧은 목차/);
@@ -57,6 +60,9 @@ test("official research and independent review include provenance without invent
   const input = { topic: "고덕강일3단지", dateKey: "2026-10-04", sources: "SH 공식공고 URL 후보", materials: "일정 변경은 추가 확인", facts: "[검증 결과]\n공식 모집공고 미확인", kick: "토지임대료 확인", article: "검수할 원고" };
   const research = makePresaleResearchPrompt(input);
   assert.match(research, /공식 모집공고가 없으면/);
+  assert.match(research, /조사를 끝내지 말 것/);
+  assert.match(research, /최근 보도상 예정 물량/);
+  assert.match(research, /기존 명칭으로 재검색/);
   assert.match(research, /단지 전체 세대수 \/ 사전예약/);
   assert.match(research, /\[검증 결과\]/);
   assert.match(research, /SH 공식공고 URL 후보/);
@@ -69,6 +75,8 @@ test("official research and independent review include provenance without invent
   assert.match(review, /검수할 원고/);
   assert.match(review, /공식 모집공고/);
   assert.match(review, /원래의 수치를 추측해 대체하지 말고/);
+  assert.match(review, /정보 누락으로 지적/);
+  assert.match(review, /POINT가 빈 항목/);
 });
 
 const ARTICLE = [
