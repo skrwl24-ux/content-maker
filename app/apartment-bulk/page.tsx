@@ -149,16 +149,17 @@ type ComplexDetailResponse = {
   } | null;
 };
 
-const SAMPLE: ApartmentData = {
-  name: "산본 퇴계아파트",
-  region: "경기 군포시 금정동",
-  area: "전용 42㎡",
-  recentPrice: "3억 5,000만원",
-  previousPrice: "직전 3억 3,000만원",
-  households: "1,992세대",
-  moveIn: "1993년 6월",
-  station: "수리산역",
-  locationLine: "수리산역·학교·공원을 가까이 누리는 생활권",
+const EMPTY_APARTMENT: ApartmentData = {
+  name: "",
+  region: "",
+  area: "",
+  recentPrice: "",
+  previousPrice: "",
+  households: "",
+  moveIn: "",
+  station: "",
+  locationLine: "",
+
 };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
@@ -1885,7 +1886,7 @@ async function makeStoryMapCard(
 
 export default function ApartmentBulkPage() {
   const [contentMode, setContentMode] = useState<ContentMode>("bulk");
-  const [data, setData] = useState<ApartmentData>(SAMPLE);
+  const [data, setData] = useState<ApartmentData>(EMPTY_APARTMENT);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
@@ -2004,15 +2005,16 @@ export default function ApartmentBulkPage() {
     [approvedV3, data, mapDataUrl, finalBlogText, autoArticleVisualPrompt]);
   // An unlinked complex is NOT proof of zero sales. Block publication prompts
   // until a real monthly series for this selected complex exists.
-  const selectedComplexNeedsMatching = Boolean(selectedComplexName &&
-    !monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0));
+  const hasVerifiedMonthlyTrades = monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0);
+  const bulkDataReady = Boolean(data.name.trim() && data.region.trim() && hasVerifiedMonthlyTrades);
+  const selectedComplexNeedsMatching = Boolean(selectedComplexName && !hasVerifiedMonthlyTrades);
   const bodyPrompt = useMemo(
-    () => selectedComplexNeedsMatching
-      ? "[실거래 데이터 매칭 대기]\n" + data.name +
-        "의 최근 6개월 거래 원자료가 이 단지에 아직 연결되지 않았습니다. 실제 무거래 0건으로 판단하거나 샘플 가격으로 본문을 작성하지 마세요. 데이터 재동기화 후 다시 열어주세요."
+    () => !bulkDataReady
+      ? "[단지 또는 실거래 준비 대기]\n" + (data.name || "선택한 단지") +
+        "의 검증된 최근 6개월 거래 자료가 아직 준비되지 않았습니다. 실제 무거래 0건으로 판단하거나 임의 숫자로 본문을 작성하지 마세요. 단지를 선택하고 원본 자료 연결 상태를 확인해 주세요."
       : makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
         approvedV3, v3Planner.current.status !== "skipped"),
-    [selectedComplexNeedsMatching, data, monthlyStats, recommendedAngle, selectedArticleTheme, approvedV3, v3Planner.current.status]
+    [bulkDataReady, data, monthlyStats, recommendedAngle, selectedArticleTheme, approvedV3, v3Planner.current.status]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -2282,7 +2284,7 @@ export default function ApartmentBulkPage() {
     if (!activeWorkId || !activeWorkType || workHydratingRef.current) return;
     const timer = window.setTimeout(() => {
       void persistActiveWork();
-    }, 250);
+    }, 650);
     return () => window.clearTimeout(timer);
   }, [
     activeWorkId,
@@ -2335,9 +2337,9 @@ export default function ApartmentBulkPage() {
         const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
         const nextData: ApartmentData = {
-          ...SAMPLE,
-          name: detail.complex.name || SAMPLE.name,
-          region: region || SAMPLE.region,
+          ...EMPTY_APARTMENT,
+          name: detail.complex.name || EMPTY_APARTMENT.name,
+          region: region || EMPTY_APARTMENT.region,
           area: detail.representativeArea ? "전용 " + detail.representativeArea : "",
           recentPrice: recent != null && Number.isFinite(recent) ? formatWon(recent) : "",
           previousPrice: firstMedian != null && Number.isFinite(firstMedian) ? "6개월 전 대표값 " + formatWon(firstMedian) : "",
@@ -2672,7 +2674,7 @@ export default function ApartmentBulkPage() {
   }
 
   function resetBulkWorkspace() {
-    setData(SAMPLE);
+    setData(EMPTY_APARTMENT);
     setMonthlyStats([]);
     setMapDataUrl("");
     setAptPoint(null);
@@ -2715,7 +2717,7 @@ export default function ApartmentBulkPage() {
         setTop3Work(normalizeTop3(saved.top3));
 
         if (slot.type === "bulk" && saved.bulk) {
-          setData(saved.bulk.data || SAMPLE);
+          setData(saved.bulk.data || EMPTY_APARTMENT);
           setMonthlyStats(saved.bulk.monthlyStats || []);
           setMapDataUrl(saved.bulk.mapDataUrl || "");
           setAptPoint(saved.bulk.aptPoint || null);
@@ -3252,7 +3254,7 @@ export default function ApartmentBulkPage() {
               <div className={styles.bulkSaveState}>
                 <span>본문 {finalBlogText.trim() ? "저장됨" : "미작성"}</span>
                 <span>지도 {mapDataUrl ? "저장됨" : "없음"}</span>
-                <span>본문 이미지 {outputs ? "저장됨" : "없음"}</span>
+                <span>기존 이미지 {outputs ? "보관됨" : "없음"}</span>
               </div>
               <label className={styles.workField}>
                 <span>이미지·검수 메모</span>
@@ -3481,26 +3483,26 @@ export default function ApartmentBulkPage() {
             </div>
 
             <div className={styles.actionGrid}>
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openBodyPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openBodyPromptInChatGPT}>
                 <span className={styles.actionIcon}>📝</span>
                 <b>1. {approvedV3 ? "승인된 생활 스토리로 본문 만들기" : v3Planner.current.status === "skipped" ? "데이터 분석 본문 만들기" : "가격 + 생활 이야기 본문 만들기"}</b>
                 <small>먼저 본문 제작 → 완성글을 아래 네이버 최종편집에 붙여넣기</small>
               </button>
 
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openThumbnailPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openThumbnailPromptInChatGPT}>
                 <span className={styles.actionIcon}>🖼️</span>
                 <b>2. 썸네일 만들기</b>
                 <small>{autoArticleVisualPrompt ? "실제 완성글의 생활 스토리 자동 반영" : "1254×1254 · 본문을 먼저 붙여넣으면 이야기도 연동"}</small>
               </button>
 
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching || !monthlyStats.some(item => item.medianPrice != null)} onClick={openPriceImagePromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openPriceImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>📈</span>
                 <b>3. 시세 그래프 만들기</b>
                 <small>6개월 월별 가격 + 거래건수 자동 입력</small>
               </button>
 
               <button type="button" className={styles.actionButton}
-                disabled={selectedComplexNeedsMatching || (!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt)}
+                disabled={!bulkDataReady || (!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt)}
                 onClick={openLocationImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>🗺️</span>
                 <b>4. {approvedV3 || autoArticleVisualPrompt ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>
@@ -3595,7 +3597,7 @@ export default function ApartmentBulkPage() {
           </details>
 
           <details className={styles.advancedDetails}>
-            <summary>지도 참고 캡처 · 사진 참고</summary>
+            <summary>지도 참고·업로드</summary>
             <div className={styles.advancedBody}>
               <div className={styles.uploadGrid}>
                 <label className={styles.uploadBox}>
@@ -3798,8 +3800,8 @@ export default function ApartmentBulkPage() {
       {contentMode === "bulk" && (!activeWorkId || activeWorkType === "bulk") && outputs && (
         <section id="outputs" className={styles.outputs}>
           <div className={styles.outputHead}>
-            <div><p className={styles.eyebrow}>OUTPUT</p><h2>본문 이미지 2장 완성</h2><span>썸네일은 위 ChatGPT 요청서로 만들고, 아래 2장은 블로그 본문에 사용하세요.</span></div>
-            <button onClick={downloadZip}>본문 이미지 2장 ZIP 다운로드</button>
+            <div><p className={styles.eyebrow}>OUTPUT</p><h2>이전 작업 이미지 2장</h2><span>이전에 저장한 참고 결과물입니다. 새 이미지는 위 ChatGPT 제작 흐름을 사용합니다.</span></div>
+            <button onClick={downloadZip}>보관 이미지 ZIP 다운로드</button>
           </div>
           <OutputCard title="01 · 시세 그래프 카드" size="1600×900" src={outputs.price} filename="01_price_graph.png" />
           <OutputCard title="02 · 입지 지도 카드" size="1600×900" src={outputs.map} filename="02_location.png" />
