@@ -18,6 +18,8 @@ test("presale writing prompt follows evidence-first benchmarked structure", asyn
   assert.match(prompt, /금회 신규 공급 물량/);
   assert.match(prompt, /확정\/예정\/과거 추정치\/미확인/);
   assert.match(prompt, /핵심 POINT/);
+  assert.match(prompt, /\[분양 핵심 POINT\]/);
+  assert.match(prompt, /\[\/분양 핵심 POINT\]/);
   assert.match(prompt, /짧은 목차/);
   assert.match(prompt, /이 단지만의 킥/);
   assert.match(prompt, /이미지 00/);
@@ -42,7 +44,7 @@ test("individual presale image prompts do not infer unconfirmed prices or fake a
   const prompts = plan.map((item) => makePresaleImagePrompt(item, "고덕강일3단지", sample, "단지 공식 전경의 사용권 미확인"));
   assert.ok(prompts.every((p) => p.includes(sample)));
   assert.ok(prompts.every((p) => p.includes("1장만")));
-  assert.ok(prompts.every((p) => p.includes("확정")));
+  assert.ok(prompts.every((p) => p.includes("추정/예정/기준일")));
   assert.match(prompts[0], /실제 모습이라고 속이는/);
   assert.match(prompts[1], /이번 신규 공급/);
   assert.match(prompts[2], /토지임대부/);
