@@ -51,7 +51,7 @@ test("individual presale image prompts do not infer unconfirmed prices or fake a
   assert.ok(prompts.every((p) => p.includes("1장만")));
   assert.ok(prompts.every((p) => p.includes("추정/예정/기준일")));
   assert.match(prompts[0], /실제 모습이라고 속이는/);
-  assert.match(prompts[1], /이번 신규 공급/);
+  assert.match(prompts[1], /금회 신규/);
   assert.match(prompts[2], /토지임대부/);
   assert.equal(new Set(prompts).size, 3);
 });
@@ -64,7 +64,7 @@ test("official research and independent review include provenance without invent
   assert.match(research, /공식 모집공고가 없으면/);
   assert.match(research, /조사를 끝내지 말 것/);
   assert.match(research, /공고 전 \/ 접수 중 \/ 접수 마감/);
-  assert.match(research, /과거 예정 문구/);
+  assert.match(research, /예전 후보 카드/);
   assert.match(research, /최근 보도상 예정 물량/);
   assert.match(research, /기존 명칭으로 재검색/);
   assert.match(research, /단지 전체 세대수 \/ 사전예약/);
