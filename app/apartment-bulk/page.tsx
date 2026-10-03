@@ -14,6 +14,7 @@ import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
+import { makePresaleArticlePrompt, makePresaleImagePlan, makePresaleImagePrompt } from "../../lib/apartment-presale.mjs";
 import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
@@ -26,7 +27,7 @@ type ArticleThemeChoice = {
   score: number;
 };
 
-type DailyContentType = "bulk" | "top3" | "tip" | "moving" | "compare" | "power";
+type DailyContentType = "bulk" | "top3" | "presale" | "tip" | "moving" | "compare" | "power";
 type WorkImageSlot = string;
 type ContentMode = "bulk" | "school" | "mega";
 type WorkProgress = "not_started" | "preparing" | "drafting" | "images" | "review";
@@ -65,7 +66,7 @@ type DailyApartmentCandidate = {
   status: string;
 };
 
-type PublishHistoryFilter = "all" | "bulk" | "top3" | "tip" | "power";
+type PublishHistoryFilter = "all" | "bulk" | "top3" | "presale" | "tip" | "power";
 type PublishHistoryItem = {
   item_type: "topic" | "complex";
   normalized_key: string;
@@ -189,6 +190,7 @@ const SAMPLE: ApartmentData = {
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
   bulk: { label: "아파트 대량발행", short: "단지" },
   top3: { label: "지역 TOP3", short: "TOP3" },
+  presale: { label: "신규 분양정보", short: "분양" },
   tip: { label: "검색형 콘텐츠", short: "검색형" },
   moving: { label: "이사 체크리스트", short: "이사체크" },
   compare: { label: "지역·단지 비교글", short: "비교글" },
@@ -216,6 +218,7 @@ const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
 };
 
 const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
+  presale: ["고덕강일3단지 본청약 예정｜공급물량·분양가·토지임대료 확인"],
   top3: [
     "의왕 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
     "시흥 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
@@ -461,6 +464,7 @@ function makeDailySlots(dateKey: string, publishedTopics: string[] = []) {
 }
 
 function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string, materials: string, dateKey: string) {
+  if (contentType === "presale") return makePresaleArticlePrompt(topic, materials, dateKey);
   const safeTopic = topic.trim() || "작업 주제 미정";
   const typeLabel = contentType ? DAILY_TYPE_META[contentType].label : "블로그 콘텐츠";
   const financeTopic = /(공모주|금시세|금값|엔화|환율|ISA|적금|주식|ETF|채권|비트코인|코인|달러|금리)/.test(safeTopic);
@@ -2458,16 +2462,18 @@ export default function ApartmentBulkPage() {
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
   const workTableCount = workTables.length;
   const workImagePlan = useMemo(
-    () => makeWorkImagePlan(workTables.map((table) => ({
+    () => activeWorkType === "presale" ? makePresaleImagePlan() : makeWorkImagePlan(workTables.map((table) => ({
       heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
     }))),
-    [workTables]
+    [activeWorkType, workTables]
   );
   const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
     () => Object.fromEntries(workImagePlan.map((item) => [
-      item.slot, makeSavedWorkImagePrompt(item, workTopic, workBody, workImageNotes, workTables),
+      item.slot, activeWorkType === "presale"
+        ? makePresaleImagePrompt(item, workTopic, workBody, workImageNotes)
+        : makeSavedWorkImagePrompt(item, workTopic, workBody, workImageNotes, workTables),
     ])),
-    [workImagePlan, workTopic, workBody, workImageNotes, workTables]
+    [activeWorkType, workImagePlan, workTopic, workBody, workImageNotes, workTables]
   );
   const naverTables = useMemo(() => extractMarkdownTables(finalBlogText), [finalBlogText]);
   const markdownTableCount = naverTables.length;
@@ -2483,8 +2489,8 @@ export default function ApartmentBulkPage() {
   const usePlannedNaverImages = contentMode === "bulk" && Boolean(activeWorkId) &&
     ["tip", "moving", "compare", "power"].includes(activeWorkType || "");
   const naverBlocks = useMemo(
-    () => parseNaverBlog(finalBlogText, tableHandlingMode, usePlannedNaverImages ? naverWorkImagePlan : undefined),
-    [finalBlogText, tableHandlingMode, usePlannedNaverImages, naverWorkImagePlan]
+    () => parseNaverBlog(finalBlogText, activeWorkType === "presale" ? "card" : tableHandlingMode, usePlannedNaverImages ? naverWorkImagePlan : undefined),
+    [finalBlogText, activeWorkType, tableHandlingMode, usePlannedNaverImages, naverWorkImagePlan]
   );
   const dailyDoneCount = useMemo(() => dailySlots.filter((slot) => slot.done).length, [dailySlots]);
   const dailyBulkCount = useMemo(() => dailySlots.filter((slot) => slot.type === "bulk").length, [dailySlots]);
@@ -3716,6 +3722,7 @@ export default function ApartmentBulkPage() {
                 ["all", "전체"],
                 ["bulk", "단지"],
                 ["top3", "TOP3"],
+                ["presale", "분양"],
                 ["tip", "검색형"],
                 ["power", "파워글"],
               ] as Array<[PublishHistoryFilter, string]>).map(([value, label]) => {
@@ -3746,6 +3753,7 @@ export default function ApartmentBulkPage() {
               {filteredPublishHistory.slice(0, 120).map((item) => {
                 const label = item.content_type === "bulk" ? "단지"
                   : item.content_type === "top3" ? "TOP3"
+                  : item.content_type === "presale" ? "분양"
                   : item.content_type === "tip" ? "검색형"
                   : item.content_type === "power" ? "파워글"
                   : "기타";
@@ -3798,7 +3806,7 @@ export default function ApartmentBulkPage() {
                 data-testid="work-topic"
                 value={workTopic}
                 onChange={(e) => setWorkTopic(e.target.value)}
-                placeholder={activeWorkType === "bulk" ? "예: 산본 퇴계아파트 · 거래량 변화" : "오늘 만들 구체적인 주제를 적어두세요."}
+                placeholder={activeWorkType === "bulk" ? "예: 산본 퇴계아파트 · 거래량 변화" : activeWorkType === "presale" ? "예: 고덕강일3단지 · 본청약 · 분양가와 토지임대료" : "오늘 만들 구체적인 주제를 적어두세요."}
               />
             </label>
             <label className={styles.workField}>
@@ -3807,7 +3815,7 @@ export default function ApartmentBulkPage() {
                 data-testid="work-materials"
                 value={workMaterials}
                 onChange={(e) => setWorkMaterials(e.target.value)}
-                placeholder="확인할 자료, 출처, 수치, 비교 기준 등을 저장합니다."
+                placeholder={activeWorkType === "presale" ? "공식 모집공고 URL·확인일 / 전체 세대수와 금회 물량 / 가격(확정·추정 구분) / 일정(예정·확정 구분) / 킥 / 입지 근거를 붙여넣으세요." : "확인할 자료, 출처, 수치, 비교 기준 등을 저장합니다."}
               />
             </label>
           </div>
@@ -3844,7 +3852,7 @@ export default function ApartmentBulkPage() {
             <div className={styles.prepOnlyPanel}>
               <div className={styles.prepOnlyNotice}>
                 <b>{DAILY_TYPE_META[activeWorkType || activeWorkSlot.type].label} 준비 화면</b>
-                <span>주제와 자료 메모를 반영한 GPT 요청서를 바로 복사하거나 ChatGPT에서 열 수 있습니다.</span>
+                <span>{activeWorkType === "presale" ? "질문형 도입 → 전경 → 핵심 POINT → 목차 → 공급·가격·입지 → 이 단지만의 킥 → 청약 체크 순으로 글을 구성합니다." : "주제와 자료 메모를 반영한 GPT 요청서를 바로 복사하거나 ChatGPT에서 열 수 있습니다."}</span>
               </div>
 
               <section className={styles.promptSection}>
@@ -3878,7 +3886,7 @@ export default function ApartmentBulkPage() {
                 />
               </label>
 
-              {workTableCount > 0 && (
+              {activeWorkType !== "presale" && workTableCount > 0 && (
                 <div className={styles.tableImageNotice}>
                   <div>
                     <b>📊 표 {workTableCount}개 감지 · 전체 이미지 {workImagePlan.length}장</b>
@@ -3893,8 +3901,8 @@ export default function ApartmentBulkPage() {
               <section className={styles.actionPanel}>
                 <div className={styles.actionHead}>
                   <p className={styles.eyebrow}>IMAGE REQUESTS</p>
-                  <h2>완성 글을 바탕으로 필요한 이미지 {workImagePlan.length}장을 GPT에서 제작합니다.</h2>
-                  <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}</span>
+                  <h2>{activeWorkType === "presale" ? "분양 전용 이미지 3장: 대표 이미지 · 공급물량 · 분양조건 킥" : `완성 글을 바탕으로 필요한 이미지 ${workImagePlan.length}장을 GPT에서 제작합니다.`}</h2>
+                  <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}{activeWorkType === "presale" ? " 표가 여러 개여도 3장 고정이며, 본문 숫자 원문은 유지합니다." : ""}</span>
                 </div>
                 <div className={styles.actionGrid}>
                   {workImagePlan.map((item) => (
@@ -4373,7 +4381,7 @@ export default function ApartmentBulkPage() {
 
       <details className={styles.sharedEditor}>
         <summary>
-          <span><b>네이버 최종편집 · 발행 전 검사</b><small>단지 · 학군 · 초대형단지 공통</small></span>
+          <span><b>네이버 최종편집 · 발행 전 검사</b><small>단지 · 분양 · 학군 · 초대형단지 공통</small></span>
           <strong>완성글 붙여넣기 → 자동 검수</strong>
         </summary>
         <div className={styles.sharedEditorBody}>
@@ -4382,7 +4390,7 @@ export default function ApartmentBulkPage() {
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
                 <h2>5. 네이버 최종 편집 · 자동 검사 · 전체복사</h2>
-                <span>완성글을 한 번 붙여넣으면 실거래·태그·이미지 위치를 자동 검사합니다. 이어서 아래 '생활정보 웹 검증하기'에서 장소·영업 여부·거리의 원문 근거를 확인하고, 본문 수정 후 이미지 03을 제작하세요.</span>
+                <span>{activeWorkType === "presale" ? "분양 글은 공급량·추정가격·청약일정을 공식 모집공고와 다시 대조하세요. 표는 정보 누락을 막기 위해 모바일 카드형으로 유지합니다." : "완성글을 한 번 붙여넣으면 실거래·태그·이미지 위치를 자동 검사합니다. 이어서 아래 '생활정보 웹 검증하기'에서 장소·영업 여부·거리의 원문 근거를 확인하고, 본문 수정 후 이미지 03을 제작하세요."}</span>
               </div>
             </div>
 
@@ -4400,6 +4408,9 @@ export default function ApartmentBulkPage() {
                   }}
                   placeholder="ChatGPT에서 생성된 제목 + 본문 + 태그 전체를 여기에 붙여넣으세요. 마크다운 표도 그대로 붙여넣어도 됩니다."
                 />
+                {activeWorkType === "presale" ? (
+                  <div className={styles.naverTableModeBox}><b>분양 글 표 유지</b><small>공급·분양가 원문 숫자가 사라지지 않도록 모바일 카드형으로 자동 변환합니다. 01/02 이미지는 별도로 제작합니다.</small></div>
+                ) : (
                 <div className={styles.naverTableModeBox}>
                   <div className={styles.naverTableModeHead}>
                     <b>표 처리 방식</b>
@@ -4460,6 +4471,7 @@ export default function ApartmentBulkPage() {
                     </label>
                   </div>
                 </div>
+                )}
               </div>
 
               <div className={styles.naverPreviewPane}>
