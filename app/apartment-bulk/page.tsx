@@ -3115,6 +3115,11 @@ export default function ApartmentBulkPage() {
   }
 
   function startDailySlot(slot: DailySlot) {
+    if (slot.type === "presale") {
+      markWorkStarted(slot.workId);
+      window.location.assign("/apartment-presale?workId=" + encodeURIComponent(slot.workId) + "&topic=" + encodeURIComponent(slot.topic || ""));
+      return;
+    }
     if (slot.type === "bulk" && slot.complexId && !startedWorkIds.includes(slot.workId)) {
       markWorkStarted(slot.workId);
       window.location.assign("/apartment-bulk?complexId=" + encodeURIComponent(slot.complexId));
@@ -3589,7 +3594,7 @@ export default function ApartmentBulkPage() {
           <h1>오늘 만들 콘텐츠만 고르면<br />작업 화면이 깔끔하게 열립니다.</h1>
           <p>단지 대량발행 · 신규 분양정보 · 학군 아파트 · 수도권 초대형단지를 한 곳에서 작업합니다.</p>
         </div>
-        <a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}><a href="/apartment-presale" className={styles.heroChip}>🏙️ 분양정보 주력 제작실 →</a><a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a></div>
       </section>
 
       <nav className={styles.contentTabs} aria-label="아파트 콘텐츠 종류">
