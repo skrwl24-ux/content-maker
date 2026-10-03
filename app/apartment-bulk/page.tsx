@@ -1,22 +1,21 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
+import dynamic from "next/dynamic";
 import styles from "./page.module.css";
-import Top3Workspace from "./Top3Workspace";
-import SchoolDistrictWorkspace from "./SchoolDistrictWorkspace";
-import MegaComplexWorkspace from "./MegaComplexWorkspace";
+const Top3Workspace = dynamic(() => import("./Top3Workspace"), { ssr: false });
+const SchoolDistrictWorkspace = dynamic(() => import("./SchoolDistrictWorkspace"), { ssr: false });
+const MegaComplexWorkspace = dynamic(() => import("./MegaComplexWorkspace"), { ssr: false });
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
 import LifeVerificationPanel from "./LifeVerificationPanel";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
-import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
 import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
-type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
 type ArticleThemeId = "price" | "band" | "trade" | "mixed" | "rebound" | "volatility" | "highlow" | "stable";
 type ArticleThemeMode = "auto" | ArticleThemeId;
 type ArticleThemeChoice = {
@@ -75,14 +74,6 @@ type PublishHistoryItem = {
   complex_name: string | null;
   published_on: string;
 };
-type StoryWork = {
-  identity: string;
-  raw: string;
-  candidates: ApartmentStoryCandidate[];
-  selectedId: string;
-  sourceChecked: boolean;
-};
-
 type DailyWorkSnapshot = {
   top3?: Top3Work;
   workId: string;
@@ -109,7 +100,6 @@ type DailyWorkSnapshot = {
     autoMapGenerated: boolean;
     autoMapMessage: string;
     nearbyMessage: string;
-    story?: StoryWork;
   };
 };
 
@@ -123,8 +113,6 @@ type ApartmentData = {
   moveIn: string;
   station: string;
   locationLine: string;
-  question: string;
-  thumbnailTone: ThumbnailTone;
 };
 
 type Point = { x: number; y: number } | null;
@@ -141,16 +129,6 @@ type MarkdownTable = {
   rows: string[][];
 };
 type TableHandlingMode = "image" | "card" | "original";
-type PhotoCandidate = {
-  title: string;
-  imageUrl: string;
-  thumbnailUrl: string;
-  width: number;
-  height: number;
-  imageToken: string;
-  thumbnailToken: string;
-};
-
 type ComplexDetailResponse = {
   complex: {
     id: string;
@@ -172,18 +150,17 @@ type ComplexDetailResponse = {
   } | null;
 };
 
-const SAMPLE: ApartmentData = {
-  name: "산본 퇴계아파트",
-  region: "경기 군포시 금정동",
-  area: "전용 42㎡",
-  recentPrice: "3억 5,000만원",
-  previousPrice: "직전 3억 3,000만원",
-  households: "1,992세대",
-  moveIn: "1993년 6월",
-  station: "수리산역",
-  locationLine: "수리산역·학교·공원을 가까이 누리는 생활권",
-  question: "",
-  thumbnailTone: "auto",
+const EMPTY_APARTMENT: ApartmentData = {
+  name: "",
+  region: "",
+  area: "",
+  recentPrice: "",
+  previousPrice: "",
+  households: "",
+  moveIn: "",
+  station: "",
+  locationLine: "",
+
 };
 
 const DAILY_TYPE_META: Record<DailyContentType, { label: string; short: string }> = {
@@ -285,7 +262,6 @@ const PUBLISHED_COMPLEX_STORAGE_KEY = "apartment-bulk-published-complexes-v1";
 const PUBLISH_QUEUE_STORAGE_KEY = "apartment-bulk-publish-queue-v2";
 const PUBLISH_QUEUE_WORK_INDEX_KEY = "apartment-bulk-publish-queue-work-index-v2";
 const PUBLISH_QUEUE_ACTIVE_WORK_KEY = "apartment-bulk-publish-queue-active-work-v2";
-const APARTMENT_STORY_STORAGE_PREFIX = "apartment-bulk-story-v1:";
 const PUBLISHED_COMPLEX_NAME_SEEDS = [
   "평촌어바인퍼스트",
   "산성역포레스티아",
@@ -714,16 +690,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y + h, x, y, rr);
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
-}
-
-function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, min: number, weight = 800) {
-  let size = start;
-  while (size > min) {
-    ctx.font = `${weight} ${size}px ${FONT}`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    size -= 2;
-  }
-  return size;
 }
 
 function drawWrapped(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
@@ -1209,16 +1175,6 @@ function drawBrand(ctx: CanvasRenderingContext2D, x: number, y: number, dark = f
   ctx.fillText("APARTMENT NOTE", x, y + 42);
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number) {
-  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
-  const dw = image.naturalWidth * scale;
-  const dh = image.naturalHeight * scale;
-  const dx = x + (w - dw) / 2;
-  const dy = y + (h - dh) / 2;
-  ctx.drawImage(image, dx, dy, dw, dh);
-}
-
-
 function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼마에 거래될까?") {
   const monthly = monthlyStats.slice(-6);
   const valid = monthly.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
@@ -1403,28 +1359,6 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], a
   const changeRate = first?.medianPrice && last?.medianPrice
     ? (delta! / first.medianPrice) * 100
     : null;
-  const userMainCopy = data.question.trim();
-  const toneLabel: Record<ThumbnailTone, string> = {
-    auto: "자동 추천",
-    standard: "정석형",
-    hook: "후킹형",
-    humor: "유머형",
-  };
-  const toneInstruction: Record<ThumbnailTone, string> = {
-    auto: "정석형·후킹형·유머형 3가지를 내부적으로 비교한 뒤 가장 잘 맞는 1픽을 선택할 것.",
-    standard: "정석형만 사용. 데이터가 바로 이해되는 안정적이고 신뢰감 있는 문구를 선택할 것.",
-    hook: "후킹형만 사용. 실제 데이터에 근거한 놀람·의문·반전 표현으로 클릭을 유도하되 과장하지 말 것.",
-    humor: "유머형만 사용. 부동산 신뢰감을 해치지 않는 선에서 가볍고 재치 있는 문구를 선택할 것.",
-  };
-  const mainCopyBlock = userMainCopy
-    ? `\n[사용자 지정 메인 문구]\n${userMainCopy}\n- 사용자가 직접 입력한 문구이므로 이 문구를 우선 사용하되, 숫자나 사실이 제공 데이터와 충돌하면 데이터에 맞게 최소 수정할 것.\n`
-    : "";
-  const selectedCopyGuide = userMainCopy
-    ? userMainCopy
-    : data.thumbnailTone === "auto"
-      ? "정석형·후킹형·유머형 3가지를 내부적으로 비교해 고른 최종 1픽"
-      : `${toneLabel[data.thumbnailTone]} 톤으로 고른 최종 1픽`;
-
   return `네이버 블로그용 아파트 썸네일 이미지를 만들어줘.
 
 [기본 정보]
@@ -1447,14 +1381,12 @@ function makeThumbnailPrompt(data: ApartmentData, monthlyStats: MonthlyStat[], a
 첫 유효월 거래량: ${first ? first.tradeCount + "건" : "확인 필요"}
 최근 유효월 거래량: ${last ? last.tradeCount + "건" : "확인 필요"}
 
-${mainCopyBlock}
 [이번 글의 주제 방향]
 주제: ${articleTheme.label}
 관점: ${articleTheme.angle}
 
 [썸네일 톤 선택]
-${toneLabel[data.thumbnailTone]}
-${toneInstruction[data.thumbnailTone]}
+자동 추천 · 정석형·후킹형·유머형을 내부 비교한 뒤 실제 데이터에 가장 맞는 최종 1개만 선택할 것.
 
 [썸네일 제작 방향 — 최우선]
 이번 썸네일은 광고 배너나 분양 홍보물처럼 보이지 않게 한다.
@@ -1464,10 +1396,7 @@ ${toneInstruction[data.thumbnailTone]}
 텍스트와 장식 요소를 최소화하고 생활감 있는 주거 이미지를 활용한다.
 
 [썸네일 메인 문구 생성 규칙]
-- 사용자가 메인 문구를 직접 입력했다면 그 문구를 우선 사용한다.
-- 입력값이 비어 있으면 위 [썸네일 톤 선택]을 최우선으로 따를 것.
-- 자동 추천이면 ① 정석형 ② 후킹형 ③ 가벼운 재치형을 내부적으로 비교한 뒤 최종 1개만 사용할 것.
-- 정석형·후킹형·유머형 중 하나를 직접 선택했다면 선택한 톤 안에서 가장 좋은 문구를 만들 것.
+- 정석형·후킹형·가벼운 재치형을 내부적으로 비교한 뒤 이 단지의 확인된 주제와 데이터에 가장 맞는 최종 문구 1개만 사용할 것.
 - 후보나 선택 과정을 이미지에 표시하지 말 것.
 - 지역명 또는 대표 생활권을 자연스럽게 활용할 수 있다.
 - 단지명만 덩그러니 보여주기보다 지역 맥락이 함께 느껴지게 할 것.
@@ -1615,16 +1544,11 @@ function apartmentStoryIdentity(data: ApartmentData) {
   return [normalizeComplexName(data.name), data.region.trim().replace(/\s+/g, " ")].join("|");
 }
 
-function emptyApartmentStory(identity = ""): StoryWork {
-  return { identity, raw: "", candidates: [], selectedId: "", sourceChecked: false };
-}
-
 function makeBodyPrompt(
   data: ApartmentData,
   monthlyStats: MonthlyStat[],
   recommendedAngle: string,
   articleTheme: ArticleThemeChoice,
-  story: ApartmentStoryCandidate | null,
   plannedStory: ApartmentStoryCandidate | null,
   autoDiscover = true
 ) {
@@ -1645,23 +1569,9 @@ function makeBodyPrompt(
   const firstTradeCount = firstMonthly?.tradeCount ?? null;
   const lastTradeCount = lastMonthly?.tradeCount ?? null;
   const articleAngle = recommendedAngle.trim();
-  const storyBlock = plannedStory ? makeApprovedStoryBlock(plannedStory) : story ? `[선정한 동네 스토리 — 본문 반영 전에 원문 재확인]
-주제: ${story.title}
-유형: ${story.kind}
-확인된 핵심 사실: ${story.facts}
-단지와의 생활권 연결: ${story.connection}
-연결 문장 초안: ${story.bridge}
-원문 제목: ${story.sourceTitle}
-원문 URL(검증용, 최종 발행본문에는 출력하지 말 것): ${story.sourceUrl}
-원문 발표일: ${story.sourceDate}
-행사·사업 실제 날짜: ${story.eventDate}
-시점 상태: ${story.timing}
-- 이 자료는 별도 조사 결과이다. 최종 원고 작성 시 원문을 다시 확인하고 사실이 불확실하면 해당 내용은 제외할 것.
-- 가격 변동 원인이 아니라 입지·생활권을 이해하는 별도 이야기로 전개할 것.
-- 지역 스토리는 전체 글의 약 15~20% 이내에서 간결하게 쓰고 억지로 고정 소제목을 만들지 말 것.`
+  const storyBlock = plannedStory ? makeApprovedStoryBlock(plannedStory)
     : autoDiscover ? makeAutomaticLivingStoryBlock({ mode: "bulk", name: data.name, region: data.region })
-    : `[명시적으로 선택한 데이터 집중 모드]
-사용자가 생활 스토리 생략을 선택했다. 지역 행사·뉴스·커뮤니티 정보를 추가하지 말고 실거래와 확인된 입지 설명을 중심으로 완성할 것.`;
+    : `[명시적으로 선택한 데이터 집중 모드]\n사용자가 생활 스토리 생략을 선택했다. 지역 행사·뉴스·커뮤니티 정보를 추가하지 말고 실거래와 확인된 입지 설명을 중심으로 완성할 것.`;
   const today = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -1777,7 +1687,7 @@ ${storyBlock}
 ① 지역을 여는 강한 도입 3문장
 ② 최근 6개월 시세 흐름
 ③ 거래량 변화
-④ ${plannedStory || story || autoDiscover
+④ ${plannedStory || autoDiscover
   ? "가격만 보면 놓치기 쉬운 실제 생활: 입지 설명에서 자연스럽게 이어지는 별도의 의미 있는 소제목으로, 단지에 살면서 경험할 만한 장소/일상 하나를 검증된 사실 3~5문장으로 보여줄 것. 왜 이 아파트와 관련이 있는지, 실제 접근 조건은 무엇인지 독자 질문에 답할 것. 적합한 근거가 없을 때만 단순 입지 설명으로 대체."
   : "입지·생활권: 제공된 자료에서 확인되는 생활환경만 간결하게 설명할 것."}
 ⑤ 이 단지만의 핵심 포인트
@@ -1786,7 +1696,7 @@ ${storyBlock}
 - 세대수·입주년도 같은 기본정보는 별도 스펙표처럼 길게 나열하지 않고 도입이나 관련 섹션에 자연스럽게 녹일 것.
 - ⑤ 핵심 포인트는 단지별 데이터에 따라 반등, 거래 급증·감소, 고점 접근, 가격과 거래량의 엇갈림, 정비사업, 신축·입주 등으로 자유롭게 바꿀 것.
 - 전체 원칙은 '틀은 일정하게, 첫 문장·핵심 포인트·제목은 단지마다 다르게'로 할 것.
-- ${plannedStory || story || autoDiscover ? "④의 생활 장면은 반드시 ②·③ 데이터 분석 이후에 자연스럽게 등장하게 할 것. 고정 문구 '한편 이 아파트 주변에는'으로 이어 붙이지 말고 ④의 첫 문장에서 입지·생활 질문을 제시할 것." : "데이터 집중 모드에서는 ④의 외부 스토리 조사·삽입을 생략할 것."}
+- ${plannedStory || autoDiscover ? "④의 생활 장면은 반드시 ②·③ 데이터 분석 이후에 자연스럽게 등장하게 할 것. 고정 문구 '한편 이 아파트 주변에는'으로 이어 붙이지 말고 ④의 첫 문장에서 입지·생활 질문을 제시할 것." : "데이터 집중 모드에서는 ④의 외부 스토리 조사·삽입을 생략할 것."}
 - 동네 이야기는 실거래 상승·하락의 직접 원인이라고 단정하지 말 것. 연결이 부자연스러우면 생략할 것.
 - 지난 행사·예정 행사 등 시점을 정확히 밝히고, 일부 공개 커뮤니티 게시물을 주민 전체 의견으로 일반화하지 말 것.
 - 모바일 가독성을 위해 한 문단은 짧게 유지할 것.
@@ -1879,278 +1789,6 @@ function formatWon(value: number | null | undefined) {
   return Math.round(value / 10000).toLocaleString("ko-KR") + "만원";
 }
 
-async function makeThumbnail(data: ApartmentData, photoDataUrl: string) {
-  const photo = photoDataUrl ? await loadImage(photoDataUrl) : null;
-  return canvasUrl(1254, 1254, (ctx) => {
-    if (photo) {
-      drawCover(ctx, photo, 0, 0, 1254, 1254);
-      const shade = ctx.createLinearGradient(0, 0, 0, 1254);
-      shade.addColorStop(0, "rgba(8,19,34,.36)");
-      shade.addColorStop(.42, "rgba(8,19,34,.28)");
-      shade.addColorStop(1, "rgba(5,16,30,.92)");
-      ctx.fillStyle = shade;
-      ctx.fillRect(0, 0, 1254, 1254);
-    } else {
-      const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
-      bg.addColorStop(0, "#0a1829");
-      bg.addColorStop(.58, "#123c50");
-      bg.addColorStop(1, "#0a6d70");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, 1254, 1254);
-
-      ctx.save();
-      ctx.globalAlpha = .18;
-      ctx.strokeStyle = "#b9fff4";
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 7; i++) {
-        roundRect(ctx, 740 + i * 48, 160 + i * 36, 250, 760 - i * 38, 18);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      ctx.fillStyle = "rgba(255,255,255,.06)";
-      roundRect(ctx, 760, 300, 330, 650, 22);
-      ctx.fill();
-      ctx.fillStyle = "rgba(161,246,231,.42)";
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 4; col++) {
-          roundRect(ctx, 804 + col * 62, 356 + row * 60, 30, 24, 5);
-          ctx.fill();
-        }
-      }
-    }
-
-    drawBrand(ctx, 78, 70);
-
-    roundRect(ctx, 862, 70, 314, 52, 26);
-    ctx.fillStyle = "rgba(8,22,36,.52)";
-    ctx.fill();
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.9)";
-    ctx.textAlign = "center";
-    ctx.fillText(data.region || "지역", 1019, 83);
-    ctx.textAlign = "left";
-
-    ctx.font = `700 23px ${FONT}`;
-    ctx.fillStyle = "#88efe2";
-    ctx.fillText("단지 실거래 · 가격 흐름", 78, 328);
-
-    const nameSize = fitText(ctx, data.name || "아파트 단지", 1080, 94, 58, 900);
-    ctx.font = `900 ${nameSize}px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(0,0,0,.28)";
-    ctx.shadowBlur = 18;
-    ctx.fillText(data.name || "아파트 단지", 78, 374);
-    ctx.shadowBlur = 0;
-
-    roundRect(ctx, 78, 650, 1098, 196, 32);
-    ctx.fillStyle = "rgba(7,20,34,.78)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.16)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#ff8f84";
-    roundRect(ctx, 78, 650, 14, 196, 7);
-    ctx.fill();
-
-    ctx.font = `900 66px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    drawWrapped(ctx, data.question || "요즘 얼마에 거래될까?", 128, 690, 980, 80, 2);
-
-    const chips = [data.area || "대표면적", "최근 실거래", "입지 핵심"];
-    let chipX = 78;
-    chips.forEach((label) => {
-      ctx.font = `800 22px ${FONT}`;
-      const w = Math.max(150, ctx.measureText(label).width + 48);
-      roundRect(ctx, chipX, 914, w, 54, 27);
-      ctx.fillStyle = "rgba(255,255,255,.12)";
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.9)";
-      ctx.fillText(label, chipX + 24, 928);
-      chipX += w + 14;
-    });
-
-    ctx.strokeStyle = "rgba(255,255,255,.18)";
-    ctx.beginPath();
-    ctx.moveTo(78, 1040);
-    ctx.lineTo(1176, 1040);
-    ctx.stroke();
-
-    ctx.font = `700 24px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.68)";
-    ctx.fillText("실거래 원자료를 기준으로 최근 흐름을 정리했습니다.", 78, 1084);
-    ctx.font = `800 20px ${FONT}`;
-    ctx.fillStyle = "#86e9dc";
-    ctx.textAlign = "right";
-    ctx.fillText("집값쓱", 1176, 1088);
-    ctx.textAlign = "left";
-  });
-}
-
-function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
-  return canvasUrl(1600, 900, (ctx) => {
-    ctx.fillStyle = "#f4f7fb";
-    ctx.fillRect(0, 0, 1600, 900);
-    drawBrand(ctx, 76, 52, true);
-
-    const stats = monthlyStats.slice(-6);
-    const valid = stats.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
-    const last = valid[valid.length - 1];
-
-    ctx.font = `900 46px ${FONT}`;
-    ctx.fillStyle = "#101b2c";
-    ctx.fillText("최근 6개월 실거래 흐름", 76, 134);
-
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#718096";
-    ctx.fillText(`${data.name} · ${data.area || "대표 전용면적"}`, 76, 198);
-
-    if (!valid.length) {
-      roundRect(ctx, 76, 270, 1448, 500, 30);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
-      ctx.strokeStyle = "#e1e8f1";
-      ctx.stroke();
-      ctx.font = `900 38px ${FONT}`;
-      ctx.fillStyle = "#203047";
-      ctx.fillText("실거래 데이터 연결 후 그래프가 자동 생성됩니다.", 154, 430);
-      ctx.font = `700 22px ${FONT}`;
-      ctx.fillStyle = "#7a8799";
-      ctx.fillText("월별 중앙값 · 거래건수 · 최근 대표값을 한 장에서 보여줍니다.", 154, 494);
-      return;
-    }
-
-    const lastMonth = last.month.split("-");
-    ctx.textAlign = "right";
-    ctx.font = `700 20px ${FONT}`;
-    ctx.fillStyle = "#78869a";
-    ctx.fillText(`${lastMonth[0]}년 ${Number(lastMonth[1])}월 확인 기준`, 1524, 64);
-    ctx.textAlign = "left";
-
-    roundRect(ctx, 76, 260, 1090, 540, 30);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.strokeStyle = "#e1e8f1";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    roundRect(ctx, 1192, 260, 332, 540, 30);
-    ctx.fillStyle = "#0f2036";
-    ctx.fill();
-
-    const prices = valid.map((v) => v.medianPrice);
-    let min = Math.min(...prices);
-    let max = Math.max(...prices);
-    if (min === max) {
-      min *= .96;
-      max *= 1.04;
-    } else {
-      const pad = (max - min) * .18;
-      min -= pad;
-      max += pad;
-    }
-
-    const gx = 152, gy = 344, gw = 936, gh = 320;
-    ctx.strokeStyle = "#e8edf3";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) {
-      const y = gy + (gh / 3) * i;
-      ctx.beginPath();
-      ctx.moveTo(gx, y);
-      ctx.lineTo(gx + gw, y);
-      ctx.stroke();
-    }
-
-    const points: Array<{ x: number; y: number; item: MonthlyStat }> = [];
-    stats.forEach((item, index) => {
-      const x = gx + (stats.length === 1 ? gw / 2 : (gw * index) / (stats.length - 1));
-      if (item.medianPrice != null) {
-        const y = gy + gh - ((item.medianPrice - min) / (max - min)) * gh;
-        points.push({ x, y, item });
-      }
-      ctx.font = `700 18px ${FONT}`;
-      ctx.fillStyle = "#728196";
-      ctx.textAlign = "center";
-      ctx.fillText(item.month.slice(5) + "월", x, gy + gh + 34);
-      ctx.font = `700 16px ${FONT}`;
-      ctx.fillStyle = "#9aa5b4";
-      ctx.fillText(item.tradeCount ? item.tradeCount + "건" : "거래 없음", x, gy + gh + 64);
-    });
-
-    if (points.length >= 2) {
-      ctx.beginPath();
-      points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-      ctx.strokeStyle = "#0f8b86";
-      ctx.lineWidth = 8;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.stroke();
-    }
-
-    // Show the representative price on every valid monthly point.
-    points.forEach((p, index) => {
-      const isLatest = index === points.length - 1;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, isLatest ? 11 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = isLatest ? "#ef746e" : "#0f8b86";
-      ctx.fill();
-
-      const label = formatWon(p.item.medianPrice);
-      ctx.font = `${isLatest ? 900 : 800} ${isLatest ? 21 : 18}px ${FONT}`;
-      const labelWidth = ctx.measureText(label).width + (isLatest ? 26 : 22);
-      const labelHeight = isLatest ? 36 : 32;
-      const labelY = p.y - (isLatest ? 54 : 48);
-
-      roundRect(ctx, p.x - labelWidth / 2, labelY, labelWidth, labelHeight, labelHeight / 2);
-      ctx.fillStyle = isLatest ? "#fff0ee" : "#ffffff";
-      ctx.fill();
-      ctx.strokeStyle = isLatest ? "rgba(239,116,110,.34)" : "rgba(15,139,134,.22)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = isLatest ? "#d85f59" : "#28545a";
-      ctx.textAlign = "center";
-      ctx.fillText(label, p.x, labelY + (isLatest ? 7 : 6));
-    });
-    ctx.textAlign = "left";
-
-    const first = valid[0];
-    const change = first.medianPrice ? ((last.medianPrice - first.medianPrice) / first.medianPrice) * 100 : null;
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "#83eadc";
-    ctx.fillText("최근 대표값", 1236, 320);
-    ctx.font = `900 50px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(formatWon(last.medianPrice), 1236, 360);
-
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
-    ctx.beginPath();
-    ctx.moveTo(1236, 444);
-    ctx.lineTo(1480, 444);
-    ctx.stroke();
-
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.58)";
-    ctx.fillText("6개월 첫 대표값", 1236, 486);
-    ctx.font = `900 31px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(formatWon(first.medianPrice), 1236, 524);
-
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.58)";
-    ctx.fillText("대표값 변화", 1236, 594);
-    ctx.font = `900 34px ${FONT}`;
-    ctx.fillStyle = change != null && change < 0 ? "#83c9ff" : "#ff9a96";
-    ctx.fillText(change == null ? "-" : (change >= 0 ? "+" : "") + change.toFixed(1) + "%", 1236, 632);
-
-    ctx.font = `600 16px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.48)";
-    ctx.fillText("각 월 대표가격 · 중앙값 기준", 1236, 724);
-    ctx.fillText("거래 없는 달은 공백 처리", 1236, 750);
-  });
-}
-
 function drawContain(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const scale = Math.min(w / image.naturalWidth, h / image.naturalHeight);
   const dw = image.naturalWidth * scale;
@@ -2177,59 +1815,6 @@ function drawMarker(ctx: CanvasRenderingContext2D, x: number, y: number, label: 
   ctx.fillStyle = "#172033";
   ctx.fillText(label, x + 38, y - 13);
   ctx.restore();
-}
-
-async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Point, stationPoint: Point) {
-  const image = await loadImage(mapDataUrl);
-  return canvasUrl(1600, 900, (ctx) => {
-    ctx.fillStyle = "#f4f7fb";
-    ctx.fillRect(0, 0, 1600, 900);
-    drawBrand(ctx, 70, 48, true);
-
-    ctx.font = `900 42px ${FONT}`;
-    ctx.fillStyle = "#101b2c";
-    ctx.fillText("입지 한눈에 보기", 70, 132);
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#6e7d92";
-    ctx.fillText(`${data.name} · ${data.station}`, 70, 188);
-
-    const mapX = 70, mapY = 244, mapW = 1080, mapH = 590;
-    roundRect(ctx, mapX, mapY, mapW, mapH, 30);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = "#e9eef5";
-    ctx.fillRect(mapX, mapY, mapW, mapH);
-    const box = drawContain(ctx, image, mapX, mapY, mapW, mapH);
-    if (aptPoint) drawMarker(ctx, box.x + aptPoint.x * box.w, box.y + aptPoint.y * box.h, "단지", "#ef476f");
-    if (stationPoint) drawMarker(ctx, box.x + stationPoint.x * box.w, box.y + stationPoint.y * box.h, data.station || "주요 역", "#118ab2");
-    ctx.restore();
-    roundRect(ctx, mapX, mapY, mapW, mapH, 30);
-    ctx.strokeStyle = "#dce4ee";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    roundRect(ctx, 1190, 244, 340, 590, 30);
-    ctx.fillStyle = "#0f2036";
-    ctx.fill();
-    ctx.font = `700 20px ${FONT}`;
-    ctx.fillStyle = "#8de8db";
-    ctx.fillText("LOCATION NOTE", 1232, 294);
-    ctx.font = `900 36px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(data.station || "주요 역", 1232, 350);
-    ctx.font = `700 25px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.78)";
-    drawWrapped(ctx, data.locationLine || "한 줄 입지 설명", 1232, 430, 250, 38, 5);
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
-    ctx.beginPath();
-    ctx.moveTo(1232, 660);
-    ctx.lineTo(1488, 660);
-    ctx.stroke();
-    ctx.font = `600 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.52)";
-    ctx.fillText("지도 출처 표시는 원본 유지", 1232, 706);
-    ctx.fillText("왜곡 없이 비율 보존", 1232, 738);
-  });
 }
 
 async function makeStoryMapCard(
@@ -2302,7 +1887,7 @@ async function makeStoryMapCard(
 
 export default function ApartmentBulkPage() {
   const [contentMode, setContentMode] = useState<ContentMode>("bulk");
-  const [data, setData] = useState<ApartmentData>(SAMPLE);
+  const [data, setData] = useState<ApartmentData>(EMPTY_APARTMENT);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
   const [selectedComplexLoading, setSelectedComplexLoading] = useState(false);
@@ -2313,16 +1898,11 @@ export default function ApartmentBulkPage() {
   const [autoMapGenerated, setAutoMapGenerated] = useState(false);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyMessage, setNearbyMessage] = useState("");
-  const [photoCandidates, setPhotoCandidates] = useState<PhotoCandidate[]>([]);
-  const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
-  const [photoSearchMessage, setPhotoSearchMessage] = useState("");
-  const [photoSearchStart, setPhotoSearchStart] = useState(1);
   const [recommendedAngle, setRecommendedAngle] = useState("");
   const [articleThemeMode, setArticleThemeMode] = useState<ArticleThemeMode>("auto");
   const [recentArticleThemes, setRecentArticleThemes] = useState<ArticleThemeId[]>([]);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
-  const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
   const [outputs, setOutputs] = useState<Outputs | null>(null);
   const [loading, setLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
@@ -2345,8 +1925,6 @@ export default function ApartmentBulkPage() {
       prev?.plan === info.plan && prev?.dataSummary === info.dataSummary ? prev : info
     );
   }, []);
-  const [storyState, setStoryState] = useState<StoryWork>(() => emptyApartmentStory());
-  const [storyNotice, setStoryNotice] = useState("");
   const [tableHandlingMode, setTableHandlingMode] = useState<TableHandlingMode>("image");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [mapCopyMessage, setMapCopyMessage] = useState("");
@@ -2367,15 +1945,12 @@ export default function ApartmentBulkPage() {
   const [workBody, setWorkBody] = useState("");
   const [workImageNotes, setWorkImageNotes] = useState("");
   const [workAttachments, setWorkAttachments] = useState<WorkAttachment[]>([]);
-  const [workProgress, setWorkProgress] = useState<WorkProgress>("not_started");
   const [top3Work, setTop3Work] = useState<Top3Work>(emptyTop3);
   const workOpeningRef = useRef(false);
   const [startedWorkIds, setStartedWorkIds] = useState<string[]>([]);
   const [workSaveMessage, setWorkSaveMessage] = useState("");
   const workHydratingRef = useRef(false);
-  const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
-  const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
   const selectedArticleTheme = useMemo(
     () => selectArticleTheme(monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle),
     [monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle]
@@ -2429,26 +2004,18 @@ export default function ApartmentBulkPage() {
         })
       : autoArticleVisualPrompt || makeLocationImagePrompt(data),
     [approvedV3, data, mapDataUrl, finalBlogText, autoArticleVisualPrompt]);
-  const storyCurrent = storyState.identity === storyIdentity;
-  const storyCandidates = storyCurrent ? storyState.candidates : [];
-  const chosenStory = storyCandidates.find(item => item.id === storyState.selectedId) || null;
-  const appliedStory = chosenStory && storyState.sourceChecked ? chosenStory : null;
-  const storyResearchPrompt = useMemo(
-    () => makeApartmentStoryResearchPrompt(data, selectedArticleTheme),
-    [data, selectedArticleTheme]
-  );
   // An unlinked complex is NOT proof of zero sales. Block publication prompts
   // until a real monthly series for this selected complex exists.
-  const selectedComplexNeedsMatching = Boolean(selectedComplexName &&
-    !monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0));
+  const hasVerifiedMonthlyTrades = monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0);
+  const bulkDataReady = Boolean(data.name.trim() && data.region.trim() && hasVerifiedMonthlyTrades);
+  const selectedComplexNeedsMatching = Boolean(selectedComplexName && !hasVerifiedMonthlyTrades);
   const bodyPrompt = useMemo(
-    () => selectedComplexNeedsMatching
-      ? "[실거래 데이터 매칭 대기]\n" + data.name +
-        "의 최근 6개월 거래 원자료가 이 단지에 아직 연결되지 않았습니다. 실제 무거래 0건으로 판단하거나 샘플 가격으로 본문을 작성하지 마세요. 데이터 재동기화 후 다시 열어주세요."
+    () => !bulkDataReady
+      ? "[단지 또는 실거래 준비 대기]\n" + (data.name || "선택한 단지") +
+        "의 검증된 최근 6개월 거래 자료가 아직 준비되지 않았습니다. 실제 무거래 0건으로 판단하거나 임의 숫자로 본문을 작성하지 마세요. 단지를 선택하고 원본 자료 연결 상태를 확인해 주세요."
       : makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
-        v3Planner.handled ? null : appliedStory, approvedV3,
-        v3Planner.current.status !== "skipped"),
-    [selectedComplexNeedsMatching, data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled, v3Planner.current.status]
+        approvedV3, v3Planner.current.status !== "skipped"),
+    [bulkDataReady, data, monthlyStats, recommendedAngle, selectedArticleTheme, approvedV3, v3Planner.current.status]
   );
   const workGptPrompt = useMemo(
     () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
@@ -2718,7 +2285,7 @@ export default function ApartmentBulkPage() {
     if (!activeWorkId || !activeWorkType || workHydratingRef.current) return;
     const timer = window.setTimeout(() => {
       void persistActiveWork();
-    }, 250);
+    }, 650);
     return () => window.clearTimeout(timer);
   }, [
     activeWorkId,
@@ -2728,7 +2295,6 @@ export default function ApartmentBulkPage() {
     workBody,
     workImageNotes,
     workAttachments,
-    workProgress,
     top3Work,
     data,
     monthlyStats,
@@ -2743,20 +2309,7 @@ export default function ApartmentBulkPage() {
     autoMapMessage,
     nearbyMessage,
     finalBlogText,
-    storyState,
   ]);
-
-  // 독립 단지 편집 시에는 단지·지역별로 보관하고, 발행 큐는 기존 IndexedDB 작업 스냅샷에 저장한다.
-  useEffect(() => {
-    if (activeWorkId || !data.name.trim() || !data.region.trim()) return;
-    try {
-      const raw = window.localStorage.getItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity);
-      const saved = raw ? JSON.parse(raw) as StoryWork : null;
-      setStoryState(saved?.identity === storyIdentity ? saved : emptyApartmentStory(storyIdentity));
-    } catch {
-      setStoryState(emptyApartmentStory(storyIdentity));
-    }
-  }, [activeWorkId, storyIdentity]);
 
   useEffect(() => {
     try {
@@ -2769,32 +2322,6 @@ export default function ApartmentBulkPage() {
       setRecentArticleThemes([]);
     }
   }, []);
-
-  async function searchPhotoCandidates(name: string, region: string, start = 1) {
-    if (!name.trim()) return;
-    setPhotoCandidatesLoading(true);
-    setPhotoSearchMessage("단지 참고 사진을 찾는 중…");
-    try {
-      const params = new URLSearchParams({
-        query: name.trim(),
-        region: region.trim(),
-        start: String(start),
-      });
-      const res = await fetch("/api/apartment/photo-search?" + params.toString(), { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "사진 검색 실패");
-      const items = (json.items || []) as PhotoCandidate[];
-      setPhotoCandidates(items);
-      setPhotoSearchStart(start);
-      setPhotoSearchMessage(items.length ? "검색 사진 3장은 외관 확인 참고용입니다." : "검색 사진을 찾지 못했습니다.");
-    } catch (e) {
-      setPhotoCandidates([]);
-      setPhotoSearchMessage(e instanceof Error ? e.message : "사진 자동 검색에 실패했습니다. 직접 업로드할 수 있습니다.");
-    } finally {
-      setPhotoCandidatesLoading(false);
-    }
-  }
-
 
   useEffect(() => {
     const complexId = new URLSearchParams(window.location.search).get("complexId");
@@ -2811,9 +2338,9 @@ export default function ApartmentBulkPage() {
         const recent = detail.latestTrade?.price ?? (detail.snapshot?.latest_median_price == null ? null : Number(detail.snapshot.latest_median_price));
         const region = [detail.complex.sido, detail.complex.sigungu, detail.complex.legal_dong].filter(Boolean).join(" ");
         const nextData: ApartmentData = {
-          ...SAMPLE,
-          name: detail.complex.name || SAMPLE.name,
-          region: region || SAMPLE.region,
+          ...EMPTY_APARTMENT,
+          name: detail.complex.name || EMPTY_APARTMENT.name,
+          region: region || EMPTY_APARTMENT.region,
           area: detail.representativeArea ? "전용 " + detail.representativeArea : "",
           recentPrice: recent != null && Number.isFinite(recent) ? formatWon(recent) : "",
           previousPrice: firstMedian != null && Number.isFinite(firstMedian) ? "6개월 전 대표값 " + formatWon(firstMedian) : "",
@@ -2821,8 +2348,6 @@ export default function ApartmentBulkPage() {
           moveIn: detail.complex.use_date ? detail.complex.use_date.slice(0, 7).replace("-", "년 ") + "월" : "",
           station: "",
           locationLine: "",
-          question: "",
-          thumbnailTone: "auto",
         };
         setData(nextData);
         setMonthlyStats(detail.monthly || []);
@@ -3051,7 +2576,6 @@ export default function ApartmentBulkPage() {
       setWorkBody("");
       setWorkImageNotes("");
       setWorkAttachments([]);
-      setWorkProgress("not_started");
       setTop3Work(emptyTop3());
       setWorkSaveMessage("");
     }
@@ -3068,10 +2592,7 @@ export default function ApartmentBulkPage() {
     setWorkBody("");
     setWorkImageNotes("");
     setWorkAttachments([]);
-    setWorkProgress("not_started");
     setTop3Work(emptyTop3());
-    setStoryState(emptyApartmentStory());
-    setStoryNotice("");
     setWorkSaveMessage("");
     setStartedWorkIds([]);
     try {
@@ -3118,7 +2639,7 @@ export default function ApartmentBulkPage() {
       body: isBulk ? finalBlogText : workBody,
       imageNotes: workImageNotes,
       attachments: workAttachments,
-      progress: workProgress,
+      progress: activeWorkType === "bulk" ? (finalBlogText.trim() ? "review" : monthlyStats.length ? "drafting" : "preparing") : workBody.trim() ? "images" : "preparing",
       top3: top3Work,
       updatedAt: new Date().toISOString(),
       bulk: isBulk ? {
@@ -3134,7 +2655,6 @@ export default function ApartmentBulkPage() {
         autoMapGenerated,
         autoMapMessage,
         nearbyMessage,
-        story: storyCurrent ? storyState : emptyApartmentStory(storyIdentity),
       } : undefined,
     };
   }
@@ -3155,7 +2675,7 @@ export default function ApartmentBulkPage() {
   }
 
   function resetBulkWorkspace() {
-    setData(SAMPLE);
+    setData(EMPTY_APARTMENT);
     setMonthlyStats([]);
     setMapDataUrl("");
     setAptPoint(null);
@@ -3169,8 +2689,6 @@ export default function ApartmentBulkPage() {
     setAutoMapMessage("");
     setNearbyMessage("");
     setFinalBlogText("");
-    setStoryState(emptyApartmentStory());
-    setStoryNotice("");
   }
 
   async function openDailyWork(slot: DailySlot, scroll = true) {
@@ -3197,12 +2715,10 @@ export default function ApartmentBulkPage() {
         }
         setWorkImageNotes(saved.imageNotes || "");
         setWorkAttachments(Array.isArray(saved.attachments) ? saved.attachments : []);
-        setWorkProgress(saved.progress || "preparing");
         setTop3Work(normalizeTop3(saved.top3));
-        if (slot.type !== "bulk") setStoryState(emptyApartmentStory());
 
         if (slot.type === "bulk" && saved.bulk) {
-          setData(saved.bulk.data || SAMPLE);
+          setData(saved.bulk.data || EMPTY_APARTMENT);
           setMonthlyStats(saved.bulk.monthlyStats || []);
           setMapDataUrl(saved.bulk.mapDataUrl || "");
           setAptPoint(saved.bulk.aptPoint || null);
@@ -3215,9 +2731,6 @@ export default function ApartmentBulkPage() {
           setAutoMapMessage(saved.bulk.autoMapMessage || "");
           setNearbyMessage(saved.bulk.nearbyMessage || "");
           setFinalBlogText(saved.body || "");
-          const restoredIdentity = apartmentStoryIdentity(saved.bulk.data || SAMPLE);
-          setStoryState(saved.bulk.story?.identity === restoredIdentity ? saved.bulk.story : emptyApartmentStory(restoredIdentity));
-          setStoryNotice("");
         } else if (slot.type === "bulk") {
           resetBulkWorkspace();
         }
@@ -3232,9 +2745,7 @@ export default function ApartmentBulkPage() {
         }
         setWorkImageNotes("");
         setWorkAttachments([]);
-        setWorkProgress("preparing");
         setTop3Work(emptyTop3());
-        setStoryState(emptyApartmentStory());
         if (slot.type === "bulk") {
           const queryComplexId = new URLSearchParams(window.location.search).get("complexId");
           if (!queryComplexId || queryComplexId !== slot.complexId) resetBulkWorkspace();
@@ -3347,50 +2858,6 @@ export default function ApartmentBulkPage() {
     });
   }
 
-  // Explicit user updates only: avoid writing stale daily-work state into standalone cache during hydration.
-  function updateApartmentStory(change: (prev: StoryWork) => StoryWork) {
-    const next = change(storyCurrent ? storyState : emptyApartmentStory(storyIdentity));
-    setStoryState(next);
-    if (!activeWorkId) {
-      try {
-        window.localStorage.setItem(APARTMENT_STORY_STORAGE_PREFIX + storyIdentity, JSON.stringify(next));
-      } catch {
-        // 작업은 계속하고, 브라우저 저장 실패만 허용한다.
-      }
-    }
-  }
-
-  async function copyStoryResearchPrompt() {
-    try {
-      await navigator.clipboard.writeText(storyResearchPrompt);
-      setStoryNotice("동네 스토리 조사 요청서를 복사했습니다.");
-    } catch {
-      setStoryNotice("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
-    }
-  }
-
-  function openStoryResearchPrompt() {
-    window.open("https://chatgpt.com/?q=" + encodeURIComponent(storyResearchPrompt), "_blank", "noopener,noreferrer");
-  }
-
-  function importStoryResearch() {
-    try {
-      const candidates = parseApartmentStoryResearch(storyCurrent ? storyState.raw : "");
-      updateApartmentStory(prev => ({
-        ...prev,
-        identity: storyIdentity,
-        candidates,
-        selectedId: "",
-        sourceChecked: false,
-      }));
-      setStoryNotice(candidates.length
-        ? "근거 URL이 있는 후보 " + candidates.length + "개를 가져왔습니다. 원문 확인 후 하나만 선택해 주세요."
-        : "관련성 있는 후보가 없습니다. 스토리를 생략하고 기존 실거래 분석을 작성할 수 있습니다.");
-    } catch (error) {
-      setStoryNotice(error instanceof Error ? error.message : "조사 결과를 읽지 못했습니다.");
-    }
-  }
-
   async function copyBodyPrompt() {
     try {
       await navigator.clipboard.writeText(bodyPrompt);
@@ -3499,33 +2966,6 @@ export default function ApartmentBulkPage() {
     setAutoMapGenerated(false);
     setAutoMapMessage("직접 올린 지도 이미지를 사용합니다.");
     setOutputs(null);
-  }
-
-  function markOnMap(e: MouseEvent<HTMLDivElement>) {
-    if (!markMode || !mapPreviewRef.current) return;
-    const imgRect = mapPreviewRef.current.getBoundingClientRect();
-    if (e.clientX < imgRect.left || e.clientX > imgRect.right || e.clientY < imgRect.top || e.clientY > imgRect.bottom) return;
-    const point = {
-      x: (e.clientX - imgRect.left) / imgRect.width,
-      y: (e.clientY - imgRect.top) / imgRect.height,
-    };
-    if (markMode === "apt") setAptPoint(point);
-    else setStationPoint(point);
-    setMarkMode(null);
-    setOutputs(null);
-  }
-
-  async function generate() {
-    if (!ready) return;
-    setLoading(true);
-    try {
-      const price = makePriceCard(data, monthlyStats);
-      const map = await makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
-      setOutputs({ price, map });
-      requestAnimationFrame(() => document.getElementById("outputs")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    } finally {
-      setLoading(false);
-    }
   }
 
   async function downloadVerifiedStoryMap() {
@@ -3779,13 +3219,7 @@ export default function ApartmentBulkPage() {
               <code>{activeWorkId}</code>
             </div>
             <div className={styles.activeWorkMeta}>
-              <select value={workProgress} onChange={(e) => setWorkProgress(e.target.value as WorkProgress)}>
-                <option value="not_started">미시작</option>
-                <option value="preparing">자료 준비</option>
-                <option value="drafting">본문 작성</option>
-                <option value="images">이미지 작업</option>
-                <option value="review">검수</option>
-              </select>
+              <span>진행 상태 자동 관리</span>
               <button type="button" onClick={() => void persistActiveWork()}>지금 저장</button>
               <span>{workSaveMessage || "변경 내용 자동 저장"}</span>
             </div>
@@ -3821,7 +3255,7 @@ export default function ApartmentBulkPage() {
               <div className={styles.bulkSaveState}>
                 <span>본문 {finalBlogText.trim() ? "저장됨" : "미작성"}</span>
                 <span>지도 {mapDataUrl ? "저장됨" : "없음"}</span>
-                <span>본문 이미지 {outputs ? "저장됨" : "없음"}</span>
+                <span>기존 이미지 {outputs ? "보관됨" : "없음"}</span>
               </div>
               <label className={styles.workField}>
                 <span>이미지·검수 메모</span>
@@ -3967,8 +3401,7 @@ export default function ApartmentBulkPage() {
       <section className={styles.layout}>
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
-            <div><b>단지 데이터</b><span>샘플: 산본 퇴계아파트</span></div>
-            <button type="button" onClick={() => { setData(SAMPLE); setOutputs(null); }}>샘플값 복원</button>
+            <div><b>단지 데이터</b><span>선택한 단지의 자료가 자동 입력됩니다.</span></div>
           </div>
           <div className={styles.unmatchedSourceEntry}>
             <span><b>국토부 원자료 매칭 현황</b> · 아직 K-apt 단지와 연결되지 않은 거래는 별도 검토합니다. 실제 무거래와 혼동하지 마세요.</span>
@@ -4020,18 +3453,6 @@ export default function ApartmentBulkPage() {
           <div className={styles.autoLoad}>
             이번 글 추천 주제: <b>{selectedArticleTheme.label}</b> · {selectedArticleTheme.angle}
           </div>
-          <SelectField
-            label="썸네일 문구 톤"
-            value={data.thumbnailTone}
-            onChange={(v) => update("thumbnailTone", v)}
-            options={[
-              { value: "auto", label: "자동 추천 · 정석/후킹/유머 중 1픽" },
-              { value: "standard", label: "정석형 · 깔끔하고 신뢰감 있게" },
-              { value: "hook", label: "후킹형 · 놀람/의문/반전" },
-              { value: "humor", label: "유머형 · 재치 한 스푼" },
-            ]}
-          />
-          <Field label="썸네일 메인 문구 (비워두면 선택 톤으로 GPT 추천)" value={data.question} onChange={(v) => update("question", v)} />
           <Field label="한 줄 입지 설명" value={data.locationLine} onChange={(v) => update("locationLine", v)} />
 
           {(nearbyMessage || autoMapMessage) && (
@@ -4051,122 +3472,6 @@ export default function ApartmentBulkPage() {
 
           <StoryPlanningPanel input={plannerInput} planner={v3Planner} />
 
-          <details className={styles.advancedDetails}>
-            <summary>이전 V2 동네 스토리 조사 (기존 저장한 자료 보기)</summary>
-          <section className={styles.storyPanel}>
-            <div className={styles.storyHeader}>
-              <div>
-                <p className={styles.eyebrow}>NEIGHBORHOOD STORY · OPTIONAL</p>
-                <h2>동네 스토리 조사</h2>
-                <span>실거래가를 보러 온 독자가 동네의 분위기까지 이해하도록, 관련 있는 이야기만 한 개 선정합니다.</span>
-              </div>
-              <span className={styles.storyStatus}>{appliedStory ? "본문 반영 준비" : "선택 기능"}</span>
-            </div>
-            <div className={styles.storyActions}>
-              <button type="button" onClick={openStoryResearchPrompt} disabled={!data.name.trim() || !data.region.trim()}>
-                1. ChatGPT에서 동네 조사
-              </button>
-              <button type="button" onClick={() => void copyStoryResearchPrompt()} disabled={!data.name.trim() || !data.region.trim()}>
-                조사 요청서 복사
-              </button>
-            </div>
-            <label className={styles.workField}>
-              <span>2. ChatGPT 조사 결과 전체 붙여넣기 · STORY_JSON 표시 포함</span>
-              <textarea
-                className={styles.storyTextarea}
-                value={storyCurrent ? storyState.raw : ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  updateApartmentStory(prev => ({
-                    ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
-                    identity: storyIdentity,
-                    raw,
-                    candidates: [],
-                    selectedId: "",
-                    sourceChecked: false,
-                  }));
-                  setStoryNotice("");
-                }}
-                placeholder="ChatGPT 조사 결과를 [STORY_JSON]부터 [/STORY_JSON]까지 붙여넣으세요. 적합한 후보가 없는 경우도 정상적으로 인식합니다."
-              />
-            </label>
-            <div className={styles.storyActions}>
-              <button type="button" disabled={!storyCurrent || !storyState.raw.trim()} onClick={importStoryResearch}>
-                3. 후보 불러오기
-              </button>
-              <button type="button" onClick={() => {
-                updateApartmentStory(prev => ({
-                  ...(prev.identity === storyIdentity ? prev : emptyApartmentStory(storyIdentity)),
-                  identity: storyIdentity,
-                  selectedId: "",
-                  sourceChecked: false,
-                }));
-                setStoryNotice("이번 글은 동네 스토리 없이 실거래 분석으로 작성합니다.");
-              }}>
-                이번 글은 스토리 생략
-              </button>
-            </div>
-            {storyNotice && <p className={styles.storyNotice} role="status">{storyNotice}</p>}
-            {storyCandidates.length > 0 && (
-              <div className={styles.storyCandidates}>
-                <b>4. 스토리 후보 · 실제 관련성 확인 후 1개 선택</b>
-                {storyCandidates.map((candidate, index) => (
-                  <label key={candidate.id} className={storyState.selectedId === candidate.id ? styles.storyCandidateSelected : styles.storyCandidate}>
-                    <input
-                      type="radio"
-                      name="apartment-story-candidate"
-                      checked={storyState.selectedId === candidate.id}
-                      onChange={() => updateApartmentStory(prev => ({ ...prev, selectedId: candidate.id, sourceChecked: false }))}
-                    />
-                    <div>
-                      <strong>{index + 1}번째 후보 · {candidate.title}</strong>
-                      <small>{candidate.kind} · {candidate.timing} · 출처 발표일 {candidate.sourceDate}{candidate.eventDate && candidate.eventDate !== "해당 없음" ? " · 행사·사업일 " + candidate.eventDate : ""}</small>
-                      <p>{candidate.facts}</p>
-                      <p><b>이 단지와 연결되는 이유:</b> {candidate.connection}</p>
-                      {candidate.communityNote && candidate.communityNote !== "없음" && (
-                        <small>공개 커뮤니티 탐색 단서(주민 전체 의견 아님): {candidate.communityNote}</small>
-                      )}
-                      <a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                        원문 출처 확인 ↗ {candidate.sourceTitle || candidate.sourceUrl}
-                      </a>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-            {chosenStory && (
-              <div className={styles.storyPreview}>
-                <b>5. 본문 연결 문장 미리보기</b>
-                <p>가격과 행사를 억지로 인과관계로 연결하지 않고, 입지·생활권 설명에서 자연스럽게 이어지는 문장입니다. 어색하면 수정하세요.</p>
-                <textarea
-                  aria-label="동네 스토리 연결 문장"
-                  value={chosenStory.bridge}
-                  onChange={(e) => {
-                    const bridge = e.target.value;
-                    updateApartmentStory(prev => ({
-                      ...prev,
-                      sourceChecked: false,
-                      candidates: prev.candidates.map(item => item.id === chosenStory.id ? { ...item, bridge } : item),
-                    }));
-                  }}
-                />
-                <label className={styles.storyConfirm}>
-                  <input
-                    type="checkbox"
-                    checked={storyState.sourceChecked}
-                    onChange={(e) => updateApartmentStory(prev => ({ ...prev, sourceChecked: e.target.checked }))}
-                  />
-                  원문 출처·발표일과 실제 행사일·단지의 생활권 연결을 확인했습니다.
-                </label>
-                <p className={styles.storyResult}>{appliedStory
-                  ? "✓ 확인한 스토리 1개가 최종 본문 요청서에 자동 반영됩니다."
-                  : "위 확인을 완료하기 전에는 스토리가 본문 요청서에 반영되지 않습니다."}</p>
-              </div>
-            )}
-            <p className={styles.storyFootnote}>좋은 후보가 없으면 생략합니다. 지난 행사를 다가올 행사처럼 쓰거나 일부 커뮤니티 의견을 지역 전체의 분위기로 단정하지 않습니다.</p>
-          </section>
-          </details>
-
           <section className={styles.actionPanel}>
             <div className={styles.actionHead}>
               <p className={styles.eyebrow}>PUBLISH ACTIONS</p>
@@ -4179,26 +3484,26 @@ export default function ApartmentBulkPage() {
             </div>
 
             <div className={styles.actionGrid}>
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openBodyPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openBodyPromptInChatGPT}>
                 <span className={styles.actionIcon}>📝</span>
                 <b>1. {approvedV3 ? "승인된 생활 스토리로 본문 만들기" : v3Planner.current.status === "skipped" ? "데이터 분석 본문 만들기" : "가격 + 생활 이야기 본문 만들기"}</b>
                 <small>먼저 본문 제작 → 완성글을 아래 네이버 최종편집에 붙여넣기</small>
               </button>
 
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching} onClick={openThumbnailPromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openThumbnailPromptInChatGPT}>
                 <span className={styles.actionIcon}>🖼️</span>
                 <b>2. 썸네일 만들기</b>
                 <small>{autoArticleVisualPrompt ? "실제 완성글의 생활 스토리 자동 반영" : "1254×1254 · 본문을 먼저 붙여넣으면 이야기도 연동"}</small>
               </button>
 
-              <button type="button" className={styles.actionButton} disabled={selectedComplexNeedsMatching || !monthlyStats.some(item => item.medianPrice != null)} onClick={openPriceImagePromptInChatGPT}>
+              <button type="button" className={styles.actionButton} disabled={!bulkDataReady} onClick={openPriceImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>📈</span>
                 <b>3. 시세 그래프 만들기</b>
                 <small>6개월 월별 가격 + 거래건수 자동 입력</small>
               </button>
 
               <button type="button" className={styles.actionButton}
-                disabled={selectedComplexNeedsMatching || (!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt)}
+                disabled={!bulkDataReady || (!mapDataUrl && !approvedV3 && !autoArticleVisualPrompt)}
                 onClick={openLocationImagePromptInChatGPT}>
                 <span className={styles.actionIcon}>🗺️</span>
                 <b>4. {approvedV3 || autoArticleVisualPrompt ? "스토리 비주얼 만들기" : "입지 이미지 만들기"}</b>
@@ -4293,43 +3598,8 @@ export default function ApartmentBulkPage() {
           </details>
 
           <details className={styles.advancedDetails}>
-            <summary>지도 참고 캡처 · 사진 참고</summary>
+            <summary>지도 참고·업로드</summary>
             <div className={styles.advancedBody}>
-              <section className={styles.photoSection}>
-                <div className={styles.photoHead}>
-                  <div>
-                    <b>검색 사진 참고</b>
-                    <span>{photoSearchMessage || "필요할 때만 단지 외관 참고 사진을 검색합니다."}</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={photoCandidatesLoading || !data.name.trim()}
-                    onClick={() => {
-                      const nextStart = photoCandidates.length ? (photoSearchStart >= 981 ? 1 : photoSearchStart + 10) : 1;
-                      void searchPhotoCandidates(data.name, data.region, nextStart);
-                    }}
-                  >
-                    {photoCandidatesLoading ? "검색 중…" : photoCandidates.length ? "다시 검색" : "참고 사진 찾기"}
-                  </button>
-                </div>
-                {photoCandidates.length > 0 && (
-                  <div className={styles.photoGrid}>
-                    {photoCandidates.map((candidate, index) => (
-                      <div key={candidate.imageUrl + index} className={styles.photoCard}>
-                        <img
-                          src={candidate.thumbnailUrl}
-                          alt={candidate.title || `단지 참고 사진 ${index + 1}`}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                        <span>{`참고 ${index + 1}`}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className={styles.photoNotice}>검색 이미지는 참고용이며 생성 이미지에 직접 복제하지 않습니다.</p>
-              </section>
-
               <div className={styles.uploadGrid}>
                 <label className={styles.uploadBox}>
                   <input type="file" accept="image/*" onChange={handleMap} />
@@ -4360,14 +3630,6 @@ export default function ApartmentBulkPage() {
           {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 준비합니다."}</p>}
         </div>
 
-        <aside className={styles.guideCard}>
-          <p className={styles.eyebrow}>PUBLISH FLOW</p>
-          <h2>이미지 3장 모두 ChatGPT에서 제작.</h2>
-          <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
-          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
-          <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
-          <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
-        </aside>
       </section>
       )}
 
@@ -4539,8 +3801,8 @@ export default function ApartmentBulkPage() {
       {contentMode === "bulk" && (!activeWorkId || activeWorkType === "bulk") && outputs && (
         <section id="outputs" className={styles.outputs}>
           <div className={styles.outputHead}>
-            <div><p className={styles.eyebrow}>OUTPUT</p><h2>본문 이미지 2장 완성</h2><span>썸네일은 위 ChatGPT 요청서로 만들고, 아래 2장은 블로그 본문에 사용하세요.</span></div>
-            <button onClick={downloadZip}>본문 이미지 2장 ZIP 다운로드</button>
+            <div><p className={styles.eyebrow}>OUTPUT</p><h2>이전 작업 이미지 2장</h2><span>이전에 저장한 참고 결과물입니다. 새 이미지는 위 ChatGPT 제작 흐름을 사용합니다.</span></div>
+            <button onClick={downloadZip}>보관 이미지 ZIP 다운로드</button>
           </div>
           <OutputCard title="01 · 시세 그래프 카드" size="1600×900" src={outputs.price} filename="01_price_graph.png" />
           <OutputCard title="02 · 입지 지도 카드" size="1600×900" src={outputs.map} filename="02_location.png" />
