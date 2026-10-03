@@ -47,7 +47,7 @@ function todayLocal() {
 }
 function emptyDraft(): PresaleDraft {
   return {
-    topic: "", dateKey: todayLocal(), sourceStatus: "unchecked",
+    topic: "", dateKey: "", sourceStatus: "unchecked",
     sourceUrl: "", sourceDate: "", materials: "", facts: "", kick: "",
     article: "", imageNotes: "", sourceReviewed: false, finalReviewed: false,
     sitePhoto: "", sitePhotoCaption: "", sitePhotoRights: false, images: {},
@@ -175,14 +175,14 @@ export default function PresalePage() {
     const initialTopic = (qs.get("topic") || "").slice(0, 180);
     void loadDraft(workId).then((saved) => {
       if (disposed) return;
-      setDraft(saved ? { ...emptyDraft(), ...saved, images: saved.images || {} } :
-        { ...emptyDraft(), topic: initialTopic });
+      setDraft(saved ? { ...emptyDraft(), ...saved, dateKey: saved.dateKey || todayLocal(), images: saved.images || {} } :
+        { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic });
       setId(workId);
       setHydrated(true);
       setSaveStatus(saved ? "저장된 작업 복원됨" : "새 분양 작업 시작");
     }).catch(() => {
       if (disposed) return;
-      setDraft({ ...emptyDraft(), topic: initialTopic });
+      setDraft({ ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic });
       setId(workId);
       setHydrated(true);
       setSaveStatus("저장소 접근 불가 · 이 브라우저의 저장 권한을 확인하세요.");
@@ -330,7 +330,7 @@ export default function PresalePage() {
         </div>
         <div className={styles.heroAside}>
           <b>신규 분양정보 제작실</b>
-          <span>작성 기준일 · {draft.dateKey}</span>
+          <span>작성 기준일 · {draft.dateKey || "불러오는 중"}</span>
           <small>{saveStatus}</small>
         </div>
       </section>
