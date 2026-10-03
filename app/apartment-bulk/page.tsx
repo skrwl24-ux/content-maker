@@ -1065,6 +1065,20 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", pla
       continue;
     }
 
+    // Keep the opening POINT block together as a styled Naver card.
+    // If the closing marker is missing, leave source text untouched instead of eating the article.
+    if (/^\[분양 핵심 POINT\]$/i.test(original)) {
+      const endIndex = lines.findIndex((candidate, candidateIndex) =>
+        candidateIndex > index && /^\[\/분양 핵심 POINT\]$/i.test(candidate));
+      if (endIndex > index) {
+        const details = lines.slice(index + 1, endIndex).map(cleanNaverLine).filter(Boolean);
+        blocks.push({ type: "card", text: ["📌 이번 분양 핵심 POINT", ...details].join("\n") });
+        index = endIndex;
+        firstContent = false;
+        continue;
+      }
+    }
+
     const line = cleanNaverLine(original);
     if (!line) continue;
 
