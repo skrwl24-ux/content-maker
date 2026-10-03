@@ -19,5 +19,5 @@ export type PresaleArticleBlock =
 export function makePresaleResearchPrompt(input?: PresaleProjectInput): string;
 export function makePresaleProjectPrompt(input?: PresaleProjectInput): string;
 export function makePresaleReviewPrompt(input?: PresaleProjectInput): string;
-export function auditPresaleArticle(article: string): { checks: { key: string; label: string; ok: boolean }[]; passed: boolean; tagCount: number };
+export function auditPresaleArticle(article: string): { checks: { key: string; label: string; ok: boolean }[]; passed: boolean; tagCount: number; qualityWarnings: string[] };
 export function parsePresaleArticle(article: string): PresaleArticleBlock[];
