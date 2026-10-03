@@ -22,4 +22,15 @@ export const PRESALE_CANDIDATE_SNAPSHOT_DATE: string;
 export const PRESALE_CANDIDATES: PresaleCandidate[];
 export function getPresaleCandidate(id: string): PresaleCandidate | null;
 export function getPresaleCandidateCounts(): Record<"total" | PresaleCandidateStage, number>;
+export function makePresaleCandidateSeed(id: string): {
+  topic: string;
+  sourceStatus: "unchecked";
+  sourceDate: string;
+  facts: string;
+  sourceReviewed: false;
+  finalReviewed: false;
+  sourceUrl: string;
+  kick: string;
+  materials: string;
+} | null;
 export function makePresaleDiscoveryPrompt(dateKey: string): string;
