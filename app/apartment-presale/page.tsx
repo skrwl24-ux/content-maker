@@ -415,6 +415,7 @@ export default function PresalePage() {
                 <div className={styles.subHead}><h3>글 구성 자동검사</h3><span>{articleAudit.checks.length - missing.length}/{articleAudit.checks.length} 항목 확인</span></div>
                 <div className={styles.auditGrid}>{articleAudit.checks.map((item) => <span key={item.key}
                   className={item.ok ? styles.auditPass : styles.auditMissing}>{item.ok ? "✓" : "!"} {item.label}</span>)}</div>
+                {articleAudit.qualityWarnings.map((warning) => <p className={styles.warning} key={warning}>정보 밀도 점검: {warning}</p>)}
                 <p className={styles.hint}>{PRESALE_CHECK_NOTICE}</p>
               </div>
               <div className={styles.actions}>
