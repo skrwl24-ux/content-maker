@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
@@ -131,16 +131,6 @@ type MarkdownTable = {
   rows: string[][];
 };
 type TableHandlingMode = "image" | "card" | "original";
-type PhotoCandidate = {
-  title: string;
-  imageUrl: string;
-  thumbnailUrl: string;
-  width: number;
-  height: number;
-  imageToken: string;
-  thumbnailToken: string;
-};
-
 type ComplexDetailResponse = {
   complex: {
     id: string;
@@ -705,16 +695,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, start: number, min: number, weight = 800) {
-  let size = start;
-  while (size > min) {
-    ctx.font = `${weight} ${size}px ${FONT}`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    size -= 2;
-  }
-  return size;
-}
-
 function drawWrapped(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
   const chars = [...text.trim()];
   let line = "";
@@ -1197,16 +1177,6 @@ function drawBrand(ctx: CanvasRenderingContext2D, x: number, y: number, dark = f
   ctx.fillStyle = dark ? "#65748b" : "rgba(255,255,255,.62)";
   ctx.fillText("APARTMENT NOTE", x, y + 42);
 }
-
-function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number) {
-  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight);
-  const dw = image.naturalWidth * scale;
-  const dh = image.naturalHeight * scale;
-  const dx = x + (w - dw) / 2;
-  const dy = y + (h - dh) / 2;
-  ctx.drawImage(image, dx, dy, dw, dh);
-}
-
 
 function buildThumbnailHook(monthlyStats: MonthlyStat[], fallback = "요즘 얼마에 거래될까?") {
   const monthly = monthlyStats.slice(-6);
@@ -1849,278 +1819,6 @@ function formatWon(value: number | null | undefined) {
   return Math.round(value / 10000).toLocaleString("ko-KR") + "만원";
 }
 
-async function makeThumbnail(data: ApartmentData, photoDataUrl: string) {
-  const photo = photoDataUrl ? await loadImage(photoDataUrl) : null;
-  return canvasUrl(1254, 1254, (ctx) => {
-    if (photo) {
-      drawCover(ctx, photo, 0, 0, 1254, 1254);
-      const shade = ctx.createLinearGradient(0, 0, 0, 1254);
-      shade.addColorStop(0, "rgba(8,19,34,.36)");
-      shade.addColorStop(.42, "rgba(8,19,34,.28)");
-      shade.addColorStop(1, "rgba(5,16,30,.92)");
-      ctx.fillStyle = shade;
-      ctx.fillRect(0, 0, 1254, 1254);
-    } else {
-      const bg = ctx.createLinearGradient(0, 0, 1254, 1254);
-      bg.addColorStop(0, "#0a1829");
-      bg.addColorStop(.58, "#123c50");
-      bg.addColorStop(1, "#0a6d70");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, 1254, 1254);
-
-      ctx.save();
-      ctx.globalAlpha = .18;
-      ctx.strokeStyle = "#b9fff4";
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 7; i++) {
-        roundRect(ctx, 740 + i * 48, 160 + i * 36, 250, 760 - i * 38, 18);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      ctx.fillStyle = "rgba(255,255,255,.06)";
-      roundRect(ctx, 760, 300, 330, 650, 22);
-      ctx.fill();
-      ctx.fillStyle = "rgba(161,246,231,.42)";
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 4; col++) {
-          roundRect(ctx, 804 + col * 62, 356 + row * 60, 30, 24, 5);
-          ctx.fill();
-        }
-      }
-    }
-
-    drawBrand(ctx, 78, 70);
-
-    roundRect(ctx, 862, 70, 314, 52, 26);
-    ctx.fillStyle = "rgba(8,22,36,.52)";
-    ctx.fill();
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.9)";
-    ctx.textAlign = "center";
-    ctx.fillText(data.region || "지역", 1019, 83);
-    ctx.textAlign = "left";
-
-    ctx.font = `700 23px ${FONT}`;
-    ctx.fillStyle = "#88efe2";
-    ctx.fillText("단지 실거래 · 가격 흐름", 78, 328);
-
-    const nameSize = fitText(ctx, data.name || "아파트 단지", 1080, 94, 58, 900);
-    ctx.font = `900 ${nameSize}px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.shadowColor = "rgba(0,0,0,.28)";
-    ctx.shadowBlur = 18;
-    ctx.fillText(data.name || "아파트 단지", 78, 374);
-    ctx.shadowBlur = 0;
-
-    roundRect(ctx, 78, 650, 1098, 196, 32);
-    ctx.fillStyle = "rgba(7,20,34,.78)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.16)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = "#ff8f84";
-    roundRect(ctx, 78, 650, 14, 196, 7);
-    ctx.fill();
-
-    ctx.font = `900 66px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    drawWrapped(ctx, data.question || "요즘 얼마에 거래될까?", 128, 690, 980, 80, 2);
-
-    const chips = [data.area || "대표면적", "최근 실거래", "입지 핵심"];
-    let chipX = 78;
-    chips.forEach((label) => {
-      ctx.font = `800 22px ${FONT}`;
-      const w = Math.max(150, ctx.measureText(label).width + 48);
-      roundRect(ctx, chipX, 914, w, 54, 27);
-      ctx.fillStyle = "rgba(255,255,255,.12)";
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.9)";
-      ctx.fillText(label, chipX + 24, 928);
-      chipX += w + 14;
-    });
-
-    ctx.strokeStyle = "rgba(255,255,255,.18)";
-    ctx.beginPath();
-    ctx.moveTo(78, 1040);
-    ctx.lineTo(1176, 1040);
-    ctx.stroke();
-
-    ctx.font = `700 24px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.68)";
-    ctx.fillText("실거래 원자료를 기준으로 최근 흐름을 정리했습니다.", 78, 1084);
-    ctx.font = `800 20px ${FONT}`;
-    ctx.fillStyle = "#86e9dc";
-    ctx.textAlign = "right";
-    ctx.fillText("집값쓱", 1176, 1088);
-    ctx.textAlign = "left";
-  });
-}
-
-function makePriceCard(data: ApartmentData, monthlyStats: MonthlyStat[]) {
-  return canvasUrl(1600, 900, (ctx) => {
-    ctx.fillStyle = "#f4f7fb";
-    ctx.fillRect(0, 0, 1600, 900);
-    drawBrand(ctx, 76, 52, true);
-
-    const stats = monthlyStats.slice(-6);
-    const valid = stats.filter((item) => item.medianPrice != null) as Array<MonthlyStat & { medianPrice: number }>;
-    const last = valid[valid.length - 1];
-
-    ctx.font = `900 46px ${FONT}`;
-    ctx.fillStyle = "#101b2c";
-    ctx.fillText("최근 6개월 실거래 흐름", 76, 134);
-
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#718096";
-    ctx.fillText(`${data.name} · ${data.area || "대표 전용면적"}`, 76, 198);
-
-    if (!valid.length) {
-      roundRect(ctx, 76, 270, 1448, 500, 30);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
-      ctx.strokeStyle = "#e1e8f1";
-      ctx.stroke();
-      ctx.font = `900 38px ${FONT}`;
-      ctx.fillStyle = "#203047";
-      ctx.fillText("실거래 데이터 연결 후 그래프가 자동 생성됩니다.", 154, 430);
-      ctx.font = `700 22px ${FONT}`;
-      ctx.fillStyle = "#7a8799";
-      ctx.fillText("월별 중앙값 · 거래건수 · 최근 대표값을 한 장에서 보여줍니다.", 154, 494);
-      return;
-    }
-
-    const lastMonth = last.month.split("-");
-    ctx.textAlign = "right";
-    ctx.font = `700 20px ${FONT}`;
-    ctx.fillStyle = "#78869a";
-    ctx.fillText(`${lastMonth[0]}년 ${Number(lastMonth[1])}월 확인 기준`, 1524, 64);
-    ctx.textAlign = "left";
-
-    roundRect(ctx, 76, 260, 1090, 540, 30);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-    ctx.strokeStyle = "#e1e8f1";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    roundRect(ctx, 1192, 260, 332, 540, 30);
-    ctx.fillStyle = "#0f2036";
-    ctx.fill();
-
-    const prices = valid.map((v) => v.medianPrice);
-    let min = Math.min(...prices);
-    let max = Math.max(...prices);
-    if (min === max) {
-      min *= .96;
-      max *= 1.04;
-    } else {
-      const pad = (max - min) * .18;
-      min -= pad;
-      max += pad;
-    }
-
-    const gx = 152, gy = 344, gw = 936, gh = 320;
-    ctx.strokeStyle = "#e8edf3";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) {
-      const y = gy + (gh / 3) * i;
-      ctx.beginPath();
-      ctx.moveTo(gx, y);
-      ctx.lineTo(gx + gw, y);
-      ctx.stroke();
-    }
-
-    const points: Array<{ x: number; y: number; item: MonthlyStat }> = [];
-    stats.forEach((item, index) => {
-      const x = gx + (stats.length === 1 ? gw / 2 : (gw * index) / (stats.length - 1));
-      if (item.medianPrice != null) {
-        const y = gy + gh - ((item.medianPrice - min) / (max - min)) * gh;
-        points.push({ x, y, item });
-      }
-      ctx.font = `700 18px ${FONT}`;
-      ctx.fillStyle = "#728196";
-      ctx.textAlign = "center";
-      ctx.fillText(item.month.slice(5) + "월", x, gy + gh + 34);
-      ctx.font = `700 16px ${FONT}`;
-      ctx.fillStyle = "#9aa5b4";
-      ctx.fillText(item.tradeCount ? item.tradeCount + "건" : "거래 없음", x, gy + gh + 64);
-    });
-
-    if (points.length >= 2) {
-      ctx.beginPath();
-      points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-      ctx.strokeStyle = "#0f8b86";
-      ctx.lineWidth = 8;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.stroke();
-    }
-
-    // Show the representative price on every valid monthly point.
-    points.forEach((p, index) => {
-      const isLatest = index === points.length - 1;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, isLatest ? 11 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = isLatest ? "#ef746e" : "#0f8b86";
-      ctx.fill();
-
-      const label = formatWon(p.item.medianPrice);
-      ctx.font = `${isLatest ? 900 : 800} ${isLatest ? 21 : 18}px ${FONT}`;
-      const labelWidth = ctx.measureText(label).width + (isLatest ? 26 : 22);
-      const labelHeight = isLatest ? 36 : 32;
-      const labelY = p.y - (isLatest ? 54 : 48);
-
-      roundRect(ctx, p.x - labelWidth / 2, labelY, labelWidth, labelHeight, labelHeight / 2);
-      ctx.fillStyle = isLatest ? "#fff0ee" : "#ffffff";
-      ctx.fill();
-      ctx.strokeStyle = isLatest ? "rgba(239,116,110,.34)" : "rgba(15,139,134,.22)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.fillStyle = isLatest ? "#d85f59" : "#28545a";
-      ctx.textAlign = "center";
-      ctx.fillText(label, p.x, labelY + (isLatest ? 7 : 6));
-    });
-    ctx.textAlign = "left";
-
-    const first = valid[0];
-    const change = first.medianPrice ? ((last.medianPrice - first.medianPrice) / first.medianPrice) * 100 : null;
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "#83eadc";
-    ctx.fillText("최근 대표값", 1236, 320);
-    ctx.font = `900 50px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(formatWon(last.medianPrice), 1236, 360);
-
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
-    ctx.beginPath();
-    ctx.moveTo(1236, 444);
-    ctx.lineTo(1480, 444);
-    ctx.stroke();
-
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.58)";
-    ctx.fillText("6개월 첫 대표값", 1236, 486);
-    ctx.font = `900 31px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(formatWon(first.medianPrice), 1236, 524);
-
-    ctx.font = `700 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.58)";
-    ctx.fillText("대표값 변화", 1236, 594);
-    ctx.font = `900 34px ${FONT}`;
-    ctx.fillStyle = change != null && change < 0 ? "#83c9ff" : "#ff9a96";
-    ctx.fillText(change == null ? "-" : (change >= 0 ? "+" : "") + change.toFixed(1) + "%", 1236, 632);
-
-    ctx.font = `600 16px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.48)";
-    ctx.fillText("각 월 대표가격 · 중앙값 기준", 1236, 724);
-    ctx.fillText("거래 없는 달은 공백 처리", 1236, 750);
-  });
-}
-
 function drawContain(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, w: number, h: number) {
   const scale = Math.min(w / image.naturalWidth, h / image.naturalHeight);
   const dw = image.naturalWidth * scale;
@@ -2147,59 +1845,6 @@ function drawMarker(ctx: CanvasRenderingContext2D, x: number, y: number, label: 
   ctx.fillStyle = "#172033";
   ctx.fillText(label, x + 38, y - 13);
   ctx.restore();
-}
-
-async function makeMapCard(data: ApartmentData, mapDataUrl: string, aptPoint: Point, stationPoint: Point) {
-  const image = await loadImage(mapDataUrl);
-  return canvasUrl(1600, 900, (ctx) => {
-    ctx.fillStyle = "#f4f7fb";
-    ctx.fillRect(0, 0, 1600, 900);
-    drawBrand(ctx, 70, 48, true);
-
-    ctx.font = `900 42px ${FONT}`;
-    ctx.fillStyle = "#101b2c";
-    ctx.fillText("입지 한눈에 보기", 70, 132);
-    ctx.font = `700 22px ${FONT}`;
-    ctx.fillStyle = "#6e7d92";
-    ctx.fillText(`${data.name} · ${data.station}`, 70, 188);
-
-    const mapX = 70, mapY = 244, mapW = 1080, mapH = 590;
-    roundRect(ctx, mapX, mapY, mapW, mapH, 30);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = "#e9eef5";
-    ctx.fillRect(mapX, mapY, mapW, mapH);
-    const box = drawContain(ctx, image, mapX, mapY, mapW, mapH);
-    if (aptPoint) drawMarker(ctx, box.x + aptPoint.x * box.w, box.y + aptPoint.y * box.h, "단지", "#ef476f");
-    if (stationPoint) drawMarker(ctx, box.x + stationPoint.x * box.w, box.y + stationPoint.y * box.h, data.station || "주요 역", "#118ab2");
-    ctx.restore();
-    roundRect(ctx, mapX, mapY, mapW, mapH, 30);
-    ctx.strokeStyle = "#dce4ee";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    roundRect(ctx, 1190, 244, 340, 590, 30);
-    ctx.fillStyle = "#0f2036";
-    ctx.fill();
-    ctx.font = `700 20px ${FONT}`;
-    ctx.fillStyle = "#8de8db";
-    ctx.fillText("LOCATION NOTE", 1232, 294);
-    ctx.font = `900 36px ${FONT}`;
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(data.station || "주요 역", 1232, 350);
-    ctx.font = `700 25px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.78)";
-    drawWrapped(ctx, data.locationLine || "한 줄 입지 설명", 1232, 430, 250, 38, 5);
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
-    ctx.beginPath();
-    ctx.moveTo(1232, 660);
-    ctx.lineTo(1488, 660);
-    ctx.stroke();
-    ctx.font = `600 18px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,.52)";
-    ctx.fillText("지도 출처 표시는 원본 유지", 1232, 706);
-    ctx.fillText("왜곡 없이 비율 보존", 1232, 738);
-  });
 }
 
 async function makeStoryMapCard(
@@ -2283,16 +1928,11 @@ export default function ApartmentBulkPage() {
   const [autoMapGenerated, setAutoMapGenerated] = useState(false);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyMessage, setNearbyMessage] = useState("");
-  const [photoCandidates, setPhotoCandidates] = useState<PhotoCandidate[]>([]);
-  const [photoCandidatesLoading, setPhotoCandidatesLoading] = useState(false);
-  const [photoSearchMessage, setPhotoSearchMessage] = useState("");
-  const [photoSearchStart, setPhotoSearchStart] = useState(1);
   const [recommendedAngle, setRecommendedAngle] = useState("");
   const [articleThemeMode, setArticleThemeMode] = useState<ArticleThemeMode>("auto");
   const [recentArticleThemes, setRecentArticleThemes] = useState<ArticleThemeId[]>([]);
   const [aptPoint, setAptPoint] = useState<Point>(null);
   const [stationPoint, setStationPoint] = useState<Point>(null);
-  const [markMode, setMarkMode] = useState<"apt" | "station" | null>(null);
   const [outputs, setOutputs] = useState<Outputs | null>(null);
   const [loading, setLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
@@ -2341,9 +1981,7 @@ export default function ApartmentBulkPage() {
   const [startedWorkIds, setStartedWorkIds] = useState<string[]>([]);
   const [workSaveMessage, setWorkSaveMessage] = useState("");
   const workHydratingRef = useRef(false);
-  const mapPreviewRef = useRef<HTMLImageElement | null>(null);
 
-  const ready = useMemo(() => Boolean(data.name.trim() && data.recentPrice.trim() && mapDataUrl), [data.name, data.recentPrice, mapDataUrl]);
   const selectedArticleTheme = useMemo(
     () => selectArticleTheme(monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle),
     [monthlyStats, articleThemeMode, recentArticleThemes, recommendedAngle]
@@ -2715,32 +2353,6 @@ export default function ApartmentBulkPage() {
       setRecentArticleThemes([]);
     }
   }, []);
-
-  async function searchPhotoCandidates(name: string, region: string, start = 1) {
-    if (!name.trim()) return;
-    setPhotoCandidatesLoading(true);
-    setPhotoSearchMessage("단지 참고 사진을 찾는 중…");
-    try {
-      const params = new URLSearchParams({
-        query: name.trim(),
-        region: region.trim(),
-        start: String(start),
-      });
-      const res = await fetch("/api/apartment/photo-search?" + params.toString(), { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "사진 검색 실패");
-      const items = (json.items || []) as PhotoCandidate[];
-      setPhotoCandidates(items);
-      setPhotoSearchStart(start);
-      setPhotoSearchMessage(items.length ? "검색 사진 3장은 외관 확인 참고용입니다." : "검색 사진을 찾지 못했습니다.");
-    } catch (e) {
-      setPhotoCandidates([]);
-      setPhotoSearchMessage(e instanceof Error ? e.message : "사진 자동 검색에 실패했습니다. 직접 업로드할 수 있습니다.");
-    } finally {
-      setPhotoCandidatesLoading(false);
-    }
-  }
-
 
   useEffect(() => {
     const complexId = new URLSearchParams(window.location.search).get("complexId");
@@ -3393,33 +3005,6 @@ export default function ApartmentBulkPage() {
     setOutputs(null);
   }
 
-  function markOnMap(e: MouseEvent<HTMLDivElement>) {
-    if (!markMode || !mapPreviewRef.current) return;
-    const imgRect = mapPreviewRef.current.getBoundingClientRect();
-    if (e.clientX < imgRect.left || e.clientX > imgRect.right || e.clientY < imgRect.top || e.clientY > imgRect.bottom) return;
-    const point = {
-      x: (e.clientX - imgRect.left) / imgRect.width,
-      y: (e.clientY - imgRect.top) / imgRect.height,
-    };
-    if (markMode === "apt") setAptPoint(point);
-    else setStationPoint(point);
-    setMarkMode(null);
-    setOutputs(null);
-  }
-
-  async function generate() {
-    if (!ready) return;
-    setLoading(true);
-    try {
-      const price = makePriceCard(data, monthlyStats);
-      const map = await makeMapCard(data, mapDataUrl, aptPoint, stationPoint);
-      setOutputs({ price, map });
-      requestAnimationFrame(() => document.getElementById("outputs")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function downloadVerifiedStoryMap() {
     if (!approvedV3 || !mapDataUrl || approvedV3.visualMode !== "map-hybrid") return;
     setLoading(true);
@@ -3859,8 +3444,7 @@ export default function ApartmentBulkPage() {
       <section className={styles.layout}>
         <div className={styles.formCard}>
           <div className={styles.cardHead}>
-            <div><b>단지 데이터</b><span>샘플: 산본 퇴계아파트</span></div>
-            <button type="button" onClick={() => { setData(SAMPLE); setOutputs(null); }}>샘플값 복원</button>
+            <div><b>단지 데이터</b><span>선택한 단지의 자료가 자동 입력됩니다.</span></div>
           </div>
           <div className={styles.unmatchedSourceEntry}>
             <span><b>국토부 원자료 매칭 현황</b> · 아직 K-apt 단지와 연결되지 않은 거래는 별도 검토합니다. 실제 무거래와 혼동하지 마세요.</span>
@@ -4071,41 +3655,6 @@ export default function ApartmentBulkPage() {
           <details className={styles.advancedDetails}>
             <summary>지도 참고 캡처 · 사진 참고</summary>
             <div className={styles.advancedBody}>
-              <section className={styles.photoSection}>
-                <div className={styles.photoHead}>
-                  <div>
-                    <b>검색 사진 참고</b>
-                    <span>{photoSearchMessage || "필요할 때만 단지 외관 참고 사진을 검색합니다."}</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={photoCandidatesLoading || !data.name.trim()}
-                    onClick={() => {
-                      const nextStart = photoCandidates.length ? (photoSearchStart >= 981 ? 1 : photoSearchStart + 10) : 1;
-                      void searchPhotoCandidates(data.name, data.region, nextStart);
-                    }}
-                  >
-                    {photoCandidatesLoading ? "검색 중…" : photoCandidates.length ? "다시 검색" : "참고 사진 찾기"}
-                  </button>
-                </div>
-                {photoCandidates.length > 0 && (
-                  <div className={styles.photoGrid}>
-                    {photoCandidates.map((candidate, index) => (
-                      <div key={candidate.imageUrl + index} className={styles.photoCard}>
-                        <img
-                          src={candidate.thumbnailUrl}
-                          alt={candidate.title || `단지 참고 사진 ${index + 1}`}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                        <span>{`참고 ${index + 1}`}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <p className={styles.photoNotice}>검색 이미지는 참고용이며 생성 이미지에 직접 복제하지 않습니다.</p>
-              </section>
-
               <div className={styles.uploadGrid}>
                 <label className={styles.uploadBox}>
                   <input type="file" accept="image/*" onChange={handleMap} />
@@ -4136,14 +3685,6 @@ export default function ApartmentBulkPage() {
           {!mapDataUrl && <p className={styles.helper}>{autoMapLoading ? "지도 자동 생성 중입니다." : "후보 단지를 선택하면 지도를 자동으로 준비합니다."}</p>}
         </div>
 
-        <aside className={styles.guideCard}>
-          <p className={styles.eyebrow}>PUBLISH FLOW</p>
-          <h2>이미지 3장 모두 ChatGPT에서 제작.</h2>
-          <div className={styles.templateItem}><span>01</span><div><b>썸네일</b><small>1254×1254 요청서 자동 생성</small></div></div>
-          <div className={styles.templateItem}><span>02</span><div><b>시세 그래프</b><small>6개월 월별 가격·거래건수 요청서 자동 생성</small></div></div>
-          <div className={styles.templateItem}><span>03</span><div><b>입지 이미지</b><small>네이버 지도 자동 복사 → Ctrl+V → 새 인포그래픽 제작</small></div></div>
-          <div className={styles.note}><b>최종 흐름</b><p>사이트는 데이터와 지도 참고자료를 준비하고, 실제 이미지는 ChatGPT에서 고품질로 제작합니다.</p></div>
-        </aside>
       </section>
       )}
 
