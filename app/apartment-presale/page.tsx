@@ -7,6 +7,7 @@ import {
   makePresaleImagePlan, makePresaleImagePrompt, auditPresaleArticle, parsePresaleArticle,
 } from "../../lib/apartment-presale.mjs";
 import type { PresaleArticleBlock } from "../../lib/apartment-presale.mjs";
+import { renderPresaleLinks, richArticle } from "../../lib/presale-naver-export.mjs";
 import { makePresaleCandidateSeed } from "../../lib/apartment-presale-candidates.mjs";
 import styles from "./page.module.css";
 
@@ -107,32 +108,6 @@ function plainArticle(blocks: PresaleArticleBlock[]) {
     return block.text;
   }).join("\r\n \r\n");
 }
-function escapeHtml(text: string) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-function richArticle(blocks: PresaleArticleBlock[]) {
-  const font = "'Noto Sans KR','Nanum Gothic','Apple SD Gothic Neo',Arial,sans-serif";
-  const rendered = blocks.map((block) => {
-    if (block.type === "table") {
-      const rowHtml = (cells: string[], head = false) => "<tr>" + cells.map((cell) =>
-        "<" + (head ? "th" : "td") + ' style="border:1px solid #dce7e8;padding:9px 12px;font-size:14pt;text-align:left;' +
-        (head ? "background:#e8f3f3;font-weight:700;" : "") + '">' + escapeHtml(cell) + "</" + (head ? "th" : "td") + ">"
-      ).join("") + "</tr>";
-      return '<table style="width:100%;border-collapse:collapse;font-family:' + font + ';margin:10px 0;">' +
-        rowHtml(block.headers, true) + block.rows.map((row) => rowHtml(row)).join("") + "</table>";
-    }
-    const text = escapeHtml(block.text);
-    if (block.type === "title") return '<div style="font-family:' + font + ';font-size:21pt;font-weight:800;line-height:1.45;">' + text + "</div>";
-    if (block.type === "heading") return '<div style="font-family:' + font + ';font-size:18pt;font-weight:700;color:#0b7772;line-height:1.5;">' + text + "</div>";
-    if (block.type === "points") return '<div style="font-family:' + font + ';font-size:14pt;line-height:1.75;background:#e9f5f5;border-left:4px solid #128c84;padding:14px 18px;"><b>📌 이번 분양 핵심 POINT</b><br>' + text.replace(/\n/g, "<br>") + "</div>";
-    if (block.type === "image") return '<div style="font-family:' + font + ';font-size:14pt;font-weight:700;color:#13776f;background:#f0f6f6;padding:12px;text-align:center;">' + text + "</div>";
-    if (block.type === "tags") return '<div style="font-family:' + font + ';font-size:13.5pt;line-height:1.6;">' + text + "</div>";
-    return '<div style="font-family:' + font + ';font-size:15pt;line-height:1.7;">' + text + "</div>";
-  });
-  const gap = '<div style="height:14px;"><br></div>';
-  return "<div>" + rendered.join(gap) + "</div>";
-}
-
 export default function PresalePage() {
   const [id, setId] = useState("main");
   const [hydrated, setHydrated] = useState(false);
@@ -248,7 +223,7 @@ export default function PresalePage() {
           "text/html": new Blob([richArticle(parsed)], { type: "text/html" }),
           "text/plain": new Blob([plainArticle(parsed)], { type: "text/plain" }),
         })]);
-        setNotice("네이버용 서식 포함 전체복사 완료. 실제 이미지는 발행 화면에서 각 위치에 별도로 삽입하세요.");
+        setNotice("네이버용 서식 포함 전체복사 완료. 출처 URL은 클릭 가능한 링크로 포함됩니다. 네이버 편집기에 붙여넣은 후 링크를 확인하고, 이미지는 별도로 삽입하세요.");
       } else {
         await navigator.clipboard.writeText(plainArticle(parsed));
         setNotice("서식 복사를 지원하지 않아 본문 텍스트로 복사했습니다.");
@@ -494,11 +469,11 @@ export default function PresalePage() {
                     </figure> : <div key={index} className={styles.previewPlaceholder}>{block.text} · 업로드 대기</div>;
                   }
                   if (block.type === "tags") return <p key={index} className={styles.previewTags}>{block.text}</p>;
-                  return <p key={index} className={styles.previewText}>{block.text}</p>;
+                  return <p key={index} className={styles.previewText} dangerouslySetInnerHTML={{ __html: renderPresaleLinks(block.text) }} />;
                 })}
               </article> : <div className={styles.emptyPreview}>완성 원고를 붙여넣으면 이곳에 실제 편집 형태가 나타납니다.</div>}
               {missing.length > 0 && <p className={styles.warning}>형식 미확인 {missing.length}건 · 검증을 마친 후 서식 포함 전체복사를 사용할 수 있습니다.</p>}
-              <p className={styles.hint}>서식 포함 복사는 본문·표·이미지 위치 표시만 전달합니다. 업로드한 PNG/JPG는 네이버 편집기에서 해당 위치에 별도로 삽입하세요. ZIP에도 개별 파일로 담깁니다.</p>
+              <p className={styles.hint}>서식 포함 복사는 본문·표·출처 URL의 클릭 링크·이미지 위치 표시를 전달합니다. 브라우저가 HTML 클립보드를 지원하지 않으면 일반 텍스트로 복사됩니다. 업로드한 PNG/JPG는 네이버 편집기에서 해당 위치에 별도로 삽입하세요. ZIP에도 개별 파일로 담깁니다.</p>
               <div className={styles.actions}>
                 <button type="button" className={styles.primaryButton} disabled={!readyForFinal}
                   onClick={() => void copyFinal()}>📋 네이버 서식 포함 전체복사</button>
