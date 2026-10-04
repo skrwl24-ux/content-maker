@@ -1468,7 +1468,7 @@ export default function GoogleBlogSchedulePage() {
         <a href="/google-blog-schedule/lab">실전 검증실 시작 →</a>
       </section>
 
-      {notice && <div className={styles.notice}>{notice}</div>
+      {notice && <div className={styles.notice}>{notice}</div>}
 
       <section className={styles.stats}>
         <div><span>전체</span><b>{counts.total}</b></div>
