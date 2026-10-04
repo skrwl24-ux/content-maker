@@ -1387,19 +1387,27 @@ export default function GoogleBlogSchedulePage() {
     <main className={styles.wrap}>
       <header className={styles.header}>
         <button className={styles.back} onClick={() => window.location.href = "/"}>← 콘텐츠 메이커</button>
-        <div className={styles.saved}>자동 저장됨</div>
+        <div className={styles.headerLinks}><a className={styles.labHeaderLink} href="/google-blog-schedule/lab">🔬 AI 실전 검증실</a><div className={styles.saved}>자동 저장됨</div></div>
       </header>
 
       <section className={styles.hero}>
         <div>
           <span className={styles.eyebrow}>Google Blog · AI Price Atlas</span>
-          <h1>구글 블로그 롤링 스케줄</h1>
-          <p>어제 글 1개는 남기고, 오늘부터 앞으로의 일정은 매일 자동으로 한 칸씩 밀리며 새 주제를 보충합니다.</p>
+          <h1>AI Price Atlas · 발행 제작실</h1>
+          <p>독자적인 실전 검증 콘텐츠를 제작하고, 기존 가격·국가·결제 정보 글의 발행 스케줄도 계속 관리합니다.</p>
         </div>
         <div className={styles.heroDate}>오늘 {dayLabel(today)}</div>
       </section>
 
-      {notice && <div className={styles.notice}>{notice}</div>}
+      <section className={styles.labSpotlight}>
+        <div><span>NEW · FIRST-HAND CONTENT</span><h2>가격표만 요약하지 말고 AI를 직접 시험해 보세요.</h2>
+          <p>동일한 테스트용 PDF → ChatGPT·Claude·Gemini 웹사이트에서 답변 수집 → 정답표 수동 대조 → 실제 결과가 담긴 영문 글 제작.</p>
+          <small>API 키나 API 비용 없이 기존 웹 계정 사용 · 모든 실험 자료는 ZIP으로 백업</small>
+        </div>
+        <a href="/google-blog-schedule/lab">실전 검증실 시작 →</a>
+      </section>
+
+      {notice && <div className={styles.notice}>{notice}</div>
 
       <section className={styles.stats}>
         <div><span>전체</span><b>{counts.total}</b></div>
@@ -1446,7 +1454,7 @@ export default function GoogleBlogSchedulePage() {
       <section className={styles.panel}>
         <div className={styles.panelHead}>
           <div>
-            <h2>14일 롤링 일정표</h2>
+            <h2>기존 가격·정보 글 · 14일 롤링 일정표</h2>
             <p>어제 + 오늘 + 앞으로 12일을 기본으로 유지합니다. 오래된 완료 글은 발행 이력으로 이동하고, 미완료 글은 사라지지 않습니다.</p>
           </div>
           <div className={styles.actions}>
