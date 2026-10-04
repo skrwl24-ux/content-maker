@@ -176,3 +176,12 @@
   .syncSetup>span{display:none}
   .syncSetup button{width:100%}
 }
+
+/* AI Price Atlas first-hand lab takes priority; legacy price schedule remains below. */
+.headerLinks{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.labHeaderLink{background:#eaf5f2;color:#236959;text-decoration:none;border:1px solid #cfe4dc;border-radius:11px;padding:9px 12px;font-size:12px;font-weight:900}
+.labSpotlight{display:flex;align-items:center;justify-content:space-between;gap:20px;background:#edf7f6;border:1px solid #c9e4e1;border-radius:18px;padding:21px 24px;margin-top:15px}
+.labSpotlight>div{min-width:0}.labSpotlight span{color:#147364;font-size:11px;font-weight:950;letter-spacing:.06em}
+.labSpotlight h2{font-size:20px;margin:6px 0 7px;color:#244f52}.labSpotlight p{font-size:13px;color:#496c69;line-height:1.65;margin:0 0 5px}.labSpotlight small{font-size:11px;color:#738b84}
+.labSpotlight>a{background:#1b736c;color:#fff;text-decoration:none;border-radius:11px;padding:13px 16px;font-size:13px;font-weight:900;white-space:nowrap;flex:0 0 auto}
+@media(max-width:700px){.labSpotlight{flex-direction:column;align-items:flex-start;padding:18px}.labSpotlight>a{width:100%;text-align:center}.headerLinks{gap:7px}}
