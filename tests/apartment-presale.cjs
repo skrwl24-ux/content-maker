@@ -264,3 +264,17 @@ test("poor POINT density is flagged without blocking sparse but sourced work", a
   assert.match(audit.qualityWarnings.join(" "), /구체적 수치/);
   assert.match(audit.qualityWarnings.join(" "), /미확인/);
 });
+
+
+test("presale copy and ZIP are not blocked by manual confirmation checkboxes", () => {
+  const { readFileSync } = require("node:fs");
+  const { join } = require("node:path");
+  const page = readFileSync(join(__dirname, "../app/apartment-presale/page.tsx"), "utf8");
+  assert.match(page, /const readyForFinal = articleAudit\.passed;/);
+  assert.doesNotMatch(page, /sourceReviewed|finalReviewed/);
+  assert.doesNotMatch(page, /원문 직접 대조.*체크|공식자료 수동 대조/);
+  assert.match(page, /const sourceInfoRecorded = Boolean\(draft\.sourceUrl\.trim\(\) \|\| draft\.facts\.trim\(\)\);/);
+  // The source date remains useful metadata, but it must never be a condition for export.
+  const readiness = page.split("\\n").find((line) => line.includes("const readyForFinal ="));
+  assert.doesNotMatch(readiness, /sourceDate|sourceStatus|sourceInfoRecorded/);
+});
