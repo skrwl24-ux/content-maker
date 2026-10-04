@@ -66,6 +66,9 @@ test("official research and independent review include provenance without invent
   assert.match(research, /공고 전 \/ 접수 중 \/ 접수 마감/);
   assert.match(research, /예전 후보 카드/);
   assert.match(research, /최근 보도상 예정 물량/);
+  assert.match(research, /동일 사업 선행단지/);
+  assert.match(research, /가격 비교 1순위/);
+  assert.match(research, /가격 관찰 포인트/);
   assert.match(research, /기존 명칭으로 재검색/);
   assert.match(research, /단지 전체 세대수 \/ 사전예약/);
   assert.match(research, /\[검증 결과\]/);
@@ -80,6 +83,8 @@ test("official research and independent review include provenance without invent
   assert.match(review, /공식 모집공고/);
   assert.match(review, /원래의 수치를 추측해 대체하지 말고/);
   assert.match(review, /정보 누락으로 지적/);
+  assert.match(review, /동일 사업 선행단지/);
+  assert.match(review, /실제 금액이 하나도 없으면/);
   assert.match(review, /POINT가 빈 항목/);
   assert.match(review, /단계·주택 유형이 뒤섞이면/);
 });
@@ -352,4 +357,24 @@ test("Naver clipboard batches are measured in UTF-8 and never discard article bl
   const html = richArticle(blocks);
   assert.ok(presaleByteCount(html) > limit);
   assert.equal(createPresaleCopyParts([], limit).length, 0);
+});
+
+
+test("unconfirmed presale price without a real comparison line is warned, but sourced comparison clears it", async () => {
+  const { auditPresaleArticle } = await helpers();
+  const bland = ARTICLE
+    .replace("서울에서 3억대라고 소개되는 건물 분양가격이 실제 공고에서는 어떻게 정해질지 궁금합니다. 공식 모집공고 기준일에 따라 달라질 수 있습니다.",
+      "현재 분양가는 확정 공고 미확인입니다. 최종 모집공고에서 확인해야 합니다.")
+    .replace("분양가로 알려진 가격은 과거 사전예약의 추정치입니다. 건물분양가 이외의 토지임대료는 반드시 모집공고와 확인해야 합니다.",
+      "분양가는 미확인 상태입니다. 공고 후 확인이 필요합니다.")
+    .replace("3억대", "미정");
+  const warned = auditPresaleArticle(bland);
+  assert.match(warned.qualityWarnings.join(" "), /실제 가격 참고선/);
+
+  const meaningful = bland.replace(
+    "분양가는 미확인 상태입니다. 공고 후 확인이 필요합니다.",
+    "현재 단지 확정 분양가는 미확인입니다. 다만 같은 사업 1단지 전용 84㎡의 실제 모집공고 분양가는 7.72억~8.82억원이어서 가장 가까운 참고 가격선으로 봅니다. 현재 단지 가격은 별도 공고에서 확인합니다."
+  );
+  const cleared = auditPresaleArticle(meaningful);
+  assert.doesNotMatch(cleared.qualityWarnings.join(" "), /실제 가격 참고선/);
 });
