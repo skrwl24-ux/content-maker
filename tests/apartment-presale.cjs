@@ -123,6 +123,31 @@ const ARTICLE = [
   "#고덕강일3단지 #고덕강일 #강동구분양 #서울분양 #토지임대부 #본청약 #공공분양 #분양정보 #청약일정",
 ].join("\n");
 
+test("ordinary ChatGPT POINT headings are normalized for audit, preview and Naver copy", async () => {
+  const { auditPresaleArticle, normalizePresaleArticle, parsePresaleArticle } = await helpers();
+  const { richArticle } = await import("../lib/presale-naver-export.mjs");
+  for (const heading of ["### 분양 핵심 POINT", "**이번 분양 핵심 POINT**", "📌 이번 분양 핵심 POINT"]) {
+    const article = ARTICLE.replace("[분양 핵심 POINT]", heading).replace("[/분양 핵심 POINT]", "");
+    const normalized = normalizePresaleArticle(article);
+    assert.match(normalized, /^\[분양 핵심 POINT\]$/m);
+    assert.match(normalized, /^\[\/분양 핵심 POINT\]$/m);
+    assert.equal(auditPresaleArticle(article).passed, true, heading);
+    const blocks = parsePresaleArticle(article);
+    assert.equal(blocks.filter((item) => item.type === "points").length, 1, heading);
+    assert.match(blocks.find((item) => item.type === "points").text, /1,305세대/);
+    assert.equal(blocks.filter((item) => item.type === "image").length, 3);
+    assert.equal(blocks.filter((item) => item.type === "toc").length, 1);
+    const html = richArticle(blocks);
+    assert.match(html, /이번 분양 핵심 POINT/);
+    assert.doesNotMatch(html, /### 분양 핵심 POINT/);
+  }
+  // Never silently repair explicit but incomplete markers or a heading without list content.
+  assert.equal(auditPresaleArticle(ARTICLE.replace("[/분양 핵심 POINT]", "")).passed, false);
+  const noBullets = ARTICLE.replace("[분양 핵심 POINT]", "### 분양 핵심 POINT")
+    .replace("[/분양 핵심 POINT]", "").replace(/^- /gm, "· ");
+  assert.equal(auditPresaleArticle(noBullets).passed, false);
+});
+
 test("editorial audit preserves required structure and rejects duplicate/missing image slots", async () => {
   const { auditPresaleArticle } = await helpers();
   const good = auditPresaleArticle(ARTICLE);
