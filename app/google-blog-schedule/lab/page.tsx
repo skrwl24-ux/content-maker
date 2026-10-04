@@ -102,7 +102,18 @@ export default function AiPriceAtlasLabPage() {
   }, [runs, hydrated]);
 
   function updateActive(patch: Partial<LabRun>) {
-    setRuns((prev) => ({ ...prev, [activeProvider]: { ...prev[activeProvider], ...patch } }));
+    // Replacing the answer/model/date is a new observation: previously assigned verdicts become invalid.
+    const evidenceChanged = ["response", "model", "plan", "testedAt"].some((field) => Object.prototype.hasOwnProperty.call(patch, field));
+    setRuns((prev) => ({
+      ...prev,
+      [activeProvider]: {
+        ...prev[activeProvider], ...patch,
+        ...(evidenceChanged ? {
+          verdicts: newLabRun(activeProvider, "").verdicts,
+          falsePositivesReviewed: false,
+        } : {}),
+      },
+    }));
   }
   function updateVerdict(issueId: string, verdict: LabVerdict) {
     setRuns((prev) => ({
