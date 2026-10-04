@@ -214,7 +214,7 @@ export default function AiPriceAtlasLabPage() {
 
     <section className={styles.progress} aria-label="실험 진행 상황">
       <div><strong>{answered}/3</strong><span>AI 답변 수집</span></div>
-      <div><strong>{completed}/3</strong><span>수동 검증 완료</span></div>
+      <div><strong>{autoEvaluated}/3</strong><span>답변 자동 대조</span></div>
       <div><strong>{LAB_ISSUES.length}</strong><span>검증 정답 개수</span></div>
       <div><strong>0</strong><span>AI API 호출</span></div>
     </section>
@@ -248,7 +248,7 @@ export default function AiPriceAtlasLabPage() {
             className={activeProvider === provider.id ? styles.providerActive : styles.providerTab}
             onClick={() => setActiveProvider(provider.id)}>
             <strong>{provider.label}</strong>
-            <small>{score.complete ? "검증 완료" : runs[provider.id].response.trim() ? "답변 저장됨" : "대기"}</small>
+            <small>{score.complete ? "자동 대조 완료" : score.evaluated ? "판독 보류 " + score.uncertain + "개" : runs[provider.id].response.trim() ? "답변 저장됨" : "대기"}</small>
           </button>;
         })}
       </div>
@@ -262,11 +262,11 @@ export default function AiPriceAtlasLabPage() {
           </a>
         </div>
         <div className={styles.formGrid}>
-          <label>실제로 표시된 모델명
+          <label>표시된 모델명 (선택 · 나중에 입력 가능)
             <input value={active.model} placeholder={modelLabel(activeProvider)}
               onChange={(event) => updateActive({ model: event.target.value })} />
           </label>
-          <label>이용 요금제
+          <label>이용 요금제 (선택 · 나중에 입력 가능)
             <input value={active.plan} placeholder="예: Free / Plus / Pro"
               onChange={(event) => updateActive({ plan: event.target.value })} />
           </label>
@@ -280,63 +280,53 @@ export default function AiPriceAtlasLabPage() {
           placeholder="AI 답변을 생략하거나 요약하지 말고 그대로 붙여넣으세요. 출처를 검증할 수 있게 원문을 보관합니다."
           onChange={(event) => updateActive({ response: event.target.value })} rows={11} />
         <div className={styles.answerFoot}>
-          <small>답변 길이 {active.response.trim().length.toLocaleString()}자 · 이 브라우저에만 자동 저장</small>
+          <small>답변 길이 {active.response.trim().length.toLocaleString()}자 · 자동 대조 즉시 반영 · 기존 내용 보존</small>
           <button type="button" className={styles.smallAction} onClick={() => void copy(prompt, "공통 질문")}>질문 다시 복사</button>
         </div>
       </div>
     </section>
 
+
     <section className={styles.panel}>
-      <span className={styles.step}>STEP 03 · 정답표 기준으로 직접 검증</span>
-      <h2>발견했는지, 틀렸는지 실제 답변과 대조합니다</h2>
-      <p className={styles.muted}>발견(Found)은 페이지·오류 위치·수정값이 모두 정확할 때만 선택하세요. 오류를 눈치챘지만 계산값이나 위치가 불완전하면 부분(Partial), 언급하지 않았다면 누락(Missed)입니다. AI가 정상 수치를 틀렸다고 주장한 경우 별도로 세어 주세요.</p>
-      <button type="button" className={styles.secondary} onClick={() => setShowKey((value) => !value)}>
-        {showKey ? "비공개 정답표 접기" : "테스트 답변을 수집한 뒤 정답표 펼치기"}
-      </button>
-      {showKey && <>
-        <p className={styles.warning}>아래 정답은 운영자 채점용입니다. 다른 AI의 새 대화에 복사하거나 비교 실험 전에 보여주지 마세요.</p>
-        <div className={styles.gradeGrid}>
-          {LAB_ISSUES.map((issue, index) => <div className={styles.issue} key={issue.id}>
-            <div className={styles.issueTop}><b>{index + 1}. {issue.label}</b><span>PDF {issue.page}페이지</span></div>
-            <p>표시된 값: <strong>{issue.reported}</strong></p>
-            <p>올바른 값: <strong className={styles.corrected}>{issue.corrected}</strong></p>
-            <small>{issue.explanation}</small>
-            <label>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label} 판정
-              <select value={active.verdicts[issue.id] || "unreviewed"}
-                onChange={(event) => updateVerdict(issue.id, event.target.value as LabVerdict)}>
-                <option value="unreviewed">미채점</option>
-                <option value="found">발견 · 위치와 수정값 모두 정확</option>
-                <option value="partial">부분 발견 · 내용 불완전</option>
-                <option value="missed">놓침 / 미언급</option>
-              </select>
-            </label>
-          </div>)}
+      <span className={styles.step}>STEP 03 · 정답표 자동 대조</span>
+      <h2>직접 채점하지 마세요. 답변을 붙여넣으면 자동으로 계산합니다.</h2>
+      <p className={styles.muted}>AI마다 표·문단·목록 형식이 달라도 오류 항목과 수정값을 찾아 대조합니다. 맥락이 불명확하면 임의로 0점 처리하지 않고 '판독 보류'로 따로 표시합니다.</p>
+      {!allAnswersReady ? (
+        <div className={styles.scoreStatus}>
+          <span>현재 {autoEvaluated}/3개 답변 인식</span>
+          <b>나머지 답변을 붙여넣으면 세 AI의 결과를 한 번에 공개합니다.</b>
+          <small>공정한 블라인드 테스트를 위해 답변 3개를 수집하기 전에는 PDF의 정답 숫자를 공개하지 않습니다. 모델명·요금제는 채점 필수 입력이 아닙니다.</small>
         </div>
-        <div className={styles.scoreForm}>
-          <label>없는 오류를 있다고 주장한 횟수
-            <input type="number" min="0" max="99" step="1" value={active.falsePositives}
-              onChange={(event) => updateActive({
-                falsePositives: event.target.value === "" ? -1 : Number(event.target.value),
-                falsePositivesReviewed: false,
-              })} />
-          </label>
-          <label className={styles.confirm}>
-            <input type="checkbox" checked={active.falsePositivesReviewed}
-              onChange={(event) => updateActive({ falsePositivesReviewed: event.target.checked })}/>
-            실제 원문과 비교해 오탐 수를 확인했습니다.
-          </label>
-          <label>평가 근거·유의사항 (선택)
-            <textarea rows={3} value={active.notes}
-              placeholder="예: 페이지는 맞았지만 수정값을 잘못 계산함"
-              onChange={(event) => updateActive({ notes: event.target.value })} />
-          </label>
-        </div>
-      </>}
-      <div className={styles.scoreStatus}>
-        <span>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label}의 현재 판정</span>
-        <b>정확 {activeScore.found}/5 · 부분 {activeScore.partial} · 누락 {activeScore.missed} · 미채점 {activeScore.unreviewed}</b>
-        <small>{activeScore.complete ? "필수 증거와 수동 검증 기록이 채워졌습니다." : "모델명·요금제·날짜·답변 30자 이상·5개 항목 채점·오탐 확인을 모두 마치면 검증 완료로 집계됩니다."}</small>
-      </div>
+      ) : (
+        <>
+          <div className={styles.scoreStatus}>
+            <span>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label} 자동 대조</span>
+            <b>수정값 확인 {activeScore.found}/5 · 부분 {activeScore.partial} · 미발견 {activeScore.missed} · 판독 보류 {activeScore.uncertain}</b>
+            <small>동일 오류의 항목명과 수정 숫자가 실제 답변에서 연결되는지 검사합니다. 오탐(정상 값을 오류로 지적)은 자동으로 확정할 수 없어 미평가로 둡니다.</small>
+          </div>
+          <div className={styles.gradeGrid}>
+            {LAB_ISSUES.map((issue, index) => {
+              const result = activeScore.details.find((item) => item.id === issue.id);
+              const verdict = result?.verdict || "unreviewed";
+              const verdictName = verdict === "found" ? "수정값 확인" :
+                verdict === "partial" ? "부분 발견" : verdict === "missed" ? "수정 근거 미발견" : "판독 보류";
+              return <div className={styles.issue} key={issue.id}>
+                <div className={styles.issueTop}>
+                  <b>{index + 1}. {issue.label}</b>
+                  <span>{verdictName}</span>
+                </div>
+                <p className={styles.corrected}>정답: {issue.corrected} <small>(PDF 기재 {issue.reported})</small></p>
+                <p>{result?.explanation}</p>
+                <div className={styles.excerpt}>{result?.evidence ? "AI 답변 근거: " + result.evidence : "AI 답변에서 일치하는 수정 근거를 찾지 못했습니다."}</div>
+              </div>;
+            })}
+          </div>
+          <details className={styles.reportDetails}>
+            <summary>정답표와 올바른 계산식 전체 보기</summary>
+            <pre>{makeLabAnswerKey()}</pre>
+          </details>
+        </>
+      )}
     </section>
 
     <section className={styles.panel}>
