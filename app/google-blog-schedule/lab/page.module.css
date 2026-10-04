@@ -18,3 +18,8 @@
 .outputActions{margin-top:17px}.reportDetails{border:1px solid #e0e8ee;border-radius:11px;margin-top:12px;padding:12px 15px}.reportDetails summary{cursor:pointer;font-size:12px;color:#476377;font-weight:850}.reportDetails pre{max-height:410px;overflow:auto;font-size:11px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;color:#495e73}.endActions{justify-content:space-between;margin-top:18px}.endActions small{font-size:11px;color:#8c97a3;line-height:1.5}
 .toast{position:fixed;bottom:23px;left:50%;transform:translateX(-50%);z-index:99;background:#243d50;color:white;max-width:min(750px,95vw);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:16px;box-shadow:0 9px 23px #203b4a44;font-size:12px;line-height:1.5}.toast button{border:0;background:none;color:white;font-size:20px;cursor:pointer}
 @media(max-width:750px){.wrap{padding:12px 10px 60px}.hero{padding:25px 22px}.progress{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.panel{padding:19px 15px}.panel h2{font-size:20px}.formGrid{grid-template-columns:1fr}.gradeGrid{grid-template-columns:1fr}.scoreForm{grid-template-columns:1fr}.scoreForm>label:last-child{grid-column:auto}.fixtureActions button,.outputActions button,.outputActions a{flex:1 1 100%}}
+
+/* Automatic answer matching: show traceable excerpt instead of requiring 15 manual verdict inputs. */
+.excerpt{font-size:11px;line-height:1.65;word-break:break-word;white-space:pre-wrap;color:#466678;background:#fff;border:1px solid #e2e9ef;border-radius:8px;padding:9px 10px;margin-top:10px}
+.issue .corrected{font-size:12px;color:#167c63;line-height:1.6;font-weight:850}
+.issue .corrected small{display:inline;color:#738596;font-size:10px;font-weight:650}
