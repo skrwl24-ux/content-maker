@@ -1605,6 +1605,17 @@ export default function GoogleBlogSchedulePage() {
             </div>
           </div>
 
+          {selected.kind === "experiment" && <section className={styles.labEvidencePanel}>
+            <div><span>FIRST-HAND LAB · {selected.labVersion || "실험 결과"}</span>
+              <strong>기획 근거: 실제 AI 답변과 수동 검증 결과</strong>
+              <p>일반 가격 기사와 다르게 검증실에서 가져온 결과만 본문·이미지 제작 요청서에 반영됩니다. 원본 PDF와 AI별 답변은 실전 검증실 ZIP에서 백업합니다.</p>
+            </div>
+            <div className={styles.labEvidenceActions}>
+              <a href="/google-blog-schedule/lab">실전 검증실 열기 ↗</a>
+              <button type="button" onClick={() => void copyText(selected.labReport || "", "실험 검증 리포트를 복사했습니다.")}>검증 근거 복사</button>
+            </div>
+          </section>}
+
           <section className={styles.publishSetup}>
             <div className={styles.publishSetupHead}>
               <div>
