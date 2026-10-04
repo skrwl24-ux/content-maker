@@ -1,0 +1,33 @@
+export type LabProviderId = "chatgpt" | "claude" | "gemini";
+export type LabVerdict = "unreviewed" | "found" | "partial" | "missed";
+export type LabRun = {
+  providerId: LabProviderId;
+  model: string;
+  plan: string;
+  testedAt: string;
+  response: string;
+  verdicts: Record<string, LabVerdict>;
+  falsePositives: number;
+  falsePositivesReviewed: boolean;
+  notes: string;
+};
+export type LabScore = { found: number; partial: number; missed: number; unreviewed: number; falsePositives: number; complete: boolean };
+export const LAB_VERSION: string;
+export const LAB_TITLE: string;
+export const LAB_PROVIDERS: Array<{ id: LabProviderId; label: string; url: string }>;
+export const LAB_ISSUES: Array<{
+  id: string;
+  page: number;
+  label: string;
+  reported: string;
+  corrected: string;
+  explanation: string;
+}>;
+export const LAB_PDF_PAGES: string[][];
+export function buildLabPdf(): Uint8Array;
+export function makeLabPrompt(): string;
+export function makeLabAnswerKey(): string;
+export function newLabRun(providerId: LabProviderId, localDate?: string): LabRun;
+export function scoreLabRun(run?: LabRun | null): LabScore;
+export function makeLabReport(runs: Partial<Record<LabProviderId, LabRun>>, reportDate?: string): string;
+export function makeLabBloggerPrompt(runs: Partial<Record<LabProviderId, LabRun>>, reportDate?: string): string;
