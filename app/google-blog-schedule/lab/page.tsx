@@ -332,35 +332,36 @@ export default function AiPriceAtlasLabPage() {
     <section className={styles.panel}>
       <span className={styles.step}>STEP 04 · 결과표와 근거 자료 만들기</span>
       <h2>독자에게 보여줄 비교 결과</h2>
-      <p className={styles.muted}>검증이 끝난 AI만 비교표에 포함합니다. 미실행·미완료인 AI를 0점으로 취급하거나 전체 AI의 순위를 단정하지 않습니다.</p>
+      <p className={styles.muted}>세 답변을 붙여넣으면 표가 자동으로 채워집니다. 수정값 확인·부분·미발견·판독 보류를 분리하고, 자동 평가가 불가능한 오탐은 미평가로 표시합니다. 모델명과 요금제는 발행 전 기록하면 됩니다.</p>
       <div className={styles.tableWrap}>
         <table className={styles.resultTable}>
-          <thead><tr><th>서비스</th><th>모델</th><th>발견</th><th>부분</th><th>누락</th><th>오탐</th><th>검증</th></tr></thead>
+          <thead><tr><th>서비스</th><th>모델</th><th>수정값 확인</th><th>부분</th><th>미발견</th><th>판독 보류</th><th>오탐</th><th>결과</th></tr></thead>
           <tbody>{LAB_PROVIDERS.map((provider) => {
             const run = runs[provider.id];
             const score = scoreAutoRun(run);
             return <tr key={provider.id}>
               <td><strong>{provider.label}</strong></td>
               <td>{run.model || "—"}</td>
-              <td>{score.complete ? score.found + "/5" : "—"}</td>
-              <td>{score.complete ? score.partial : "—"}</td>
-              <td>{score.complete ? score.missed : "—"}</td>
-              <td>{score.complete ? score.falsePositives : "—"}</td>
-              <td>{score.complete ? "수동 검증 완료" : "미완료"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.found + "/5" : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.partial : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.missed : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.uncertain : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? "미평가" : "—"}</td>
+              <td>{!score.evaluated ? "답변 대기" : !allAnswersReady ? "결과 공개 대기" : score.complete ? "자동 대조 완료" : "일부 판독 보류"}</td>
             </tr>;
           })}</tbody>
         </table>
       </div>
       <div className={styles.outputActions}>
-        <button type="button" className={styles.primary} disabled={!completed}
-          onClick={() => void copy(report, "수동 검증 결과 리포트")}>
+        <button type="button" className={styles.primary} disabled={!allAnswersReady}
+          onClick={() => void copy(report, "자동 대조 결과 리포트")}>
           검증 리포트 복사
         </button>
-        <button type="button" className={styles.secondary} disabled={!completed}
+        <button type="button" className={styles.secondary} disabled={!allAnswersReady}
           onClick={() => void copy(articlePrompt, "영문 Blogger 원고 작성 요청서")}>
           영문 포스팅 요청서 복사
         </button>
-        <button type="button" className={styles.primary} disabled={!completed} onClick={sendToQueue}>
+        <button type="button" className={styles.primary} disabled={!allAnswersReady} onClick={sendToQueue}>
           검증된 실험을 발행 큐로 등록 →
         </button>
         <button type="button" className={styles.secondary} disabled={!answered || exporting}
@@ -371,7 +372,7 @@ export default function AiPriceAtlasLabPage() {
       </div>
       <details className={styles.reportDetails}><summary>내보낼 검증 리포트 미리보기</summary>
         <pre>{report}</pre></details>
-      <p className={styles.warning}>ZIP에는 비공개 정답표와 AI별 원문 답변이 함께 들어갑니다. 테스트가 끝난 뒤 백업하고, 공개할 때는 파일별로 선별하세요. 자동 점수 판정이나 AI API 호출은 수행하지 않습니다.</p>
+      <p className={styles.warning}>ZIP에는 비공개 정답표와 AI별 원문 답변이 들어갑니다. 계산 오류 5개는 API 없이 브라우저에서 자동 대조합니다. 판독 보류와 오탐 미평가를 정확하게 표시하며, 이를 근거로 AI 전체 순위를 확정하지 않습니다.</p>
       <div className={styles.endActions}>
         <button type="button" className={styles.reset} onClick={resetTest}>이 실험 기록 초기화</button>
         <small>데이터는 브라우저 로컬 저장소에만 남습니다. 다른 PC로 옮기려면 ZIP을 별도로 보관하세요.</small>
