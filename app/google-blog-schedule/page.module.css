@@ -185,3 +185,8 @@
 .labSpotlight h2{font-size:20px;margin:6px 0 7px;color:#244f52}.labSpotlight p{font-size:13px;color:#496c69;line-height:1.65;margin:0 0 5px}.labSpotlight small{font-size:11px;color:#738b84}
 .labSpotlight>a{background:#1b736c;color:#fff;text-decoration:none;border-radius:11px;padding:13px 16px;font-size:13px;font-weight:900;white-space:nowrap;flex:0 0 auto}
 @media(max-width:700px){.labSpotlight{flex-direction:column;align-items:flex-start;padding:18px}.labSpotlight>a{width:100%;text-align:center}.headerLinks{gap:7px}}
+
+.labEvidencePanel{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 17px;border-radius:14px;background:#ecf6f5;border:1px solid #cde4df;margin:0 0 15px}
+.labEvidencePanel>div:first-child{min-width:0}.labEvidencePanel span,.labEvidencePanel strong{display:block}.labEvidencePanel span{font-size:10px;letter-spacing:.07em;font-weight:900;color:#238270;margin-bottom:5px}.labEvidencePanel strong{font-size:15px;color:#305d5b}.labEvidencePanel p{font-size:12px;color:#617e7a;line-height:1.55;margin:5px 0 0}
+.labEvidenceActions{display:flex;gap:7px;flex-wrap:wrap;flex:0 0 auto}.labEvidenceActions a,.labEvidenceActions button{border:1px solid #bfdbd5;color:#216b63;background:#fff;font-size:12px;text-decoration:none;font-weight:850;border-radius:9px;padding:9px 10px}
+@media(max-width:800px){.labEvidencePanel{flex-direction:column;align-items:stretch}.labEvidenceActions a,.labEvidenceActions button{flex:1 1 auto;text-align:center}}
