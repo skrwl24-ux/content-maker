@@ -81,6 +81,7 @@ test("blog-writing request enforces no fake model rankings, prices, or missing t
   const prompt = makeLabBloggerPrompt({}, "2026-10-05");
   assert.match(prompt, /synthetic two-page arithmetic\/PDF test/);
   assert.match(prompt, /Do not claim you tested any missing\/incomplete provider/);
+  assert.match(prompt, /only if two or more providers have completed results/);
   assert.match(prompt, /operator's manual verdict/);
   assert.match(prompt, /\[BLOGGER_HTML\]/);
 });
