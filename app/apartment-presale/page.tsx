@@ -393,7 +393,7 @@ export default function PresalePage() {
               </div>
               <label className={styles.field}>ChatGPT 완성 글 붙여넣기 (제목·본문·표·태그 전체)
                 <textarea className={styles.articleInput} value={draft.article} onChange={(e) => update("article", e.target.value)}
-                  placeholder={"완성 글 전체를 이곳에 한 번만 붙여넣으세요.\n[분양 핵심 POINT]...[/분양 핵심 POINT] 박스와 [이미지 00/01/02] 위치가 자동 인식됩니다."} /></label>
+                  placeholder={"완성 글 전체를 이곳에 한 번만 붙여넣으세요.\nPOINT 일반 제목과 [분양 핵심 POINT] 전용 박스 모두 자동으로 요약 카드로 변환됩니다. [이미지 00/01/02] 위치도 인식합니다."} /></label>
               <div className={styles.auditBox}>
                 <div className={styles.subHead}><h3>글 구성 자동검사</h3><span>{articleAudit.checks.length - missing.length}/{articleAudit.checks.length} 항목 확인</span></div>
                 <div className={styles.auditGrid}>{articleAudit.checks.map((item) => <span key={item.key}
@@ -505,7 +505,7 @@ export default function PresalePage() {
                   return <p key={index} className={styles.previewText} dangerouslySetInnerHTML={{ __html: renderPresaleLinks(block.text) }} />;
                 })}
               </article> : <div className={styles.emptyPreview}>완성 원고를 붙여넣으면 이곳에 실제 편집 형태가 나타납니다.</div>}
-              {missing.length > 0 && <p className={styles.warning}>형식 미확인 {missing.length}건 · 검증을 마친 후 서식 포함 전체복사를 사용할 수 있습니다.</p>}
+              {missing.length > 0 && <p className={styles.warning}>원고 구성 {missing.length}건 미인식 · 빨간색으로 표시된 항목을 확인해 주세요. 사실관계 검증 여부와는 별개입니다.</p>}
               <div className={styles.copyMeter} role="status">
                 <strong>네이버 복붙 데이터 · {(completeCopyBytes / 1024).toFixed(1)}KB</strong>
                 <span>1회 권장 상한 {(PRESALE_COPY_BUDGET / 1024).toFixed(0)}KB · HTML/텍스트 중 큰 크기를 UTF-8로 계산 (네이버 실제 허용량과는 다를 수 있음)</span>
