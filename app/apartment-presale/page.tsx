@@ -7,7 +7,7 @@ import {
   makePresaleImagePlan, makePresaleImagePrompt, auditPresaleArticle, parsePresaleArticle,
 } from "../../lib/apartment-presale.mjs";
 import type { PresaleArticleBlock } from "../../lib/apartment-presale.mjs";
-import { renderPresaleLinks, richArticle } from "../../lib/presale-naver-export.mjs";
+import { renderPresaleLinks, richArticle, plainPresaleArticle, presaleByteCount, createPresaleCopyParts, PRESALE_COPY_BUDGET } from "../../lib/presale-naver-export.mjs";
 import { makePresaleCandidateSeed } from "../../lib/apartment-presale-candidates.mjs";
 import styles from "./page.module.css";
 
@@ -102,12 +102,9 @@ function safeBase64(dataUrl: string) {
   return { ext: found[1] === "jpeg" ? "jpg" : found[1], base64: found[2] };
 }
 function plainArticle(blocks: PresaleArticleBlock[]) {
-  return blocks.map((block) => {
-    if (block.type === "points") return "📌 이번 분양 핵심 POINT\n" + block.text;
-    if (block.type === "table") return [block.headers.join(" | "), ...block.rows.map((row) => row.join(" | "))].join("\n");
-    return block.text;
-  }).join("\r\n \r\n");
+  return plainPresaleArticle(blocks);
 }
+
 export default function PresalePage() {
   const [id, setId] = useState("main");
   const [hydrated, setHydrated] = useState(false);
@@ -118,6 +115,10 @@ export default function PresalePage() {
   const imagePlan = useMemo(() => makePresaleImagePlan(), []);
   const parsed = useMemo(() => parsePresaleArticle(draft.article), [draft.article]);
   const articleAudit = useMemo(() => auditPresaleArticle(draft.article), [draft.article]);
+  const copyParts = useMemo(() => createPresaleCopyParts(parsed), [parsed]);
+  const completeCopyBytes = useMemo(() =>
+    Math.max(presaleByteCount(richArticle(parsed)), presaleByteCount(plainArticle(parsed))), [parsed]);
+  const unsafeCopyParts = copyParts.filter((part) => part.oversized);
   const researchPrompt = useMemo(() => makePresaleResearchPrompt({
     topic: draft.topic, dateKey: draft.dateKey, sources: draft.sourceUrl, materials: draft.materials,
   }), [draft.topic, draft.dateKey, draft.sourceUrl, draft.materials]);
@@ -212,26 +213,36 @@ export default function PresalePage() {
     }
     event.target.value = "";
   }
-  async function copyFinal() {
+  async function copyFinal(partIndex = 0) {
     if (!readyForFinal) {
       setNotice("원고 구성 검사에서 누락된 항목을 먼저 수정해 주세요.");
       return;
     }
+    const part = copyParts[partIndex];
+    if (!part) {
+      setNotice("복사할 원고가 없습니다.");
+      return;
+    }
+    const prefix = copyParts.length > 1 ? "(" + (partIndex + 1) + "/" + copyParts.length + ") " : "";
+    if (part.oversized && part.textBytes > PRESALE_COPY_BUDGET) {
+      setNotice(prefix + "하나의 긴 표·문단이 복붙 권장 크기를 넘었습니다. ZIP의 텍스트 원고를 사용하거나 해당 단락을 분리해 주세요.");
+      return;
+    }
     try {
-      if (navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+      if (!part.oversized && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
         await navigator.clipboard.write([new ClipboardItem({
-          "text/html": new Blob([richArticle(parsed)], { type: "text/html" }),
-          "text/plain": new Blob([plainArticle(parsed)], { type: "text/plain" }),
+          "text/html": new Blob([part.html], { type: "text/html" }),
+          "text/plain": new Blob([part.text], { type: "text/plain" }),
         })]);
-        setNotice("네이버용 서식 포함 전체복사 완료. 출처 URL은 클릭 가능한 링크로 포함됩니다. 네이버 편집기에 붙여넣은 후 링크를 확인하고, 이미지는 별도로 삽입하세요.");
+        setNotice(prefix + "네이버용 서식 복사 완료. 붙여넣은 뒤 다음 구간을 복사하세요. 링크는 클릭 가능하며 이미지는 별도 삽입합니다.");
       } else {
-        await navigator.clipboard.writeText(plainArticle(parsed));
-        setNotice("서식 복사를 지원하지 않아 본문 텍스트로 복사했습니다.");
+        await navigator.clipboard.writeText(part.text);
+        setNotice(prefix + "경량 텍스트 복사 완료. 해당 구간을 네이버에 붙여넣으세요.");
       }
     } catch {
       try {
-        await navigator.clipboard.writeText(plainArticle(parsed));
-        setNotice("서식 복사가 제한돼 텍스트로 복사했습니다.");
+        await navigator.clipboard.writeText(part.text);
+        setNotice(prefix + "서식 복사가 제한돼 해당 구간을 텍스트로 복사했습니다.");
       } catch {
         setNotice("클립보드 복사 실패. 브라우저 권한을 확인해 주세요.");
       }
@@ -246,6 +257,15 @@ export default function PresalePage() {
     try {
       const zip = new JSZip();
       zip.file("final-article.txt", plainArticle(parsed));
+      zip.file("final-article.html", richArticle(parsed));
+      if (copyParts.length > 1) {
+        copyParts.forEach((part, index) => {
+          const name = "part-" + String(index + 1).padStart(2, "0");
+          zip.file("naver-copy/" + name + ".html", part.html);
+          zip.file("naver-copy/" + name + ".txt", part.text);
+        });
+        zip.file("naver-copy/README.txt", "네이버 편집기에 part-01부터 순서대로 붙여넣으세요. 이미지는 별도로 삽입합니다. 용량은 복붙 전 HTML/UTF-8 계산값이며 네이버 실제 처리 크기와 다를 수 있습니다.");
+      }
       zip.file("source-research.txt", draft.facts + "\n\n[공고 상태] " + draft.sourceStatus +
         "\n[공식 URL]\n" + draft.sourceUrl + "\n[자료 기준일] " + draft.sourceDate);
       zip.file("requests/01-research.txt", researchPrompt);
@@ -273,7 +293,7 @@ export default function PresalePage() {
       anchor.download = "apartment-presale-" + draft.dateKey.replace(/-/g, "") + ".zip";
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setNotice("ZIP 저장 완료. 영문 파일명으로 본문·검증 메모·요청서·업로드한 이미지를 묶었습니다.");
+      setNotice("ZIP 저장 완료. 경량 HTML·텍스트 원고, 분할 복사본(필요 시), 근거·요청서·개별 이미지를 묶었습니다.");
     } catch (error) {
       setNotice(error instanceof Error ? "ZIP 제작 오류: " + error.message : "ZIP 제작에 실패했습니다.");
     } finally {
@@ -362,7 +382,7 @@ export default function PresalePage() {
                 <div><b>제목·대표 비주얼</b><span>독자의 질문으로 시작</span></div>
                 <div><b>핵심 POINT·목차</b><span>첫 화면에서 핵심 파악</span></div>
                 <div><b>공급·가격·입지</b><span>공고 숫자와 상태 구분</span></div>
-                <div><b>이 단지만의 킥</b><span>놓치기 쉬운 실부담·조건</span></div>
+                <div><b>이 단지만의 킥·FAQ</b><span>검증된 실부담·조건, 정보 박스까지 자동 편집</span></div>
               </div>
               {!draft.facts.trim() && <p className={styles.softNotice}>조사 결과를 생략해도 원고 요청은 가능합니다. 이때 ChatGPT가 공식자료 검색부터 수행하게 하며 완성 후 별도 검증이 필요합니다.</p>}
               <div className={styles.actions}>
@@ -453,7 +473,20 @@ export default function PresalePage() {
                       <img src={draft.sitePhoto} alt="사용 권한 확인된 단지 전경" /><figcaption>{draft.sitePhotoCaption}</figcaption>
                     </figure>}
                   </div>;
-                  if (block.type === "heading") return <h3 key={index}>{block.text}</h3>;
+                  if (block.type === "heading") return block.level === 3
+                    ? <h4 key={index} className={styles.previewSubheading}>{block.text}</h4>
+                    : <h3 key={index}>{block.text}</h3>;
+                  if (block.type === "divider") return <hr key={index} className={styles.previewDivider} />;
+                  if (block.type === "toc") return <div className={styles.previewToc} key={index}>
+                    <strong>📋 목차</strong>{block.text.split("\n").map((line, lineIndex) =>
+                      <p key={lineIndex}>{line}</p>)}</div>;
+                  if (block.type === "info") return <div key={index}
+                    className={styles.previewInfo + " " +
+                      (block.tone === "warning" ? styles.infoWarning : block.tone === "estimate"
+                        ? styles.infoEstimate : block.tone === "check" ? styles.infoCheck : styles.infoNote)}>
+                    <strong>{block.title}</strong>{block.text.split("\n").map((line, lineIndex) =>
+                      <p key={lineIndex}>{line.replace(/^[-•]\s*/, "• ")}</p>)}</div>;
+                  if (block.type === "faqQuestion") return <p key={index} className={styles.previewFaq}>{block.text}</p>;
                   if (block.type === "points") return <div className={styles.previewPoints} key={index}>
                     <strong>📌 이번 분양 핵심 POINT</strong>{block.text.split("\n").map((line, lineIndex) => <p key={lineIndex}>{line}</p>)}</div>;
                   if (block.type === "table") return <div className={styles.tableWrap} key={index}><table><thead><tr>
@@ -473,10 +506,22 @@ export default function PresalePage() {
                 })}
               </article> : <div className={styles.emptyPreview}>완성 원고를 붙여넣으면 이곳에 실제 편집 형태가 나타납니다.</div>}
               {missing.length > 0 && <p className={styles.warning}>형식 미확인 {missing.length}건 · 검증을 마친 후 서식 포함 전체복사를 사용할 수 있습니다.</p>}
-              <p className={styles.hint}>서식 포함 복사는 본문·표·출처 URL의 클릭 링크·이미지 위치 표시를 전달합니다. 브라우저가 HTML 클립보드를 지원하지 않으면 일반 텍스트로 복사됩니다. 업로드한 PNG/JPG는 네이버 편집기에서 해당 위치에 별도로 삽입하세요. ZIP에도 개별 파일로 담깁니다.</p>
+              <div className={styles.copyMeter} role="status">
+                <strong>네이버 복붙 데이터 · {(completeCopyBytes / 1024).toFixed(1)}KB</strong>
+                <span>1회 권장 상한 {(PRESALE_COPY_BUDGET / 1024).toFixed(0)}KB · HTML/텍스트 중 큰 크기를 UTF-8로 계산 (네이버 실제 허용량과는 다를 수 있음)</span>
+                <span>{copyParts.length > 1
+                  ? "긴 원고이므로 " + copyParts.length + "개 구간으로 자동 분리했습니다. 아래 번호대로 복사·붙여넣기 하세요."
+                  : "한 번에 복사 가능한 크기입니다."}</span>
+                {unsafeCopyParts.length > 0 && <span className={styles.warning}>긴 단일 표·문단 {unsafeCopyParts.length}개는 경량 텍스트 복사로 처리하거나 원고를 분리해야 합니다.</span>}
+              </div>
+              <p className={styles.hint}>표·핵심 요약·목차·보조 박스·출처 링크는 경량 HTML로 복사합니다. PNG/JPG는 HTML에 넣지 않고 네이버 편집기에서 해당 위치에 별도 삽입하세요.</p>
               <div className={styles.actions}>
-                <button type="button" className={styles.primaryButton} disabled={!readyForFinal}
-                  onClick={() => void copyFinal()}>📋 네이버 서식 포함 전체복사</button>
+                {copyParts.length <= 1
+                  ? <button type="button" className={styles.primaryButton} disabled={!readyForFinal}
+                      onClick={() => void copyFinal(0)}>📋 네이버 서식 포함 전체복사</button>
+                  : copyParts.map((part, index) => <button key={index} type="button"
+                      className={styles.primaryButton} disabled={!readyForFinal}
+                      onClick={() => void copyFinal(index)}>📋 {index + 1}/{copyParts.length} 구간 복사 ({(Math.max(part.htmlBytes, part.textBytes) / 1024).toFixed(0)}KB)</button>)}
                 <button type="button" className={styles.secondaryButton} disabled={!readyForFinal || busy}
                   onClick={() => void exportZip()}>{busy ? "ZIP 제작 중…" : "📦 원고·이미지·근거 ZIP"}</button>
               </div>
@@ -490,6 +535,7 @@ export default function PresalePage() {
               <div className={styles.statusRow}><span>출처·조사 메모</span><b>{sourceInfoRecorded ? "기록됨" : "선택"}</b></div>
               <div className={styles.statusRow}><span>본문 형식 검사</span><b>{articleAudit.checks.length - missing.length}/{articleAudit.checks.length}</b></div>
               <div className={styles.statusRow}><span>이미지 등록</span><b>{imageDone}/3</b></div>
+              <div className={styles.statusRow}><span>복붙 크기</span><b>{(completeCopyBytes / 1024).toFixed(0)}KB · {copyParts.length || 0}회</b></div>
               <div className={styles.statusRow}><span>전체복사·ZIP</span><b>{readyForFinal ? "준비 완료" : "구성검사 대기"}</b></div>
               <hr />
               <p>공고 미발표 상태에서도 작업할 수 있습니다. 다만 과거 추정치·예정 일정은 절대 확정값으로 표시하지 않습니다.</p>
