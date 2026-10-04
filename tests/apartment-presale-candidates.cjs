@@ -29,6 +29,7 @@ test("candidate selection seeds only preliminary leads and never grants fact-che
     assert.equal(seed.facts, "");
     assert.match(seed.materials, /2026-10-04/);
     assert.match(seed.materials, /공식 모집공고/);
+    assert.match(seed.materials, /가격 조사 우선순위/);
     assert.ok(seed.materials.includes(item.sourceUrl));
     if (item.officialUrl === "https://www.applyhome.co.kr/") assert.equal(seed.sourceUrl, "");
   }
@@ -41,6 +42,7 @@ test("official builder facts distinguish large complexes, apt counts, new and ol
   assert.match(getPresaleCandidate("banpo-dh-claest").supply, /5,007세대/);
   assert.doesNotMatch(getPresaleCandidate("banpo-dh-claest").topic, /5,002가구/);
   assert.match(getPresaleCandidate("gyeonggi-gwangju-lotte-2").supply, /1,249세대/);
+  assert.match(getPresaleCandidate("gyeonggi-gwangju-lotte-2").kick, /1단지의 2026년 실제 모집공고/);
   assert.match(getPresaleCandidate("hyangnam-lotte-signature").supply, /1,542세대/);
   assert.match(getPresaleCandidate("forena-jije").supply, /1,098가구/);
   assert.match(getPresaleCandidate("ansan-armuse-xi").supply, /아파트 984가구 \+ 오피스텔 370실/);
