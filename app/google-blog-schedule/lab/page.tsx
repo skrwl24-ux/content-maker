@@ -12,6 +12,7 @@ import styles from "./page.module.css";
 
 type LabRuns = Record<LabProviderId, LabRun>;
 const STORAGE_KEY = "ai-price-atlas-lab-v1";
+const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
 function localToday() {
   const date = new Date();
@@ -176,6 +177,30 @@ export default function AiPriceAtlasLabPage() {
       setNotice("ZIP 생성 실패 · 브라우저 저장 공간을 확인하세요.");
     } finally {
       setExporting(false);
+    }
+  }
+  function sendToQueue() {
+    if (!completed) return;
+    const testedNames = LAB_PROVIDERS.filter((p) => scoreLabRun(runs[p.id]).complete).map((p) => p.label);
+    const date = localToday();
+    const title = "AI PDF Error Test: Verified Results from " + testedNames.join(", ");
+    const pending = {
+      id: "lab-" + Date.now(),
+      kind: "experiment",
+      date,
+      title,
+      keyword: "AI PDF numerical accuracy test",
+      slug: "ai-pdf-error-test-" + date.replace(/-/g, ""),
+      note: "실제 AI 웹 테스트 | 가상 PDF 2페이지 | 검증 완료한 서비스 " + testedNames.join(", ") + " | 파일 및 원문은 실전 검증실 ZIP에서 관리",
+      labVersion: LAB_VERSION,
+      labReport: report,
+      labPrompt: articlePrompt,
+    };
+    try {
+      window.localStorage.setItem(QUEUE_TRANSFER_KEY, JSON.stringify(pending));
+      window.location.href = "/google-blog-schedule?fromLab=1";
+    } catch {
+      setNotice("발행 큐 전달에 실패했습니다. 브라우저의 로컬 저장소를 확인하세요.");
     }
   }
   function resetTest() {
@@ -363,6 +388,9 @@ export default function AiPriceAtlasLabPage() {
         <button type="button" className={styles.secondary} disabled={!completed}
           onClick={() => void copy(articlePrompt, "영문 Blogger 원고 작성 요청서")}>
           영문 포스팅 요청서 복사
+        </button>
+        <button type="button" className={styles.primary} disabled={!completed} onClick={sendToQueue}>
+          검증된 실험을 발행 큐로 등록 →
         </button>
         <button type="button" className={styles.secondary} disabled={!answered || exporting}
           onClick={() => void exportArchive()}>
