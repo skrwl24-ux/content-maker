@@ -20,7 +20,7 @@ const TYPES = [
   ["🏠", "아파트 블로그", "시세·실거래·TOP3"],
   ["💡", "생활·아파트 꿀팁", "이사·청소·점검"],
   ["🌿", "Paramma 블로거", "추천 10개 순차 발행"],
-  ["🤖", "AI Price Atlas", "가격·국가 비교"],
+  ["🤖", "AI Price Atlas", "실전 검증 · 가격 비교"],
   ["🎬", "집값쓱 쇼츠", "배경 1장 + 코드 정보판 7장"],
 ] as const;
 
@@ -1365,6 +1365,7 @@ export default function Home() {
       <div className="inlineActions">
         <a className="presaleNavLink" href="/apartment-presale/discover">🔎 관심 분양 찾기</a>
         <a className="presaleNavLink" href="/apartment-presale">🏙️ 분양 제작실</a>
+        <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule/lab"}>🔬 AI 실전 검증실</button>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
       </div>
@@ -1399,7 +1400,8 @@ export default function Home() {
         <div className="sectionHead"><div><h2>무엇을 만들까요?</h2><p>카테고리를 고르면 그 작업에 맞게 이미지 구성과 규격을 준비합니다.</p></div></div>
         <div className="types">{TYPES.map(([ico, name, desc]) => <button key={name} className={`type ${contentType === name ? "sel" : ""}`} onClick={() => setContentType(name)}><span className="ico">{ico}</span><b>{name}</b><small>{desc}</small></button>)}</div>
         {contentType === "Paramma 블로거" && <div className="box parammaBox"><h3>🌿 Paramma 블로거 · 순차 발행 모드</h3><p className="muted">신기한 동물이야기 · 신비로운 자연 · 생활 속 궁금증을 한 발행 큐에 섞어 1번부터 10번까지 순서대로 진행합니다.</p></div>}
-        <div className="actions"><button className="primary" onClick={() => { if (contentType === "Paramma 블로거") window.location.href = "/paramma-bulk"; else setPhase("input"); }}>{contentType === "Paramma 블로거" ? "발행 10개 열기" : "새 작업 시작"}</button></div>
+        {contentType === "AI Price Atlas" && <div className="box parammaBox"><h3>🔬 AI Price Atlas · 직접 검증 콘텐츠</h3><p className="muted">실전 테스트 PDF 생성 → 동일 질문으로 AI 3종 비교 → 원문 답변 저장 → 정답 대조 → 결과 기반 영문 글 기획. API 사용 없이 기존 AI 계정으로 진행합니다.</p></div>}
+        <div className="actions"><button className="primary" onClick={() => { if (contentType === "Paramma 블로거") window.location.href = "/paramma-bulk"; else if (contentType === "AI Price Atlas") window.location.href = "/google-blog-schedule/lab"; else setPhase("input"); }}>{contentType === "Paramma 블로거" ? "발행 10개 열기" : contentType === "AI Price Atlas" ? "실전 검증 시작" : "새 작업 시작"}</button></div>
         <div className="box"><h3>저장 프로젝트</h3>{saved.length === 0 ? <div className="muted">아직 저장된 작업이 없습니다.</div> : <div className="savedList">{saved.map(p => <div className="savedItem" key={p.id}><div><b>{p.project_title}</b><small>{p.content_type}</small></div><button className="secondary compact" onClick={() => loadProject(p.id)}>불러오기</button></div>)}</div>}</div>
       </>}
 
