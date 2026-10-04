@@ -278,3 +278,32 @@ test("presale copy and ZIP are not blocked by manual confirmation checkboxes", (
   const readiness = page.split(String.fromCharCode(10)).find((line) => line.includes("const readyForFinal ="));
   assert.doesNotMatch(readiness, /sourceDate|sourceStatus|sourceInfoRecorded/);
 });
+
+
+test("presale Naver HTML copy keeps official source URLs clickable", async () => {
+  const { parsePresaleArticle } = await helpers();
+  const { richArticle, renderPresaleLinks } = await import("../lib/presale-naver-export.mjs");
+  const officialUrl = "https://kind.krx.co.kr/external/2026/02/27/000237/20260225002766/91370.htm";
+  const sourceText = [
+    "- 현대건설, 정정 공시",
+    officialUrl,
+    "- [서울시 정비사업 정보몽땅](https://cleanup.seoul.go.kr/cafe/mainIndx.do?cafeId=650900000161f71)",
+    "금융위: https://fsc.go.kr/no010101/85432.",
+  ].join("\n");
+  const html = richArticle(parsePresaleArticle(ARTICLE + "\n" + sourceText));
+  assert.ok(html.includes('href="' + officialUrl + '"'));
+  assert.ok(html.includes('>' + officialUrl + '</a>'));
+  assert.match(html, /href="https:\/\/cleanup\.seoul\.go\.kr\/cafe\/mainIndx\.do\?cafeId=650900000161f71"[^>]*>서울시 정비사업 정보몽땅<\/a>/);
+  assert.match(html, /href="https:\/\/fsc\.go\.kr\/no010101\/85432"[^>]*>https:\/\/fsc\.go\.kr\/no010101\/85432<\/a>\./);
+  assert.match(html, /rel="noopener noreferrer"/);
+  const inTable = richArticle([{ type: "table", headers: ["출처", "주소"],
+    rows: [["공식공고", "https://www.applyhome.co.kr/"]] }]);
+  assert.match(inTable, /<td[^>]*><a href="https:\/\/www\.applyhome\.co\.kr\/"/);
+
+  // Preserve meaningful URL characters while escaping HTML and rejecting script schemes.
+  assert.match(renderPresaleLinks("https://example.org/?a=1&b=2"), /href="https:\/\/example\.org\/\?a=1&amp;b=2"/);
+  assert.match(renderPresaleLinks("https://example.org/path_(A)."), /href="https:\/\/example\.org\/path_\(A\)"/);
+  const malicious = richArticle([{ type: "body", text: '<script>alert(1)</script> [나쁜 링크](javascript:alert(1))' }]);
+  assert.ok(malicious.includes("&lt;script&gt;"));
+  assert.doesNotMatch(malicious, /<script|href="javascript:/);
+});
