@@ -370,8 +370,8 @@ export default function AiPriceAtlasLabPage() {
         </button>
         <a className={styles.scheduleLink} href="/google-blog-schedule">기존 발행 스케줄 ↗</a>
       </div>
-      <details className={styles.reportDetails}><summary>내보낼 검증 리포트 미리보기</summary>
-        <pre>{report}</pre></details>
+      {allAnswersReady && <details className={styles.reportDetails}><summary>내보낼 자동 대조 리포트 미리보기</summary>
+        <pre>{report}</pre></details>}
       <p className={styles.warning}>ZIP에는 비공개 정답표와 AI별 원문 답변이 들어갑니다. 계산 오류 5개는 API 없이 브라우저에서 자동 대조합니다. 판독 보류와 오탐 미평가를 정확하게 표시하며, 이를 근거로 AI 전체 순위를 확정하지 않습니다.</p>
       <div className={styles.endActions}>
         <button type="button" className={styles.reset} onClick={resetTest}>이 실험 기록 초기화</button>
