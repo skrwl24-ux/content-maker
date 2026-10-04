@@ -5,9 +5,9 @@ import JSZip from "jszip";
 import {
   LAB_VERSION, LAB_TITLE, LAB_PROVIDERS, LAB_ISSUES,
   buildLabPdf, makeLabPrompt, makeLabAnswerKey, newLabRun,
-  scoreLabRun, makeLabReport, makeLabBloggerPrompt,
 } from "../../../lib/ai-price-atlas-lab.mjs";
-import type { LabProviderId, LabRun, LabVerdict } from "../../../lib/ai-price-atlas-lab.mjs";
+import { scoreAutoRun, makeAutoReport, makeAutoBloggerPrompt } from "../../../lib/ai-price-atlas-auto-grade.mjs";
+import type { LabProviderId, LabRun } from "../../../lib/ai-price-atlas-lab.mjs";
 import styles from "./page.module.css";
 
 type LabRuns = Record<LabProviderId, LabRun>;
@@ -48,16 +48,16 @@ export default function AiPriceAtlasLabPage() {
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState("불러오는 중");
   const [notice, setNotice] = useState("");
-  const [showKey, setShowKey] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [today, setToday] = useState("");
   const prompt = useMemo(() => makeLabPrompt(), []);
   const active = runs[activeProvider];
-  const activeScore = scoreLabRun(active);
-  const completed = LAB_PROVIDERS.filter((p) => scoreLabRun(runs[p.id]).complete).length;
+  const activeScore = scoreAutoRun(active);
   const answered = LAB_PROVIDERS.filter((p) => runs[p.id].response.trim().length > 0).length;
-  const report = useMemo(() => makeLabReport(runs, today), [runs, today]);
-  const articlePrompt = useMemo(() => makeLabBloggerPrompt(runs, today), [runs, today]);
+  const autoEvaluated = LAB_PROVIDERS.filter((p) => scoreAutoRun(runs[p.id]).evaluated).length;
+  const allAnswersReady = autoEvaluated === LAB_PROVIDERS.length;
+  const report = useMemo(() => makeAutoReport(runs, today), [runs, today]);
+  const articlePrompt = useMemo(() => makeAutoBloggerPrompt(runs, today), [runs, today]);
 
   useEffect(() => {
     const date = localToday();
@@ -103,27 +103,8 @@ export default function AiPriceAtlasLabPage() {
   }, [runs, hydrated]);
 
   function updateActive(patch: Partial<LabRun>) {
-    // Replacing the answer/model/date is a new observation: previously assigned verdicts become invalid.
-    const evidenceChanged = ["response", "model", "plan", "testedAt"].some((field) => Object.prototype.hasOwnProperty.call(patch, field));
-    setRuns((prev) => ({
-      ...prev,
-      [activeProvider]: {
-        ...prev[activeProvider], ...patch,
-        ...(evidenceChanged ? {
-          verdicts: newLabRun(activeProvider, "").verdicts,
-          falsePositivesReviewed: false,
-        } : {}),
-      },
-    }));
-  }
-  function updateVerdict(issueId: string, verdict: LabVerdict) {
-    setRuns((prev) => ({
-      ...prev,
-      [activeProvider]: {
-        ...prev[activeProvider],
-        verdicts: { ...prev[activeProvider].verdicts, [issueId]: verdict },
-      },
-    }));
+    // Re-analyze saved original answers on each edit; old manual verdict fields are intentionally ignored.
+    setRuns((prev) => ({ ...prev, [activeProvider]: { ...prev[activeProvider], ...patch } }));
   }
   async function copy(text: string, what: string) {
     try {
@@ -156,9 +137,9 @@ export default function AiPriceAtlasLabPage() {
       }
       zip.file("05_scorecard/scorecard.json", JSON.stringify({
         version: LAB_VERSION, exportedAt: new Date().toISOString(),
-        sources: "User-pasted answers from provider websites; manually marked against synthetic answer key.",
+        sources: "User-pasted original replies; deterministic local matching of metric/corrected figures; false positives unassessed.",
         issues: LAB_ISSUES, runs,
-        scores: Object.fromEntries(LAB_PROVIDERS.map((p) => [p.id, scoreLabRun(runs[p.id])])),
+        scores: Object.fromEntries(LAB_PROVIDERS.map((p) => [p.id, scoreAutoRun(runs[p.id])])),
       }, null, 2));
       zip.file("05_scorecard/verified_report.txt", report);
       zip.file("06_blog/english_article_request.txt", articlePrompt);
@@ -167,7 +148,8 @@ export default function AiPriceAtlasLabPage() {
         "IMPORTANT: 03_PRIVATE_answer_key.txt contains the five planted errors.",
         "Do not upload the whole ZIP to AI models before collecting their answers.",
         "The PDF and common prompt must be identical across every run.",
-        "Manual scoring requires model/plan/date/original reply and all five verdicts.",
+        "The five known corrections are checked locally against each pasted reply. Ambiguous passages are excluded from confirmed matches.",
+        "False positives are NOT assessed automatically. Model/plan/date metadata is recommended for publishing provenance.",
         "Raw answers are user-supplied, not API outputs. This is not an independent model benchmark.",
         "Files are exported locally, not uploaded to a server.",
       ].join("\n"));
@@ -180,8 +162,8 @@ export default function AiPriceAtlasLabPage() {
     }
   }
   function sendToQueue() {
-    if (!completed) return;
-    const testedNames = LAB_PROVIDERS.filter((p) => scoreLabRun(runs[p.id]).complete).map((p) => p.label);
+    if (!allAnswersReady) return;
+    const testedNames = LAB_PROVIDERS.filter((p) => scoreAutoRun(runs[p.id]).evaluated).map((p) => p.label);
     const date = localToday();
     const title = "AI PDF Error Test: Verified Results from " + testedNames.join(", ");
     const pending = {
@@ -191,7 +173,7 @@ export default function AiPriceAtlasLabPage() {
       title,
       keyword: "AI PDF numerical accuracy test",
       slug: "ai-pdf-error-test-" + date.replace(/-/g, ""),
-      note: "실제 AI 웹 테스트 | 가상 PDF 2페이지 | 검증 완료한 서비스 " + testedNames.join(", ") + " | 파일 및 원문은 실전 검증실 ZIP에서 관리",
+      note: "실제 AI 웹 테스트 | 가상 PDF 2페이지 | 세 답변 자동 대조: " + testedNames.join(", ") + " | 판독 보류·오탐 미평가는 결과에 그대로 표기 | 원본은 검증실 ZIP",
       labVersion: LAB_VERSION,
       labReport: report,
       labPrompt: articlePrompt,
@@ -206,7 +188,6 @@ export default function AiPriceAtlasLabPage() {
   function resetTest() {
     if (!window.confirm("이 브라우저에 저장된 AI별 답변·채점 기록을 모두 초기화할까요? 필요하다면 먼저 ZIP으로 백업하세요.")) return;
     setRuns(emptyRuns(localToday()));
-    setShowKey(false);
     setActiveProvider("chatgpt");
     setNotice("테스트가 초기화됐습니다. 공통 PDF와 프롬프트는 동일하게 유지됩니다.");
   }
@@ -233,7 +214,7 @@ export default function AiPriceAtlasLabPage() {
 
     <section className={styles.progress} aria-label="실험 진행 상황">
       <div><strong>{answered}/3</strong><span>AI 답변 수집</span></div>
-      <div><strong>{completed}/3</strong><span>수동 검증 완료</span></div>
+      <div><strong>{autoEvaluated}/3</strong><span>답변 자동 대조</span></div>
       <div><strong>{LAB_ISSUES.length}</strong><span>검증 정답 개수</span></div>
       <div><strong>0</strong><span>AI API 호출</span></div>
     </section>
@@ -261,13 +242,13 @@ export default function AiPriceAtlasLabPage() {
       <p className={styles.muted}>아래 버튼은 해당 서비스의 공식 채팅 사이트만 엽니다. 로그인·PDF 첨부·질문 붙여넣기는 각 사이트에서 진행하고, 받은 원문을 다시 이 화면에 복사합니다. 기존 계정으로 테스트할 수 있습니다.</p>
       <div className={styles.providerTabs} role="tablist" aria-label="테스트할 AI 선택">
         {LAB_PROVIDERS.map((provider) => {
-          const score = scoreLabRun(runs[provider.id]);
+          const score = scoreAutoRun(runs[provider.id]);
           return <button type="button" role="tab" aria-selected={activeProvider === provider.id}
             key={provider.id}
             className={activeProvider === provider.id ? styles.providerActive : styles.providerTab}
             onClick={() => setActiveProvider(provider.id)}>
             <strong>{provider.label}</strong>
-            <small>{score.complete ? "검증 완료" : runs[provider.id].response.trim() ? "답변 저장됨" : "대기"}</small>
+            <small>{score.complete ? "자동 대조 완료" : score.evaluated ? "판독 보류 " + score.uncertain + "개" : runs[provider.id].response.trim() ? "답변 저장됨" : "대기"}</small>
           </button>;
         })}
       </div>
@@ -281,11 +262,11 @@ export default function AiPriceAtlasLabPage() {
           </a>
         </div>
         <div className={styles.formGrid}>
-          <label>실제로 표시된 모델명
+          <label>표시된 모델명 (선택 · 나중에 입력 가능)
             <input value={active.model} placeholder={modelLabel(activeProvider)}
               onChange={(event) => updateActive({ model: event.target.value })} />
           </label>
-          <label>이용 요금제
+          <label>이용 요금제 (선택 · 나중에 입력 가능)
             <input value={active.plan} placeholder="예: Free / Plus / Pro"
               onChange={(event) => updateActive({ plan: event.target.value })} />
           </label>
@@ -299,97 +280,88 @@ export default function AiPriceAtlasLabPage() {
           placeholder="AI 답변을 생략하거나 요약하지 말고 그대로 붙여넣으세요. 출처를 검증할 수 있게 원문을 보관합니다."
           onChange={(event) => updateActive({ response: event.target.value })} rows={11} />
         <div className={styles.answerFoot}>
-          <small>답변 길이 {active.response.trim().length.toLocaleString()}자 · 이 브라우저에만 자동 저장</small>
+          <small>답변 길이 {active.response.trim().length.toLocaleString()}자 · 자동 대조 즉시 반영 · 기존 내용 보존</small>
           <button type="button" className={styles.smallAction} onClick={() => void copy(prompt, "공통 질문")}>질문 다시 복사</button>
         </div>
       </div>
     </section>
 
+
     <section className={styles.panel}>
-      <span className={styles.step}>STEP 03 · 정답표 기준으로 직접 검증</span>
-      <h2>발견했는지, 틀렸는지 실제 답변과 대조합니다</h2>
-      <p className={styles.muted}>발견(Found)은 페이지·오류 위치·수정값이 모두 정확할 때만 선택하세요. 오류를 눈치챘지만 계산값이나 위치가 불완전하면 부분(Partial), 언급하지 않았다면 누락(Missed)입니다. AI가 정상 수치를 틀렸다고 주장한 경우 별도로 세어 주세요.</p>
-      <button type="button" className={styles.secondary} onClick={() => setShowKey((value) => !value)}>
-        {showKey ? "비공개 정답표 접기" : "테스트 답변을 수집한 뒤 정답표 펼치기"}
-      </button>
-      {showKey && <>
-        <p className={styles.warning}>아래 정답은 운영자 채점용입니다. 다른 AI의 새 대화에 복사하거나 비교 실험 전에 보여주지 마세요.</p>
-        <div className={styles.gradeGrid}>
-          {LAB_ISSUES.map((issue, index) => <div className={styles.issue} key={issue.id}>
-            <div className={styles.issueTop}><b>{index + 1}. {issue.label}</b><span>PDF {issue.page}페이지</span></div>
-            <p>표시된 값: <strong>{issue.reported}</strong></p>
-            <p>올바른 값: <strong className={styles.corrected}>{issue.corrected}</strong></p>
-            <small>{issue.explanation}</small>
-            <label>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label} 판정
-              <select value={active.verdicts[issue.id] || "unreviewed"}
-                onChange={(event) => updateVerdict(issue.id, event.target.value as LabVerdict)}>
-                <option value="unreviewed">미채점</option>
-                <option value="found">발견 · 위치와 수정값 모두 정확</option>
-                <option value="partial">부분 발견 · 내용 불완전</option>
-                <option value="missed">놓침 / 미언급</option>
-              </select>
-            </label>
-          </div>)}
+      <span className={styles.step}>STEP 03 · 정답표 자동 대조</span>
+      <h2>직접 채점하지 마세요. 답변을 붙여넣으면 자동으로 계산합니다.</h2>
+      <p className={styles.muted}>AI마다 표·문단·목록 형식이 달라도 오류 항목과 수정값을 찾아 대조합니다. 맥락이 불명확하면 임의로 0점 처리하지 않고 '판독 보류'로 따로 표시합니다.</p>
+      {!allAnswersReady ? (
+        <div className={styles.scoreStatus}>
+          <span>현재 {autoEvaluated}/3개 답변 인식</span>
+          <b>나머지 답변을 붙여넣으면 세 AI의 결과를 한 번에 공개합니다.</b>
+          <small>공정한 블라인드 테스트를 위해 답변 3개를 수집하기 전에는 PDF의 정답 숫자를 공개하지 않습니다. 모델명·요금제는 채점 필수 입력이 아닙니다.</small>
         </div>
-        <div className={styles.scoreForm}>
-          <label>없는 오류를 있다고 주장한 횟수
-            <input type="number" min="0" max="99" step="1" value={active.falsePositives}
-              onChange={(event) => updateActive({
-                falsePositives: event.target.value === "" ? -1 : Number(event.target.value),
-                falsePositivesReviewed: false,
-              })} />
-          </label>
-          <label className={styles.confirm}>
-            <input type="checkbox" checked={active.falsePositivesReviewed}
-              onChange={(event) => updateActive({ falsePositivesReviewed: event.target.checked })}/>
-            실제 원문과 비교해 오탐 수를 확인했습니다.
-          </label>
-          <label>평가 근거·유의사항 (선택)
-            <textarea rows={3} value={active.notes}
-              placeholder="예: 페이지는 맞았지만 수정값을 잘못 계산함"
-              onChange={(event) => updateActive({ notes: event.target.value })} />
-          </label>
-        </div>
-      </>}
-      <div className={styles.scoreStatus}>
-        <span>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label}의 현재 판정</span>
-        <b>정확 {activeScore.found}/5 · 부분 {activeScore.partial} · 누락 {activeScore.missed} · 미채점 {activeScore.unreviewed}</b>
-        <small>{activeScore.complete ? "필수 증거와 수동 검증 기록이 채워졌습니다." : "모델명·요금제·날짜·답변 30자 이상·5개 항목 채점·오탐 확인을 모두 마치면 검증 완료로 집계됩니다."}</small>
-      </div>
+      ) : (
+        <>
+          <div className={styles.scoreStatus}>
+            <span>{LAB_PROVIDERS.find((provider) => provider.id === activeProvider)?.label} 자동 대조</span>
+            <b>수정값 확인 {activeScore.found}/5 · 부분 {activeScore.partial} · 미발견 {activeScore.missed} · 판독 보류 {activeScore.uncertain}</b>
+            <small>동일 오류의 항목명과 수정 숫자가 실제 답변에서 연결되는지 검사합니다. 오탐(정상 값을 오류로 지적)은 자동으로 확정할 수 없어 미평가로 둡니다.</small>
+          </div>
+          <div className={styles.gradeGrid}>
+            {LAB_ISSUES.map((issue, index) => {
+              const result = activeScore.details.find((item) => item.id === issue.id);
+              const verdict = result?.verdict || "unreviewed";
+              const verdictName = verdict === "found" ? "수정값 확인" :
+                verdict === "partial" ? "부분 발견" : verdict === "missed" ? "수정 근거 미발견" : "판독 보류";
+              return <div className={styles.issue} key={issue.id}>
+                <div className={styles.issueTop}>
+                  <b>{index + 1}. {issue.label}</b>
+                  <span>{verdictName}</span>
+                </div>
+                <p className={styles.corrected}>정답: {issue.corrected} <small>(PDF 기재 {issue.reported})</small></p>
+                <p>{result?.explanation}</p>
+                <div className={styles.excerpt}>{result?.evidence ? "AI 답변 근거: " + result.evidence : "AI 답변에서 일치하는 수정 근거를 찾지 못했습니다."}</div>
+              </div>;
+            })}
+          </div>
+          <details className={styles.reportDetails}>
+            <summary>정답표와 올바른 계산식 전체 보기</summary>
+            <pre>{makeLabAnswerKey()}</pre>
+          </details>
+        </>
+      )}
     </section>
 
     <section className={styles.panel}>
       <span className={styles.step}>STEP 04 · 결과표와 근거 자료 만들기</span>
       <h2>독자에게 보여줄 비교 결과</h2>
-      <p className={styles.muted}>검증이 끝난 AI만 비교표에 포함합니다. 미실행·미완료인 AI를 0점으로 취급하거나 전체 AI의 순위를 단정하지 않습니다.</p>
+      <p className={styles.muted}>세 답변을 붙여넣으면 표가 자동으로 채워집니다. 수정값 확인·부분·미발견·판독 보류를 분리하고, 자동 평가가 불가능한 오탐은 미평가로 표시합니다. 모델명과 요금제는 발행 전 기록하면 됩니다.</p>
       <div className={styles.tableWrap}>
         <table className={styles.resultTable}>
-          <thead><tr><th>서비스</th><th>모델</th><th>발견</th><th>부분</th><th>누락</th><th>오탐</th><th>검증</th></tr></thead>
+          <thead><tr><th>서비스</th><th>모델</th><th>수정값 확인</th><th>부분</th><th>미발견</th><th>판독 보류</th><th>오탐</th><th>결과</th></tr></thead>
           <tbody>{LAB_PROVIDERS.map((provider) => {
             const run = runs[provider.id];
-            const score = scoreLabRun(run);
+            const score = scoreAutoRun(run);
             return <tr key={provider.id}>
               <td><strong>{provider.label}</strong></td>
               <td>{run.model || "—"}</td>
-              <td>{score.complete ? score.found + "/5" : "—"}</td>
-              <td>{score.complete ? score.partial : "—"}</td>
-              <td>{score.complete ? score.missed : "—"}</td>
-              <td>{score.complete ? score.falsePositives : "—"}</td>
-              <td>{score.complete ? "수동 검증 완료" : "미완료"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.found + "/5" : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.partial : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.missed : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? score.uncertain : "—"}</td>
+              <td>{allAnswersReady && score.evaluated ? "미평가" : "—"}</td>
+              <td>{!score.evaluated ? "답변 대기" : !allAnswersReady ? "결과 공개 대기" : score.complete ? "자동 대조 완료" : "일부 판독 보류"}</td>
             </tr>;
           })}</tbody>
         </table>
       </div>
       <div className={styles.outputActions}>
-        <button type="button" className={styles.primary} disabled={!completed}
-          onClick={() => void copy(report, "수동 검증 결과 리포트")}>
+        <button type="button" className={styles.primary} disabled={!allAnswersReady}
+          onClick={() => void copy(report, "자동 대조 결과 리포트")}>
           검증 리포트 복사
         </button>
-        <button type="button" className={styles.secondary} disabled={!completed}
+        <button type="button" className={styles.secondary} disabled={!allAnswersReady}
           onClick={() => void copy(articlePrompt, "영문 Blogger 원고 작성 요청서")}>
           영문 포스팅 요청서 복사
         </button>
-        <button type="button" className={styles.primary} disabled={!completed} onClick={sendToQueue}>
+        <button type="button" className={styles.primary} disabled={!allAnswersReady} onClick={sendToQueue}>
           검증된 실험을 발행 큐로 등록 →
         </button>
         <button type="button" className={styles.secondary} disabled={!answered || exporting}
@@ -398,9 +370,9 @@ export default function AiPriceAtlasLabPage() {
         </button>
         <a className={styles.scheduleLink} href="/google-blog-schedule">기존 발행 스케줄 ↗</a>
       </div>
-      <details className={styles.reportDetails}><summary>내보낼 검증 리포트 미리보기</summary>
-        <pre>{report}</pre></details>
-      <p className={styles.warning}>ZIP에는 비공개 정답표와 AI별 원문 답변이 함께 들어갑니다. 테스트가 끝난 뒤 백업하고, 공개할 때는 파일별로 선별하세요. 자동 점수 판정이나 AI API 호출은 수행하지 않습니다.</p>
+      {allAnswersReady && <details className={styles.reportDetails}><summary>내보낼 자동 대조 리포트 미리보기</summary>
+        <pre>{report}</pre></details>}
+      <p className={styles.warning}>ZIP에는 비공개 정답표와 AI별 원문 답변이 들어갑니다. 계산 오류 5개는 API 없이 브라우저에서 자동 대조합니다. 판독 보류와 오탐 미평가를 정확하게 표시하며, 이를 근거로 AI 전체 순위를 확정하지 않습니다.</p>
       <div className={styles.endActions}>
         <button type="button" className={styles.reset} onClick={resetTest}>이 실험 기록 초기화</button>
         <small>데이터는 브라우저 로컬 저장소에만 남습니다. 다른 PC로 옮기려면 ZIP을 별도로 보관하세요.</small>
