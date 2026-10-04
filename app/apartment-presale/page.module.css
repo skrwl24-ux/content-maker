@@ -101,3 +101,20 @@
 .toast button{border:0;background:none;color:#dff; font-size:22px;padding:0;line-height:1}
 @media(max-width:950px){.layout{grid-template-columns:minmax(0,1fr)}.sideColumn{position:static;order:-1}.statusCard{display:block}.statusRow{display:inline-flex;width:50%;padding-right:13px}.heroAside{display:none}}
 @media(max-width:680px){.page{padding:14px 11px 72px}.topbar{align-items:flex-start}.toplinks{gap:6px}.toplinks a{font-size:12px}.hero{padding:27px 22px;border-radius:18px}.hero h1{font-size:30px}.hero p{font-size:12px}.stages{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.stages a{padding:11px;gap:8px}.stages span{font-size:12px}.panel{padding:20px 16px;border-radius:16px}.twoFields,.editorialGuide,.auditGrid{grid-template-columns:1fr}.sectionHead{flex-wrap:wrap}.sectionHead h2{font-size:21px}.sectionHead>button{width:100%}.actions>button{flex:1 1 140px}.imageActions>button,.imageActions>label{flex:1 1 132px}.naverPreview{padding:19px 13px}.naverPreview h2{font-size:23px}.naverPreview h3{font-size:18px}.statusRow{width:100%}}
+
+/* Benchmark-inspired informational boxes: simple, readable, and cheap to copy. */
+.previewSubheading{font-size:17px;font-weight:800;color:#24343a;margin:25px 0 8px}
+.previewDivider{border:0;border-top:1px solid #dfe8e8;margin:28px 0}
+.previewToc{background:#f3f6fa;border-left:4px solid #2673d5;padding:15px 19px;margin:20px 0 24px}
+.previewToc strong{display:block;font-size:17px;color:#236fc4;margin-bottom:6px}
+.previewToc p{font-size:14px;line-height:1.7;margin:4px 0}
+.previewInfo{border-left:4px solid #2879cb;background:#e4f1ff;padding:14px 17px;margin:18px 0 22px;font-size:14px}
+.previewInfo strong{display:block;margin-bottom:7px;color:#1c5c9c;font-size:16px}
+.previewInfo p{margin:3px 0;line-height:1.75}
+.infoNote{background:#e4f1ff;border-color:#2879cb}.infoNote strong{color:#1c5c9c}
+.infoEstimate{background:#fff6e3;border-color:#e7a51c}.infoEstimate strong{color:#866213}
+.infoCheck{background:#e8f5e9;border-color:#43a457}.infoCheck strong{color:#246d37}
+.infoWarning{background:#ffebee;border-color:#db5660}.infoWarning strong{color:#973f47}
+.previewFaq{font-size:15px;line-height:1.7;font-weight:750;color:#1b66c0;margin:19px 0 6px}
+.copyMeter{display:flex;flex-direction:column;gap:5px;border:1px solid #d6e5e4;background:#f6faf9;border-radius:11px;padding:12px 15px;margin:15px 0;color:#34575d}
+.copyMeter strong{font-size:14px;color:#176f66}.copyMeter span{font-size:12px;line-height:1.6}

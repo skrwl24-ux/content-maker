@@ -15,7 +15,9 @@ export type PresaleProjectInput = {
 };
 export type PresaleArticleBlock =
   | { type: "table"; headers: string[]; rows: string[][] }
-  | { type: "title" | "heading" | "points" | "body" | "image" | "tags"; text: string };
+  | { type: "info"; title: string; tone: "note" | "estimate" | "check" | "warning"; text: string }
+  | { type: "heading"; text: string; level?: 2 | 3 }
+  | { type: "title" | "points" | "body" | "image" | "tags" | "toc" | "faqQuestion" | "divider"; text: string };
 export function makePresaleResearchPrompt(input?: PresaleProjectInput): string;
 export function makePresaleProjectPrompt(input?: PresaleProjectInput): string;
 export function makePresaleReviewPrompt(input?: PresaleProjectInput): string;

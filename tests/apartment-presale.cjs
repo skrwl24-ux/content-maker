@@ -307,3 +307,49 @@ test("presale Naver HTML copy keeps official source URLs clickable", async () =>
   assert.ok(malicious.includes("&lt;script&gt;"));
   assert.doesNotMatch(malicious, /<script|href="javascript:/);
 });
+
+
+test("benchmark article parses editorial highlight boxes, a structured TOC and factual FAQ", async () => {
+  const { parsePresaleArticle } = await helpers();
+  const { richArticle, plainPresaleArticle } = await import("../lib/presale-naver-export.mjs");
+  const source = ARTICLE
+    .replace("1. 공급물량 / 2. 가격 / 3. 청약 유의사항",
+      "01. 공급물량\n02. 분양가격\n03. 청약 유의사항")
+    .replace("## 입지와 생활권",
+      "[정보 박스: 주목할 포인트]\n- 자료별 공급물량의 기준일을 구분\n- 모집공고로 최종 확인\n[/정보 박스]\n## 입지와 생활권")
+    .replace("## 최종 정리",
+      "## 자주 묻는 질문(FAQ)\nQ. 최종 모집공고는 나왔나요?\nA. 기준일 현재 확인한 자료를 근거로 확인해야 합니다.\n## 최종 정리");
+  const blocks = parsePresaleArticle(source);
+  assert.equal(blocks.filter((block) => block.type === "toc").length, 1);
+  assert.equal(blocks.filter((block) => block.type === "info").length, 1);
+  assert.equal(blocks.filter((block) => block.type === "faqQuestion").length, 1);
+  const markup = richArticle(blocks);
+  assert.match(markup, /📋 목차/);
+  assert.match(markup, /주목할 포인트/);
+  assert.match(markup, /최종 모집공고는 나왔나요/);
+  assert.match(plainPresaleArticle(blocks), /기준일을 구분/);
+  assert.equal((markup.match(/<img\b/g) || []).length, 0, "images stay outside clipboard HTML");
+});
+
+test("Naver clipboard batches are measured in UTF-8 and never discard article blocks", async () => {
+  const { createPresaleCopyParts, presaleByteCount, richArticle } =
+    await import("../lib/presale-naver-export.mjs");
+  const blocks = [
+    { type: "title", text: "분양정보 긴 글" },
+    ...Array.from({ length: 30 }, (_, index) => ({
+      type: "body", text: "확인된 근거와 핵심 정보입니다. ".repeat(15) + index,
+    })),
+    { type: "tags", text: "#분양정보 #청약" },
+  ];
+  const limit = 1800;
+  const parts = createPresaleCopyParts(blocks, limit);
+  assert.ok(parts.length > 1);
+  assert.deepEqual(parts.flatMap((part) => part.blocks), blocks);
+  assert.ok(parts.every((part) => !part.oversized));
+  assert.ok(parts.every((part) => part.htmlBytes <= limit && part.textBytes <= limit));
+  assert.ok(parts.every((part) => part.htmlBytes === presaleByteCount(part.html)));
+  assert.ok(parts.every((part) => !part.html.includes("data:image/")));
+  const html = richArticle(blocks);
+  assert.ok(presaleByteCount(html) > limit);
+  assert.equal(createPresaleCopyParts([], limit).length, 0);
+});
