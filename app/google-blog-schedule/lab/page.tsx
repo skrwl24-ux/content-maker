@@ -5,9 +5,9 @@ import JSZip from "jszip";
 import {
   LAB_VERSION, LAB_TITLE, LAB_PROVIDERS, LAB_ISSUES,
   buildLabPdf, makeLabPrompt, makeLabAnswerKey, newLabRun,
-  scoreLabRun, makeLabReport, makeLabBloggerPrompt,
 } from "../../../lib/ai-price-atlas-lab.mjs";
-import type { LabProviderId, LabRun, LabVerdict } from "../../../lib/ai-price-atlas-lab.mjs";
+import { scoreAutoRun, makeAutoReport, makeAutoBloggerPrompt } from "../../../lib/ai-price-atlas-auto-grade.mjs";
+import type { LabProviderId, LabRun } from "../../../lib/ai-price-atlas-lab.mjs";
 import styles from "./page.module.css";
 
 type LabRuns = Record<LabProviderId, LabRun>;
@@ -48,16 +48,16 @@ export default function AiPriceAtlasLabPage() {
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState("불러오는 중");
   const [notice, setNotice] = useState("");
-  const [showKey, setShowKey] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [today, setToday] = useState("");
   const prompt = useMemo(() => makeLabPrompt(), []);
   const active = runs[activeProvider];
-  const activeScore = scoreLabRun(active);
-  const completed = LAB_PROVIDERS.filter((p) => scoreLabRun(runs[p.id]).complete).length;
+  const activeScore = scoreAutoRun(active);
   const answered = LAB_PROVIDERS.filter((p) => runs[p.id].response.trim().length > 0).length;
-  const report = useMemo(() => makeLabReport(runs, today), [runs, today]);
-  const articlePrompt = useMemo(() => makeLabBloggerPrompt(runs, today), [runs, today]);
+  const autoEvaluated = LAB_PROVIDERS.filter((p) => scoreAutoRun(runs[p.id]).evaluated).length;
+  const allAnswersReady = autoEvaluated === LAB_PROVIDERS.length;
+  const report = useMemo(() => makeAutoReport(runs, today), [runs, today]);
+  const articlePrompt = useMemo(() => makeAutoBloggerPrompt(runs, today), [runs, today]);
 
   useEffect(() => {
     const date = localToday();
@@ -103,27 +103,8 @@ export default function AiPriceAtlasLabPage() {
   }, [runs, hydrated]);
 
   function updateActive(patch: Partial<LabRun>) {
-    // Replacing the answer/model/date is a new observation: previously assigned verdicts become invalid.
-    const evidenceChanged = ["response", "model", "plan", "testedAt"].some((field) => Object.prototype.hasOwnProperty.call(patch, field));
-    setRuns((prev) => ({
-      ...prev,
-      [activeProvider]: {
-        ...prev[activeProvider], ...patch,
-        ...(evidenceChanged ? {
-          verdicts: newLabRun(activeProvider, "").verdicts,
-          falsePositivesReviewed: false,
-        } : {}),
-      },
-    }));
-  }
-  function updateVerdict(issueId: string, verdict: LabVerdict) {
-    setRuns((prev) => ({
-      ...prev,
-      [activeProvider]: {
-        ...prev[activeProvider],
-        verdicts: { ...prev[activeProvider].verdicts, [issueId]: verdict },
-      },
-    }));
+    // Re-analyze saved original answers on each edit; old manual verdict fields are intentionally ignored.
+    setRuns((prev) => ({ ...prev, [activeProvider]: { ...prev[activeProvider], ...patch } }));
   }
   async function copy(text: string, what: string) {
     try {
@@ -156,9 +137,9 @@ export default function AiPriceAtlasLabPage() {
       }
       zip.file("05_scorecard/scorecard.json", JSON.stringify({
         version: LAB_VERSION, exportedAt: new Date().toISOString(),
-        sources: "User-pasted answers from provider websites; manually marked against synthetic answer key.",
+        sources: "User-pasted original replies; deterministic local matching of metric/corrected figures; false positives unassessed.",
         issues: LAB_ISSUES, runs,
-        scores: Object.fromEntries(LAB_PROVIDERS.map((p) => [p.id, scoreLabRun(runs[p.id])])),
+        scores: Object.fromEntries(LAB_PROVIDERS.map((p) => [p.id, scoreAutoRun(runs[p.id])])),
       }, null, 2));
       zip.file("05_scorecard/verified_report.txt", report);
       zip.file("06_blog/english_article_request.txt", articlePrompt);
@@ -167,7 +148,8 @@ export default function AiPriceAtlasLabPage() {
         "IMPORTANT: 03_PRIVATE_answer_key.txt contains the five planted errors.",
         "Do not upload the whole ZIP to AI models before collecting their answers.",
         "The PDF and common prompt must be identical across every run.",
-        "Manual scoring requires model/plan/date/original reply and all five verdicts.",
+        "The five known corrections are checked locally against each pasted reply. Ambiguous passages are excluded from confirmed matches.",
+        "False positives are NOT assessed automatically. Model/plan/date metadata is recommended for publishing provenance.",
         "Raw answers are user-supplied, not API outputs. This is not an independent model benchmark.",
         "Files are exported locally, not uploaded to a server.",
       ].join("\n"));
@@ -180,8 +162,8 @@ export default function AiPriceAtlasLabPage() {
     }
   }
   function sendToQueue() {
-    if (!completed) return;
-    const testedNames = LAB_PROVIDERS.filter((p) => scoreLabRun(runs[p.id]).complete).map((p) => p.label);
+    if (!allAnswersReady) return;
+    const testedNames = LAB_PROVIDERS.filter((p) => scoreAutoRun(runs[p.id]).evaluated).map((p) => p.label);
     const date = localToday();
     const title = "AI PDF Error Test: Verified Results from " + testedNames.join(", ");
     const pending = {
@@ -191,7 +173,7 @@ export default function AiPriceAtlasLabPage() {
       title,
       keyword: "AI PDF numerical accuracy test",
       slug: "ai-pdf-error-test-" + date.replace(/-/g, ""),
-      note: "실제 AI 웹 테스트 | 가상 PDF 2페이지 | 검증 완료한 서비스 " + testedNames.join(", ") + " | 파일 및 원문은 실전 검증실 ZIP에서 관리",
+      note: "실제 AI 웹 테스트 | 가상 PDF 2페이지 | 세 답변 자동 대조: " + testedNames.join(", ") + " | 판독 보류·오탐 미평가는 결과에 그대로 표기 | 원본은 검증실 ZIP",
       labVersion: LAB_VERSION,
       labReport: report,
       labPrompt: articlePrompt,
@@ -206,7 +188,6 @@ export default function AiPriceAtlasLabPage() {
   function resetTest() {
     if (!window.confirm("이 브라우저에 저장된 AI별 답변·채점 기록을 모두 초기화할까요? 필요하다면 먼저 ZIP으로 백업하세요.")) return;
     setRuns(emptyRuns(localToday()));
-    setShowKey(false);
     setActiveProvider("chatgpt");
     setNotice("테스트가 초기화됐습니다. 공통 PDF와 프롬프트는 동일하게 유지됩니다.");
   }
@@ -261,7 +242,7 @@ export default function AiPriceAtlasLabPage() {
       <p className={styles.muted}>아래 버튼은 해당 서비스의 공식 채팅 사이트만 엽니다. 로그인·PDF 첨부·질문 붙여넣기는 각 사이트에서 진행하고, 받은 원문을 다시 이 화면에 복사합니다. 기존 계정으로 테스트할 수 있습니다.</p>
       <div className={styles.providerTabs} role="tablist" aria-label="테스트할 AI 선택">
         {LAB_PROVIDERS.map((provider) => {
-          const score = scoreLabRun(runs[provider.id]);
+          const score = scoreAutoRun(runs[provider.id]);
           return <button type="button" role="tab" aria-selected={activeProvider === provider.id}
             key={provider.id}
             className={activeProvider === provider.id ? styles.providerActive : styles.providerTab}
@@ -367,7 +348,7 @@ export default function AiPriceAtlasLabPage() {
           <thead><tr><th>서비스</th><th>모델</th><th>발견</th><th>부분</th><th>누락</th><th>오탐</th><th>검증</th></tr></thead>
           <tbody>{LAB_PROVIDERS.map((provider) => {
             const run = runs[provider.id];
-            const score = scoreLabRun(run);
+            const score = scoreAutoRun(run);
             return <tr key={provider.id}>
               <td><strong>{provider.label}</strong></td>
               <td>{run.model || "—"}</td>
