@@ -23,8 +23,6 @@ type PresaleDraft = {
   kick: string;
   article: string;
   imageNotes: string;
-  sourceReviewed: boolean;
-  finalReviewed: boolean;
   sitePhoto: string;
   sitePhotoCaption: string;
   sitePhotoRights: boolean;
@@ -40,7 +38,7 @@ const SLOT_NAMES: Record<ImageSlot, string> = {
   "01": "공급물량 핵심 카드",
   "02": "분양조건·킥 카드",
 };
-const PRESALE_CHECK_NOTICE = "자동 검수는 글의 구조만 확인합니다. 숫자·공고일·청약자격은 반드시 공식 공고 원문과 별도로 대조해야 합니다.";
+const PRESALE_CHECK_NOTICE = "자동검사는 원고 구성만 점검하며 공식 공고의 사실관계를 대신 검증하지 않습니다. 공고 전 자료와 추정치는 최종 원고에서 상태를 구분해 주세요.";
 
 function todayLocal() {
   const d = new Date();
@@ -50,7 +48,7 @@ function emptyDraft(): PresaleDraft {
   return {
     topic: "", dateKey: "", sourceStatus: "unchecked",
     sourceUrl: "", sourceDate: "", materials: "", facts: "", kick: "",
-    article: "", imageNotes: "", sourceReviewed: false, finalReviewed: false,
+    article: "", imageNotes: "",
     sitePhoto: "", sitePhotoCaption: "", sitePhotoRights: false, images: {},
   };
 }
@@ -161,13 +159,12 @@ export default function PresalePage() {
     [imagePlan, draft.topic, draft.article, draft.imageNotes]);
   const imageDone = IMAGE_SLOTS.filter((slot) => Boolean(draft.images[slot])).length;
   const introReady = draft.topic.trim().length > 1;
-  const sourceReady = draft.sourceReviewed && Boolean(draft.sourceDate) && (
-    draft.sourceStatus === "published" ? Boolean(draft.sourceUrl.trim()) :
-    draft.sourceStatus === "prior" && Boolean(draft.sourceUrl.trim() || draft.facts.trim())
-  );
+  const sourceInfoRecorded = Boolean(draft.sourceUrl.trim() || draft.facts.trim());
   const articleReady = draft.article.trim().length >= 300;
   const missing = articleAudit.checks.filter((item) => !item.ok);
-  const readyForFinal = articleAudit.passed && draft.finalReviewed && sourceReady;
+  // Export is a user-controlled copy/download, not official publication approval.
+  // Never lock a finished article behind redundant hand-checked confirmation flags.
+  const readyForFinal = articleAudit.passed;
 
   useEffect(() => {
     let disposed = false;
@@ -205,13 +202,7 @@ export default function PresalePage() {
   }, [id, draft, hydrated]);
 
   function update<K extends keyof PresaleDraft>(field: K, value: PresaleDraft[K]) {
-    setDraft((prev) => ({
-      ...prev, [field]: value,
-      sourceReviewed: ["topic", "sourceStatus", "sourceUrl", "sourceDate", "facts", "materials"].includes(field)
-        ? false : prev.sourceReviewed,
-      finalReviewed: ["topic", "sourceStatus", "sourceUrl", "sourceDate", "facts", "materials", "kick", "article"].includes(field)
-        ? false : prev.finalReviewed,
-    }));
+    setDraft((prev) => ({ ...prev, [field]: value }));
   }
   async function copyPrompt(value: string, name: string) {
     try {
@@ -248,7 +239,7 @@ export default function PresalePage() {
   }
   async function copyFinal() {
     if (!readyForFinal) {
-      setNotice("먼저 공식자료 수동 대조와 원고 검수 체크를 완료하고, 원고 형식 누락을 수정해 주세요.");
+      setNotice("원고 구성 검사에서 누락된 항목을 먼저 수정해 주세요.");
       return;
     }
     try {
@@ -273,7 +264,7 @@ export default function PresalePage() {
   }
   async function exportZip() {
     if (!readyForFinal || busy) {
-      setNotice("원고 형식 검사, 공식자료 수동 대조, 최종 확인을 먼저 완료해 주세요.");
+      setNotice("원고 구성 검사에서 누락된 항목을 먼저 수정해 주세요.");
       return;
     }
     setBusy(true);
@@ -385,10 +376,7 @@ export default function PresalePage() {
                 <label className={styles.field}>이 단지만의 킥 후보 (선택)
                   <input value={draft.kick} onChange={(e) => update("kick", e.target.value)}
                     placeholder="예: 분양가 외에 매월 발생하는 토지임대료" /></label>
-                <label className={styles.checkLabel}><input type="checkbox" checked={draft.sourceReviewed}
-                  onChange={(e) => update("sourceReviewed", e.target.checked)} />
-                  <span>공고 상태, 위 자료 날짜 및 물량·추정/확정 표기를 원문과 직접 대조했습니다.</span></label>
-                <p className={styles.hint}>발행 단계로 진행하려면 확인한 자료 날짜를 입력해야 합니다. 이 체크는 운영자의 수동 확인이며 사이트가 공식 자료를 자동 열람했다는 뜻이 아닙니다.</p>
+                <p className={styles.hint}>조사·검증 결과와 출처를 입력하면 작업에 보관하고 ZIP에도 함께 담습니다. 공고 전이거나 자료 날짜가 비어 있어도 완성 원고 복사·저장을 막지 않습니다.</p>
               </div>
             </section>
 
@@ -424,10 +412,7 @@ export default function PresalePage() {
                 <button className={styles.minorButton} type="button" disabled={!articleReady}
                   onClick={() => void copyPrompt(reviewPrompt, "2차 교차검증 요청서")}>검증 요청서 복사</button>
               </div>
-              <p className={styles.hint}>두 번째 검증에서 수정본이 나오면 위 원고를 교체하세요. 수정할 때마다 최종 확인 체크가 자동 해제됩니다.</p>
-              <label className={styles.checkLabel}><input type="checkbox" checked={draft.finalReviewed}
-                onChange={(e) => update("finalReviewed", e.target.checked)} />
-                <span>2차 검증 결과를 반영하고 최종 발행 글의 모든 가격·물량·일정·출처를 다시 확인했습니다.</span></label>
+              <p className={styles.hint}>2차 검증에서 수정본이 나오면 원고를 교체하세요. 구성 자동검사 결과는 즉시 갱신되며 별도 수동 확인 체크는 필요하지 않습니다.</p>
             </section>
 
             <section id="step-images" className={styles.panel}>
@@ -513,7 +498,6 @@ export default function PresalePage() {
                 })}
               </article> : <div className={styles.emptyPreview}>완성 원고를 붙여넣으면 이곳에 실제 편집 형태가 나타납니다.</div>}
               {missing.length > 0 && <p className={styles.warning}>형식 미확인 {missing.length}건 · 검증을 마친 후 서식 포함 전체복사를 사용할 수 있습니다.</p>}
-              {!sourceReady && <p className={styles.warning}>공식자료·사전자료 상태를 먼저 확인하고 '원문 직접 대조'를 체크하세요.</p>}
               <p className={styles.hint}>서식 포함 복사는 본문·표·이미지 위치 표시만 전달합니다. 업로드한 PNG/JPG는 네이버 편집기에서 해당 위치에 별도로 삽입하세요. ZIP에도 개별 파일로 담깁니다.</p>
               <div className={styles.actions}>
                 <button type="button" className={styles.primaryButton} disabled={!readyForFinal}
@@ -521,17 +505,17 @@ export default function PresalePage() {
                 <button type="button" className={styles.secondaryButton} disabled={!readyForFinal || busy}
                   onClick={() => void exportZip()}>{busy ? "ZIP 제작 중…" : "📦 원고·이미지·근거 ZIP"}</button>
               </div>
-              {!readyForFinal && <p className={styles.hint}>발행 버튼은 형식검사 통과 + 공식자료 수동 확인 + 최종 원고 확인을 모두 마쳤을 때 활성화됩니다.</p>}
+              {!readyForFinal && <p className={styles.hint}>원고 구성 자동검사 11개 항목을 충족하면 전체복사와 ZIP 저장이 활성화됩니다. 추가 수동 체크는 필요하지 않습니다.</p>}
             </section>
           </div>
           <aside className={styles.sideColumn}>
             <div className={styles.statusCard}>
               <small>현재 제작 상태</small><h2>분양 원고 체크</h2>
               <div className={styles.statusRow}><span>단지명 입력</span><b>{introReady ? "완료" : "대기"}</b></div>
-              <div className={styles.statusRow}><span>공식자료 원문 확인</span><b>{sourceReady ? "수동 확인" : "대기"}</b></div>
+              <div className={styles.statusRow}><span>출처·조사 메모</span><b>{sourceInfoRecorded ? "기록됨" : "선택"}</b></div>
               <div className={styles.statusRow}><span>본문 형식 검사</span><b>{articleAudit.checks.length - missing.length}/{articleAudit.checks.length}</b></div>
               <div className={styles.statusRow}><span>이미지 등록</span><b>{imageDone}/3</b></div>
-              <div className={styles.statusRow}><span>최종 원고 확인</span><b>{draft.finalReviewed ? "확인" : "대기"}</b></div>
+              <div className={styles.statusRow}><span>전체복사·ZIP</span><b>{readyForFinal ? "준비 완료" : "구성검사 대기"}</b></div>
               <hr />
               <p>공고 미발표 상태에서도 작업할 수 있습니다. 다만 과거 추정치·예정 일정은 절대 확정값으로 표시하지 않습니다.</p>
               {id !== "main" && <code>작업 ID · {id}</code>}
