@@ -275,6 +275,6 @@ test("presale copy and ZIP are not blocked by manual confirmation checkboxes", (
   assert.doesNotMatch(page, /원문 직접 대조.*체크|공식자료 수동 대조/);
   assert.match(page, /const sourceInfoRecorded = Boolean\(draft\.sourceUrl\.trim\(\) \|\| draft\.facts\.trim\(\)\);/);
   // The source date remains useful metadata, but it must never be a condition for export.
-  const readiness = page.split("\\n").find((line) => line.includes("const readyForFinal ="));
+  const readiness = page.split(String.fromCharCode(10)).find((line) => line.includes("const readyForFinal ="));
   assert.doesNotMatch(readiness, /sourceDate|sourceStatus|sourceInfoRecorded/);
 });
