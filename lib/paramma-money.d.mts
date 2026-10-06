@@ -7,6 +7,10 @@ export type ParammaMoneyCandidate = {
   brief: string;
   intent: ParammaMoneyIntent;
   action: string;
+  mainKeyword: string;
+  subKeywords: string[];
+  actionQuestions: string[];
+  faqQuestions: string[];
   keywords: string[];
   whyNow: string;
   expiresAt: string;
