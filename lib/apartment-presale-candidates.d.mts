@@ -19,11 +19,12 @@ export type PresaleCandidate = {
   caution: string;
 };
 export const PRESALE_CANDIDATE_SNAPSHOT_DATE: string;
+export const PRESALE_DISCOVERED_STORAGE_KEY: string;
 export const PRESALE_BASELINE_PUBLISHED_IDS: readonly string[];
 export const PRESALE_CANDIDATES: PresaleCandidate[];
 export function getPresaleCandidate(id: string): PresaleCandidate | null;
 export function getPresaleCandidateCounts(): Record<"total" | PresaleCandidateStage, number>;
-export function makePresaleCandidateSeed(id: string): {
+export type PresaleCandidateSeed = {
   topic: string;
   sourceStatus: "unchecked";
   sourceDate: string;
@@ -33,6 +34,8 @@ export function makePresaleCandidateSeed(id: string): {
   sourceUrl: string;
   kick: string;
   materials: string;
-} | null;
+};
+export function makePresaleCandidateSeedFromItem(item: PresaleCandidate | null | undefined, snapshotDate?: string): PresaleCandidateSeed | null;
+export function makePresaleCandidateSeed(id: string): PresaleCandidateSeed | null;
 export function getBaselinePublishedCandidates(): PresaleCandidate[];
 export function makePresaleDiscoveryPrompt(dateKey: string, publishedCandidates?: Array<PresaleCandidate | string>): string;
