@@ -16,6 +16,12 @@ type AreaKey = "전체" | "서울" | "경기" | "인천";
 type QueueView = "queue" | "published";
 type PublicationState = { published: string[]; restored: string[] };
 type ResearchMeta = { checkedAt: string; summary: string; questions: string[] };
+type ServerCandidate = PresaleCandidate & {
+  publicationStatus?: "queue" | "published";
+  origin?: "baseline" | "ai" | "manual";
+  checkedAt?: string;
+  eventKey?: string;
+};
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "전체 후보" },
@@ -136,25 +142,52 @@ export default function PresaleDiscoverPage() {
   const [researchMeta, setResearchMeta] = useState<ResearchMeta | null>(null);
   const [autoResearchReady, setAutoResearchReady] = useState<boolean | null>(null);
   const [autoResearchProvider, setAutoResearchProvider] = useState<string | null>(null);
+  const [storageReady, setStorageReady] = useState<boolean | null>(null);
   const [researching, setResearching] = useState(false);
   const [today, setToday] = useState("");
   const [notice, setNotice] = useState("");
 
+  async function refreshServerState() {
+    const response = await fetch("/api/apartment-presale/discover", { method: "GET", cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok && !Array.isArray(data?.candidates)) {
+      throw new Error(data?.error || "분양 후보 저장소를 불러오지 못했습니다.");
+    }
+
+    const rows = (Array.isArray(data?.candidates) ? data.candidates : [])
+      .filter(isCandidate) as ServerCandidate[];
+    const baselineIds = new Set<string>(PRESALE_BASELINE_PUBLISHED_IDS);
+    setDiscoveredCandidates(rows.filter((item) => !baselineIds.has(item.id)));
+    setPublicationState({
+      published: rows.filter((item) => item.publicationStatus === "published").map((item) => item.id),
+      restored: rows
+        .filter((item) => baselineIds.has(item.id) && item.publicationStatus === "queue")
+        .map((item) => item.id),
+    });
+    setAutoResearchReady(Boolean(data?.available));
+    setAutoResearchProvider(typeof data?.provider === "string" ? data.provider : null);
+    setStorageReady(Boolean(data?.storageAvailable));
+
+    const latest = data?.latestRun;
+    if (latest && typeof latest === "object") {
+      setResearchMeta({
+        checkedAt: typeof latest.checked_at === "string" ? latest.checked_at : "",
+        summary: typeof latest.summary === "string" ? latest.summary : "",
+        questions: Array.isArray(latest.questions)
+          ? latest.questions.filter((item: unknown): item is string => typeof item === "string").slice(0, 12)
+          : [],
+      });
+    }
+    return data;
+  }
+
   useEffect(() => {
     setToday(localDate());
-    setPublicationState(loadPublicationState());
-    setDiscoveredCandidates(loadDiscoveredCandidates());
-    setResearchMeta(loadResearchMeta());
-    void fetch("/api/apartment-presale/discover", { method: "GET", cache: "no-store" })
-      .then((response) => response.json())
-      .then((data) => {
-        setAutoResearchReady(Boolean(data?.available));
-        setAutoResearchProvider(typeof data?.provider === "string" ? data.provider : null);
-      })
-      .catch(() => {
-        setAutoResearchReady(false);
-        setAutoResearchProvider(null);
-      });
+    void refreshServerState().catch((error) => {
+      setAutoResearchReady(false);
+      setStorageReady(false);
+      setNotice(error instanceof Error ? error.message : "분양 후보 저장소를 불러오지 못했습니다.");
+    });
   }, []);
 
   const allCandidates = useMemo(() => {
@@ -190,58 +223,32 @@ export default function PresaleDiscoverPage() {
 
   async function autoDiscover() {
     if (researching) return;
-    if (autoResearchReady === false) {
+    if (autoResearchReady === false || storageReady === false) {
       openChatGptResearch();
-      setNotice("자동 조사 인증이 아직 없어 수동 ChatGPT 조사로 열었습니다. AI Gateway 키를 추가하고 재배포하면 이 버튼이 자동 조사로 전환됩니다.");
+      setNotice(storageReady === false
+        ? "공용 후보 저장소에 연결할 수 없어 수동 ChatGPT 조사로 열었습니다."
+        : "자동 조사 인증이 없어 수동 ChatGPT 조사로 열었습니다.");
       return;
     }
+
     setResearching(true);
-    setNotice("공식자료와 최신 웹 자료를 검색하고 있습니다…");
+    setNotice("공식자료와 최신 웹 자료를 검색하고 새 후보를 공용 큐에 저장하고 있습니다…");
     try {
       const response = await fetch("/api/apartment-presale/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dateKey: today || localDate(),
-          existingIds: allCandidates.map((item) => item.id),
-          publishedCandidates: publishedCandidates.map((item) => ({
-            name: item.name, region: item.region, status: item.status, topic: item.topic,
-          })),
-          existingCandidates: allCandidates.map((item) => ({
-            name: item.name, region: item.region, status: item.status, topic: item.topic,
-          })),
-        }),
+        body: JSON.stringify({ dateKey: today || localDate() }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || "자동 조사에 실패했습니다.");
 
-      const incoming = Array.isArray(data?.candidates)
-        ? data.candidates.filter(isCandidate) as PresaleCandidate[]
-        : [];
-      const knownIds = new Set(allCandidates.map((item) => item.id));
-      const fresh = incoming.filter((item, index) =>
-        !knownIds.has(item.id) && incoming.findIndex((candidate) => candidate.id === item.id) === index);
-      setDiscoveredCandidates((prev) => {
-        const next = [...fresh, ...prev];
-        saveDiscoveredCandidates(next);
-        return next;
-      });
-      const added = fresh.length;
-
-      const meta: ResearchMeta = {
-        checkedAt: typeof data?.checkedAt === "string" ? data.checkedAt : (today || localDate()),
-        summary: typeof data?.summary === "string" ? data.summary : "",
-        questions: Array.isArray(data?.questions)
-          ? data.questions.filter((item: unknown): item is string => typeof item === "string").slice(0, 12)
-          : [],
-      };
-      setResearchMeta(meta);
-      saveResearchMeta(meta);
+      const added = Array.isArray(data?.candidates) ? data.candidates.length : 0;
+      await refreshServerState();
       setQueueView("queue");
       clearFilters();
       setNotice(added > 0
-        ? "새 분양 소재 " + added + "개를 미발행 큐에 자동 추가했습니다."
-        : "새 사건으로 확인된 미발행 후보가 없습니다. 기존 카드와 발행 이력을 유지합니다.");
+        ? "새 분양 소재 " + added + "개를 공용 미발행 큐에 자동 저장했습니다."
+        : "새 사건으로 확인된 미발행 후보가 없습니다. 기존 발행 이력은 그대로 유지합니다.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "자동 조사 중 오류가 발생했습니다.");
     } finally {
@@ -275,28 +282,25 @@ export default function PresaleDiscoverPage() {
     setArea("전체");
   }
 
-  function setCandidatePublished(id: string, published: boolean) {
-    setPublicationState((prev) => {
-      const localPublished = new Set(prev.published);
-      const restored = new Set(prev.restored);
-      if (published) {
-        localPublished.add(id);
-        restored.delete(id);
-      } else {
-        localPublished.delete(id);
-        if (BASELINE_PUBLISHED.has(id)) restored.add(id);
-        else restored.delete(id);
-      }
-      const next = {
-        published: Array.from(localPublished),
-        restored: Array.from(restored),
-      };
-      savePublicationState(next);
-      return next;
-    });
-    setNotice(published
-      ? "발행 완료로 보관했습니다. 앞으로 자동 조사에서도 같은 사건은 제외됩니다."
-      : "미발행 큐로 복원했습니다.");
+  async function setCandidatePublished(id: string, published: boolean) {
+    try {
+      const response = await fetch("/api/apartment-presale/discover", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          publicationStatus: published ? "published" : "queue",
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "발행 상태 저장에 실패했습니다.");
+      await refreshServerState();
+      setNotice(published
+        ? "발행 완료로 공용 보관함에 저장했습니다. 다른 PC에서도 같은 사건이 제외됩니다."
+        : "공용 미발행 큐로 복원했습니다.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "발행 상태 저장에 실패했습니다.");
+    }
   }
 
   return <main className={styles.page}>
@@ -347,7 +351,7 @@ export default function PresaleDiscoverPage() {
 
       <p className={styles.sourceWarning}>
         {autoResearchReady === false
-          ? "자동 조사 엔진은 구현됐지만 Vercel AI Gateway/OpenAI 인증값이 아직 없습니다. 상단 버튼은 현재 수동 ChatGPT 조사로 연결되며, 인증키를 추가한 뒤 재배포하면 자동 조사 버튼으로 활성화됩니다."
+          ? "자동 조사 인증을 사용할 수 없습니다. 상단 버튼은 수동 ChatGPT 조사로 연결됩니다."
           : queueCandidates.length === 0
             ? "현재 미발행 후보가 없습니다. 상단의 ‘최신 후보 자동 조사’를 누르면 발행 이력과 기존 카드를 제외한 새 사건을 웹에서 직접 찾아 카드로 추가합니다."
             : "자동 조사 카드도 최종 발행 전에는 제작실에서 최신 공식 모집공고·정정공고와 가격·물량을 다시 교차확인하세요. 카드 자체가 청약 권유나 확정 공고를 대신하지 않습니다."}
@@ -450,7 +454,7 @@ export default function PresaleDiscoverPage() {
               </a>
               <button type="button"
                 className={published ? styles.restoreButton : styles.completeButton}
-                onClick={() => setCandidatePublished(item.id, !published)}>
+                onClick={() => void setCandidatePublished(item.id, !published)}>
                 {published ? "↩ 미발행 큐로 복원" : "✓ 발행 완료 처리"}
               </button>
             </div>
@@ -460,8 +464,8 @@ export default function PresaleDiscoverPage() {
 
       <section className={styles.footerGuide}>
         <h2>자동 조사 → 제작 → 발행완료</h2>
-        <p>‘최신 후보 자동 조사’를 누르면 웹 검색을 실행하고, 이미 발행한 같은 사건과 기존 카드를 제외한 후보만 브라우저의 미발행 큐에 저장합니다.</p>
-        <p>새 카드의 ‘이 단지 글 만들기’를 누르면 자동 조사 당시의 근거 URL·공급 메모·킥이 분양정보 제작실의 조사 출발점으로 넘어갑니다. 제작이 끝나면 ‘발행 완료 처리’를 눌러 다음 자동 조사에서 같은 사건이 다시 나오지 않게 합니다.</p>
+        <p>‘최신 후보 자동 조사’를 누르면 웹 검색을 실행하고, 이미 발행한 같은 사건과 기존 카드를 제외한 후보만 Supabase 공용 미발행 큐에 저장합니다.</p>
+        <p>새 카드의 ‘이 단지 글 만들기’를 누르면 자동 조사 당시의 근거 URL·공급 메모·킥이 분양정보 제작실의 조사 출발점으로 넘어갑니다. 발행 완료 상태도 공용 저장소에 기록되어 다른 PC와 다음 자동 조사에서 그대로 적용됩니다.</p>
         <p>단지 자체를 영구 차단하지는 않습니다. 새 모집공고·정정공고·무순위·잔여세대·청약결과·의미 있는 일정 변경은 같은 단지라도 새로운 사건으로 다시 후보화할 수 있습니다.</p>
       </section>
     </div>
