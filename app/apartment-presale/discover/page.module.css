@@ -70,3 +70,13 @@
 .completeButton,.restoreButton{border-radius:11px;padding:11px 13px;font-size:12px;font-weight:900;white-space:nowrap}
 .completeButton{border:1px solid #b9d9cf;background:#edf8f4;color:#126657}
 .restoreButton{border:1px solid #d6dfdc;background:white;color:#667b75}
+
+.whiteButton:disabled,.ghostButton:disabled,.noResults button:disabled{opacity:.58;cursor:not-allowed}
+.researchBox{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:18px;background:white;border:1px solid #d5e8e1;border-radius:16px;padding:19px 22px;margin:0 0 16px}
+.researchBox small{display:block;color:#2a8372;font-size:11px;font-weight:900;margin-bottom:6px}
+.researchBox h2{font-size:18px;color:#1d554b;margin:0 0 8px}
+.researchBox p{font-size:12px;line-height:1.7;color:#56756e;margin:5px 0}
+.researchQuestions{border-left:1px solid #e2ece9;padding-left:18px}
+.researchQuestions b{display:block;color:#315f57;font-size:12px;margin-bottom:7px}
+.liveBadge{font-size:11px;font-weight:900;color:#0c6b5e;background:#dff6ee;border:1px solid #b9e6d8;border-radius:7px;padding:6px 9px}
+@media(max-width:650px){.researchBox{grid-template-columns:1fr;padding:17px 14px}.researchQuestions{border-left:0;border-top:1px solid #e2ece9;padding-left:0;padding-top:14px}.cardActions{grid-template-columns:1fr}.completeButton,.restoreButton{width:100%}}
