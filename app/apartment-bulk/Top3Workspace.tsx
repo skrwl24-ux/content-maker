@@ -8,7 +8,7 @@ import styles from "./top3.module.css";
 import { naverCopy } from "./top3-naver";
 
 type Props = {
-  workId: string; topic: string; materials: string; body: string;
+  workId: string; topic: string; materials: string; searchPlanBlock?: string; body: string;
   onBodyChange: (body: string) => void;
   onTopicChange: (topic: string) => void;
   data: Top3Work; onChange: Dispatch<SetStateAction<Top3Work>>;
@@ -34,14 +34,14 @@ async function toPng(file: File): Promise<string> {
   } finally { URL.revokeObjectURL(url); }
 }
 
-export default function Top3Workspace({ workId, topic, materials, body, onBodyChange, onTopicChange, data, onChange }: Props) {
+export default function Top3Workspace({ workId, topic, materials, searchPlanBlock = "", body, onBodyChange, onTopicChange, data, onChange }: Props) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = revision(topic, materials, body, data);
   const formatted = naverCopy(body, topic);
-  const request = articleRequest(data.requestTopic || "", materials);
+  const request = articleRequest(data.requestTopic || "", materials) + searchPlanBlock;
   const issues = exportIssues(topic, materials, body, data);
   const slots = IMAGE_SLOTS.filter((slot) => slot.id !== "03" || data.optionalImage);
   const patch = (key: keyof Top3Work, value: string | boolean) => onChange((prev) => ({ ...prev, [key]: value }));
