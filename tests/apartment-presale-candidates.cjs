@@ -16,6 +16,16 @@ test("dated curated presale leads have unique IDs, precise source URLs and meani
   assert.ok(PRESALE_CANDIDATES.every((item) => /^https:\/\//.test(item.sourceUrl) && /^https:\/\//.test(item.officialUrl)));
 });
 
+test("the 2026-10-04 snapshot starts in the published archive", async () => {
+  const { PRESALE_CANDIDATES, PRESALE_BASELINE_PUBLISHED_IDS, getBaselinePublishedCandidates } = await helpers();
+  assert.equal(PRESALE_BASELINE_PUBLISHED_IDS.length, PRESALE_CANDIDATES.length);
+  assert.equal(new Set(PRESALE_BASELINE_PUBLISHED_IDS).size, PRESALE_BASELINE_PUBLISHED_IDS.length);
+  assert.deepEqual(
+    new Set(getBaselinePublishedCandidates().map((item) => item.id)),
+    new Set(PRESALE_CANDIDATES.map((item) => item.id)),
+  );
+});
+
 test("candidate selection seeds only preliminary leads and never grants fact-check approval", async () => {
   const { PRESALE_CANDIDATES, getPresaleCandidate, makePresaleCandidateSeed } = await helpers();
   for (const item of PRESALE_CANDIDATES) {
@@ -62,4 +72,8 @@ test("fresh-discovery prompt demands web verification and does not present old s
   assert.match(prompt, /검색량을 측정하지 못했으면/);
   assert.match(prompt, /근거 URL·확인일/);
   assert.match(prompt, /마감 후 분석/);
+  assert.match(prompt, /이미 발행한 소재/);
+  assert.match(prompt, /고덕강일3단지/);
+  assert.match(prompt, /새로운 공식 모집공고/);
+  assert.match(prompt, /제목만 바꿔 반복 제안하지 말 것/);
 });

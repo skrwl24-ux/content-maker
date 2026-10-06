@@ -19,6 +19,7 @@ export type PresaleCandidate = {
   caution: string;
 };
 export const PRESALE_CANDIDATE_SNAPSHOT_DATE: string;
+export const PRESALE_BASELINE_PUBLISHED_IDS: readonly string[];
 export const PRESALE_CANDIDATES: PresaleCandidate[];
 export function getPresaleCandidate(id: string): PresaleCandidate | null;
 export function getPresaleCandidateCounts(): Record<"total" | PresaleCandidateStage, number>;
@@ -33,4 +34,5 @@ export function makePresaleCandidateSeed(id: string): {
   kick: string;
   materials: string;
 } | null;
-export function makePresaleDiscoveryPrompt(dateKey: string): string;
+export function getBaselinePublishedCandidates(): PresaleCandidate[];
+export function makePresaleDiscoveryPrompt(dateKey: string, publishedCandidates?: Array<PresaleCandidate | string>): string;

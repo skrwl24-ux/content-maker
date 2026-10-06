@@ -318,7 +318,7 @@ export default function PresalePage() {
           <p>공식공고 조사 → 질문형 도입·POINT·목차 → 공급·가격·킥 → 이미지 3장 → 네이버 최종편집</p>
         </div>
         <div className={styles.heroAside}>
-          <a href="/apartment-presale/discover" style={{ color: "white", fontWeight: 900, textDecoration: "underline" }}>오늘의 분양 후보 12곳 보기 →</a>
+          <a href="/apartment-presale/discover" style={{ color: "white", fontWeight: 900, textDecoration: "underline" }}>신규분양 미발행 후보 큐 보기 →</a>
           <b>신규 분양정보 제작실</b>
           <span>작성 기준일 · {draft.dateKey || "불러오는 중"}</span>
           <small>{saveStatus}</small>
