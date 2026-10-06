@@ -32,12 +32,13 @@
 .naverPreviewHead>b{font-size:13px;color:#33465c}
 .naverPreviewHead span{font-size:11px;color:#7d8997}
 .naverPreview{min-height:260px;max-height:650px;overflow:auto;padding:24px;background:#fff}
-.naverTitle{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:20pt;line-height:1.5;font-weight:700;color:#151c24;word-break:keep-all}
-.naverSubheading{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:18pt;line-height:1.55;font-weight:700;color:#1d2732;word-break:keep-all}
-.naverBody,.naverImageLine{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15pt;line-height:1.7;color:#222;font-weight:400;word-break:keep-all}
+.naverTitle{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:32px;line-height:1.35;font-weight:700;color:#151c24;word-break:keep-all}
+.naverSubheading{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:30px;line-height:1.45;font-weight:700;color:#1d2732;word-break:keep-all}
+.naverEmphasis{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:19px;line-height:1.65;font-weight:700;color:#172033;word-break:keep-all}
+.naverBody,.naverImageLine{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.8;color:#222;font-weight:400;word-break:keep-all}
 .naverImageLine{font-weight:600;color:#526476}
-.naverTags{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:13.5pt;line-height:1.65;color:#506071;font-weight:400;word-break:break-word}
-.naverSpacer{height:1.7em;line-height:1.7em;font-size:15pt}
+.naverTags{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.7;color:#506071;font-weight:400;word-break:break-word}
+.naverSpacer{height:1.8em;line-height:1.8em;font-size:15px}
 .naverPreviewEmpty{display:flex;align-items:center;justify-content:center;min-height:220px;text-align:center;color:#9aa5b2;font-size:13px;line-height:1.6;padding:20px}
 .naverCopyActions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
 .naverCopyActions button{border:0;border-radius:12px;padding:11px 14px;background:#e9eff5;color:#33465c;font-size:13px;font-weight:900;cursor:pointer}
