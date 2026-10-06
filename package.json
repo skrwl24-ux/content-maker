@@ -13,7 +13,8 @@
     "jszip": "^3.10.1",
     "next": "^15.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "@vercel/oidc": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
