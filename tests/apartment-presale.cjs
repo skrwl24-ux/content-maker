@@ -410,3 +410,41 @@ test("unconfirmed presale price without a real comparison line is warned, but so
   const cleared = auditPresaleArticle(meaningful);
   assert.doesNotMatch(cleared.qualityWarnings.join(" "), /실제 가격 참고선/);
 });
+
+
+test("presale story kick research is optional, verified and does not add image slots", async () => {
+  const { makePresaleResearchPrompt, makePresaleProjectPrompt, makePresaleReviewPrompt, makePresaleImagePlan } = await helpers();
+  const input = { topic: "테스트 분양", dateKey: "2026-10-07", sources: "https://example.org/notice", materials: "기관추천 특별공급 확인", facts: "공급 100호", kick: "우수선수 기관추천 여부", article: "## 이 단지만의 킥\n검증된 제도 이야기" };
+  const research = makePresaleResearchPrompt(input);
+  assert.match(research, /추가 탐색: 이 단지만의 킥·스토리/);
+  assert.match(research, /0~1개/);
+  assert.match(research, /커뮤니티·SNS/);
+  assert.match(research, /검증된 단지 고유 스토리 후보\(없으면 없음\)/);
+  const writing = makePresaleProjectPrompt(input);
+  assert.match(writing, /특별공급·토지임대부·지분적립형/);
+  assert.match(writing, /정보 박스: 이 단지만의 이야기/);
+  const review = makePresaleReviewPrompt(input);
+  assert.match(review, /커뮤니티·SNS만 근거인 이야기/);
+  assert.match(review, /스토리가 없어도/);
+  assert.equal(makePresaleImagePlan().length, 3);
+});
+
+test("presale prompt inputs are bounded so accidental huge pastes do not explode requests", async () => {
+  const { makePresaleProjectPrompt, makePresaleReviewPrompt } = await helpers();
+  const huge = "가".repeat(50000);
+  const writing = makePresaleProjectPrompt({ topic:"테스트", facts:huge, materials:huge, sources:huge, kick:huge });
+  const review = makePresaleReviewPrompt({ topic:"테스트", facts:huge, sources:huge, article:huge });
+  assert.match(writing, /긴 입력 일부 생략/);
+  assert.match(review, /긴 입력 일부 생략/);
+  assert.ok(writing.length < 20000);
+  assert.ok(review.length < 30000);
+});
+
+test("presale page avoids long ChatGPT query URLs and copies long prompts instead", () => {
+  const { readFileSync } = require("node:fs");
+  const { join } = require("node:path");
+  const page = readFileSync(join(__dirname, "../app/apartment-presale/page.tsx"), "utf8");
+  assert.match(page, /query\.length <= 3200 && value\.length <= 1600/);
+  assert.match(page, /전체 요청서/);
+  assert.match(page, /요청서가 길면 주소창으로 보내지 않고/);
+});
