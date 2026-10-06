@@ -551,3 +551,15 @@ test("V3.3 three apartment article modes request 8 to 10 source-relevant tags", 
     assert.doesNotMatch(src,/네이버 태그 7개/);
   }
 });
+
+
+test("V3 prioritizes verified complex-direct management stories before generic local spots", async () => {
+  const mod = await import("../lib/apartment-story.mjs");
+  const prompt = mod.makeApartmentV3PlanningPrompt({
+    mode:"bulk", name:"테스트아파트", region:"서울 테스트구", dataSummary:"6개월 실거래"
+  });
+  assert.match(prompt, /관리사무소 공지/);
+  assert.match(prompt, /수능\/시험기간/);
+  assert.match(prompt, /단지 직접 공지·관리·운영 사례 → 실제 생활권 → 지역 대표 소재/);
+  assert.match(prompt, /주민 전체의 수준·성향으로 일반화 금지/);
+});
