@@ -529,9 +529,12 @@ ${relatedLinkText(row, allRows)}
 단, 확인되지 않은 내용을 채우기 위해 억지로 만들지 말 것.
 
 [본문 구조]
-- 별도의 H1은 만들지 말 것. Blogger의 글 제목이 H1 역할을 함.
-- 검색 의도에 맞는 H2 4~7개를 구성.
-- 짧은 도입 2~3문단.
+- 별도의 H1은 만들지 말 것. Blogger의 글 제목 입력란이 최상위 제목 역할을 함.
+- Blogger 기본 서식 기준으로 H2=제목, H3=부제목, H4=소제목, p=보통 본문으로 사용.
+- 검색 의도에 맞는 H2 4~7개를 구성하되, 모든 문단에 제목을 붙이지 말 것.
+- H3는 하나의 H2 안에서 비교 항목·세부 주제를 나눌 때만 사용.
+- H4는 H3 아래에서 정말 필요한 세부 구분이 있을 때만 제한적으로 사용.
+- 짧은 도입 2~3문단. ANSWER FIRST는 제목 바로 아래 보통 본문(p)으로 시작.
 - 핵심 답 또는 핵심 비교표를 초반에 배치.
 - 독자가 실제로 행동할 수 있는 확인 방법 또는 체크리스트 포함.
 - FAQ는 실제 검색자가 추가로 궁금해할 내용이 있을 때만 3~6개.
@@ -553,10 +556,22 @@ ${relatedLinkText(row, allRows)}
 - ChatGPT Plus Price in Japan 2026: https://aipriceatlas.blogspot.com/2026/09/chatgpt-plus-price-in-japan-2026-3000.html
 관련성이 낮으면 억지로 넣지 말 것.
 
+[Blogger 기본 서식 디자인 — 매우 중요]
+- 이 글은 Blogger 편집기의 기본 서식 자체가 디자인을 담당한다. 개별 글 안에서 폰트·크기·색상·여백을 임의 지정하지 말 것.
+- Blogger 서식 대응: 제목 = <h2>, 부제목 = <h3>, 소제목 = <h4>, 보통 = <p>.
+- 본문 안에 <h1>을 만들지 말 것.
+- style, class, id 속성을 본문 태그에 넣지 말 것.
+- font-size, font-family, color, background, line-height 같은 인라인 디자인 속성 금지.
+- <font> 태그 금지.
+- 빈 줄을 만들기 위한 &nbsp;, <p><br></p>, 비어 있는 h2/h3/h4 금지.
+- 문단 사이 간격은 빈 태그가 아니라 Blogger 테마의 기본 간격에 맡길 것.
+- 강조는 <strong>을 필요한 핵심 문장·숫자에만 사용하고 남용하지 말 것.
+
 [Blogger HTML 규칙]
 - 본문은 Blogger HTML 보기에서 바로 붙여넣을 수 있는 깨끗한 HTML로 작성.
 - <html>, <head>, <body>, <style>, <script> 태그 금지.
-- h2, h3, p, strong, em, ul, ol, li, table, thead, tbody, tr, th, td, a, br 정도의 단순한 태그만 사용.
+- h2, h3, h4, p, strong, em, ul, ol, li, table, thead, tbody, tr, th, td, a, br 정도의 단순한 태그만 사용.
+- br은 문단 안에서 의미상 줄바꿈이 꼭 필요할 때만 사용하고, 문단 사이 여백 용도로 사용하지 말 것.
 - 마크다운 문법을 HTML 안에 섞지 말 것.
 - 표에는 width 고정값이나 복잡한 CSS를 넣지 말 것.
 - 외부 광고 스크립트나 임베드 코드를 넣지 말 것.
@@ -2184,8 +2199,8 @@ export default function GoogleBlogSchedulePage() {
             <div className={styles.bloggerHead}>
               <div>
                 <span className={styles.stepNo}>04</span>
-                <h3>Blogger 바로 업로드 서식</h3>
-                <p>제목·검색 설명·슬러그·라벨을 복사하고, 입력한 이미지 URL이 반영된 최종 본문을 Blogger에 붙여넣으세요.</p>
+                <h3>Blogger 기본 서식으로 바로 업로드</h3>
+                <p>본문 디자인은 Blogger 테마에 맡깁니다. 제목(H2) · 부제목(H3) · 소제목(H4) · 보통(p)만 사용하고 글마다 폰트·크기·색상을 강제하지 않습니다.</p>
               </div>
               <a className={styles.bloggerOpen} href="https://www.blogger.com/" target="_blank" rel="noopener noreferrer">Blogger 열기 ↗</a>
             </div>
@@ -2221,7 +2236,7 @@ export default function GoogleBlogSchedulePage() {
                   title="Blogger preview"
                   sandbox=""
                   className={styles.previewFrame}
-                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#202124;line-height:1.7;padding:24px;max-width:860px;margin:auto}h2{font-size:26px;margin-top:34px}h3{font-size:21px;margin-top:28px}p{font-size:17px}table{width:100%;border-collapse:collapse;margin:20px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left}a{color:#1769aa}img{max-width:100%}</style></head><body>${finalBloggerHtml}</body></html>`}
+                  srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#202124;line-height:1.7;padding:24px;max-width:860px;margin:auto}h2{font-size:26px;margin:36px 0 14px}h3{font-size:21px;margin:28px 0 12px}h4{font-size:18px;margin:22px 0 10px}p{font-size:17px;margin:0 0 16px}strong{font-weight:700}table{width:100%;border-collapse:collapse;margin:22px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left}a{color:#1769aa}img{max-width:100%;height:auto}</style></head><body>${finalBloggerHtml}</body></html>`}
                 />
               ) : (
                 <div className={styles.previewEmpty}>ChatGPT 결과를 위에 붙여넣으면 Blogger에 들어갈 본문을 여기서 확인할 수 있습니다.</div>

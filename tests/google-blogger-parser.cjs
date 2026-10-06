@@ -75,3 +75,33 @@ test("rejects forbidden embedded script in Blogger HTML", async () => {
   const result = await parse(fixture.replace("<h2>Comparison</h2>", "<script>alert(1)</script><h2>Comparison</h2>"));
   assert.equal(result.valid, false);
 });
+
+
+test("accepts Blogger native h2 h3 h4 and normal paragraph hierarchy", async () => {
+  const nativeHtml = imageMarkers + "\n<h2>Price and plans</h2><p>Answer first.</p><h3>Plan differences</h3><p>Details.</p><h4>Heavy users</h4><p>More detail.</p>";
+  const result = await parse(fixture.replace(html, nativeHtml));
+  assert.equal(result.valid, true, result.errors.join(" / "));
+});
+
+test("rejects H1 and manual design attributes so Blogger theme stays in control", async () => {
+  for (const body of [
+    imageMarkers + "\n<h1>Duplicate top title</h1><p>Body.</p>",
+    imageMarkers + "\n<h2 style=\"font-size:32px\">Styled heading</h2><p>Body.</p>",
+    imageMarkers + "\n<h2 class=\"custom\">Styled heading</h2><p>Body.</p>",
+    imageMarkers + "\n<font size=\"5\">Manual font</font><p>Body.</p>",
+  ]) {
+    const result = await parse(fixture.replace(html, body));
+    assert.equal(result.valid, false);
+  }
+});
+
+test("rejects spacer-only Blogger HTML blocks", async () => {
+  for (const body of [
+    imageMarkers + "\n<h2>Section</h2><p>&nbsp;</p><p>Body.</p>",
+    imageMarkers + "\n<h2>Section</h2><p><br /></p><p>Body.</p>",
+    imageMarkers + "\n<h2><br /></h2><p>Body.</p>",
+  ]) {
+    const result = await parse(fixture.replace(html, body));
+    assert.equal(result.valid, false);
+  }
+});
