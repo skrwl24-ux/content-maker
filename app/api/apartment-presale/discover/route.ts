@@ -280,23 +280,11 @@ export async function POST(req: NextRequest) {
 }
 
 
-export async function GET(req: NextRequest) {
-  if (process.env.VERCEL_ENV === "production") {
-    return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
-  }
-  const synthetic = new NextRequest(req.url, {
-    method: "POST",
-    headers: req.headers,
-    body: JSON.stringify({
-      dateKey: "2026-10-07",
-      existingIds: [],
-      publishedCandidates: [
-        { name: "고덕강일3단지", region: "서울 강동구", status: "기존 글 발행 완료", topic: "고덕강일3단지 기존 발행 소재" }
-      ],
-      existingCandidates: [
-        { name: "고덕강일3단지", region: "서울 강동구", status: "기존 글 발행 완료", topic: "고덕강일3단지 기존 발행 소재" }
-      ]
-    }),
+export async function GET() {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  return NextResponse.json({
+    available: Boolean(openAiKey || gatewayToken),
+    provider: openAiKey ? "openai-direct" : gatewayToken ? "vercel-ai-gateway" : null,
   });
-  return POST(synthetic);
 }
