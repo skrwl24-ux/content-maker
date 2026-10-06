@@ -134,6 +134,8 @@ export default function PresaleDiscoverPage() {
   const [publicationState, setPublicationState] = useState<PublicationState>({ published: [], restored: [] });
   const [discoveredCandidates, setDiscoveredCandidates] = useState<PresaleCandidate[]>([]);
   const [researchMeta, setResearchMeta] = useState<ResearchMeta | null>(null);
+  const [autoResearchReady, setAutoResearchReady] = useState<boolean | null>(null);
+  const [autoResearchProvider, setAutoResearchProvider] = useState<string | null>(null);
   const [researching, setResearching] = useState(false);
   const [today, setToday] = useState("");
   const [notice, setNotice] = useState("");
@@ -143,6 +145,16 @@ export default function PresaleDiscoverPage() {
     setPublicationState(loadPublicationState());
     setDiscoveredCandidates(loadDiscoveredCandidates());
     setResearchMeta(loadResearchMeta());
+    void fetch("/api/apartment-presale/discover", { method: "GET", cache: "no-store" })
+      .then((response) => response.json())
+      .then((data) => {
+        setAutoResearchReady(Boolean(data?.available));
+        setAutoResearchProvider(typeof data?.provider === "string" ? data.provider : null);
+      })
+      .catch(() => {
+        setAutoResearchReady(false);
+        setAutoResearchProvider(null);
+      });
   }, []);
 
   const allCandidates = useMemo(() => {
@@ -178,6 +190,11 @@ export default function PresaleDiscoverPage() {
 
   async function autoDiscover() {
     if (researching) return;
+    if (autoResearchReady === false) {
+      openChatGptResearch();
+      setNotice("자동 조사 인증이 아직 없어 수동 ChatGPT 조사로 열었습니다. AI Gateway 키가 연결되면 이 버튼이 자동 조사로 전환됩니다.");
+      return;
+    }
     setResearching(true);
     setNotice("공식자료와 최신 웹 자료를 검색하고 있습니다…");
     try {
@@ -297,7 +314,11 @@ export default function PresaleDiscoverPage() {
       <p>사이트 안에서 최신 웹 검색을 실행해 공식 공고와 사업주체 자료를 우선 확인합니다. 이미 발행한 같은 사건은 제외하고, 새 공고·재공급·일정 변경처럼 새 글감만 카드로 추가합니다.</p>
       <div className={styles.heroActions}>
         <button type="button" className={styles.whiteButton} disabled={researching} onClick={() => void autoDiscover()}>
-          {researching ? "🔎 공식자료 검색 중…" : "🔎 최신 후보 자동 조사"}
+          {researching
+            ? "🔎 공식자료 검색 중…"
+            : autoResearchReady === false
+              ? "🔑 자동 조사 설정 필요 · 수동 조사 ↗"
+              : "🔎 최신 후보 자동 조사"}
         </button>
         <button type="button" className={styles.ghostButton} onClick={openChatGptResearch}>ChatGPT에서 수동 조사 ↗</button>
         <button type="button" className={styles.ghostButton} onClick={() => void copyResearch()}>요청서 복사</button>
@@ -311,7 +332,11 @@ export default function PresaleDiscoverPage() {
           <strong>{PRESALE_CANDIDATE_SNAPSHOT_DATE.replace(/-/g, ".")}</strong>
           <span>{researchMeta?.checkedAt
             ? "마지막 자동 조사 " + researchMeta.checkedAt.replace(/-/g, ".")
-            : "기존 후보는 삭제하지 않고 발행완료 보관함에 남깁니다."}</span>
+            : autoResearchReady === false
+              ? "자동 조사 인증 설정 필요 · 수동 조사 기능은 계속 사용 가능"
+              : autoResearchProvider
+                ? "자동 조사 연결됨 · " + autoResearchProvider
+                : "기존 후보는 삭제하지 않고 발행완료 보관함에 남깁니다."}</span>
         </div>
         <div className={styles.snapshotNumbers}>
           <b>{queueCandidates.length}<small>미발행 큐</small></b>
@@ -321,9 +346,11 @@ export default function PresaleDiscoverPage() {
       </section>
 
       <p className={styles.sourceWarning}>
-        {queueCandidates.length === 0
-          ? "현재 미발행 후보가 없습니다. 상단의 ‘최신 후보 자동 조사’를 누르면 발행 이력과 기존 카드를 제외한 새 사건을 웹에서 직접 찾아 카드로 추가합니다."
-          : "자동 조사 카드도 최종 발행 전에는 제작실에서 최신 공식 모집공고·정정공고와 가격·물량을 다시 교차확인하세요. 카드 자체가 청약 권유나 확정 공고를 대신하지 않습니다."}
+        {autoResearchReady === false
+          ? "자동 조사 엔진은 구현됐지만 Vercel AI Gateway/OpenAI 인증값이 아직 없습니다. 상단 버튼은 현재 수동 ChatGPT 조사로 연결되며, 인증키가 추가되면 별도 배포 없이 자동 조사 버튼으로 활성화됩니다."
+          : queueCandidates.length === 0
+            ? "현재 미발행 후보가 없습니다. 상단의 ‘최신 후보 자동 조사’를 누르면 발행 이력과 기존 카드를 제외한 새 사건을 웹에서 직접 찾아 카드로 추가합니다."
+            : "자동 조사 카드도 최종 발행 전에는 제작실에서 최신 공식 모집공고·정정공고와 가격·물량을 다시 교차확인하세요. 카드 자체가 청약 권유나 확정 공고를 대신하지 않습니다."}
       </p>
 
       {researchMeta && (researchMeta.summary || researchMeta.questions.length > 0) &&
