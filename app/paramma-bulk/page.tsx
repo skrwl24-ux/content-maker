@@ -17,6 +17,10 @@ type MoneyIntent = "신청" | "비용" | "비교" | "구매" | "가입" | "시�
 type MoneyTopicMeta = {
   intent: MoneyIntent;
   action: string;
+  mainKeyword: string;
+  subKeywords: string[];
+  actionQuestions: string[];
+  faqQuestions: string[];
   keywords: string[];
   whyNow: string;
   expiresAt: string;
@@ -192,11 +196,17 @@ function moneyTopicContext(topic: Topic) {
     "- 이 글은 광고글이 아니라 독자가 실제 행동 직전에 찾는 질문을 해결하는 정보글이다.",
     "- 검색 의도: " + meta.intent,
     "- 독자의 다음 행동: " + (meta.action || "조건 확인 후 실제 행동"),
-    meta.keywords.length ? "- 함께 확인할 검색 질문: " + meta.keywords.join(" · ") : "",
+    meta.mainKeyword ? "- 메인 키워드: " + meta.mainKeyword : "",
+    meta.subKeywords.length ? "- 세부 키워드: " + meta.subKeywords.join(" · ") : "",
+    meta.actionQuestions.length ? "[실제 행동 직전 질문]\n- " + meta.actionQuestions.join("\n- ") : "",
+    meta.faqQuestions.length ? "[글 말미 FAQ 후보]\n- " + meta.faqQuestions.join("\n- ") : "",
+    meta.keywords.length ? "- 추가 검색 표현: " + meta.keywords.join(" · ") : "",
     meta.whyNow ? "- 지금 써야 하는 이유: " + meta.whyNow : "",
     meta.expiresAt ? "- 정보 유효 시점: " + meta.expiresAt : "",
-    "- 제목은 억지로 '왜?' 형태에 맞추지 말고 신청방법·비용·대상·비교·단점·가입조건 등 실제 검색 의도를 자연스럽게 앞쪽에 둔다.",
-    "- 첫 3~4문장 안에서 독자가 지금 무엇을 확인해야 하는지 먼저 답하고, 이후 원리·배경·조건을 설명한다.",
+    "- 제목은 메인 키워드를 자연스럽게 포함하고 가장 중요한 세부 키워드 1개까지만 덧붙인다. 키워드를 나열하거나 같은 단어를 반복하지 않는다.",
+    "- 첫 3~4문장 안에서 메인 키워드가 묻는 핵심 답과 독자가 지금 무엇을 해야 하는지 먼저 답한다.",
+    "- 본문 소제목은 세부 키워드와 실제 행동 질문을 따라 구성하되 검색어를 억지로 반복하지 않는다.",
+    "- 글 말미에는 '## 자주 묻는 질문'을 두고 FAQ 후보 중 본문과 중복이 적고 실제 도움이 되는 3~5개만 간결하게 답한다. 최신 근거로 확인할 수 없는 질문은 억지로 답하지 않는다.",
     "- 신청형이면 대상·기간·공식 신청 경로·모바일 가능 여부·준비물, 비용형이면 실제 비용·무료/지원 대상·가격 차이의 조건, 비교형이면 선택 기준과 장단점, 구매형이면 출시·가격·후기에서 확인할 단점과 비교 기준, 가입형이면 금리·조건·만기·중도해지·갈아타기, 시즌형이면 기간과 지금 해야 할 행동을 우선 확인한다.",
     "- 공식 홈페이지·정부기관·금융기관·제조사·의료기관 등 최신 1차 출처를 우선하고, 종료된 일정이나 과거 조건을 현재 정보처럼 쓰지 않는다.",
     "- 건강·금융 정보는 치료·수익을 보장하거나 개인에게 특정 선택을 권유하지 않는다.",
@@ -1379,6 +1389,10 @@ export default function ParammaBulkPage() {
       money: {
         intent: candidate.intent,
         action: candidate.action,
+        mainKeyword: candidate.mainKeyword,
+        subKeywords: candidate.subKeywords,
+        actionQuestions: candidate.actionQuestions,
+        faqQuestions: candidate.faqQuestions,
         keywords: candidate.keywords,
         whyNow: candidate.whyNow,
         expiresAt: candidate.expiresAt,
@@ -1691,6 +1705,22 @@ export default function ParammaBulkPage() {
                   <span>행동 · {candidate.action || "정보 확인"}</span>
                   <span>유효 · {candidate.expiresAt || "상시"}</span>
                 </div>
+                <div className={styles.searchBlueprint}>
+                  <div><b>메인 키워드</b><span>{candidate.mainKeyword || candidate.keywords[0] || candidate.title}</span></div>
+                  {candidate.subKeywords.length > 0 && <div><b>세부 키워드</b><span>{candidate.subKeywords.join(" · ")}</span></div>}
+                  {candidate.actionQuestions.length > 0 && (
+                    <div>
+                      <b>행동 직전 질문</b>
+                      <ul>{candidate.actionQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
+                    </div>
+                  )}
+                  {candidate.faqQuestions.length > 0 && (
+                    <div>
+                      <b>FAQ 후보</b>
+                      <ul>{candidate.faqQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
+                    </div>
+                  )}
+                </div>
                 <div className={styles.moneyScores}>
                   <span>돈 {candidate.moneyScore}/5</span>
                   <span>시의성 {candidate.timelinessScore}/5</span>
@@ -1822,9 +1852,12 @@ export default function ParammaBulkPage() {
             <p className={styles.brief}>{selected.brief}</p>
             {selected.kind === "money" && selected.money && (
               <div className={styles.selectedMoneyInfo}>
-                <b>수익형 행동 검색</b>
+                <b>수익형 검색 설계</b>
                 <span>독자 행동 · {selected.money.action || "정보 확인"}</span>
-                <span>검색 포인트 · {selected.money.keywords.join(" · ") || selected.money.intent}</span>
+                <span>메인 키워드 · {selected.money.mainKeyword || selected.money.keywords[0] || selected.title}</span>
+                <span>세부 키워드 · {selected.money.subKeywords.join(" · ") || selected.money.keywords.join(" · ") || selected.money.intent}</span>
+                {selected.money.actionQuestions.length > 0 && <span>행동 질문 · {selected.money.actionQuestions.join(" / ")}</span>}
+                {selected.money.faqQuestions.length > 0 && <span>FAQ · {selected.money.faqQuestions.join(" / ")}</span>}
                 <span>유효 시점 · {selected.money.expiresAt || "상시"}</span>
               </div>
             )}
