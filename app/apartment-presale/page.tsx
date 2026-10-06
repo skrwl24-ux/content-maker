@@ -8,7 +8,7 @@ import {
 } from "../../lib/apartment-presale.mjs";
 import type { PresaleArticleBlock } from "../../lib/apartment-presale.mjs";
 import { renderPresaleLinks, richArticle, plainPresaleArticle, presaleByteCount, createPresaleCopyParts, PRESALE_COPY_BUDGET } from "../../lib/presale-naver-export.mjs";
-import { PRESALE_DISCOVERED_STORAGE_KEY, makePresaleCandidateSeed, makePresaleCandidateSeedFromItem } from "../../lib/apartment-presale-candidates.mjs";
+import { makePresaleCandidateSeed, makePresaleCandidateSeedFromItem } from "../../lib/apartment-presale-candidates.mjs";
 import type { PresaleCandidate } from "../../lib/apartment-presale-candidates.mjs";
 import styles from "./page.module.css";
 
@@ -105,22 +105,10 @@ function safeBase64(dataUrl: string) {
 function plainArticle(blocks: PresaleArticleBlock[]) {
   return plainPresaleArticle(blocks);
 }
-function loadDiscoveredCandidate(id: string): PresaleCandidate | null {
-  if (!id || !id.startsWith("live-")) return null;
-  try {
-    const raw = window.localStorage.getItem(PRESALE_DISCOVERED_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return null;
-    const found = parsed.find((item) => item && typeof item === "object" && item.id === id);
-    if (!found || typeof found.name !== "string" || typeof found.topic !== "string") return null;
-    return found as PresaleCandidate;
-  } catch {
-    return null;
-  }
-}
-
 export default function PresalePage() {
   const [id, setId] = useState("main");
+  const [candidateId, setCandidateId] = useState("");
+  const [candidatePublished, setCandidatePublished] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [draft, setDraft] = useState<PresaleDraft>(emptyDraft);
   const [saveStatus, setSaveStatus] = useState("작업 불러오는 중…");
@@ -158,27 +146,49 @@ export default function PresalePage() {
 
   useEffect(() => {
     let disposed = false;
-    const qs = new URLSearchParams(window.location.search);
-    const workId = (qs.get("workId") || "main").slice(0, 100);
-    const initialTopic = (qs.get("topic") || "").slice(0, 180);
-    const candidateId = (qs.get("candidate") || "").slice(0, 100);
-    const staticSeed = makePresaleCandidateSeed(candidateId);
-    const liveCandidate = staticSeed ? null : loadDiscoveredCandidate(candidateId);
-    const candidateSeed = staticSeed || makePresaleCandidateSeedFromItem(liveCandidate, todayLocal());
-    const initialDraft = { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic, ...(candidateSeed || {}) };
-    void loadDraft(workId).then((saved) => {
-      if (disposed) return;
-      setDraft(saved ? { ...emptyDraft(), ...saved, dateKey: saved.dateKey || todayLocal(), images: saved.images || {} } : initialDraft);
-      setId(workId);
-      setHydrated(true);
-      setSaveStatus(saved ? "저장된 작업 복원됨" : "새 분양 작업 시작");
-    }).catch(() => {
-      if (disposed) return;
-      setDraft(initialDraft);
-      setId(workId);
-      setHydrated(true);
-      setSaveStatus("저장소 접근 불가 · 이 브라우저의 저장 권한을 확인하세요.");
-    });
+
+    async function initialize() {
+      const qs = new URLSearchParams(window.location.search);
+      const workId = (qs.get("workId") || "main").slice(0, 100);
+      const initialTopic = (qs.get("topic") || "").slice(0, 180);
+      const selectedCandidateId = (qs.get("candidate") || "").slice(0, 100);
+      setCandidateId(selectedCandidateId);
+
+      let candidateSeed = makePresaleCandidateSeed(selectedCandidateId);
+      if (!candidateSeed && selectedCandidateId) {
+        try {
+          const response = await fetch("/api/apartment-presale/discover?id=" + encodeURIComponent(selectedCandidateId), {
+            method: "GET",
+            cache: "no-store",
+          });
+          const data = await response.json();
+          if (response.ok && data?.candidate) {
+            candidateSeed = makePresaleCandidateSeedFromItem(data.candidate as PresaleCandidate, data.candidate.checkedAt || todayLocal());
+            setCandidatePublished(data.candidate.publicationStatus === "published");
+          }
+        } catch {
+          // The page can still open as a blank draft if the shared candidate store is unavailable.
+        }
+      }
+
+      const initialDraft = { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic, ...(candidateSeed || {}) };
+      try {
+        const saved = await loadDraft(workId);
+        if (disposed) return;
+        setDraft(saved ? { ...emptyDraft(), ...saved, dateKey: saved.dateKey || todayLocal(), images: saved.images || {} } : initialDraft);
+        setId(workId);
+        setHydrated(true);
+        setSaveStatus(saved ? "저장된 작업 복원됨" : "새 분양 작업 시작");
+      } catch {
+        if (disposed) return;
+        setDraft(initialDraft);
+        setId(workId);
+        setHydrated(true);
+        setSaveStatus("저장소 접근 불가 · 이 브라우저의 저장 권한을 확인하세요.");
+      }
+    }
+
+    void initialize();
     return () => { disposed = true; };
   }, []);
   useEffect(() => {
@@ -265,6 +275,26 @@ export default function PresalePage() {
       }
     }
   }
+  async function markCandidatePublished() {
+    if (!candidateId) {
+      setNotice("Discover 후보에서 시작한 작업이 아니라 발행완료 상태를 연결할 후보 ID가 없습니다.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/apartment-presale/discover", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: candidateId, publicationStatus: "published" }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "발행완료 상태 저장에 실패했습니다.");
+      setCandidatePublished(true);
+      setNotice("발행 완료로 공용 보관함에 저장했습니다. 다음 자동 조사에서는 같은 사건이 제외됩니다.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "발행완료 상태 저장에 실패했습니다.");
+    }
+  }
+
   async function exportZip() {
     if (!readyForFinal || busy) {
       setNotice("원고 구성 검사에서 누락된 항목을 먼저 수정해 주세요.");
@@ -541,6 +571,11 @@ export default function PresalePage() {
                       onClick={() => void copyFinal(index)}>📋 {index + 1}/{copyParts.length} 구간 복사 ({(Math.max(part.htmlBytes, part.textBytes) / 1024).toFixed(0)}KB)</button>)}
                 <button type="button" className={styles.secondaryButton} disabled={!readyForFinal || busy}
                   onClick={() => void exportZip()}>{busy ? "ZIP 제작 중…" : "📦 원고·이미지·근거 ZIP"}</button>
+                {candidateId && <button type="button" className={styles.secondaryButton}
+                  disabled={candidatePublished}
+                  onClick={() => void markCandidatePublished()}>
+                  {candidatePublished ? "✓ 발행 완료 저장됨" : "✓ 실제 발행 후 완료 처리"}
+                </button>}
               </div>
               {!readyForFinal && <p className={styles.hint}>원고 구성 자동검사 11개 항목을 충족하면 전체복사와 ZIP 저장이 활성화됩니다. 추가 수동 체크는 필요하지 않습니다.</p>}
             </section>
