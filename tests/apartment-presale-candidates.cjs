@@ -77,3 +77,34 @@ test("fresh-discovery prompt demands web verification and does not present old s
   assert.match(prompt, /새로운 공식 모집공고/);
   assert.match(prompt, /제목만 바꿔 반복 제안하지 말 것/);
 });
+
+
+test("dynamic discovery candidates can seed the same production workflow", async () => {
+  const { PRESALE_DISCOVERED_STORAGE_KEY, makePresaleCandidateSeedFromItem } = await helpers();
+  assert.equal(PRESALE_DISCOVERED_STORAGE_KEY, "content-maker-presale-discovered-v1");
+  const item = {
+    id: "live-demo",
+    name: "테스트 신규단지",
+    region: "경기 수원시",
+    area: "경기",
+    stage: "planned",
+    status: "모집공고 확인",
+    schedule: "2026년 10월 7일",
+    supply: "전체 500가구 / 금회 일반 120가구",
+    supplyNote: "전체와 금회 물량 구분",
+    interest: "신규 공고",
+    kick: "금회 물량과 전체 규모를 나눠 본다.",
+    topic: "테스트 신규단지 모집공고｜금회 120가구 확인",
+    sourceUrl: "https://example.com/source",
+    sourceLabel: "공식 자료",
+    officialUrl: "https://example.com/official",
+    officialLabel: "공식 모집공고",
+    caution: "최종 공고 재확인",
+  };
+  const seed = makePresaleCandidateSeedFromItem(item, "2026-10-07");
+  assert.equal(seed.topic, item.topic);
+  assert.equal(seed.sourceUrl, item.officialUrl);
+  assert.match(seed.materials, /2026-10-07/);
+  assert.match(seed.materials, /테스트 신규단지/);
+  assert.match(seed.materials, /대상 단지 자체의 확정·예상·거론 분양가/);
+});

@@ -8,7 +8,8 @@ import {
 } from "../../lib/apartment-presale.mjs";
 import type { PresaleArticleBlock } from "../../lib/apartment-presale.mjs";
 import { renderPresaleLinks, richArticle, plainPresaleArticle, presaleByteCount, createPresaleCopyParts, PRESALE_COPY_BUDGET } from "../../lib/presale-naver-export.mjs";
-import { makePresaleCandidateSeed } from "../../lib/apartment-presale-candidates.mjs";
+import { PRESALE_DISCOVERED_STORAGE_KEY, makePresaleCandidateSeed, makePresaleCandidateSeedFromItem } from "../../lib/apartment-presale-candidates.mjs";
+import type { PresaleCandidate } from "../../lib/apartment-presale-candidates.mjs";
 import styles from "./page.module.css";
 
 type ImageSlot = "00" | "01" | "02";
@@ -104,6 +105,19 @@ function safeBase64(dataUrl: string) {
 function plainArticle(blocks: PresaleArticleBlock[]) {
   return plainPresaleArticle(blocks);
 }
+function loadDiscoveredCandidate(id: string): PresaleCandidate | null {
+  if (!id || !id.startsWith("live-")) return null;
+  try {
+    const raw = window.localStorage.getItem(PRESALE_DISCOVERED_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return null;
+    const found = parsed.find((item) => item && typeof item === "object" && item.id === id);
+    if (!found || typeof found.name !== "string" || typeof found.topic !== "string") return null;
+    return found as PresaleCandidate;
+  } catch {
+    return null;
+  }
+}
 
 export default function PresalePage() {
   const [id, setId] = useState("main");
@@ -147,7 +161,10 @@ export default function PresalePage() {
     const qs = new URLSearchParams(window.location.search);
     const workId = (qs.get("workId") || "main").slice(0, 100);
     const initialTopic = (qs.get("topic") || "").slice(0, 180);
-    const candidateSeed = makePresaleCandidateSeed((qs.get("candidate") || "").slice(0, 100));
+    const candidateId = (qs.get("candidate") || "").slice(0, 100);
+    const staticSeed = makePresaleCandidateSeed(candidateId);
+    const liveCandidate = staticSeed ? null : loadDiscoveredCandidate(candidateId);
+    const candidateSeed = staticSeed || makePresaleCandidateSeedFromItem(liveCandidate, todayLocal());
     const initialDraft = { ...emptyDraft(), dateKey: todayLocal(), topic: initialTopic, ...(candidateSeed || {}) };
     void loadDraft(workId).then((saved) => {
       if (disposed) return;
