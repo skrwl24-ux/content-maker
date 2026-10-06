@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ensureAnonymousSession } from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 import { parseBloggerOutput } from "@/lib/google-blogger-parser.mjs";
+import { buildGoogleContentPlanPrompt, googleContentPlanBlock, googleImagePlanBlock, parseGoogleContentPlan } from "@/lib/google-content-plan.mjs";
+import type { GoogleContentPlan } from "@/lib/google-content-plan.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
 type VerificationValue = "pending" | "checked" | "na";
@@ -40,6 +42,8 @@ type ScheduleRow = {
   backlinkDoneIds?: string[];
   verification?: VerificationState;
   note: string;
+  contentPlanRaw?: string;
+  contentPlan?: GoogleContentPlan | null;
   body?: string;
   imageUrls?: Record<string, string>;
   imageMeta?: Record<string, ImageUploadMeta>;
@@ -80,12 +84,12 @@ type GooglePublishHistoryItem = {
 };
 
 const IMAGE_SLOTS = [
-  { id: "00", label: "대표 이미지", role: "글의 핵심 제품·국가·가격 주제를 한눈에 보여주는 대표 비주얼" },
-  { id: "01", label: "가격 요약", role: "현재 확인된 가격과 통화, 기준 시점을 간결하게 보여주는 정보 이미지" },
-  { id: "02", label: "웹 vs 앱", role: "웹 결제와 앱스토어 결제 차이를 비교하는 설명 이미지" },
-  { id: "03", label: "결제 방법", role: "지원되는 결제수단·결제 흐름을 쉽게 보여주는 설명 이미지" },
-  { id: "04", label: "국가·지역 맥락", role: "해당 국가의 통화·세금·지역 가격 맥락을 보여주는 이미지" },
-  { id: "05", label: "핵심 정리", role: "독자가 마지막에 기억할 핵심 3~4가지를 정리하는 요약 이미지" },
+  { id: "00", label: "대표 이미지", role: "글의 핵심 검색 질문과 의사결정 포인트를 한눈에 보여주는 대표 비주얼" },
+  { id: "01", label: "핵심 사실", role: "독자의 결정에 필요한 최신 공식 가격·플랜·조건 등 핵심 사실을 보여주는 정보 이미지" },
+  { id: "02", label: "선택 비교", role: "플랜·서비스·결제방식·해결방법 등 이번 글에서 실제로 비교해야 하는 선택지를 보여주는 이미지" },
+  { id: "03", label: "Original Value", role: "이 글만의 자체 비교·판단 기준·실제 테스트 결과·행동 순서 중 핵심 차별화 가치를 보여주는 이미지" },
+  { id: "04", label: "조건·한계", role: "가격·지역·세금·사용 제한·예외·주의사항 등 판단에 필요한 조건을 보여주는 이미지" },
+  { id: "05", label: "핵심 정리", role: "독자가 마지막에 기억할 결정 기준과 다음 행동을 정리하는 요약 이미지" },
 ] as const;
 
 const STORAGE_KEY = "content-maker-google-blog-schedule-v3-links";
@@ -455,7 +459,7 @@ function buildDifferentiatePrompt(row: ScheduleRow, similar: SimilarTopic[]) {
 }
 
 
-function buildArticlePrompt(row: ScheduleRow, allRows: ScheduleRow[]) {
+function buildArticlePrompt(row: ScheduleRow, allRows: ScheduleRow[], contentPlanBlock = "") {
   if (row.kind === "experiment") return row.labPrompt?.trim() || "실전 검증실에서 원문 답변·정답 채점을 마친 뒤 글 요청서를 가져오세요.";
   return `AI Price Atlas용 구글 Blogger 영문 글을 최종 발행본으로 작성해줘.
 
@@ -470,6 +474,7 @@ https://aipriceatlas.blogspot.com/
 예정 제목: ${row.title || "주제 미입력"}
 핵심 SEO 키워드: ${row.keyword || "키워드 미입력"}
 기획 메모: ${row.note || "없음"}
+${contentPlanBlock}
 
 [운영자가 저장한 사전 검증 기록]
 ${verificationSummary(row)}
@@ -536,10 +541,10 @@ ${relatedLinkText(row, allRows)}
 [이미지 위치]
 본문 HTML 안에 아래 위치 문구를 각각 한 줄로 정확히 넣어줘.
 [IMAGE 00 — Hero]
-[IMAGE 01 — Price snapshot]
-[IMAGE 02 — Web vs app]
-[IMAGE 03 — Payment methods]
-[IMAGE 04 — Country context]
+[IMAGE 01 — Core facts]
+[IMAGE 02 — Decision comparison]
+[IMAGE 03 — Original value]
+[IMAGE 04 — Conditions and limits]
 [IMAGE 05 — Key takeaways]
 
 [내부 링크]
@@ -582,7 +587,7 @@ Blogger에 바로 넣을 최종 HTML 본문
 출력 전에 가격·통화·세금·날짜를 다시 자가검수하고, 확인되지 않은 숫자를 만들지 마.`;
 }
 
-function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
+function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], contentPlan?: GoogleContentPlan | null) {
   if (row.kind === "experiment") {
     const image = imageSlotFor(row, slot);
     return [
@@ -603,6 +608,7 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
 글 제목: ${row.title || "제목 미입력"}
 핵심 키워드: ${row.keyword || "키워드 미입력"}
 기획 메모: ${row.note || "없음"}
+${googleImagePlanBlock(contentPlan, slot.id)}
 
 [이미지 역할]
 슬롯: ${slot.id} · ${slot.label}
@@ -627,7 +633,7 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
 [텍스트]
 - 영어만 사용.
 - 핵심 문구는 짧게.
-- ${slot.id === "00" ? "대표 이미지이므로 제목 전체를 반복하지 말고 제품명·국가·핵심 가격 포인트가 1초 안에 보이게 구성." : "본문 설명 이미지이므로 큰 광고성 헤드라인보다 비교·과정·요약이 중심이 되게 구성."}
+- ${slot.id === "00" ? "대표 이미지이므로 제목 전체를 반복하지 말고 검색 질문과 핵심 판단 포인트가 1초 안에 보이게 구성." : "본문 설명 이미지이므로 큰 광고성 헤드라인보다 비교·과정·검증·판단 기준이 중심이 되게 구성."}
 - 한글, 워터마크, 타사 편집툴 로고 금지.
 
 중요: 여러 장 합본이 아니라 슬롯 ${slot.id}에 사용할 이미지 한 장만 바로 생성해줘.`;
@@ -878,7 +884,16 @@ export default function GoogleBlogSchedulePage() {
     done: rows.filter(r => r.status === "발행 완료").length,
   }), [rows]);
   const selected = rows.find(row => row.id === selectedId) || rows[0];
-  const articlePrompt = selected ? buildArticlePrompt(selected, rows) : "";
+  const selectedContentPlanBlock = selected?.kind === "experiment" ? "" : googleContentPlanBlock(selected?.contentPlan);
+  const contentPlanPrompt = selected?.kind === "experiment" ? "" : buildGoogleContentPlanPrompt({
+    date: today,
+    title: selected?.title || "",
+    keyword: selected?.keyword || "",
+    note: selected?.note || "",
+    existingTitles: rows.filter(row => row.id !== selected?.id && row.title.trim()).map(row => row.title),
+  });
+  const contentPlanChatUrl = contentPlanPrompt ? "https://chatgpt.com/?q=" + encodeURIComponent(contentPlanPrompt) : "";
+  const articlePrompt = selected ? buildArticlePrompt(selected, rows, selectedContentPlanBlock) : "";
   const selectedPlannedUrl = selected ? plannedUrl(selected) : "";
   const selectedResolvedUrl = selected ? resolvedUrl(selected) : "";
   const selectedRelated = selected ? relatedRows(selected, rows) : [];
@@ -1173,6 +1188,27 @@ export default function GoogleBlogSchedulePage() {
 
   function updateRow(id: string, patch: Partial<ScheduleRow>) {
     setRows(prev => prev.map(row => row.id === id ? { ...row, ...patch } : row));
+  }
+
+  function importContentPlan() {
+    if (!selected || selected.kind === "experiment") return;
+    const parsed = parseGoogleContentPlan(selected.contentPlanRaw || "");
+    if (!parsed) {
+      setNotice("⚠️ 기획 결과를 읽지 못했습니다. [GOOGLE_PLAN_JSON] 블록까지 통째로 붙여넣어 주세요.");
+      return;
+    }
+    updateRow(selected.id, {
+      contentPlan: parsed,
+      keyword: parsed.primaryQuery || selected.keyword,
+      note: selected.note || parsed.userDecision,
+    });
+    setNotice("✅ MONEY INTENT · SEARCH PLAN · ORIGINAL VALUE · ANSWER FIRST를 불러왔습니다. 본문·이미지 요청서에 자동 반영됩니다.");
+  }
+
+  function clearContentPlan() {
+    if (!selected || selected.kind === "experiment") return;
+    updateRow(selected.id, { contentPlanRaw: "", contentPlan: null });
+    setNotice("통합 기획을 비웠습니다. 기존 제목·본문·이미지는 유지됩니다.");
   }
 
   async function copyText(text: string, message: string) {
@@ -1599,6 +1635,7 @@ export default function GoogleBlogSchedulePage() {
               {selected.kind === "experiment"
                 ? <span className={styles.healthGood}>실전 검증 근거</span>
                 : <span className={selectedVerificationResolved === 6 ? styles.healthGood : styles.healthWait}>가격 검증 {selectedVerificationResolved}/6</span>}
+              {selected.kind !== "experiment" && <span className={selected.contentPlan ? styles.healthGood : styles.healthWait}>{selected.contentPlan ? "기획 완료" : "통합 기획 필요"}</span>}
               <span className={duplicateCount ? styles.healthDanger : styles.healthGood}>{duplicateCount ? `중복 ${duplicateCount}` : "SEO OK"}</span>
               <span className={selectedUrlValid ? styles.healthGood : styles.healthNeutral}>{selectedUrlValid ? "LIVE" : "URL 대기"}</span>
               {selectedBacklinkRemaining > 0 && <span className={styles.healthWait}>역링크 {selectedBacklinkRemaining}</span>}
@@ -1890,6 +1927,76 @@ export default function GoogleBlogSchedulePage() {
           </details>
           </div>
 
+          {selected.kind !== "experiment" && <section className={styles.contentPlanPanel}>
+            <div className={styles.contentPlanHead}>
+              <div>
+                <span className={styles.planEyebrow}>FAST RESEARCH · ONE PASS</span>
+                <h3>🎯 조사·기획 한 번에</h3>
+                <p>MONEY INTENT → SEARCH PLAN → ORIGINAL VALUE → ANSWER FIRST를 한 번에 조사합니다. 운영자는 결과를 붙여넣기만 하면 됩니다.</p>
+              </div>
+              <span className={selected.contentPlan ? styles.planReady : styles.planWaiting}>
+                {selected.contentPlan ? "✓ 본문·이미지 반영" : "기획 전"}
+              </span>
+            </div>
+            <div className={styles.contentPlanActions}>
+              <a
+                href={contentPlanChatUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  startWork();
+                  void copyText(contentPlanPrompt, "통합 조사·기획 요청서를 ChatGPT로 열고 복사했습니다.");
+                }}
+              >
+                🔎 1 · 조사·기획 시작
+              </a>
+              <button type="button" onClick={() => void copyText(contentPlanPrompt, "통합 조사·기획 요청서를 복사했습니다.")}>요청서만 복사</button>
+              {selected.contentPlan && <button type="button" className={styles.planClear} onClick={clearContentPlan}>기획 비우기</button>}
+            </div>
+            <details className={styles.contentPlanPaste}>
+              <summary>2 · ChatGPT 조사 결과 붙여넣기</summary>
+              <textarea
+                value={selected.contentPlanRaw || ""}
+                onChange={e => updateRow(selected.id, { contentPlanRaw: e.target.value })}
+                placeholder="[GOOGLE_PLAN_JSON] ... [/GOOGLE_PLAN_JSON]이 포함된 조사 결과를 통째로 붙여넣으세요."
+              />
+              <button type="button" onClick={importContentPlan}>기획 자동 불러오기</button>
+            </details>
+
+            {selected.contentPlan && (
+              <div className={styles.contentPlanCard}>
+                <div className={styles.planSummaryGrid}>
+                  <div><span>MONEY INTENT</span><b>{selected.contentPlan.moneyIntent}</b></div>
+                  <div><span>CLUSTER</span><b>{selected.contentPlan.cluster || "미지정"}</b></div>
+                  <div><span>PRIMARY QUERY</span><b>{selected.contentPlan.primaryQuery}</b></div>
+                  <div><span>EVIDENCE</span><b>{selected.contentPlan.evidenceLevel || "B"}</b></div>
+                </div>
+                <div className={styles.planDecision}>
+                  <span>USER DECISION</span>
+                  <b>{selected.contentPlan.userDecision}</b>
+                </div>
+                <div className={styles.planOriginal}>
+                  <span>ORIGINAL VALUE</span>
+                  <p>{selected.contentPlan.originalValue}</p>
+                </div>
+                <div className={styles.planAnswer}>
+                  <span>ANSWER FIRST</span>
+                  <p>{selected.contentPlan.answerFirst}</p>
+                </div>
+                {!!selected.contentPlan.secondaryQueries.length && (
+                  <div className={styles.planQueries}>
+                    <span>SECONDARY QUERIES</span>
+                    <p>{selected.contentPlan.secondaryQueries.join(" · ")}</p>
+                  </div>
+                )}
+                <div className={styles.planMeta}>
+                  <span>확인일 · {selected.contentPlan.checkedAt || "미기재"}</span>
+                  <span>공식 근거 · {selected.contentPlan.sourceUrls.length}개</span>
+                </div>
+              </div>
+            )}
+          </section>}
+
           <div className={styles.sectionDivider}>
             <div><span>CREATE</span><b>콘텐츠 만들기</b></div>
             <small>관리 도구는 필요할 때만 열고, 아래에서 본문과 이미지를 제작하세요.</small>
@@ -1899,7 +2006,7 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>01</span>
               <h3>본문 요청서</h3>
-              <p>{selected.kind === "experiment" ? "실전 검증실에서 가져온 원문 답변과 수동 판정 근거로 영문 Blogger 글을 작성합니다. 가격·세금 글 템플릿은 적용하지 않습니다." : "최신 가격을 웹에서 검증하고 SEO 제목·검색 설명·슬러그·라벨·Blogger HTML까지 한 번에 받습니다."}</p>
+              <p>{selected.kind === "experiment" ? "실전 검증실에서 가져온 원문 답변과 수동 판정 근거로 영문 Blogger 글을 작성합니다. 가격·세금 글 템플릿은 적용하지 않습니다." : selected.contentPlan ? "통합 기획에서 확정한 검색 의도·차별화 가치·첫 답을 반영해 SEO 메타와 Blogger HTML까지 한 번에 만듭니다." : "통합 기획 없이도 작성할 수 있지만, 검색 의도와 차별화 가치를 먼저 확정하면 글 품질이 더 안정적입니다."}</p>
               <div className={styles.requestActions}>
                 <a
                   className={styles.primaryAction}
@@ -1927,7 +2034,7 @@ export default function GoogleBlogSchedulePage() {
               <p>{selected.kind === "experiment" ? "실험 대표·원본 문서·검증 결과·오류 사례·채점 기준·한계 6장. 확정되지 않은 수치는 넣지 않습니다." : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
-                  const prompt = buildImagePrompt(selected, slot);
+                  const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
                   const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(prompt);
                   return (
                     <div key={slot.id} className={styles.imagePromptItem}>
