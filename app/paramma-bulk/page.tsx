@@ -189,6 +189,10 @@ function categoryGuide(category: Category) {
 function moneyTopicContext(topic: Topic) {
   if (topic.kind !== "money" || !topic.money) return "";
   const meta = topic.money;
+  const subKeywords = meta.subKeywords || [];
+  const actionQuestions = meta.actionQuestions || [];
+  const faqQuestions = meta.faqQuestions || [];
+  const keywords = meta.keywords || [];
   return [
     "",
     "",
@@ -197,10 +201,10 @@ function moneyTopicContext(topic: Topic) {
     "- 검색 의도: " + meta.intent,
     "- 독자의 다음 행동: " + (meta.action || "조건 확인 후 실제 행동"),
     meta.mainKeyword ? "- 메인 키워드: " + meta.mainKeyword : "",
-    meta.subKeywords.length ? "- 세부 키워드: " + meta.subKeywords.join(" · ") : "",
-    meta.actionQuestions.length ? "[실제 행동 직전 질문]\n- " + meta.actionQuestions.join("\n- ") : "",
-    meta.faqQuestions.length ? "[글 말미 FAQ 후보]\n- " + meta.faqQuestions.join("\n- ") : "",
-    meta.keywords.length ? "- 추가 검색 표현: " + meta.keywords.join(" · ") : "",
+    subKeywords.length ? "- 세부 키워드: " + subKeywords.join(" · ") : "",
+    actionQuestions.length ? "[실제 행동 직전 질문]\n- " + actionQuestions.join("\n- ") : "",
+    faqQuestions.length ? "[글 말미 FAQ 후보]\n- " + faqQuestions.join("\n- ") : "",
+    keywords.length ? "- 추가 검색 표현: " + keywords.join(" · ") : "",
     meta.whyNow ? "- 지금 써야 하는 이유: " + meta.whyNow : "",
     meta.expiresAt ? "- 정보 유효 시점: " + meta.expiresAt : "",
     "- 제목은 메인 키워드를 자연스럽게 포함하고 가장 중요한 세부 키워드 1개까지만 덧붙인다. 키워드를 나열하거나 같은 단어를 반복하지 않는다.",
@@ -1854,10 +1858,10 @@ export default function ParammaBulkPage() {
               <div className={styles.selectedMoneyInfo}>
                 <b>수익형 검색 설계</b>
                 <span>독자 행동 · {selected.money.action || "정보 확인"}</span>
-                <span>메인 키워드 · {selected.money.mainKeyword || selected.money.keywords[0] || selected.title}</span>
-                <span>세부 키워드 · {selected.money.subKeywords.join(" · ") || selected.money.keywords.join(" · ") || selected.money.intent}</span>
-                {selected.money.actionQuestions.length > 0 && <span>행동 질문 · {selected.money.actionQuestions.join(" / ")}</span>}
-                {selected.money.faqQuestions.length > 0 && <span>FAQ · {selected.money.faqQuestions.join(" / ")}</span>}
+                <span>메인 키워드 · {selected.money.mainKeyword || selected.money.keywords?.[0] || selected.title}</span>
+                <span>세부 키워드 · {selected.money.subKeywords?.join(" · ") || selected.money.keywords?.join(" · ") || selected.money.intent}</span>
+                {!!selected.money.actionQuestions?.length && <span>행동 질문 · {selected.money.actionQuestions.join(" / ")}</span>}
+                {!!selected.money.faqQuestions?.length && <span>FAQ · {selected.money.faqQuestions.join(" / ")}</span>}
                 <span>유효 시점 · {selected.money.expiresAt || "상시"}</span>
               </div>
             )}
