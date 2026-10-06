@@ -34,7 +34,7 @@ type TopicWork = {
 type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string };
 type LoadedImage = ImageRecord & { url: string };
 type NaverBlock = {
-  type: "title" | "subheading" | "body" | "image" | "tags";
+  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags";
   text: string;
 };
 
@@ -160,6 +160,7 @@ function categoryGuide(category: Category) {
 
 function cleanNaverLine(line: string) {
   return line
+    .replace(/^>\s?/, "")
     .replace(/^#{1,6}\s+/, "")
     .replace(/^\*\*(.*?)\*\*$/, "$1")
     .replace(/^__(.*?)__$/, "$1")
@@ -179,12 +180,72 @@ function isNonPublishNaverHeading(line: string) {
   return /^(이미지.*기획\s*메모|검수\s*메모)(?:\s*[:：-].*)?$/i.test(normalized);
 }
 
+function normalizeNaverParagraphLines(raw: string) {
+  const source = raw.replace(/\r\n?/g, "\n").split("\n");
+  const out: string[] = [];
+  let paragraph: string[] = [];
+  let firstPublishLineSeen = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(paragraph.join(" ").replace(/\s+/g, " ").trim());
+    paragraph = [];
+  };
+
+  const isStructural = (trimmed: string) => {
+    if (!trimmed) return false;
+    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) return true;
+    if (/^#{1,6}\s+/.test(trimmed)) return true;
+    if (/^(\*\*|__)[\s\S]+\1$/.test(trimmed)) return true;
+    if (/^>\s+/.test(trimmed)) return true;
+    const cleaned = cleanNaverLine(trimmed);
+    if (/^\[이미지\s*\d+/i.test(cleaned)) return true;
+    if (/^#[^\s#]+(?:\s+#[^\s#]+)+/.test(cleaned)) return true;
+    return /^[🐾🌌💡🧠✅📌🔎]/u.test(cleaned) && cleaned.length <= 40 && !/[.!?]$/.test(cleaned);
+  };
+
+  for (const rawLine of source) {
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      if (out.length && out[out.length - 1] !== "") out.push("");
+      continue;
+    }
+
+    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) {
+      flushParagraph();
+      out.push(trimmed);
+      continue;
+    }
+
+    if (!firstPublishLineSeen) {
+      flushParagraph();
+      out.push(trimmed);
+      firstPublishLineSeen = true;
+      continue;
+    }
+
+    if (isStructural(trimmed)) {
+      flushParagraph();
+      out.push(trimmed);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  return out.join("\n");
+}
+
 function parseNaverBlog(raw: string): NaverBlock[] {
   const allLines = raw.replace(/\r\n?/g, "\n").split("\n");
   const cutoff = allLines.findIndex((line) => isNonPublishNaverHeading(line));
   const publishLines = cutoff >= 0 ? allLines.slice(0, cutoff) : allLines;
 
-  const lines = publishLines
+  const lines = normalizeNaverParagraphLines(publishLines.join("\n"))
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => line && !/^:::writing\b/i.test(line) && line !== ":::" && !/^---option\b/i.test(line));
 
@@ -216,10 +277,16 @@ function parseNaverBlog(raw: string): NaverBlock[] {
 
     const markdownHeading = /^#{2,6}\s+/.test(original);
     const wholeBold = /^(\*\*|__)[\s\S]+\1$/.test(original);
+    const blockQuote = /^>\s+/.test(original);
     const emojiHeading = /^[🐾🌌💡🧠✅📌🔎]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
 
-    if (markdownHeading || wholeBold || emojiHeading) {
+    if (markdownHeading || emojiHeading) {
       blocks.push({ type: "subheading", text: line });
+      continue;
+    }
+
+    if (wholeBold || blockQuote) {
+      blocks.push({ type: "emphasis", text: line });
       continue;
     }
 
@@ -246,21 +313,24 @@ function naverRichHtml(blocks: NaverBlock[]) {
   const blockHtml = blocks.map((block) => {
     const safe = escapeHtml(block.text);
     if (block.type === "title") {
-      return `<div style="font-family:${font};font-size:20pt;line-height:1.5;font-weight:700;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:32px;line-height:1.35;font-weight:700;margin:0;">${safe}</div>`;
     }
     if (block.type === "subheading") {
-      return `<div style="font-family:${font};font-size:18pt;line-height:1.55;font-weight:700;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:30px;line-height:1.45;font-weight:700;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "emphasis") {
+      return `<div style="font-family:${font};font-size:19px;line-height:1.65;font-weight:700;margin:0;">${safe}</div>`;
     }
     if (block.type === "tags") {
-      return `<div style="font-family:${font};font-size:13.5pt;line-height:1.6;font-weight:400;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
     }
     if (block.type === "image") {
-      return `<div style="font-family:${font};font-size:15pt;line-height:1.6;font-weight:600;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:600;margin:0;">${safe}</div>`;
     }
-    return `<div style="font-family:${font};font-size:15pt;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
+    return `<div style="font-family:${font};font-size:15px;line-height:1.8;font-weight:400;margin:0;">${safe}</div>`;
   });
 
-  const spacer = `<div style="font-family:${font};font-size:15pt;line-height:1.7;margin:0;"><br></div>`;
+  const spacer = `<div style="font-family:${font};font-size:15px;line-height:1.8;margin:0;"><br></div>`;
   return `<div>${blockHtml.join(spacer)}</div>`;
 }
 
@@ -299,7 +369,13 @@ ${categoryGuide(topic.category)}
 - 썸네일 문구는 제공된 “${topic.thumbnailHook}”을 기본으로 사용하고, 본문 제목 전체를 썸네일에 반복하지 말 것.
 
 [본문 구성]
-- 모바일에서 읽기 편하게 짧은 문단으로 작성.
+- 모바일에서 읽기 편하게 같은 의미의 2~4문장을 하나의 짧은 문단으로 묶어 작성.
+- 같은 문단 안에서는 문장마다 엔터하거나 한 줄씩 띄우지 말고 자연스럽게 이어 쓸 것.
+- 의미·논점이 바뀌는 문단 사이에만 완전히 빈 줄 1개를 넣을 것.
+- 소제목은 콘텐츠메이커가 크기 30으로 인식할 수 있게 반드시 '## 소제목' 형식의 독립된 줄로 작성할 것.
+- 독자가 꼭 기억해야 할 핵심 해석·결론·주의문은 글 전체에서 1~3개만 골라 '**강조 문장 전체**' 형식의 독립된 줄로 작성할 것. 콘텐츠메이커가 이를 크기 19 강조로 변환한다.
+- 일반 본문은 크기 15 기준이며, 단순한 숫자 나열이나 모든 핵심 문장을 강조 처리하지 말 것.
+- 스페이스바 1칸만 들어간 간격용 줄은 만들지 말 것.
 - 도입부에서 독자의 실제 궁금증을 바로 꺼낼 것.
 - 핵심 답을 너무 늦게 숨기지 말 것.
 - 소제목 4~6개 정도.
@@ -1248,31 +1324,18 @@ export default function ParammaBulkPage() {
             "text/plain": new Blob([plain], { type: "text/plain" }),
           }),
         ]);
-        setNaverCopyMessage("✅ 네이버 서식 포함 전체복사 완료 · 네이버에서 Ctrl+V 하세요.");
+        setNaverCopyMessage("✅ 네이버 서식 복사 완료 · 네이버에서 Ctrl+V 하세요.");
       } else {
         await navigator.clipboard.writeText(plain);
-        setNaverCopyMessage("ℹ️ 브라우저 제한으로 한줄띄기 텍스트로 복사했습니다.");
+        setNaverCopyMessage("ℹ️ 브라우저 제한으로 문단 간격 텍스트를 복사했습니다.");
       }
     } catch {
       try {
         await navigator.clipboard.writeText(plain);
-        setNaverCopyMessage("ℹ️ 서식 복사가 제한되어 한줄띄기 텍스트로 복사했습니다.");
+        setNaverCopyMessage("ℹ️ 서식 복사가 제한되어 문단 간격 텍스트를 복사했습니다.");
       } catch {
         setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
       }
-    }
-  }
-
-  async function copyNaverSafeText() {
-    if (!naverBlocks.length) {
-      setNaverCopyMessage("완성 본문을 먼저 입력해 주세요.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(naverPlainText(naverBlocks));
-      setNaverCopyMessage("✅ 한줄띄기 안전복사 완료 · 폰트는 네이버 기본 설정을 사용합니다.");
-    } catch {
-      setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
     }
   }
 
@@ -1761,8 +1824,8 @@ export default function ParammaBulkPage() {
             <div className={styles.naverEditorHead}>
               <div>
                 <p className={styles.eyebrow}>03 · NAVER FINAL COPY</p>
-                <h2>네이버 최종 편집 · 전체복사</h2>
-                <span>현재 저장된 완성 본문에 제목 20pt · 소제목 18pt · 본문 15pt · 태그 13~14pt와 한 줄 띄기를 적용합니다.</span>
+                <h2>네이버 최종 편집 · 서식복사</h2>
+                <span>제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다.</span>
               </div>
             </div>
 
@@ -1778,6 +1841,7 @@ export default function ParammaBulkPage() {
                       className={
                         block.type === "title" ? styles.naverTitle :
                         block.type === "subheading" ? styles.naverSubheading :
+                        block.type === "emphasis" ? styles.naverEmphasis :
                         block.type === "tags" ? styles.naverTags :
                         block.type === "image" ? styles.naverImageLine :
                         styles.naverBody
@@ -1788,19 +1852,16 @@ export default function ParammaBulkPage() {
                     {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
                   </div>
                 )) : (
-                  <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
+                  <div className={styles.naverPreviewEmpty}>제목 32 · 소제목 30 · 강조 19 · 본문 15와 문단 단위 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
                 )}
               </div>
             </div>
 
             <div className={styles.naverCopyActions}>
               <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
-                네이버 서식 포함 전체복사
+                네이버 서식 복사
               </button>
-              <button type="button" onClick={() => void copyNaverSafeText()}>
-                한줄띄기 안전복사
-              </button>
-              <span>기본은 서식 포함 전체복사 → 네이버 Ctrl+V</span>
+              <span>제목 32 · 소제목 30 · 강조 19 · 본문 15 · 문단마다 한 줄 띄기</span>
             </div>
 
             {naverCopyMessage && <div className={styles.naverCopyNotice}>{naverCopyMessage}</div>}
