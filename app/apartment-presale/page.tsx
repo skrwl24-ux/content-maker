@@ -218,12 +218,12 @@ export default function PresalePage() {
   function openPrompt(value: string, name: string) {
     const query = encodeURIComponent(value);
     // Long article prompts exceed reliable URL lengths: open chat and copy the full text.
-    if (query.length <= 5000) {
+    if (query.length <= 3200 && value.length <= 1600) {
       window.open("https://chatgpt.com/?q=" + query, "_blank", "noopener,noreferrer");
       setNotice(name + " 요청서를 새 ChatGPT 창으로 열었습니다.");
     } else {
       window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-      void copyPrompt(value, name);
+      void copyPrompt(value, name + " 전체 요청서");
     }
   }
   async function uploadImage(event: ChangeEvent<HTMLInputElement>, slot: ImageSlot | "site") {
@@ -411,13 +411,14 @@ export default function PresalePage() {
                 <button type="button" className={styles.minorButton} disabled={!introReady}
                   onClick={() => void copyPrompt(researchPrompt, "공식자료 조사 요청서")}>요청서 복사</button>
               </div>
+              <p className={styles.hint}>요청서가 길면 주소창으로 보내지 않고 새 ChatGPT 창을 연 뒤 전체 요청서를 자동 복사합니다. 붙여넣기만 하면 됩니다.</p>
               <div className={styles.subsection}>
                 <div className={styles.subHead}><h3>조사 결과 붙여넣기</h3><span>자료 출처와 기준일도 함께 저장</span></div>
                 <textarea className={styles.longInput} value={draft.facts} onChange={(e) => update("facts", e.target.value)}
                   placeholder={"GPT 검증 결과 전체를 붙여넣으세요.\n[검증 결과]\n정확한 단지명: ...\n공식 공고 상태 및 공고일: ...\n전체 세대수 / 금회 신규 공급 / 가격상태 ...\n[/검증 결과]"} />
-                <label className={styles.field}>이 단지만의 킥 후보 (선택)
+                <label className={styles.field}>이 단지만의 킥 · 스토리 후보 (선택)
                   <input value={draft.kick} onChange={(e) => update("kick", e.target.value)}
-                    placeholder="예: 분양가 외에 매월 발생하는 토지임대료" /></label>
+                    placeholder="예: 실부담 구조 / 특별공급 제도 / 사업·부지 이야기 중 가장 강한 1개" /></label>
                 <p className={styles.hint}>조사·검증 결과와 출처를 입력하면 작업에 보관하고 ZIP에도 함께 담습니다. 공고 전이거나 자료 날짜가 비어 있어도 완성 원고 복사·저장을 막지 않습니다.</p>
               </div>
             </section>
