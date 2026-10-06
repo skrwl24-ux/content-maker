@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { makePresaleDiscoveryPrompt } from "../../../../lib/apartment-presale-candidates.mjs";
+import { createApartmentAdminClient } from "@/lib/apartment-server";
+import {
+  PRESALE_CANDIDATES,
+  makePresaleDiscoveryPrompt,
+} from "../../../../lib/apartment-presale-candidates.mjs";
 
 type CandidateStage = "planned" | "later" | "watch" | "notice" | "followup";
 type CandidateArea = "서울" | "경기" | "인천";
+type PublicationStatus = "queue" | "published";
 
 type RawCandidate = {
   name: string;
@@ -22,6 +27,13 @@ type RawCandidate = {
   officialLabel: string;
   caution: string;
   eventKey: string;
+};
+
+type StoredCandidate = RawCandidate & {
+  id: string;
+  publicationStatus: PublicationStatus;
+  origin: "baseline" | "ai" | "manual";
+  checkedAt: string;
 };
 
 const STAGES = new Set<CandidateStage>(["planned", "later", "watch", "notice", "followup"]);
@@ -94,10 +106,13 @@ function normalizeCandidate(raw: RawCandidate, existingIds: Set<string>) {
   const sourceUrl = httpsUrl(raw.sourceUrl);
   const officialUrl = httpsUrl(raw.officialUrl);
   if (!area || !name || !region || !eventKey || !sourceUrl || !officialUrl) return null;
+
   const id = "live-" + stableHash([name, region, eventKey].join("|"));
   if (existingIds.has(id)) return null;
+
   return {
     id,
+    eventKey,
     name,
     region,
     area,
@@ -115,6 +130,45 @@ function normalizeCandidate(raw: RawCandidate, existingIds: Set<string>) {
     officialLabel: safeText(raw.officialLabel, 180),
     caution: safeText(raw.caution, 520),
   };
+}
+
+function baselineCandidate(id: string) {
+  return PRESALE_CANDIDATES.find((item) => item.id === id) || null;
+}
+
+function rowToCandidate(row: any): StoredCandidate | null {
+  const base = row?.origin === "baseline" ? baselineCandidate(String(row.id || "")) : null;
+  const value = base || (row?.candidate_json && typeof row.candidate_json === "object" ? row.candidate_json : null);
+  if (!value) return null;
+
+  return {
+    ...value,
+    id: String(row.id || value.id || ""),
+    eventKey: safeText(row.event_key || value.eventKey || "", 180),
+    publicationStatus: row.publication_status === "queue" ? "queue" : "published",
+    origin: row.origin === "baseline" || row.origin === "manual" ? row.origin : "ai",
+    checkedAt: safeText(row.checked_at, 20),
+  } as StoredCandidate;
+}
+
+function fallbackCandidates(): StoredCandidate[] {
+  return PRESALE_CANDIDATES.map((item) => ({
+    ...item,
+    eventKey: "baseline-2026-10-04",
+    publicationStatus: "published" as const,
+    origin: "baseline" as const,
+    checkedAt: "2026-10-04",
+  }));
+}
+
+async function loadStoredCandidates(client: ReturnType<typeof createApartmentAdminClient>) {
+  if (!client) return fallbackCandidates();
+  const { data, error } = await client
+    .from("presale_discovery_candidates")
+    .select("id,event_key,candidate_json,publication_status,origin,checked_at,updated_at")
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(rowToCandidate).filter((item): item is StoredCandidate => Boolean(item));
 }
 
 function outputText(payload: any) {
@@ -178,6 +232,7 @@ const CANDIDATE_SCHEMA = {
 };
 
 export const maxDuration = 120;
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   if (!sameSiteRequest(req)) {
@@ -185,6 +240,11 @@ export async function POST(req: NextRequest) {
   }
   if (!rateAllowed(req)) {
     return NextResponse.json({ error: "자동 조사는 10분에 최대 3회까지 실행할 수 있습니다." }, { status: 429 });
+  }
+
+  const client = createApartmentAdminClient();
+  if (!client) {
+    return NextResponse.json({ error: "후보 저장소를 사용할 수 없습니다. SUPABASE_SERVICE_ROLE_KEY 설정을 확인해 주세요." }, { status: 503 });
   }
 
   const openAiKey = process.env.OPENAI_API_KEY;
@@ -196,24 +256,20 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const dateKey = safeText(body?.dateKey, 20) || new Date().toISOString().slice(0, 10);
-    const existingIds = new Set<string>(
-      Array.isArray(body?.existingIds)
-        ? body.existingIds.filter((value: unknown): value is string => typeof value === "string").slice(0, 300)
-        : [],
-    );
-    const published = Array.isArray(body?.publishedCandidates) ? body.publishedCandidates.slice(0, 120) : [];
-    const existing = Array.isArray(body?.existingCandidates) ? body.existingCandidates.slice(0, 160) : [];
+    const existing = await loadStoredCandidates(client);
+    const existingIds = new Set(existing.map((item) => item.id));
+    const published = existing.filter((item) => item.publicationStatus === "published");
 
     const prompt = [
       makePresaleDiscoveryPrompt(dateKey, published),
       "",
       "[현재 Discover에 이미 있는 소재 · 같은 사건이면 중복 추가 금지]",
-      ...existing.map((item: any) => "- " + [safeText(item?.name, 120), safeText(item?.region, 100), safeText(item?.status, 140), safeText(item?.topic, 200)].filter(Boolean).join(" · ")),
+      ...existing.map((item) => "- " + [item.name, item.region, item.status, item.topic, item.eventKey].filter(Boolean).join(" · ")),
       "",
       "[자동 등록 규칙]",
-      "- 웹 검색을 실제로 수행해 2026년 현재 유효한 자료인지 확인한다.",
+      "- 웹 검색을 실제로 수행해 기준일 현재 유효한 자료인지 확인한다.",
       "- 공식 모집공고가 있으면 SH·서울주거포털·LH청약플러스·청약홈·GH·사업주체 공식자료를 sourceUrl 또는 officialUrl 중 하나에 반드시 넣는다.",
       "- 공식 공고가 없으면 상태를 watch/planned/later로 두고, 확정 조건·가격·접수일을 만들어내지 않는다.",
       "- 같은 단지라도 이전 글과 다른 새 사건일 때만 반환한다. eventKey는 단지명이 아니라 사건 종류와 핵심 날짜를 반영한다.",
@@ -229,6 +285,7 @@ export async function POST(req: NextRequest) {
     const endpoint = useGateway
       ? "https://ai-gateway.vercel.sh/v1/responses"
       : "https://api.openai.com/v1/responses";
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -253,7 +310,7 @@ export async function POST(req: NextRequest) {
 
     const payload = await response.json();
     if (!response.ok) {
-      const message = safeText(payload?.error?.message, 500) || "OpenAI 웹 조사 호출에 실패했습니다.";
+      const message = safeText(payload?.error?.message, 500) || "웹 조사 호출에 실패했습니다.";
       return NextResponse.json({ error: message }, { status: response.status >= 500 ? 502 : 400 });
     }
 
@@ -261,18 +318,62 @@ export async function POST(req: NextRequest) {
     if (!text) return NextResponse.json({ error: "웹 조사 결과가 비어 있습니다." }, { status: 502 });
 
     const parsed = JSON.parse(text);
+    const checkedAt = /^\d{4}-\d{2}-\d{2}$/.test(safeText(parsed?.checkedAt, 20))
+      ? safeText(parsed?.checkedAt, 20)
+      : dateKey;
+    const summary = safeText(parsed?.summary, 1200);
+    const questions = (Array.isArray(parsed?.questions) ? parsed.questions : [])
+      .map((item: unknown) => safeText(item, 400))
+      .filter(Boolean)
+      .slice(0, 12);
     const candidates = (Array.isArray(parsed?.candidates) ? parsed.candidates : [])
       .map((item: RawCandidate) => normalizeCandidate(item, existingIds))
       .filter(Boolean)
       .slice(0, 12);
 
+    const provider = useGateway ? "vercel-ai-gateway-oidc" : "openai-direct";
+    const { data: run, error: runError } = await client
+      .from("presale_discovery_runs")
+      .insert({
+        checked_at: checkedAt,
+        summary,
+        questions,
+        provider,
+        model,
+        candidate_count: candidates.length,
+      })
+      .select("id")
+      .single();
+    if (runError) throw runError;
+
+    if (candidates.length) {
+      const now = new Date().toISOString();
+      const rows = candidates.map((candidate) => ({
+        id: candidate.id,
+        event_key: candidate.eventKey,
+        candidate_json: candidate,
+        publication_status: "queue",
+        origin: "ai",
+        discovery_run_id: run.id,
+        checked_at: checkedAt,
+        published_at: null,
+        updated_at: now,
+      }));
+      const { error: saveError } = await client
+        .from("presale_discovery_candidates")
+        .upsert(rows, { onConflict: "id" });
+      if (saveError) throw saveError;
+    }
+
     return NextResponse.json({
-      checkedAt: safeText(parsed?.checkedAt, 20) || dateKey,
-      summary: safeText(parsed?.summary, 1200),
-      questions: (Array.isArray(parsed?.questions) ? parsed.questions : []).map((item: unknown) => safeText(item, 400)).filter(Boolean).slice(0, 12),
+      ok: true,
+      stored: true,
+      checkedAt,
+      summary,
+      questions,
       candidates,
       model,
-      provider: useGateway ? "vercel-ai-gateway-oidc" : "openai-direct",
+      provider,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자동 조사 중 오류가 발생했습니다.";
@@ -280,12 +381,89 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  if (!sameSiteRequest(req)) {
+    return NextResponse.json({ error: "허용되지 않은 요청입니다." }, { status: 403 });
+  }
 
-export async function GET() {
+  const client = createApartmentAdminClient();
+  if (!client) return NextResponse.json({ error: "후보 저장소를 사용할 수 없습니다." }, { status: 503 });
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const id = safeText(body?.id, 160);
+    const publicationStatus: PublicationStatus | null =
+      body?.publicationStatus === "queue" || body?.publicationStatus === "published"
+        ? body.publicationStatus
+        : null;
+    if (!id || !publicationStatus) {
+      return NextResponse.json({ error: "후보 ID와 발행 상태가 필요합니다." }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    const { data, error } = await client
+      .from("presale_discovery_candidates")
+      .update({
+        publication_status: publicationStatus,
+        published_at: publicationStatus === "published" ? now : null,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .select("id,event_key,candidate_json,publication_status,origin,checked_at,updated_at")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return NextResponse.json({ error: "해당 후보를 찾지 못했습니다." }, { status: 404 });
+
+    return NextResponse.json({ ok: true, candidate: rowToCandidate(data) });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "발행 상태를 저장하지 못했습니다." },
+      { status: 500 },
+    );
+  }
+}
+
+export async function GET(req: NextRequest) {
   const openAiKey = process.env.OPENAI_API_KEY;
   const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
-  return NextResponse.json({
-    available: Boolean(openAiKey || gatewayToken),
-    provider: openAiKey ? "openai-direct" : gatewayToken ? "vercel-ai-gateway" : null,
-  });
+  const client = createApartmentAdminClient();
+
+  try {
+    const candidates = await loadStoredCandidates(client);
+    const requestedId = safeText(req.nextUrl.searchParams.get("id"), 160);
+    if (requestedId) {
+      const candidate = candidates.find((item) => item.id === requestedId) || null;
+      return NextResponse.json({ candidate, storageAvailable: Boolean(client) }, { status: candidate ? 200 : 404 });
+    }
+
+    let latestRun = null;
+    if (client) {
+      const { data, error } = await client
+        .from("presale_discovery_runs")
+        .select("id,checked_at,summary,questions,provider,model,candidate_count,created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      latestRun = data || null;
+    }
+
+    return NextResponse.json({
+      available: Boolean(openAiKey || gatewayToken),
+      provider: openAiKey ? "openai-direct" : gatewayToken ? "vercel-ai-gateway" : null,
+      storageAvailable: Boolean(client),
+      candidates,
+      latestRun,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "분양 후보를 불러오지 못했습니다.",
+        available: Boolean(openAiKey || gatewayToken),
+        storageAvailable: Boolean(client),
+        candidates: fallbackCandidates(),
+      },
+      { status: 500 },
+    );
+  }
 }
