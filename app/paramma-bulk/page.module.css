@@ -116,3 +116,11 @@
 .selectedMoneyInfo b{font-size:12px;color:#6d5412;margin-bottom:5px}
 .selectedMoneyInfo span{font-size:11px;color:#766a4c;line-height:1.5}
 @media(max-width:820px){.moneyCandidateGrid{grid-template-columns:1fr}.moneyPanelHead,.moneyResearchActions{flex-direction:column;align-items:stretch}.moneyTarget select{width:100%}.moneyMix,.moneyMixGood{align-self:flex-start}.moneyPasteActions{align-items:flex-start;flex-direction:column}}
+
+
+.searchBlueprint{margin-top:10px;padding:10px 11px;border:1px solid #e8dfc7;border-radius:12px;background:#fffdf8}
+.searchBlueprint>div+div{margin-top:8px;padding-top:8px;border-top:1px solid #f0eadb}
+.searchBlueprint b{display:block;margin-bottom:3px;font-size:10px;color:#735c18}
+.searchBlueprint span{display:block;font-size:11px;line-height:1.5;color:#635b49;word-break:keep-all}
+.searchBlueprint ul{margin:4px 0 0;padding-left:17px}
+.searchBlueprint li{margin:3px 0;font-size:11px;line-height:1.45;color:#6c634f}
