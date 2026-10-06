@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
       .map((item: unknown) => safeText(item, 400))
       .filter(Boolean)
       .slice(0, 12);
-    const candidates = (Array.isArray(parsed?.candidates) ? parsed.candidates : [])
+    const candidates: NormalizedCandidate[] = (Array.isArray(parsed?.candidates) ? parsed.candidates : [])
       .map((item: RawCandidate) => normalizeCandidate(item, existingIds))
       .filter((item: NormalizedCandidate | null): item is NormalizedCandidate => item !== null)
       .slice(0, 12);
@@ -350,7 +350,7 @@ export async function POST(req: NextRequest) {
 
     if (candidates.length) {
       const now = new Date().toISOString();
-      const rows = candidates.map((candidate) => ({
+      const rows = candidates.map((candidate: NormalizedCandidate) => ({
         id: candidate.id,
         event_key: candidate.eventKey,
         candidate_json: candidate,
