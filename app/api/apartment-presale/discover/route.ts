@@ -223,8 +223,9 @@ export async function POST(req: NextRequest) {
       "- topic은 네이버 블로그에 바로 쓸 수 있는 후킹형 제목으로 만든다.",
     ].join("\n");
 
-    const model = process.env.PRESALE_DISCOVERY_MODEL
-      || (useGateway ? "openai/gpt-5.6-sol" : "gpt-5.6");
+    const model = useGateway
+      ? (process.env.PRESALE_DISCOVERY_GATEWAY_MODEL || "openai/gpt-5.6-sol")
+      : (process.env.PRESALE_DISCOVERY_MODEL || "gpt-5.6");
     const endpoint = useGateway
       ? "https://ai-gateway.vercel.sh/v1/responses"
       : "https://api.openai.com/v1/responses";
