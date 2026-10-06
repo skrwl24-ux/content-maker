@@ -306,3 +306,49 @@
 .dataQualityLinks{display:flex;gap:14px;flex-wrap:wrap}
 .dataQualityWarnings{border:1px solid #e8d8b0;background:#fffbf1;border-radius:10px;padding:12px 15px;margin:0 0 15px;color:#594c30;font-size:12px;line-height:1.7}
 .dataQualityWarnings strong{font-size:13px}.dataQualityWarnings p{margin:5px 0 0}
+
+
+/* Apartment search intent V1: hypothesis -> verification -> SEARCH_PLAN -> ANSWER_FIRST */
+.searchPlanPanel{margin-top:14px;padding:16px 17px;border:1px solid #d9e5e8;border-radius:17px;background:linear-gradient(180deg,#fbfefd,#f6fbfa)}
+.searchPlanHead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.searchPlanHead h3{margin:4px 0 6px;font-size:18px;color:#17384b}
+.searchPlanHead p:not(.eyebrow){margin:0;max-width:780px;color:#66798a;font-size:11px;line-height:1.6}
+.searchPlanReady,.searchPlanPending{flex:0 0 auto;padding:7px 9px;border-radius:999px;font-size:10px;font-weight:900}
+.searchPlanReady{background:#dcf2eb;color:#1e725b}
+.searchPlanPending{background:#edf1f5;color:#6e7b89}
+.searchPlanActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
+.searchPlanActions button,.searchPlanImport button{border:0;border-radius:10px;padding:10px 12px;background:#0f827f;color:#fff;font-size:11px;font-weight:900;cursor:pointer}
+.searchPlanActions button:nth-child(2){background:#e7f0f1;color:#315d61}
+.searchPlanActions .searchPlanClear{background:#f0f2f4;color:#7a858f}
+.searchPlanImport{margin-top:11px;border:1px solid #e1e8eb;border-radius:12px;background:#fff;overflow:hidden}
+.searchPlanImport>summary{cursor:pointer;padding:11px 12px;color:#496273;font-size:11px;font-weight:900}
+.searchPlanImport textarea{display:block;width:100%;min-height:140px;box-sizing:border-box;border:0;border-top:1px solid #edf1f3;padding:11px 12px;resize:vertical;background:#fbfcfd;color:#2c3e50;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;outline:none}
+.searchPlanImport button{margin:0 12px 12px}
+.searchPlanMessage{margin:9px 2px 0;color:#557083;font-size:11px;line-height:1.5}
+.searchPlanCard{margin-top:13px;padding:14px;border:1px solid #cfe3df;border-radius:14px;background:#fff}
+.searchPlanHypothesis{padding:9px 10px;border-radius:10px;background:#f4f8fa}
+.searchPlanHypothesis b,.searchPlanHypothesis span{display:block}
+.searchPlanHypothesis b{font-size:10px;color:#557080;margin-bottom:3px}
+.searchPlanHypothesis span{font-size:11px;line-height:1.5;color:#6c7b88}
+.searchPlanGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.searchPlanGrid>div{padding:9px 10px;border-radius:10px;background:#f7faf9;min-width:0}
+.searchPlanGrid b,.searchPlanGrid span{display:block}
+.searchPlanGrid b{font-size:10px;color:#32736c;margin-bottom:3px}
+.searchPlanGrid span{font-size:11px;line-height:1.45;color:#4d606e;overflow-wrap:anywhere}
+.searchPlanQuestions{margin-top:10px;padding:10px 12px;border:1px solid #e6ecee;border-radius:11px}
+.searchPlanQuestions>b{font-size:11px;color:#29495b}
+.searchPlanQuestions ol{margin:6px 0 0;padding-left:19px}
+.searchPlanQuestions li{margin:4px 0;color:#5b6e7d;font-size:11px;line-height:1.5}
+.answerFirstCard{margin-top:10px;padding:12px 13px;border-left:4px solid #0f827f;border-radius:0 11px 11px 0;background:#edf9f6}
+.answerFirstCard b{display:block;font-size:10px;color:#157168;margin-bottom:4px}
+.answerFirstCard p{margin:0;color:#244b50;font-size:13px;font-weight:800;line-height:1.65}
+.searchPlanNumbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.searchPlanNumbers>div{padding:10px;border-radius:10px;background:#f5f7f8}
+.searchPlanNumbers b,.searchPlanNumbers strong,.searchPlanNumbers small{display:block}
+.searchPlanNumbers b{font-size:9px;color:#71808d}
+.searchPlanNumbers strong{margin-top:3px;color:#203d50;font-size:14px;line-height:1.35}
+.searchPlanNumbers small{margin-top:3px;color:#8a96a1;font-size:9px;line-height:1.35}
+.searchPlanEvidence{margin-top:10px;padding-top:10px;border-top:1px solid #edf1f2}
+.searchPlanEvidence b{display:block;margin-bottom:3px;font-size:10px;color:#865f25}
+.searchPlanEvidence span{font-size:10px;line-height:1.55;color:#7c715f}
+@media(max-width:700px){.searchPlanHead{flex-direction:column}.searchPlanGrid,.searchPlanNumbers{grid-template-columns:1fr}.searchPlanActions{flex-direction:column}.searchPlanActions button{width:100%}}
