@@ -15,6 +15,8 @@ import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from ".
 import type { ApartmentStoryCandidate } from "../../lib/apartment-story.mjs";
 import { makeWorkImagePlan } from "../../lib/work-image-plan.mjs";
 import { makePresaleArticlePrompt, makePresaleImagePlan, makePresaleImagePrompt } from "../../lib/apartment-presale.mjs";
+import { apartmentSearchPlanPromptBlock, buildApartmentSearchPlanResearchPrompt, parseApartmentSearchPlan } from "../../lib/apartment-search-plan.mjs";
+import type { ApartmentSearchPlan } from "../../lib/apartment-search-plan.mjs";
 import type { WorkImagePlanItem } from "../../lib/work-image-plan.mjs";
 
 type ThumbnailTone = "auto" | "standard" | "hook" | "humor";
@@ -92,6 +94,8 @@ type DailyWorkSnapshot = {
   contentType: DailyContentType;
   topic: string;
   materials: string;
+  searchPlanRaw?: string;
+  searchPlan?: ApartmentSearchPlan | null;
   body: string;
   imageNotes: string;
   attachments: WorkAttachment[];
@@ -2453,6 +2457,9 @@ export default function ApartmentBulkPage() {
   const [activeWorkType, setActiveWorkType] = useState<DailyContentType | null>(null);
   const [workTopic, setWorkTopic] = useState("");
   const [workMaterials, setWorkMaterials] = useState("");
+  const [workSearchPlanRaw, setWorkSearchPlanRaw] = useState("");
+  const [workSearchPlan, setWorkSearchPlan] = useState<ApartmentSearchPlan | null>(null);
+  const [workSearchPlanMessage, setWorkSearchPlanMessage] = useState("");
   const [workBody, setWorkBody] = useState("");
   const [workImageNotes, setWorkImageNotes] = useState("");
   const [workAttachments, setWorkAttachments] = useState<WorkAttachment[]>([]);
@@ -2530,18 +2537,33 @@ export default function ApartmentBulkPage() {
   // until a real monthly series for this selected complex exists.
   const selectedComplexNeedsMatching = Boolean(selectedComplexName &&
     !monthlyStats.some(item => item.medianPrice != null && item.tradeCount > 0));
-  const bodyPrompt = useMemo(
-    () => selectedComplexNeedsMatching
+  const workSearchDataSummary = activeWorkType === "bulk" ? plannerInput.dataSummary : "";
+  const workSearchPlanResearchPrompt = useMemo(
+    () => buildApartmentSearchPlanResearchPrompt({
+      date: dailyDateKey,
+      contentType: activeWorkType || undefined,
+      topic: workTopic,
+      materials: workMaterials,
+      dataSummary: workSearchDataSummary,
+    }),
+    [dailyDateKey, activeWorkType, workTopic, workMaterials, workSearchDataSummary]
+  );
+  const workSearchPlanBlock = useMemo(
+    () => apartmentSearchPlanPromptBlock(workSearchPlan),
+    [workSearchPlan]
+  );
+  const bodyPrompt = useMemo(() => {
+    const base = selectedComplexNeedsMatching
       ? "[실거래 데이터 매칭 대기]\n" + data.name +
         "의 최근 6개월 거래 원자료가 이 단지에 아직 연결되지 않았습니다. 실제 무거래 0건으로 판단하거나 샘플 가격으로 본문을 작성하지 마세요. 데이터 재동기화 후 다시 열어주세요."
       : makeBodyPrompt(data, monthlyStats, recommendedAngle, selectedArticleTheme,
         v3Planner.handled ? null : appliedStory, approvedV3,
-        v3Planner.current.status !== "skipped"),
-    [selectedComplexNeedsMatching, data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled, v3Planner.current.status]
-  );
+        v3Planner.current.status !== "skipped");
+    return base + (activeWorkType === "bulk" ? workSearchPlanBlock : "");
+  }, [selectedComplexNeedsMatching, data, monthlyStats, recommendedAngle, selectedArticleTheme, appliedStory, approvedV3, v3Planner.handled, v3Planner.current.status, activeWorkType, workSearchPlanBlock]);
   const workGptPrompt = useMemo(
-    () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey),
-    [activeWorkType, workTopic, workMaterials, dailyDateKey]
+    () => makeSavedWorkPrompt(activeWorkType, workTopic, workMaterials, dailyDateKey) + workSearchPlanBlock,
+    [activeWorkType, workTopic, workMaterials, dailyDateKey, workSearchPlanBlock]
   );
   const workBodyReadyForImages = workBody.trim().length >= 80;
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
@@ -2816,6 +2838,8 @@ export default function ApartmentBulkPage() {
     activeWorkType,
     workTopic,
     workMaterials,
+    workSearchPlanRaw,
+    workSearchPlan,
     workBody,
     workImageNotes,
     workAttachments,
@@ -3211,6 +3235,8 @@ export default function ApartmentBulkPage() {
       contentType: activeWorkType,
       topic: workTopic,
       materials: workMaterials,
+      searchPlanRaw: workSearchPlanRaw,
+      searchPlan: workSearchPlan,
       body: isBulk ? finalBlogText : workBody,
       imageNotes: workImageNotes,
       attachments: workAttachments,
@@ -3287,6 +3313,9 @@ export default function ApartmentBulkPage() {
       if (saved) {
         setWorkTopic(saved.topic || "");
         setWorkMaterials(saved.materials || "");
+        setWorkSearchPlanRaw(saved.searchPlanRaw || "");
+        setWorkSearchPlan(saved.searchPlan || null);
+        setWorkSearchPlanMessage(saved.searchPlan ? "저장된 SEARCH_PLAN 복원됨" : "");
         setWorkBody(saved.body || "");
         if (slot.type !== "bulk" && slot.type !== "top3") {
           setFinalBlogText(saved.body || "");
@@ -3322,6 +3351,9 @@ export default function ApartmentBulkPage() {
       } else {
         setWorkTopic(slot.topic || "");
         setWorkMaterials("");
+        setWorkSearchPlanRaw("");
+        setWorkSearchPlan(null);
+        setWorkSearchPlanMessage("");
         setWorkBody("");
         if (slot.type !== "bulk" && slot.type !== "top3") {
           setFinalBlogText("");
@@ -3495,6 +3527,35 @@ export default function ApartmentBulkPage() {
     } catch {
       setBodyPromptCopied(false);
     }
+  }
+
+  function importWorkSearchPlan() {
+    const parsed = parseApartmentSearchPlan(workSearchPlanRaw);
+    if (!parsed) {
+      setWorkSearchPlanMessage("SEARCH_PLAN을 읽지 못했습니다. ChatGPT 결과의 [SEARCH_PLAN_JSON] 블록까지 통째로 붙여넣어 주세요.");
+      return;
+    }
+    setWorkSearchPlan(parsed);
+    setWorkSearchPlanMessage("✓ 검증된 SEARCH_PLAN을 불러왔습니다. 이제 본문 요청서에 자동 반영됩니다.");
+  }
+
+  async function copyWorkSearchPlanPrompt() {
+    try {
+      await navigator.clipboard.writeText(workSearchPlanResearchPrompt);
+      setWorkSearchPlanMessage("검색 가설·검증 요청서를 복사했습니다.");
+    } catch {
+      setWorkSearchPlanMessage("복사에 실패했습니다. 요청서 내용을 직접 선택해 복사해 주세요.");
+    }
+  }
+
+  function openWorkSearchPlanPromptInChatGPT() {
+    window.open("https://chatgpt.com/?q=" + encodeURIComponent(workSearchPlanResearchPrompt), "_blank", "noopener,noreferrer");
+  }
+
+  function clearWorkSearchPlan() {
+    setWorkSearchPlanRaw("");
+    setWorkSearchPlan(null);
+    setWorkSearchPlanMessage("SEARCH_PLAN을 비웠습니다. 기존 원고와 자료는 유지됩니다.");
   }
 
   async function copyWorkGptPrompt() {
@@ -3902,6 +3963,75 @@ export default function ApartmentBulkPage() {
             </label>
           </div>
 
+          <section className={styles.searchPlanPanel}>
+            <div className={styles.searchPlanHead}>
+              <div>
+                <p className={styles.eyebrow}>SEARCH INTENT V1</p>
+                <h3>🔎 검색 가설 → 사실 검증 → SEARCH_PLAN</h3>
+                <p>키워드를 먼저 확정하지 않습니다. 독자 질문을 가설로 세운 뒤 최신 자료로 검증하고, 확인된 사실에서 첫 답과 검색 구조를 뽑습니다.</p>
+              </div>
+              <span className={workSearchPlan ? styles.searchPlanReady : styles.searchPlanPending}>
+                {workSearchPlan ? "✓ 본문 반영" : "설계 전"}
+              </span>
+            </div>
+            <div className={styles.searchPlanActions}>
+              <button type="button" onClick={openWorkSearchPlanPromptInChatGPT}>1 · 검색 가설·검증 요청</button>
+              <button type="button" onClick={() => void copyWorkSearchPlanPrompt()}>요청서만 복사</button>
+              {workSearchPlan && <button type="button" className={styles.searchPlanClear} onClick={clearWorkSearchPlan}>설계 비우기</button>}
+            </div>
+            <details className={styles.searchPlanImport}>
+              <summary>2 · ChatGPT 조사 결과 붙여넣기</summary>
+              <textarea
+                value={workSearchPlanRaw}
+                onChange={(e) => setWorkSearchPlanRaw(e.target.value)}
+                placeholder="[SEARCH_PLAN_JSON] ... [/SEARCH_PLAN_JSON]이 포함된 조사 결과를 통째로 붙여넣으세요."
+              />
+              <button type="button" onClick={importWorkSearchPlan}>SEARCH_PLAN 불러오기</button>
+            </details>
+            {workSearchPlanMessage && <p className={styles.searchPlanMessage}>{workSearchPlanMessage}</p>}
+            {workSearchPlan && (
+              <div className={styles.searchPlanCard}>
+                {workSearchPlan.hypotheses.length > 0 && (
+                  <div className={styles.searchPlanHypothesis}>
+                    <b>처음 세운 검색 가설</b>
+                    <span>{workSearchPlan.hypotheses.join(" / ")}</span>
+                  </div>
+                )}
+                <div className={styles.searchPlanGrid}>
+                  <div><b>검색 유형</b><span>{workSearchPlan.searchType}</span></div>
+                  <div><b>메인 검색어</b><span>{workSearchPlan.mainKeyword}</span></div>
+                  <div><b>세부 검색어</b><span>{workSearchPlan.subKeywords.join(" · ") || "없음"}</span></div>
+                  <div><b>확인 기준</b><span>{workSearchPlan.checkedAt || "결과 확인일 미기재"}</span></div>
+                </div>
+                <div className={styles.searchPlanQuestions}>
+                  <b>독자가 반드시 답을 얻어야 할 질문</b>
+                  <ol>{workSearchPlan.readerQuestions.map((question) => <li key={question}>{question}</li>)}</ol>
+                </div>
+                <div className={styles.answerFirstCard}>
+                  <b>ANSWER_FIRST · 첫 화면 답</b>
+                  <p>{workSearchPlan.answerFirst}</p>
+                </div>
+                {workSearchPlan.keyNumbers.length > 0 && (
+                  <div className={styles.searchPlanNumbers}>
+                    {workSearchPlan.keyNumbers.map((item) => (
+                      <div key={item.label + item.value}>
+                        <b>{item.label}</b>
+                        <strong>{item.value}</strong>
+                        {item.basis && <small>{item.basis}</small>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {workSearchPlan.evidenceNotes.length > 0 && (
+                  <div className={styles.searchPlanEvidence}>
+                    <b>검증 주의</b>
+                    <span>{workSearchPlan.evidenceNotes.join(" · ")}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           {activeWorkType === "bulk" ? (
             <div className={styles.bulkWorkBridge}>
               <div>
@@ -3921,6 +4051,7 @@ export default function ApartmentBulkPage() {
           ) : activeWorkType === "top3" ? (
             <>
               <Top3Workspace key={activeWorkId} workId={activeWorkId} topic={workTopic} materials={workMaterials}
+                searchPlanBlock={workSearchPlanBlock}
                 body={workBody} onBodyChange={setWorkBody} onTopicChange={setWorkTopic} data={top3Work} onChange={setTop3Work} />
               {(workImageNotes || workAttachments.length > 0) && <details>
                 <summary>기존 이미지 메모·참고 첨부 (보존됨)</summary>
