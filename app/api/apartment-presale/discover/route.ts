@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getVercelOidcToken } from "@vercel/oidc";
 import { createApartmentAdminClient } from "@/lib/apartment-server";
 import {
   PRESALE_CANDIDATES,
@@ -233,6 +234,29 @@ const CANDIDATE_SCHEMA = {
   additionalProperties: false,
 };
 
+async function resolveAiAuth() {
+  const openAiKey = process.env.OPENAI_API_KEY?.trim();
+  if (openAiKey) {
+    return { apiKey: openAiKey, useGateway: false, provider: "openai-direct" as const };
+  }
+
+  const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  if (gatewayKey) {
+    return { apiKey: gatewayKey, useGateway: true, provider: "vercel-ai-gateway-key" as const };
+  }
+
+  try {
+    const oidcToken = await getVercelOidcToken();
+    if (oidcToken) {
+      return { apiKey: oidcToken, useGateway: true, provider: "vercel-ai-gateway-oidc" as const };
+    }
+  } catch {
+    // Older/local environments may not have an OIDC request context.
+  }
+
+  return { apiKey: "", useGateway: false, provider: null };
+}
+
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
 
@@ -249,12 +273,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "후보 저장소를 사용할 수 없습니다. SUPABASE_SERVICE_ROLE_KEY 설정을 확인해 주세요." }, { status: 503 });
   }
 
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
-  const useGateway = !openAiKey && Boolean(gatewayToken);
-  const apiKey = openAiKey || gatewayToken;
-  if (!apiKey) {
-    return NextResponse.json({ error: "자동 조사용 AI 인증을 사용할 수 없습니다. Vercel AI Gateway 또는 OpenAI API 설정을 확인해 주세요." }, { status: 503 });
+  const auth = await resolveAiAuth();
+  if (!auth.apiKey) {
+    return NextResponse.json({ error: "자동 조사용 AI 인증을 사용할 수 없습니다. Vercel AI Gateway OIDC 또는 OpenAI API 설정을 확인해 주세요." }, { status: 503 });
   }
 
   try {
@@ -281,17 +302,17 @@ export async function POST(req: NextRequest) {
       "- topic은 네이버 블로그에 바로 쓸 수 있는 후킹형 제목으로 만든다.",
     ].join("\n");
 
-    const model = useGateway
+    const model = auth.useGateway
       ? (process.env.PRESALE_DISCOVERY_GATEWAY_MODEL || "openai/gpt-5.6-sol")
       : (process.env.PRESALE_DISCOVERY_MODEL || "gpt-5.6");
-    const endpoint = useGateway
+    const endpoint = auth.useGateway
       ? "https://ai-gateway.vercel.sh/v1/responses"
       : "https://api.openai.com/v1/responses";
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + apiKey,
+        "Authorization": "Bearer " + auth.apiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -333,7 +354,7 @@ export async function POST(req: NextRequest) {
       .filter((item: NormalizedCandidate | null): item is NormalizedCandidate => item !== null)
       .slice(0, 12);
 
-    const provider = useGateway ? "vercel-ai-gateway-oidc" : "openai-direct";
+    const provider = auth.provider || "openai-direct";
     const { data: run, error: runError } = await client
       .from("presale_discovery_runs")
       .insert({
@@ -426,8 +447,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  const auth = await resolveAiAuth();
   const client = createApartmentAdminClient();
 
   try {
@@ -451,8 +471,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      available: Boolean(openAiKey || gatewayToken),
-      provider: openAiKey ? "openai-direct" : gatewayToken ? "vercel-ai-gateway" : null,
+      available: Boolean(auth.apiKey),
+      provider: auth.provider,
       storageAvailable: Boolean(client),
       candidates,
       latestRun,
@@ -461,7 +481,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "분양 후보를 불러오지 못했습니다.",
-        available: Boolean(openAiKey || gatewayToken),
+        available: Boolean(auth.apiKey),
         storageAvailable: Boolean(client),
         candidates: fallbackCandidates(),
       },
