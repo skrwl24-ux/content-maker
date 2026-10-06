@@ -133,7 +133,7 @@ type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
 type NaverBlock = {
-  type: "title" | "subheading" | "body" | "image" | "tags" | "card";
+  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags" | "card";
   text: string;
 };
 type MarkdownTable = {
@@ -761,6 +761,7 @@ function dataUrlBase64(dataUrl: string) {
 
 function cleanNaverLine(line: string) {
   return line
+    .replace(/^>\s?/, "")
     .replace(/^#{1,6}\s+/, "")
     .replace(/^\*\*(.*?)\*\*$/, "$1")
     .replace(/^__(.*?)__$/, "$1")
@@ -969,6 +970,67 @@ function makeMarkdownTableCard(headers: string[], row: string[]) {
   return details ? `${prefix}${primaryValue}\n${details}` : `${prefix}${primaryValue}`;
 }
 
+function normalizeNaverParagraphLines(raw: string) {
+  const source = raw.replace(/\r\n?/g, "\n").split("\n");
+  const out: string[] = [];
+  let paragraph: string[] = [];
+  let firstPublishLineSeen = false;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(paragraph.join(" ").replace(/\s+/g, " ").trim());
+    paragraph = [];
+  };
+
+  const isStructural = (trimmed: string) => {
+    if (!trimmed) return false;
+    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) return true;
+    if (/^#{1,6}\s+/.test(trimmed)) return true;
+    if (/^(\*\*|__)[\s\S]+\1$/.test(trimmed)) return true;
+    if (/^>\s+/.test(trimmed)) return true;
+    if (/^\[\/?분양 핵심 POINT\]$/i.test(trimmed)) return true;
+    if (/^\[이미지\s*\d+/i.test(cleanNaverLine(trimmed))) return true;
+    if (/^#[^\s#]+(?:\s+#[^\s#]+)+/.test(cleanNaverLine(trimmed))) return true;
+    if (trimmed.includes("|") && splitMarkdownTableRow(trimmed).length >= 2) return true;
+    const cleaned = cleanNaverLine(trimmed);
+    return /^[🏠📊🚉🔎✅📌]/u.test(cleaned) && cleaned.length <= 40 && !/[.!?]$/.test(cleaned);
+  };
+
+  for (const rawLine of source) {
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      if (out.length && out[out.length - 1] !== "") out.push("");
+      continue;
+    }
+
+    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) {
+      flushParagraph();
+      out.push(trimmed);
+      continue;
+    }
+
+    if (!firstPublishLineSeen) {
+      flushParagraph();
+      out.push(trimmed);
+      firstPublishLineSeen = true;
+      continue;
+    }
+
+    if (isStructural(trimmed)) {
+      flushParagraph();
+      out.push(trimmed);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  return out.join("\n");
+}
+
 function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", plannedImages?: WorkImagePlanItem[]): NaverBlock[] {
   const sourceTables = extractMarkdownTables(raw);
   const plannedTableImages = plannedImages?.filter((item) => item.tableIndex !== null) || [];
@@ -977,8 +1039,7 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", pla
     ? markdownTableSignature(primaryTimeSeriesTable)
     : "";
 
-  const lines = raw
-    .replace(/\r\n?/g, "\n")
+  const lines = normalizeNaverParagraphLines(raw)
     .split("\n")
     .map((line) => line.trim())
     .filter((line) =>
@@ -1101,10 +1162,16 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", pla
 
     const markdownHeading = /^#{2,6}\s+/.test(original);
     const wholeBold = /^(\*\*|__)[\s\S]+\1$/.test(original);
+    const blockQuote = /^>\s+/.test(original);
     const emojiHeading = /^[🏠📊🚉🔎✅📌]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
 
-    if (markdownHeading || wholeBold || emojiHeading) {
+    if (markdownHeading || emojiHeading) {
       blocks.push({ type: "subheading", text: line });
+      continue;
+    }
+
+    if (wholeBold || blockQuote) {
+      blocks.push({ type: "emphasis", text: line });
       continue;
     }
 
@@ -1190,26 +1257,29 @@ function naverRichHtml(blocks: NaverBlock[]) {
   const blockHtml = blocks.map((block) => {
     const safe = escapeHtml(block.text);
     if (block.type === "title") {
-      return `<div style="font-family:${font};font-size:20pt;line-height:1.5;font-weight:700;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:32px;line-height:1.35;font-weight:700;margin:0;">${safe}</div>`;
     }
     if (block.type === "subheading") {
-      return `<div style="font-family:${font};font-size:18pt;line-height:1.55;font-weight:700;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:30px;line-height:1.45;font-weight:700;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "emphasis") {
+      return `<div style="font-family:${font};font-size:19px;line-height:1.65;font-weight:700;margin:0;">${safe}</div>`;
     }
     if (block.type === "tags") {
-      return `<div style="font-family:${font};font-size:13.5pt;line-height:1.6;font-weight:400;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
     }
     if (block.type === "image") {
-      return `<div style="font-family:${font};font-size:15pt;line-height:1.6;font-weight:600;margin:0;">${safe}</div>`;
+      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:600;margin:0;">${safe}</div>`;
     }
     if (block.type === "card") {
       const [cardTitle, ...cardDetails] = safe.split("\n");
       const detailHtml = cardDetails.join("<br>");
-      return `<div style="font-family:${font};font-size:15pt;line-height:1.65;font-weight:400;margin:0;padding:10px 12px;border-left:3px solid #8aa99d;"><div style="font-weight:700;margin:0 0 4px;">${cardTitle}</div>${detailHtml ? `<div>${detailHtml}</div>` : ""}</div>`;
+      return `<div style="font-family:${font};font-size:15px;line-height:1.75;font-weight:400;margin:0;padding:10px 12px;border-left:3px solid #8aa99d;"><div style="font-weight:700;margin:0 0 4px;">${cardTitle}</div>${detailHtml ? `<div>${detailHtml}</div>` : ""}</div>`;
     }
-    return `<div style="font-family:${font};font-size:15pt;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
+    return `<div style="font-family:${font};font-size:15px;line-height:1.8;font-weight:400;margin:0;">${safe}</div>`;
   });
 
-  const spacer = `<div style="font-family:${font};font-size:15pt;line-height:1.7;margin:0;"><br></div>`;
+  const spacer = `<div style="font-family:${font};font-size:15px;line-height:1.8;margin:0;"><br></div>`;
   const merged = blockHtml.map((html, index) => {
     const next = blocks[index + 1];
     const separator = blocks[index]?.type === "card" && next?.type === "card" ? "" : spacer;
@@ -1831,20 +1901,19 @@ ${storyBlock}
 
 각 이미지 문구는 반드시 한 줄 단독으로 출력할 것.
 
-[폰트·출력 서식 — 최우선]
-- 제목 20pt / 소제목 18pt / 일반 본문 15pt / 태그 13~14pt 기준으로 작성할 것.
-- 실제 최종 글에 '20pt', '18pt', '15pt', '13~14pt' 같은 편집 지시문은 출력하지 말 것.
-- 일반 본문은 네이버 블로그 기본 본문 크기로 유지하고 제목과 소제목만 크게 구분할 것.
-- 제목은 가장 크게, 소제목은 본문보다 한 단계 크게 보이도록 각각 독립된 줄로 작성할 것.
-- 소제목은 굵게, 일반 본문은 기본 굵기로 유지할 것.
-- 네이버 모바일에서 읽기 쉽게 본문은 '한 문장 = 한 문단'으로 작성할 것.
-- 일반 본문 문장과 다음 문장 사이에는 네이버 블로그에 붙여넣어도 간격이 유지되도록 스페이스바 1칸이 들어간 간격용 줄을 1개 넣을 것.
-- 기본 형식은 '문장 → 엔터 → 스페이스바 1칸이 있는 줄 → 엔터 → 다음 문장'으로 할 것.
-- 완전히 비어 있는 빈 줄을 사용하지 말 것.
-- 제목 다음에도 스페이스바 1칸이 들어간 간격용 줄을 1개 넣을 것.
-- 소제목 앞뒤에도 각각 같은 간격용 줄을 1개 넣을 것.
-- 이미지 위치 문구는 한 줄 단독으로 두고 위아래 각각 같은 간격용 줄을 1개 넣을 것.
-- 3줄 요약은 각 문장을 한 줄씩 따로 쓰고 문장 사이에도 같은 간격용 줄을 1개 넣을 것.
+[네이버 발행 서식 — 최우선]
+- 제목은 네이버 글쓰기 제목 크기 32 기준으로 맨 위에 1개만 둘 것.
+- 소제목은 네이버 글쓰기 소제목 크기 30으로 적용할 수 있게 반드시 '## 소제목' 형식의 독립된 줄로 작성할 것.
+- 일반 본문은 네이버 기본 본문 크기 15 기준으로 작성할 것.
+- 본문에서 독자가 꼭 기억해야 할 핵심 해석·결론·주의문은 글 전체에서 1~3개만 골라 '**강조 문장 전체**' 형식의 독립된 줄로 작성할 것. 콘텐츠메이커가 이를 크기 19 강조로 변환한다.
+- 단순히 눈에 띄게 하려고 모든 핵심 숫자를 19로 만들지 말고, 문맥상 가장 중요한 내용만 강조할 것.
+- 본문은 같은 의미의 2~4문장을 하나의 문단으로 묶을 것.
+- 같은 문단 안에서는 문장마다 엔터하거나 한 줄씩 띄우지 말 것.
+- 의미·논점이 바뀌는 문단 사이에만 완전히 빈 줄 1개를 넣을 것.
+- 제목·소제목·강조 문장·이미지 위치 문구는 각각 독립된 줄로 두고 앞뒤 문단과는 빈 줄 1개로 구분할 것.
+- 스페이스바 1칸만 들어간 간격용 줄은 사용하지 말 것.
+- 이미지 위치 문구는 한 줄 단독으로 유지할 것.
+- 3줄 요약도 문장마다 빈 줄을 넣지 말고, 읽기 자연스러운 하나의 요약 문단으로 작성할 것.
 - 일반 텍스트가 있는 줄의 시작에는 불필요한 공백을 넣지 말 것.
 - 코드블록과 HTML은 사용하지 말 것.
 
@@ -1870,8 +1939,10 @@ ${storyBlock}
 [출력 직전 자가검수]
 - 제목 1개
 - 태그 8~10개·중복 없음·본문에 없는 장소 태그 없음
-- 모든 문장·제목·소제목·이미지 위치·요약 사이에 스페이스바 1칸이 들어간 간격용 줄 1개
-- 완전히 비어 있는 빈 줄 0개
+- 일반 본문은 같은 의미의 2~4문장을 한 문단으로 묶고 문장마다 줄바꿈하지 않음
+- 의미가 바뀌는 문단 사이에만 빈 줄 1개
+- 소제목은 '## 소제목', 내용 강조는 글 전체 1~3개만 '**강조 문장 전체**' 형식
+- 스페이스바 1칸만 들어간 간격용 줄 0개
 - 코드블록/HTML 사용 없음
 - 최근 실거래가와 월 대표값 혼동 없음
 - 제공되지 않은 숫자 생성 없음
@@ -3487,31 +3558,18 @@ export default function ApartmentBulkPage() {
             "text/plain": new Blob([plain], { type: "text/plain" }),
           }),
         ]);
-        setNaverCopyMessage("✅ 서식 포함 전체복사 완료 · 네이버에 Ctrl+V 하세요.");
+        setNaverCopyMessage("✅ 네이버 서식 복사 완료 · 네이버에서 Ctrl+V 하세요.");
       } else {
         await navigator.clipboard.writeText(plain);
-        setNaverCopyMessage("ℹ️ 브라우저 제한으로 한줄띄기 텍스트로 복사했습니다.");
+        setNaverCopyMessage("ℹ️ 브라우저 제한으로 문단 간격 텍스트를 복사했습니다.");
       }
     } catch {
       try {
         await navigator.clipboard.writeText(plain);
-        setNaverCopyMessage("ℹ️ 서식 복사가 제한되어 한줄띄기 텍스트로 복사했습니다.");
+        setNaverCopyMessage("ℹ️ 서식 복사가 제한되어 문단 간격 텍스트를 복사했습니다.");
       } catch {
         setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
       }
-    }
-  }
-
-  async function copyNaverSafeText() {
-    if (!naverBlocks.length) {
-      setNaverCopyMessage("ChatGPT 완성글을 먼저 붙여넣어 주세요.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(naverPlainText(naverBlocks));
-      setNaverCopyMessage("✅ 한줄띄기 안전복사 완료 · 폰트는 네이버 기본 설정을 사용합니다.");
-    } catch {
-      setNaverCopyMessage("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
     }
   }
 
@@ -4413,7 +4471,7 @@ export default function ApartmentBulkPage() {
             <div className={styles.naverEditorHead}>
               <div>
                 <p className={styles.eyebrow}>NAVER FINAL COPY</p>
-                <h2>5. 네이버 최종 편집 · 자동 검사 · 전체복사</h2>
+                <h2>5. 네이버 최종 편집 · 자동 검사 · 서식복사</h2>
                 <span>{activeWorkType === "presale" ? "분양 글은 공급량·추정가격·청약일정을 공식 모집공고와 다시 대조하세요. 표는 정보 누락을 막기 위해 모바일 카드형으로 유지합니다." : "완성글을 한 번 붙여넣으면 실거래·태그·이미지 위치를 자동 검사합니다. 이어서 아래 '생활정보 웹 검증하기'에서 장소·영업 여부·거리의 원문 근거를 확인하고, 본문 수정 후 이미지 03을 제작하세요."}</span>
               </div>
             </div>
@@ -4510,6 +4568,7 @@ export default function ApartmentBulkPage() {
                         className={
                           block.type === "title" ? styles.naverTitle :
                           block.type === "subheading" ? styles.naverSubheading :
+                          block.type === "emphasis" ? styles.naverEmphasis :
                           block.type === "tags" ? styles.naverTags :
                           block.type === "image" ? styles.naverImageLine :
                           block.type === "card" ? styles.naverCard :
@@ -4523,7 +4582,7 @@ export default function ApartmentBulkPage() {
                       )}
                     </div>
                   )) : (
-                    <div className={styles.naverPreviewEmpty}>제목 · 소제목 · 본문 · 태그의 실제 크기와 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
+                    <div className={styles.naverPreviewEmpty}>제목 32 · 소제목 30 · 강조 19 · 본문 15와 문단 단위 한 줄 띄기를 여기서 확인할 수 있습니다.</div>
                   )}
                 </div>
               </div>
@@ -4559,12 +4618,9 @@ export default function ApartmentBulkPage() {
             )}
             <div className={styles.naverCopyActions}>
               <button type="button" className={styles.naverPrimaryCopy} onClick={() => void copyNaverRichText()}>
-                ③ 서식 포함 전체복사
+                ③ 네이버 서식 복사
               </button>
-              <button type="button" onClick={() => void copyNaverSafeText()}>
-                한줄띄기 안전복사
-              </button>
-              <span>기본은 서식 포함 전체복사 → 네이버 Ctrl+V</span>
+              <span>제목 32 · 소제목 30 · 강조 19 · 본문 15 · 문단마다 한 줄 띄기</span>
             </div>
 
             {naverCopyMessage && <div className={styles.naverCopyNotice}>{naverCopyMessage}</div>}
