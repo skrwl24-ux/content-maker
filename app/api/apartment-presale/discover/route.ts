@@ -37,7 +37,7 @@ function sameSiteRequest(req: NextRequest) {
   const origin = req.headers.get("origin") || "";
   const secFetchSite = req.headers.get("sec-fetch-site") || "";
   if (secFetchSite && !["same-origin", "same-site", "none"].includes(secFetchSite)) return false;
-  if (!origin) return true;
+  if (!origin) return process.env.VERCEL_ENV !== "production";
   try {
     const url = new URL(origin);
     if (url.hostname === "content-maker-chi.vercel.app") return true;
@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
       "- topic은 네이버 블로그에 바로 쓸 수 있는 후킹형 제목으로 만든다.",
     ].join("\n");
 
+    const model = process.env.PRESALE_DISCOVERY_MODEL || "gpt-5.6";
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -227,7 +228,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_TEXT_MODEL || "gpt-5.6-luna",
+        model,
         tools: [{ type: "web_search", search_context_size: "medium" }],
         input: prompt,
         text: {
@@ -262,7 +263,7 @@ export async function POST(req: NextRequest) {
       summary: safeText(parsed?.summary, 1200),
       questions: (Array.isArray(parsed?.questions) ? parsed.questions : []).map((item: unknown) => safeText(item, 400)).filter(Boolean).slice(0, 12),
       candidates,
-      model: process.env.OPENAI_TEXT_MODEL || "gpt-5.6-luna",
+      model,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자동 조사 중 오류가 발생했습니다.";
