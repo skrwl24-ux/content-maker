@@ -4,12 +4,34 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
+import { buildParammaMoneyResearchPrompt, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
 type SlotId = "00" | "01" | "02" | "03";
 type KickMode = "auto" | "research" | "manual";
+type TopicKind = "curiosity" | "money";
+type MoneyIntent = "신청" | "비용" | "비교" | "구매" | "가입" | "시즌";
+
+type MoneyTopicMeta = {
+  intent: MoneyIntent;
+  action: string;
+  keywords: string[];
+  whyNow: string;
+  expiresAt: string;
+  moneyScore: number;
+  timelinessScore: number;
+  fitScore: number;
+  sourceUrls: string[];
+};
+
+type MoneyCandidate = {
+  category: Category;
+  title: string;
+  thumbnailHook: string;
+  brief: string;
+} & MoneyTopicMeta;
 
 type SlotMeta = {
   status: SlotStatus;
@@ -44,6 +66,8 @@ type Topic = {
   title: string;
   thumbnailHook: string;
   brief: string;
+  kind?: TopicKind;
+  money?: MoneyTopicMeta;
 };
 
 type TopicSeed = Omit<Topic, "id">;
@@ -156,6 +180,51 @@ function categoryGuide(category: Category) {
     return "우리 몸에서 실제로 일어나는 생리학적 원인을 중심으로 쉽게 설명한다. 질환 진단이나 과장된 건강 효과로 연결하지 말고, 건강·의학 관련 내용은 정부기관·대학병원·의학 학회·논문 등 신뢰할 수 있는 자료를 우선 확인한다. 개인차가 큰 내용은 모든 사람에게 똑같이 나타나는 것처럼 단정하지 않는다.";
   }
   return "독자가 검색한 질문에 초반 3~4문장 안에 핵심 답을 먼저 준다. 생활에서 실제로 체감하는 이유와 과학적 원리를 연결하고, 건강·안전 관련 내용은 공공기관 자료를 우선 확인한다.";
+}
+
+function moneyTopicContext(topic: Topic) {
+  if (topic.kind !== "money" || !topic.money) return "";
+  const meta = topic.money;
+  return [
+    "",
+    "",
+    "[Paramma 수익형 행동 검색 지침 — 앞선 일반 호기심형 규칙보다 우선]",
+    "- 이 글은 광고글이 아니라 독자가 실제 행동 직전에 찾는 질문을 해결하는 정보글이다.",
+    "- 검색 의도: " + meta.intent,
+    "- 독자의 다음 행동: " + (meta.action || "조건 확인 후 실제 행동"),
+    meta.keywords.length ? "- 함께 확인할 검색 질문: " + meta.keywords.join(" · ") : "",
+    meta.whyNow ? "- 지금 써야 하는 이유: " + meta.whyNow : "",
+    meta.expiresAt ? "- 정보 유효 시점: " + meta.expiresAt : "",
+    "- 제목은 억지로 '왜?' 형태에 맞추지 말고 신청방법·비용·대상·비교·단점·가입조건 등 실제 검색 의도를 자연스럽게 앞쪽에 둔다.",
+    "- 첫 3~4문장 안에서 독자가 지금 무엇을 확인해야 하는지 먼저 답하고, 이후 원리·배경·조건을 설명한다.",
+    "- 신청형이면 대상·기간·공식 신청 경로·모바일 가능 여부·준비물, 비용형이면 실제 비용·무료/지원 대상·가격 차이의 조건, 비교형이면 선택 기준과 장단점, 구매형이면 출시·가격·후기에서 확인할 단점과 비교 기준, 가입형이면 금리·조건·만기·중도해지·갈아타기, 시즌형이면 기간과 지금 해야 할 행동을 우선 확인한다.",
+    "- 공식 홈페이지·정부기관·금융기관·제조사·의료기관 등 최신 1차 출처를 우선하고, 종료된 일정이나 과거 조건을 현재 정보처럼 쓰지 않는다.",
+    "- 건강·금융 정보는 치료·수익을 보장하거나 개인에게 특정 선택을 권유하지 않는다.",
+    "- 제품 글은 직접 써보지 않았다면 실사용 후기처럼 꾸미지 말고 공식 사양·검증 가능한 비교·공개된 후기 경향을 구분한다.",
+    "- 이미지 02는 독자가 저장할 행동 정보(신청 순서·비용 구조·비교 기준)를, 이미지 03은 대상/주의/단점/조건처럼 독립된 후속 정보를 우선한다."
+  ].filter(Boolean).join("\n");
+}
+
+function moneyImageContext(topic: Topic, slotId: SlotId) {
+  if (topic.kind !== "money" || !topic.money) return "";
+  const meta = topic.money;
+  const role = slotId === "00"
+    ? "썸네일은 광고 배너보다 실제 검색 질문이 바로 보이는 정보형으로 구성한다."
+    : slotId === "01"
+      ? "이미지 01은 독자가 조건을 이해하는 데 필요한 구조·배경·원리를 설명한다."
+      : slotId === "02"
+        ? "이미지 02는 신청 순서·비용·비교 기준·구매 전 체크처럼 실제 다음 행동에 도움이 되는 핵심 정보를 저장용 카드로 보여준다."
+        : "이미지 03은 이미지 02와 겹치지 않는 대상 조건·주의사항·단점·기간·해지/갈아타기 같은 후속 정보를 보여준다.";
+  return [
+    "",
+    "",
+    "[Paramma 수익형 이미지 지침]",
+    "- 검색 의도: " + meta.intent,
+    meta.action ? "- 독자의 다음 행동: " + meta.action : "",
+    role,
+    "- 광고 문구, 구매 압박, 수익 보장 표현은 금지한다.",
+    "- 최신 원고에서 검증된 날짜·가격·대상·조건만 사용하고, 확인되지 않은 숫자를 만들지 않는다."
+  ].filter(Boolean).join("\n");
 }
 
 function cleanNaverLine(line: string) {
@@ -731,11 +800,12 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
   const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
   const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
   const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE_ARTICLE_RULES : "";
-  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work);
+  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work) + moneyTopicContext(topic);
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
   const base = work.slots[slotId].prompt;
+  const moneyRules = moneyImageContext(topic, slotId);
   const bodyPlans = extractParammaImagePlans(work.body || "");
   const articlePlan = bodyPlans[slotId];
   const syncedPlan = articlePlan
@@ -761,10 +831,10 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
       "$1추가 실용 정보 · 예방 · 비교"
     );
     const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE03_RULES : "";
-    return effectiveBase + latestRules + kickNote + previousSlot + missingPlan + syncedPlan + topicRules;
+    return effectiveBase + latestRules + kickNote + previousSlot + missingPlan + syncedPlan + topicRules + moneyRules;
   }
 
-  if (slotId !== "02") return base + syncedPlan;
+  if (slotId !== "02") return base + syncedPlan + moneyRules;
   const legacyOverride = base.includes("[Paramma V2 · 이미지 기획]")
     ? "\n\n[Paramma V3 최신 이미지 02 지침]\n- 기존 카테고리별 선택보다 최종 본문의 킥을 우선한다. 실용적인 킥이라면 구체적인 방법과 조건을 저장용 정보 카드로 보여주며 원리 이미지 01을 반복하지 말 것."
     : "";
@@ -772,7 +842,7 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
     ? "\n\n[03번과 역할 분리]\n- 이미지 03의 독립적인 후속 정보: " + bodyPlans["03"] + "\n- 이 후속 정보까지 02에 함께 넣지 말고, 02는 본문 첫 번째 보상만 분명하게 보여줄 것."
     : "";
   const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE02_RULES : "";
-  return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan + topicRules;
+  return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan + topicRules + moneyRules;
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -983,6 +1053,9 @@ export default function ParammaBulkPage() {
   const [imageBusy, setImageBusy] = useState<SlotId | null>(null);
   const [zipBusy, setZipBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [moneyResearchRaw, setMoneyResearchRaw] = useState("");
+  const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
+  const [moneyTargetId, setMoneyTargetId] = useState(1);
   const previewUrls = useRef<string[]>([]);
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
@@ -995,6 +1068,13 @@ export default function ParammaBulkPage() {
   const plannedImageSlots = SLOT_IDS.filter((slotId) => !!bodyImagePlans[slotId]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
   const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
+  const moneyCount = useMemo(() => topics.filter((topic) => topic.kind === "money").length, [topics]);
+  const curiosityCount = topics.length - moneyCount;
+  const moneyResearchPrompt = useMemo(() => buildParammaMoneyResearchPrompt({
+    date: formatToday(),
+    queueTitles: topics.map((topic) => topic.title),
+    historyTitles: historyItems.map((item) => item.title),
+  }), [topics, historyItems]);
   const availablePoolCount = useMemo(() => {
     const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
     const queueKeys = new Set(topics.map((topic) => normalizeParammaTopic(topic.title)));
@@ -1019,6 +1099,9 @@ export default function ParammaBulkPage() {
         if (parsed?.statuses) setStatuses(parsed.statuses);
         if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
         if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
+        if (typeof parsed?.moneyResearchRaw === "string") setMoneyResearchRaw(parsed.moneyResearchRaw);
+        if (Array.isArray(parsed?.moneyCandidates)) setMoneyCandidates(parsed.moneyCandidates as MoneyCandidate[]);
+        if (Number.isInteger(parsed?.moneyTargetId) && savedTopics.some((t) => t.id === parsed.moneyTargetId)) setMoneyTargetId(parsed.moneyTargetId);
       }
     } catch {
       setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
@@ -1052,11 +1135,11 @@ export default function ParammaBulkPage() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId }));
     } catch {
       setNotice("작업 상태 저장에 실패했습니다. 브라우저 저장공간을 확인해주세요.");
     }
-  }, [hydrated, topics, statuses, selectedId, works]);
+  }, [hydrated, topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1266,6 +1349,59 @@ export default function ParammaBulkPage() {
     setNotice(`${id}번을 새 주제로 갈아끼웠습니다: ${replacement.title}`);
   }
 
+  function importMoneyCandidates() {
+    const parsed = parseParammaMoneyCandidates(moneyResearchRaw) as MoneyCandidate[];
+    if (!parsed.length) {
+      setNotice("수익형 후보를 읽지 못했습니다. ChatGPT 결과의 [MONEY_JSON] 블록까지 통째로 붙여넣어 주세요.");
+      return;
+    }
+    setMoneyCandidates(parsed);
+    setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 점수와 유효기간을 보고 큐에 넣을 주제를 선택하세요.`);
+  }
+
+  async function applyMoneyCandidate(candidate: MoneyCandidate) {
+    const targetId = moneyTargetId;
+    const current = topics.find((topic) => topic.id === targetId);
+    if (!current) return;
+
+    const currentWork = works[targetId];
+    const hasProgress = statusOf(targetId) !== "waiting" || Boolean(currentWork?.body?.trim()) ||
+      SLOT_IDS.some((slotId) => currentWork?.slots?.[slotId]?.status === "registered");
+    if (hasProgress && !window.confirm(`${targetId}번에는 진행 중이거나 저장된 작업이 있습니다. 이 자리를 수익형 주제로 교체할까요? 기존 본문·요청서·등록 이미지는 초기화됩니다.`)) return;
+
+    const replacement: Topic = {
+      id: targetId,
+      category: candidate.category,
+      title: candidate.title,
+      thumbnailHook: candidate.thumbnailHook,
+      brief: candidate.brief,
+      kind: "money",
+      money: {
+        intent: candidate.intent,
+        action: candidate.action,
+        keywords: candidate.keywords,
+        whyNow: candidate.whyNow,
+        expiresAt: candidate.expiresAt,
+        moneyScore: candidate.moneyScore,
+        timelinessScore: candidate.timelinessScore,
+        fitScore: candidate.fitScore,
+        sourceUrls: candidate.sourceUrls,
+      },
+    };
+
+    for (const slotId of SLOT_IDS) {
+      try { await idbDelete(targetId, slotId); } catch {}
+    }
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+    setImages({});
+    setTopics((prev) => prev.map((topic) => topic.id === targetId ? replacement : topic));
+    setStatuses((prev) => ({ ...prev, [targetId]: "waiting" }));
+    setWorks((prev) => ({ ...prev, [targetId]: defaultWork(replacement) }));
+    setSelectedId(targetId);
+    setNotice(`${targetId}번을 수익형 주제로 교체했습니다: ${candidate.title}`);
+  }
+
   async function copyText(text: string, success: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -1464,6 +1600,9 @@ export default function ParammaBulkPage() {
     setStatuses({});
     setWorks({});
     setSelectedId(1);
+    setMoneyResearchRaw("");
+    setMoneyCandidates([]);
+    setMoneyTargetId(1);
     setNotice("진행 상태와 글 설정을 초기화했습니다. 등록 이미지 파일은 보존했습니다.");
   }
 
@@ -1479,7 +1618,7 @@ export default function ParammaBulkPage() {
         <div>
           <p className={styles.eyebrow}>PARAMMA PUBLISH QUEUE</p>
           <h1>상시 발행 큐 10개</h1>
-          <p>날짜가 바뀌어도 10칸은 유지됩니다. 글을 발행 완료한 뒤 그 카드만 새 주제로 갈아끼우며 계속 운영합니다.</p>
+          <p>기본 호기심형은 유지하고 수익형 행동 검색 주제를 3개 정도 섞습니다. 목표는 일반 7 + 수익형 3입니다.</p>
         </div>
         <div className={styles.progressCard}>
           <div><b>{doneCount}</b><span>/ 10 완료</span></div>
@@ -1489,6 +1628,90 @@ export default function ParammaBulkPage() {
       </section>
 
       {notice && <div className={styles.notice}>{notice}</div>}
+
+      <section className={styles.moneyPanel}>
+        <div className={styles.moneyPanelHead}>
+          <div>
+            <p className={styles.eyebrow}>MONEY TOPIC FINDER · 7 + 3</p>
+            <h2>💰 이번 주 수익형 주제 찾기</h2>
+            <p>사람들이 실제로 신청·비교·구매·가입·예약하기 직전에 검색할 질문을 찾습니다. 현재 큐는 일반 <b>{curiosityCount}</b> · 수익형 <b>{moneyCount}</b>개입니다.</p>
+          </div>
+          <span className={moneyCount === 3 ? styles.moneyMixGood : styles.moneyMix}>
+            {moneyCount === 3 ? "✓ 권장 비율" : `수익형 ${moneyCount}/3`}
+          </span>
+        </div>
+
+        <div className={styles.moneyResearchActions}>
+          <a
+            className={styles.moneyPrimary}
+            href={"https://chatgpt.com/?q=" + encodeURIComponent(moneyResearchPrompt)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => { void copyText(moneyResearchPrompt, "수익형 주제 조사 요청서를 복사하고 ChatGPT를 열었습니다."); }}
+          >
+            🔎 수익형 주제 조사하기
+          </a>
+          <label className={styles.moneyTarget}>
+            <span>교체할 큐 자리</span>
+            <select value={moneyTargetId} onChange={(e) => setMoneyTargetId(Number(e.target.value))}>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.id}>
+                  {String(topic.id).padStart(2, "0")} · {topic.kind === "money" ? "수익형" : statusOf(topic.id) === "done" ? "완료" : statusOf(topic.id) === "working" ? "진행 중" : "일반"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <details className={styles.moneyPasteBox}>
+          <summary>ChatGPT 조사 결과 붙여넣기 · 후보 자동 인식</summary>
+          <textarea
+            value={moneyResearchRaw}
+            onChange={(e) => setMoneyResearchRaw(e.target.value)}
+            placeholder="[MONEY_JSON] ... [/MONEY_JSON]이 포함된 조사 결과를 통째로 붙여넣으세요."
+          />
+          <div className={styles.moneyPasteActions}>
+            <button type="button" onClick={importMoneyCandidates}>후보 불러오기</button>
+            <span>돈과의 거리 · 시의성 · Paramma 적합도를 각각 5점으로 비교합니다.</span>
+          </div>
+        </details>
+
+        {moneyCandidates.length > 0 && (
+          <div className={styles.moneyCandidateGrid}>
+            {moneyCandidates.map((candidate, index) => (
+              <article className={styles.moneyCandidateCard} key={candidate.title + index}>
+                <div className={styles.moneyCandidateTop}>
+                  <span className={styles.moneyIntent}>💰 {candidate.intent}</span>
+                  <strong>{moneyCandidateScore(candidate)}/15</strong>
+                </div>
+                <h3>{candidate.title}</h3>
+                <p>{candidate.brief}</p>
+                {candidate.whyNow && <div className={styles.moneyWhy}><b>지금 쓰는 이유</b><span>{candidate.whyNow}</span></div>}
+                <div className={styles.moneyMeta}>
+                  <span>행동 · {candidate.action || "정보 확인"}</span>
+                  <span>유효 · {candidate.expiresAt || "상시"}</span>
+                </div>
+                <div className={styles.moneyScores}>
+                  <span>돈 {candidate.moneyScore}/5</span>
+                  <span>시의성 {candidate.timelinessScore}/5</span>
+                  <span>적합도 {candidate.fitScore}/5</span>
+                </div>
+                {candidate.keywords.length > 0 && <small className={styles.moneyKeywords}>{candidate.keywords.join(" · ")}</small>}
+                {candidate.sourceUrls.length > 0 && (
+                  <div className={styles.moneySources}>
+                    {candidate.sourceUrls.slice(0, 2).map((url, sourceIndex) => (
+                      <a key={url} href={url} target="_blank" rel="noopener noreferrer">공식 근거 {sourceIndex + 1} ↗</a>
+                    ))}
+                  </div>
+                )}
+                <button type="button" className={styles.moneyApply} onClick={() => void applyMoneyCandidate(candidate)}>
+                  {String(moneyTargetId).padStart(2, "0")}번에 넣기
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className={styles.layout}>
         <div className={styles.queuePanel}>
@@ -1512,9 +1735,12 @@ export default function ParammaBulkPage() {
                   <button type="button" className={styles.topicSelect} onClick={() => selectTopic(topic.id)}>
                     <span className={styles.number}>{status === "done" ? "✓" : String(topic.id).padStart(2, "0")}</span>
                     <div className={styles.topicMain}>
-                      <span className={`${styles.category} ${categoryClass(topic.category)}`}>
-                        {categoryEmoji(topic.category)} {topic.category}
-                      </span>
+                      <div className={styles.topicLabels}>
+                        <span className={`${styles.category} ${categoryClass(topic.category)}`}>
+                          {categoryEmoji(topic.category)} {topic.category}
+                        </span>
+                        {topic.kind === "money" && <span className={styles.moneyBadge}>💰 {topic.money?.intent || "수익형"}</span>}
+                      </div>
                       <b>{topic.title}</b>
                       <small>{topic.brief}</small>
                     </div>
@@ -1586,11 +1812,22 @@ export default function ParammaBulkPage() {
           <section className={styles.workPanel}>
             <p className={styles.eyebrow}>01 · BODY & PLAN</p>
             <div className={styles.currentNo}>{String(selected.id).padStart(2, "0")}</div>
-            <span className={`${styles.category} ${categoryClass(selected.category)}`}>
-              {categoryEmoji(selected.category)} {selected.category}
-            </span>
+            <div className={styles.topicLabels}>
+              <span className={`${styles.category} ${categoryClass(selected.category)}`}>
+                {categoryEmoji(selected.category)} {selected.category}
+              </span>
+              {selected.kind === "money" && <span className={styles.moneyBadge}>💰 {selected.money?.intent || "수익형"}</span>}
+            </div>
             <h2>{selected.title}</h2>
             <p className={styles.brief}>{selected.brief}</p>
+            {selected.kind === "money" && selected.money && (
+              <div className={styles.selectedMoneyInfo}>
+                <b>수익형 행동 검색</b>
+                <span>독자 행동 · {selected.money.action || "정보 확인"}</span>
+                <span>검색 포인트 · {selected.money.keywords.join(" · ") || selected.money.intent}</span>
+                <span>유효 시점 · {selected.money.expiresAt || "상시"}</span>
+              </div>
+            )}
 
             <div className={styles.kickPanel}>
               <div className={styles.kickPanelHead}>
