@@ -192,7 +192,7 @@ export default function PresaleDiscoverPage() {
     if (researching) return;
     if (autoResearchReady === false) {
       openChatGptResearch();
-      setNotice("자동 조사 인증이 아직 없어 수동 ChatGPT 조사로 열었습니다. AI Gateway 키가 연결되면 이 버튼이 자동 조사로 전환됩니다.");
+      setNotice("자동 조사 인증이 아직 없어 수동 ChatGPT 조사로 열었습니다. AI Gateway 키를 추가하고 재배포하면 이 버튼이 자동 조사로 전환됩니다.");
       return;
     }
     setResearching(true);
@@ -347,7 +347,7 @@ export default function PresaleDiscoverPage() {
 
       <p className={styles.sourceWarning}>
         {autoResearchReady === false
-          ? "자동 조사 엔진은 구현됐지만 Vercel AI Gateway/OpenAI 인증값이 아직 없습니다. 상단 버튼은 현재 수동 ChatGPT 조사로 연결되며, 인증키가 추가되면 별도 배포 없이 자동 조사 버튼으로 활성화됩니다."
+          ? "자동 조사 엔진은 구현됐지만 Vercel AI Gateway/OpenAI 인증값이 아직 없습니다. 상단 버튼은 현재 수동 ChatGPT 조사로 연결되며, 인증키를 추가한 뒤 재배포하면 자동 조사 버튼으로 활성화됩니다."
           : queueCandidates.length === 0
             ? "현재 미발행 후보가 없습니다. 상단의 ‘최신 후보 자동 조사’를 누르면 발행 이력과 기존 카드를 제외한 새 사건을 웹에서 직접 찾아 카드로 추가합니다."
             : "자동 조사 카드도 최종 발행 전에는 제작실에서 최신 공식 모집공고·정정공고와 가격·물량을 다시 교차확인하세요. 카드 자체가 청약 권유나 확정 공고를 대신하지 않습니다."}
