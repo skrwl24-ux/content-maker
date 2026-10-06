@@ -45,6 +45,9 @@ test("research prompt separates hypothesis from verified final plan", async () =
   });
   assert.match(prompt, /검색 가설 → 사실 검증 → 최종 SEARCH_PLAN/);
   assert.match(prompt, /확정 분양가가 없으면 '미정'에서 끝내지 말고/);
+  assert.match(prompt, /3\.3㎡당/);
+  assert.match(prompt, /직접 가격 신호/);
+  assert.match(prompt, /핵심 숫자는 '아직 확정되지 않았다'는 이유만으로 검색을 생략하지 않는다/);
   assert.match(prompt, /ANSWER_FIRST/);
   assert.match(prompt, /SEARCH_PLAN_JSON/);
 });
