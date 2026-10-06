@@ -171,6 +171,8 @@ async function loadStoredCandidates(client: ReturnType<typeof createApartmentAdm
   return (data || []).map(rowToCandidate).filter((item): item is StoredCandidate => Boolean(item));
 }
 
+type NormalizedCandidate = NonNullable<ReturnType<typeof normalizeCandidate>>;
+
 function outputText(payload: any) {
   if (typeof payload?.output_text === "string") return payload.output_text;
   for (const item of Array.isArray(payload?.output) ? payload.output : []) {
@@ -328,7 +330,7 @@ export async function POST(req: NextRequest) {
       .slice(0, 12);
     const candidates = (Array.isArray(parsed?.candidates) ? parsed.candidates : [])
       .map((item: RawCandidate) => normalizeCandidate(item, existingIds))
-      .filter(Boolean)
+      .filter((item: NormalizedCandidate | null): item is NormalizedCandidate => item !== null)
       .slice(0, 12);
 
     const provider = useGateway ? "vercel-ai-gateway-oidc" : "openai-direct";
