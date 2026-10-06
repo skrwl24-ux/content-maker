@@ -201,19 +201,15 @@ export default function PresaleDiscoverPage() {
       const incoming = Array.isArray(data?.candidates)
         ? data.candidates.filter(isCandidate) as PresaleCandidate[]
         : [];
-      let added = 0;
+      const knownIds = new Set(allCandidates.map((item) => item.id));
+      const fresh = incoming.filter((item, index) =>
+        !knownIds.has(item.id) && incoming.findIndex((candidate) => candidate.id === item.id) === index);
       setDiscoveredCandidates((prev) => {
-        const known = new Set([...PRESALE_CANDIDATES, ...prev].map((item) => item.id));
-        const next = [...prev];
-        for (const item of incoming) {
-          if (known.has(item.id)) continue;
-          known.add(item.id);
-          next.unshift(item);
-          added += 1;
-        }
+        const next = [...fresh, ...prev];
         saveDiscoveredCandidates(next);
         return next;
       });
+      const added = fresh.length;
 
       const meta: ResearchMeta = {
         checkedAt: typeof data?.checkedAt === "string" ? data.checkedAt : (today || localDate()),
