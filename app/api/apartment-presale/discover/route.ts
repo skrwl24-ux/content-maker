@@ -187,9 +187,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "자동 조사는 10분에 최대 3회까지 실행할 수 있습니다." }, { status: 429 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const gatewayToken = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  const useGateway = !openAiKey && Boolean(gatewayToken);
+  const apiKey = openAiKey || gatewayToken;
   if (!apiKey) {
-    return NextResponse.json({ error: "OPENAI_API_KEY가 설정되지 않았습니다." }, { status: 503 });
+    return NextResponse.json({ error: "자동 조사용 AI 인증을 사용할 수 없습니다. Vercel AI Gateway 또는 OpenAI API 설정을 확인해 주세요." }, { status: 503 });
   }
 
   try {
@@ -220,8 +223,12 @@ export async function POST(req: NextRequest) {
       "- topic은 네이버 블로그에 바로 쓸 수 있는 후킹형 제목으로 만든다.",
     ].join("\n");
 
-    const model = process.env.PRESALE_DISCOVERY_MODEL || "gpt-5.6";
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const model = process.env.PRESALE_DISCOVERY_MODEL
+      || (useGateway ? "openai/gpt-5.6-sol" : "gpt-5.6");
+    const endpoint = useGateway
+      ? "https://ai-gateway.vercel.sh/v1/responses"
+      : "https://api.openai.com/v1/responses";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Authorization": "Bearer " + apiKey,
@@ -264,6 +271,7 @@ export async function POST(req: NextRequest) {
       questions: (Array.isArray(parsed?.questions) ? parsed.questions : []).map((item: unknown) => safeText(item, 400)).filter(Boolean).slice(0, 12),
       candidates,
       model,
+      provider: useGateway ? "vercel-ai-gateway-oidc" : "openai-direct",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "자동 조사 중 오류가 발생했습니다.";
