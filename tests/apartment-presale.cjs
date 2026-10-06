@@ -401,7 +401,7 @@ test("unconfirmed presale price without a real comparison line is warned, but so
       "분양가는 미확인 상태입니다. 공고 후 확인이 필요합니다.")
     .replace("3억대", "미정");
   const warned = auditPresaleArticle(bland);
-  assert.match(warned.qualityWarnings.join(" "), /실제 가격 참고선/);
+  assert.match(warned.qualityWarnings.join(" "), /실제 가격 정보/);
 
   const meaningful = bland.replace(
     "분양가는 미확인 상태입니다. 공고 후 확인이 필요합니다.",
