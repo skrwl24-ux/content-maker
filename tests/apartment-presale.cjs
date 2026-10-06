@@ -22,6 +22,9 @@ test("presale writing prompt follows evidence-first benchmarked structure", asyn
   assert.match(prompt, /공고 전 \/ 접수 중 \/ 접수 마감/);
   assert.match(prompt, /접수결과·주택형별 공급가격/);
   assert.match(prompt, /인근 최근 실거래/);
+  assert.match(prompt, /3\.3㎡당 예상가/);
+  assert.match(prompt, /전용면적÷3\.3/);
+  assert.match(prompt, /대상 단지 자체의 최근 예상가/);
   assert.match(prompt, /반복되는 미확인/);
   assert.match(prompt, /\[분양 핵심 POINT\]/);
   assert.match(prompt, /\[\/분양 핵심 POINT\]/);
@@ -66,6 +69,8 @@ test("official research and independent review include provenance without invent
   assert.match(research, /공고 전 \/ 접수 중 \/ 접수 마감/);
   assert.match(research, /예전 후보 카드/);
   assert.match(research, /최근 보도상 예정 물량/);
+  assert.match(research, /대상 단지 자체 가격 신호/);
+  assert.match(research, /3\.3㎡당/);
   assert.match(research, /동일 사업 선행단지/);
   assert.match(research, /가격 비교 1순위/);
   assert.match(research, /가격 관찰 포인트/);
@@ -83,6 +88,8 @@ test("official research and independent review include provenance without invent
   assert.match(review, /공식 모집공고/);
   assert.match(review, /원래의 수치를 추측해 대체하지 말고/);
   assert.match(review, /정보 누락으로 지적/);
+  assert.match(review, /분양가 거론/);
+  assert.match(review, /전용면적÷3\.3/);
   assert.match(review, /동일 사업 선행단지/);
   assert.match(review, /실제 금액이 하나도 없으면/);
   assert.match(review, /POINT가 빈 항목/);
