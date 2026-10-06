@@ -1394,7 +1394,7 @@ export default function ParammaBulkPage() {
     }
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current = [];
-    if (selected.id === targetId) setImages({});
+    setImages({});
     setTopics((prev) => prev.map((topic) => topic.id === targetId ? replacement : topic));
     setStatuses((prev) => ({ ...prev, [targetId]: "waiting" }));
     setWorks((prev) => ({ ...prev, [targetId]: defaultWork(replacement) }));
