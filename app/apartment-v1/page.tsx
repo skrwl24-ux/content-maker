@@ -163,6 +163,11 @@ export default function ApartmentV1Page() {
     }
   }, [notify]);
 
+  const openInChatGPT = useCallback((prompt: string) => {
+    const url = "https://chatgpt.com/?q=" + encodeURIComponent(prompt);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
+
   const rankingMap = useMemo(() => {
     return new Map(rankings.map((item) => [item.complex_id, item]));
   }, [rankings]);
@@ -1102,7 +1107,10 @@ export default function ApartmentV1Page() {
             </div>
 
             <div className={styles.actionStrip}>
-              <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "데이터 검수 요청서")}>데이터 검수 요청서 복사</button>
+              <div className={styles.inlineButtons}>
+                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "데이터 검수 요청서")}>데이터 검수 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 열기</button>
+              </div>
               <span className={article.data_status === "pass" ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
                 {article.data_status === "pass" ? "✓ 검수 완료" : article.data_status === "warning" ? "⚠ 확인 필요" : "검수 전"}
               </span>
@@ -1136,6 +1144,16 @@ export default function ApartmentV1Page() {
                   )}
                 >
                   차트 이미지 요청서 복사
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={!chartReady || !chartTemplate.is_active}
+                  onClick={() => openInChatGPT(
+                    buildChartPrompt(snapshot, chartTemplate.template_text) +
+                    (chartTemplate.reference_image_url ? "\n\n[중요]\n기준 디자인 이미지는 사이트의 [기준 이미지 복사] 버튼으로 복사한 뒤 ChatGPT 입력창에 Ctrl+V로 붙여넣고, 이 요청서를 함께 사용할 것." : "")
+                  )}
+                >
+                  GPT 열기
                 </button>
               </div>
             </div>
@@ -1171,7 +1189,10 @@ export default function ApartmentV1Page() {
 
             {needsCheckGroups.length ? (
               <>
-                <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
+                <div className={styles.inlineButtons}>
+                  <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
+                  <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(snapshot, needsCheckGroups))}>GPT 열기</button>
+                </div>
                 <div className={styles.pasteBox}>
                   <label>GPT 구조 조사 결과 붙여넣기</label>
                   <textarea value={structureRaw} onChange={(event) => setStructureRaw(event.target.value)} placeholder='{"areas":[{"areaGroup":84,"rooms":3,"baths":2,"status":"verified","source":"..."}]}' />
@@ -1205,7 +1226,10 @@ export default function ApartmentV1Page() {
             )}
 
             <div className={styles.actionStrip}>
-              <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
+              <div className={styles.inlineButtons}>
+                <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildLifeKickPrompt(snapshot))}>GPT 열기</button>
+              </div>
             </div>
             <div className={styles.pasteBox}>
               <label>GPT 생활 킥 조사 결과 붙여넣기</label>
@@ -1218,17 +1242,30 @@ export default function ApartmentV1Page() {
                 <strong>생활 킥 이미지</strong>
                 <span>확정된 생활 킥 1개만 이미지 요청서에 사용합니다.</span>
               </div>
-              <button
-                className={styles.primaryButton}
-                disabled={!lifeReady}
-                onClick={() => copyText(buildLifeImagePrompt(snapshot, {
-                  title: article.kick_title,
-                  summary: article.kick_summary,
-                  category: String((article.kick_snapshot as any)?.category || ""),
-                }), "생활 킥 이미지 요청서")}
-              >
-                생활 킥 이미지 요청서 복사
-              </button>
+              <div className={styles.inlineButtons}>
+                <button
+                  className={styles.primaryButton}
+                  disabled={!lifeReady}
+                  onClick={() => copyText(buildLifeImagePrompt(snapshot, {
+                    title: article.kick_title,
+                    summary: article.kick_summary,
+                    category: String((article.kick_snapshot as any)?.category || ""),
+                  }), "생활 킥 이미지 요청서")}
+                >
+                  생활 킥 이미지 요청서 복사
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={!lifeReady}
+                  onClick={() => openInChatGPT(buildLifeImagePrompt(snapshot, {
+                    title: article.kick_title,
+                    summary: article.kick_summary,
+                    category: String((article.kick_snapshot as any)?.category || ""),
+                  }))}
+                >
+                  GPT 열기
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1247,19 +1284,36 @@ export default function ApartmentV1Page() {
             </div>
 
             <div className={styles.requestGrid}>
-              <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
-              <button
-                className={styles.primaryButton}
-                disabled={!finalReady}
-                onClick={() => copyText(buildFinalArticlePrompt(
-                  snapshot,
-                  structures,
-                  { title: article.kick_title, summary: article.kick_summary },
-                  article.structure_mode !== "exclude"
-                ), "최종 원고 요청서")}
-              >
-                최종 원고 요청서 복사
-              </button>
+              <div className={styles.inlineButtons}>
+                <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildThumbnailPrompt(snapshot))}>GPT 열기</button>
+              </div>
+              <div className={styles.inlineButtons}>
+                <button
+                  className={styles.primaryButton}
+                  disabled={!finalReady}
+                  onClick={() => copyText(buildFinalArticlePrompt(
+                    snapshot,
+                    structures,
+                    { title: article.kick_title, summary: article.kick_summary },
+                    article.structure_mode !== "exclude"
+                  ), "최종 원고 요청서")}
+                >
+                  최종 원고 요청서 복사
+                </button>
+                <button
+                  className={styles.secondaryButton}
+                  disabled={!finalReady}
+                  onClick={() => openInChatGPT(buildFinalArticlePrompt(
+                    snapshot,
+                    structures,
+                    { title: article.kick_title, summary: article.kick_summary },
+                    article.structure_mode !== "exclude"
+                  ))}
+                >
+                  GPT 열기
+                </button>
+              </div>
             </div>
 
             <div className={styles.pasteBox}>
