@@ -238,7 +238,7 @@ export const DEFAULT_FINAL_ARTICLE_TEMPLATE = [
   "- 반등·심리·호재·저점·고점·매수추천 같은 투자 해석을 길게 하지 말 것.",
   "- 가격 흐름은 월 대표가격의 실제 방향을 1~2문장으로만 짧게 설명할 것.",
   "- 거래 없는 월의 값을 보간하거나 거래가 있었던 것처럼 쓰지 말 것.",
-  "- 생활 킥은 아래 검증 완료된 1개만 사용할 것.",
+  "- 생활 킥은 아래 검증 완료된 자료가 있을 때만 사용할 것. 검증 완료된 생활 킥이 없으면 해당 섹션과 관련 Q&A를 생략할 것.",
   "- Q&A도 반드시 아래 자료 안에서만 만들 것.",
   "- 모바일에서 읽기 쉽게 문장마다 한 줄씩 띄울 것.",
   "",
@@ -277,7 +277,9 @@ export const DEFAULT_FINAL_ARTICLE_TEMPLATE = [
   "{{STRUCTURE_SECTION_BLOCK}}",
   "",
   "[생활 킥 섹션]",
-  "- 제목은 목차 번호에 맞춰 '여기 살면 어떤 점이 좋을까?'로 쓸 것.",
+  "- 위 [저장된 생활·입지 조사자료]에 검증 완료된 킥이 있을 때만 작성할 것.",
+  "- 검증 완료된 킥이 없다고 적혀 있으면 이 섹션 전체를 생략할 것.",
+  "- 작성하는 경우 제목은 목차 번호에 맞춰 '여기 살면 어떤 점이 좋을까?'로 쓸 것.",
   "- [생활 킥 이미지]를 한 줄로 표시.",
   "- 검증된 킥 1개만 사용할 것.",
   "- 검증된 도보 정보가 제공된 경우에만 도보 시간과 확인된 거리를 자연스럽게 포함할 것.",
@@ -554,6 +556,7 @@ export function buildFinalArticlePrompt(
     });
 
   const hasStructure = includeStructure && structureLines.length > 0;
+  const hasLifeKick = Boolean(kick.title.trim() && kick.summary.trim());
   const structureDataBlock = hasStructure
     ? "[저장된 평형 구조 조사자료]\n" + structureLines.join("\n")
     : "[평형 구조]\n구조 섹션 제외";
@@ -565,17 +568,20 @@ export function buildFinalArticlePrompt(
         "- status=varies인 경우 숫자를 억지로 하나로 만들지 말고 '타입별 상이'라고 표시."
       ].join("\n")
     : "";
-  const tocBlock = hasStructure
-    ? "1. 평형별 지금 가격은 얼마일까?\n2. 평형별 구조는 어떻게 다를까?\n3. 여기 살면 어떤 점이 좋을까?"
-    : "1. 평형별 지금 가격은 얼마일까?\n2. 여기 살면 어떤 점이 좋을까?";
-  const lifeKickBlock = [
-    kick.title,
-    kick.summary,
-    kick.walkingVerified && kick.walkingMinutes
-      ? "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
-        (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
-      : ""
-  ].filter(Boolean).join("\n");
+  const tocItems = ["1. 평형별 지금 가격은 얼마일까?"];
+  if (hasStructure) tocItems.push((tocItems.length + 1) + ". 평형별 구조는 어떻게 다를까?");
+  if (hasLifeKick) tocItems.push((tocItems.length + 1) + ". 여기 살면 어떤 점이 좋을까?");
+  const tocBlock = tocItems.join("\n");
+  const lifeKickBlock = hasLifeKick
+    ? [
+        kick.title,
+        kick.summary,
+        kick.walkingVerified && kick.walkingMinutes
+          ? "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
+            (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
+          : ""
+      ].filter(Boolean).join("\n")
+    : "검증 완료된 생활·입지 킥 없음 — 생활 킥 섹션과 생활 킥 관련 Q&A는 작성하지 말 것.";
   const referenceDate = snapshot.referenceDate.replace(/-/g, ".");
   const sourceLine = referenceDate + " 기준 · 국토부 실거래 API 자료";
 
