@@ -544,16 +544,21 @@ export function buildFinalArticlePrompt(
   includeStructure: boolean,
   template = DEFAULT_FINAL_ARTICLE_TEMPLATE
 ) {
-  const validAreaGroups = new Set(snapshot.areas.map((area) => area.areaGroup));
-  const structureLines = structures
-    .filter((item) => validAreaGroups.has(item.area_group))
-    .filter((item) => item.status === "verified" || item.status === "varies")
-    .map((item) => {
-      const area = snapshot.areas.find((candidate) => candidate.areaGroup === item.area_group);
-      const label = area ? area.displayName + " / " + area.exclusiveLabel : "전용 " + item.area_group + "㎡대";
-      if (item.status === "varies") return "- " + label + " / 타입별 상이";
-      return "- " + label + " / 방 " + item.room_count + " / 욕실 " + item.bath_count;
-    });
+  const structureByGroup = new Map(
+    structures.map((item) => [Number(item.area_group), item])
+  );
+  const structureLines = snapshot.areas.map((area) => {
+    const item = structureByGroup.get(area.areaGroup);
+    const label = area.displayName + " / " + area.exclusiveLabel;
+
+    if (!item || item.status === "needs_check") {
+      return "- " + label + " / 방 확인 필요 / 욕실 확인 필요";
+    }
+    if (item.status === "varies") {
+      return "- " + label + " / 방 타입별 상이 / 욕실 타입별 상이";
+    }
+    return "- " + label + " / 방 " + item.room_count + " / 욕실 " + item.bath_count;
+  });
 
   const hasStructure = includeStructure && structureLines.length > 0;
   const hasLifeKick = Boolean(kick.title.trim() && kick.summary.trim());
@@ -565,7 +570,8 @@ export function buildFinalArticlePrompt(
         "[평형 구조 섹션]",
         "- 제목: 2. 평형별 구조는 어떻게 다를까?",
         "- 확인된 정보만 표 형태로 정리: 평형대 | 전용면적 | 방 | 욕실.",
-        "- status=varies인 경우 숫자를 억지로 하나로 만들지 말고 '타입별 상이'라고 표시."
+        "- status=varies인 경우 숫자를 억지로 하나로 만들지 말고 '타입별 상이'라고 표시.",
+        "- needs_check이거나 확인되지 않은 평형도 표에서 빼지 말고 방·욕실을 '확인 필요'로 표시."
       ].join("\n")
     : "";
   const tocItems = ["1. 평형별 지금 가격은 얼마일까?"];
