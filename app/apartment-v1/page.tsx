@@ -158,6 +158,7 @@ function errorMessage(cause: unknown, fallback: string) {
 export default function ApartmentV1Page() {
   const supabaseRef = useRef<any>(null);
   const userIdRef = useRef("");
+  const accessTokenRef = useRef("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -390,6 +391,7 @@ export default function ApartmentV1Page() {
         if (cancelled) return;
         supabaseRef.current = supabase;
         userIdRef.current = session.user.id;
+        accessTokenRef.current = session.access_token || "";
         await loadHome();
       } catch (cause) {
         if (!cancelled) {
@@ -524,6 +526,31 @@ export default function ApartmentV1Page() {
       setBusy("");
     }
   }, [rankScopeLabel]);
+  const refreshMolitData = useCallback(async () => {
+    if (!workspace || !article || !accessTokenRef.current) return;
+    setBusy("molit-refresh");
+    setError("");
+    try {
+      const response = await fetch("/api/apartment/content-sync", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessTokenRef.current,
+        },
+        body: JSON.stringify({ complexId: workspace.complex_id }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "국토부 자료 새로고침에 실패했습니다.");
+      await loadWorkspace(article, workspace);
+      notify("국토부 2026년 자료 새로고침 완료");
+    } catch (cause) {
+      setError(errorMessage(cause, "국토부 자료 새로고침에 실패했습니다."));
+    } finally {
+      setBusy("");
+    }
+  }, [article, loadWorkspace, notify, workspace]);
+
   const startArticle = useCallback(async (rec: RecommendationRow, complex: ApartmentRankingRow) => {
     const supabase = supabaseRef.current;
     const userId = userIdRef.current;
@@ -1180,7 +1207,16 @@ export default function ApartmentV1Page() {
                 <span className={styles.stepLabel}>자동 수집</span>
                 <h2>실거래 자료</h2>
               </div>
-              <span className={styles.sourcePill}>{snapshot.referenceDate.replace(/-/g, ".")} 기준 · 국토부 실거래 API</span>
+              <div className={styles.inlineButtons}>
+                <span className={styles.sourcePill}>{snapshot.referenceDate.replace(/-/g, ".")} 기준 · 국토부 실거래 API</span>
+                <button
+                  className={styles.copyButton}
+                  disabled={busy === "molit-refresh"}
+                  onClick={refreshMolitData}
+                >
+                  {busy === "molit-refresh" ? "새로고침 중…" : "2026 자료 새로고침"}
+                </button>
+              </div>
             </div>
 
             <div className={styles.doubleCheckPanel}>
@@ -1238,7 +1274,7 @@ export default function ApartmentV1Page() {
             </div>
 
             <p className={styles.muted}>
-              K-apt의 법정동·지번을 기준으로 국토부 실거래를 연결합니다. 이름이 애매한 경우만 별도 식별 확인을 거칩니다.
+              K-apt의 법정동·지번을 기준으로 국토부 실거래를 연결합니다. 같은 지번의 K-apt 관리단지가 하나뿐이면 신고명이 달라도 자동으로 포함하고, 여러 단지가 같은 지번을 쓸 때만 별도 식별 확인을 거칩니다.
             </p>
 
             <div className={styles.areaTable}>
