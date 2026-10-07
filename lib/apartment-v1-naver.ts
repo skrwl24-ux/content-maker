@@ -1,5 +1,5 @@
 export type ApartmentV1NaverBlock = {
-  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags" | "card";
+  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags" | "card" | "pointbox" | "tocbox" | "qaheading" | "qaquestion" | "qaanswer";
   text: string;
 };
 
@@ -44,10 +44,82 @@ export function parseApartmentV1Naver(raw: string): ApartmentV1NaverBlock[] {
   const lines = raw.replace(/\r\n?/g, "\n").split("\n");
   const blocks: ApartmentV1NaverBlock[] = [];
   let firstContent = true;
+  let qaMode = false;
 
   for (let index = 0; index < lines.length; index += 1) {
     const original = lines[index].trim();
     if (!original) continue;
+
+    const cleaned = cleanLine(original);
+    if (!cleaned) continue;
+
+    // 핵심 POINT는 제목+bullet을 한 카드로 묶어 네이버에서 실제 박스처럼 보이게 한다.
+    if (/^(?:✨\s*)?이\s*단지\s*핵심\s*POINT$/i.test(cleaned)) {
+      const collected = [cleaned];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const candidateOriginal = lines[cursor].trim();
+        if (!candidateOriginal) {
+          cursor += 1;
+          continue;
+        }
+        const candidate = cleanLine(candidateOriginal);
+        if (/^(?:📋\s*)?목차$/i.test(candidate) || /^\d+\.\s+/.test(candidate)) break;
+        if (/^자주\s*묻는\s*질문$/i.test(candidate)) break;
+        collected.push(candidate);
+        cursor += 1;
+      }
+      blocks.push({ type: "pointbox", text: collected.join("\n") });
+      firstContent = false;
+      index = cursor - 1;
+      continue;
+    }
+
+    // 목차 번호는 본문 소제목으로 키우지 않고 하나의 목차 카드에 모은다.
+    if (/^(?:📋\s*)?목차$/i.test(cleaned)) {
+      const collected = ["📋 목차"];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const candidateOriginal = lines[cursor].trim();
+        if (!candidateOriginal) {
+          cursor += 1;
+          continue;
+        }
+        const candidate = cleanLine(candidateOriginal);
+        if (!/^\d+\.\s+/.test(candidate)) break;
+        collected.push(candidate);
+        cursor += 1;
+      }
+      blocks.push({ type: "tocbox", text: collected.join("\n") });
+      firstContent = false;
+      index = cursor - 1;
+      continue;
+    }
+
+    if (/^자주\s*묻는\s*질문$/i.test(cleaned)) {
+      blocks.push({ type: "qaheading", text: cleaned });
+      firstContent = false;
+      qaMode = true;
+      continue;
+    }
+
+    if (qaMode && /^(?:Q[.：:]?|질문\s*\d+[.：:]?)\s*/i.test(cleaned)) {
+      blocks.push({ type: "qaquestion", text: cleaned });
+      continue;
+    }
+
+    if (
+      qaMode &&
+      (/^(?:마무리|정리|출처)$/i.test(cleaned) ||
+       /^\d+\.\s+/.test(cleaned) ||
+       /^#{1,6}\s+/.test(original) ||
+       /^\d{4}\.\d{2}\.\d{2}\s+기준/.test(cleaned))
+    ) {
+      qaMode = false;
+    } else if (qaMode) {
+      blocks.push({ type: "qaanswer", text: cleaned });
+      continue;
+    }
 
     if (
       index + 1 < lines.length &&
@@ -75,42 +147,39 @@ export function parseApartmentV1Naver(raw: string): ApartmentV1NaverBlock[] {
       continue;
     }
 
-    const line = cleanLine(original);
-    if (!line) continue;
-
     if (firstContent) {
-      blocks.push({ type: "title", text: line });
+      blocks.push({ type: "title", text: cleaned });
       firstContent = false;
       continue;
     }
 
-    const hashtagCount = (line.match(/#[^\s#]+/g) || []).length;
-    if (line.startsWith("#") && hashtagCount >= 2) {
-      blocks.push({ type: "tags", text: line });
+    const hashtagCount = (cleaned.match(/#[^\s#]+/g) || []).length;
+    if (cleaned.startsWith("#") && hashtagCount >= 2) {
+      blocks.push({ type: "tags", text: cleaned });
       continue;
     }
 
     if (
-      /^\[(?:평형별 가격 흐름 차트 이미지|생활 킥 이미지|이미지\s*\d+)/i.test(line) ||
-      /^\[.*이미지.*\]$/.test(line)
+      /^\[(?:평형별 가격 흐름 차트 이미지|생활 킥 이미지|이미지\s*\d+)/i.test(cleaned) ||
+      /^\[.*이미지.*\]$/.test(cleaned)
     ) {
-      blocks.push({ type: "image", text: line });
+      blocks.push({ type: "image", text: cleaned });
       continue;
     }
 
     const markdownHeading = /^#{1,6}\s+/.test(original);
-    const numberedHeading = /^\d+\.\s+/.test(line) && line.length <= 60;
+    const numberedHeading = /^\d+\.\s+/.test(cleaned) && cleaned.length <= 60;
     if (markdownHeading || numberedHeading) {
-      blocks.push({ type: "subheading", text: line });
+      blocks.push({ type: "subheading", text: cleaned });
       continue;
     }
 
     if (/^(\*\*|__)[\s\S]+\1$/.test(original) || /^>\s+/.test(original)) {
-      blocks.push({ type: "emphasis", text: line });
+      blocks.push({ type: "emphasis", text: cleaned });
       continue;
     }
 
-    blocks.push({ type: "body", text: line });
+    blocks.push({ type: "body", text: cleaned });
   }
 
   return blocks;
@@ -136,33 +205,75 @@ export function apartmentV1NaverRichHtml(blocks: ApartmentV1NaverBlock[]) {
   const font = "'Nanum Gothic','Noto Sans KR','Apple SD Gothic Neo',Arial,sans-serif";
   const html = blocks.map((block) => {
     const safe = escapeHtml(block.text);
+
     if (block.type === "title") {
       return '<div style="font-family:' + font + ';font-size:32px;line-height:1.35;font-weight:700;margin:0;">' + safe + "</div>";
     }
+
+    if (block.type === "pointbox") {
+      const [title, ...items] = safe.split("\n");
+      return '<div style="font-family:' + font + ';background:#149b92;color:#ffffff;padding:16px 18px;border-left:4px solid #08766f;margin:0;">' +
+        '<div style="font-size:17px;line-height:1.5;font-weight:700;margin:0 0 6px;">' + title + "</div>" +
+        items.map((item) => '<div style="font-size:15px;line-height:1.75;font-weight:400;margin:0;">' + item + "</div>").join("") +
+        "</div>";
+    }
+
+    if (block.type === "tocbox") {
+      const [title, ...items] = safe.split("\n");
+      return '<div style="font-family:' + font + ';background:#f2f5fa;padding:14px 16px;border-left:4px solid #3978d7;margin:0;">' +
+        '<div style="font-size:17px;line-height:1.5;font-weight:700;color:#356fc4;margin:0 0 4px;">' + title + "</div>" +
+        items.map((item) => '<div style="font-size:15px;line-height:1.8;font-weight:400;color:#687386;margin:0;">' + item + "</div>").join("") +
+        "</div>";
+    }
+
     if (block.type === "subheading") {
       return '<div style="font-family:' + font + ';font-size:30px;line-height:1.45;font-weight:700;margin:0;">' + safe + "</div>";
     }
+
+    if (block.type === "qaheading") {
+      return '<div style="font-family:' + font + ';font-size:30px;line-height:1.45;font-weight:700;color:#253143;margin:0;">' + safe + "</div>";
+    }
+
+    if (block.type === "qaquestion") {
+      return '<div style="font-family:' + font + ';font-size:19px;line-height:1.6;font-weight:700;color:#253143;margin:0;">' + safe + "</div>";
+    }
+
+    if (block.type === "qaanswer") {
+      return '<div style="font-family:' + font + ';font-size:15px;line-height:1.8;font-weight:400;color:#707782;margin:0;">' + safe + "</div>";
+    }
+
     if (block.type === "emphasis") {
       return '<div style="font-family:' + font + ';font-size:19px;line-height:1.65;font-weight:700;margin:0;">' + safe + "</div>";
     }
+
     if (block.type === "tags") {
       return '<div style="font-family:' + font + ';font-size:15px;line-height:1.7;font-weight:400;margin:0;">' + safe + "</div>";
     }
+
     if (block.type === "image") {
       return '<div style="font-family:' + font + ';font-size:15px;line-height:1.7;font-weight:600;margin:0;">' + safe + "</div>";
     }
+
     if (block.type === "card") {
       const [title, ...details] = safe.split("\n");
       return '<div style="font-family:' + font + ';font-size:15px;line-height:1.75;font-weight:400;margin:0;padding:10px 12px;border-left:3px solid #8aa99d;"><div style="font-weight:700;margin:0 0 4px;">' +
         title + "</div>" + (details.length ? "<div>" + details.join("<br>") + "</div>" : "") + "</div>";
     }
+
     return '<div style="font-family:' + font + ';font-size:15px;line-height:1.8;font-weight:400;margin:0;">' + safe + "</div>";
   });
 
-  const spacer = '<div style="font-family:' + font + ';font-size:15px;line-height:1.8;margin:0;"><br></div>';
+  const normalSpacer = '<div style="font-family:' + font + ';font-size:15px;line-height:1.8;margin:0;"><br></div>';
+  const compactSpacer = '<div style="font-family:' + font + ';font-size:8px;line-height:1;margin:0;"><br></div>';
+
   return "<div>" + html.map((item, index) => {
+    const current = blocks[index];
     const next = blocks[index + 1];
-    const separator = blocks[index]?.type === "card" && next?.type === "card" ? "" : spacer;
+    const compact =
+      (current?.type === "card" && next?.type === "card") ||
+      (current?.type === "qaquestion" && next?.type === "qaanswer") ||
+      (current?.type === "qaanswer" && (next?.type === "qaanswer" || next?.type === "qaquestion"));
+    const separator = compact ? compactSpacer : normalSpacer;
     return item + (index < html.length - 1 ? separator : "");
   }).join("") + "</div>";
 }
