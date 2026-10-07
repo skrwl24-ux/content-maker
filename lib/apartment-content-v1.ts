@@ -585,7 +585,29 @@ export function buildFinalArticlePrompt(
   const referenceDate = snapshot.referenceDate.replace(/-/g, ".");
   const sourceLine = referenceDate + " 기준 · 국토부 실거래 API 자료";
 
-  return fillPromptTemplate(template, {
+  const normalizedTemplate = template
+    .replace(
+      "- 생활 킥은 아래 검증 완료된 1개만 사용할 것.",
+      "- 생활 킥은 아래 검증 완료된 자료가 있을 때만 사용할 것. 검증 완료된 생활 킥이 없으면 해당 섹션과 관련 Q&A를 생략할 것."
+    )
+    .replace(
+      [
+        "[생활 킥 섹션]",
+        "- 제목은 목차 번호에 맞춰 '여기 살면 어떤 점이 좋을까?'로 쓸 것.",
+        "- [생활 킥 이미지]를 한 줄로 표시.",
+        "- 검증된 킥 1개만 사용할 것."
+      ].join("\n"),
+      [
+        "[생활 킥 섹션]",
+        "- 위 [저장된 생활·입지 조사자료]에 검증 완료된 킥이 있을 때만 작성할 것.",
+        "- 검증 완료된 킥이 없다고 적혀 있으면 이 섹션 전체를 생략할 것.",
+        "- 작성하는 경우 제목은 목차 번호에 맞춰 '여기 살면 어떤 점이 좋을까?'로 쓸 것.",
+        "- [생활 킥 이미지]를 한 줄로 표시.",
+        "- 검증된 킥 1개만 사용할 것."
+      ].join("\n")
+    );
+
+  return fillPromptTemplate(normalizedTemplate, {
     REFERENCE_DATE: referenceDate,
     YEAR: String(snapshot.year),
     COMPLEX_NAME: snapshot.complex.name,
