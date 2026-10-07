@@ -1269,7 +1269,7 @@ export default function ApartmentV1Page() {
 
   const structureReady = article?.structure_mode === "exclude" || needsCheckGroups.length === 0;
   const lifeReady = article?.kick_status === "verified";
-  const finalReady = apiDataReady && structureReady && lifeReady;
+  const finalReady = apiDataReady;
   if (loading) {
     return <main className={styles.page}><div className={styles.loading}>아파트 콘텐츠메이커를 준비하고 있습니다…</div></main>;
   }
@@ -1785,13 +1785,17 @@ export default function ApartmentV1Page() {
                 <span className={styles.stepLabel}>제작</span>
                 <h2>최종 글 만들기</h2>
               </div>
-              <span className={finalReady ? styles.goodPill : styles.statusMuted}>{finalReady ? "✓ 자료 준비 완료" : "조사자료 준비 필요"}</span>
+              <span className={finalReady ? styles.goodPill : styles.statusMuted}>{finalReady ? "✓ 원고 생성 가능" : "실거래 자료 준비 필요"}</span>
             </div>
 
             <div className={styles.titlePreview}>
               <span>제목</span>
               <strong>{workspace.name} 얼마일까?</strong>
             </div>
+
+            <p className={styles.muted}>
+              확인된 자료만 최종 요청서에 넣습니다. 구조 확인이 덜 된 평형이나 생활 킥이 없으면 해당 내용만 자동으로 제외하고 원고 제작은 막지 않습니다.
+            </p>
 
             <div className={styles.requestGrid}>
               <div className={styles.inlineButtons}>
