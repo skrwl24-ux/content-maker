@@ -368,7 +368,11 @@ export function buildLifeKickPrompt(snapshot: DataSnapshot) {
     "- 지자체·공공기관·운영기관·공식 시설 페이지 등 최신 공식자료를 우선 확인할 것.",
     "- 현재 운영 여부와 정확한 시설/역/공원 지점을 확인할 것.",
     "- 단지와 실제 같은 생활권에서 이용 가능한지 확인할 것.",
-    "- 경로 자료가 없으면 '도보 몇 분', '차량 몇 분', '몇 m' 같은 시간을 추정하지 말 것.",
+    "- 생활 킥이 역·마트·시장·공원·도서관 등 실제 방문 지점이라면 도보 경로도 추가로 확인할 것.",
+    "- 도보 시간·거리는 지도/길찾기 결과나 경로 자료에서 실제 경로가 확인된 경우에만 입력할 것.",
+    "- 직선거리로 도보시간을 계산하거나 평균 보행속도로 추정하지 말 것.",
+    "- 도보 경로 시작점과 도착점을 명확히 적을 것. 역이면 가능하면 출구 번호까지 확인할 것.",
+    "- 경로 자료가 없거나 검색 결과를 신뢰하기 어려우면 walkingVerified=false, walkingMinutes=null, walkingDistanceM=null.",
     "- 축제는 " + snapshot.year + "년 실제 개최 여부를 공식 자료로 확인한 경우에만 선택할 것.",
     "- 광고성 표현이나 '초역세권·바로 앞·도보권' 같은 과장 표현은 근거 없으면 쓰지 말 것.",
     "- 내부적으로 여러 후보를 비교해도 최종 출력은 가장 강한 1개만.",
@@ -385,6 +389,12 @@ export function buildLifeKickPrompt(snapshot: DataSnapshot) {
     '  "title": "",',
     '  "category": "",',
     '  "summary": "",',
+    '  "walkingVerified": false,',
+    '  "walkingMinutes": null,',
+    '  "walkingDistanceM": null,',
+    '  "routeFrom": "",',
+    '  "routeTo": "",',
+    '  "routeSource": {"name":"","url":"","checked":""},',
     '  "sourceText": "",',
     '  "sources": [],',
     '  "verified": false',
@@ -416,7 +426,24 @@ export function buildChartPrompt(snapshot: DataSnapshot, template: string) {
   return filled + guard;
 }
 
-export function buildLifeImagePrompt(snapshot: DataSnapshot, kick: { title: string; category?: string; summary: string }) {
+export function buildLifeImagePrompt(
+  snapshot: DataSnapshot,
+  kick: {
+    title: string;
+    category?: string;
+    summary: string;
+    walkingVerified?: boolean;
+    walkingMinutes?: number | null;
+    walkingDistanceM?: number | null;
+    routeFrom?: string;
+    routeTo?: string;
+  }
+) {
+  const walkingLine = kick.walkingVerified && kick.walkingMinutes
+    ? "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
+      (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
+    : "";
+
   return [
     "네이버 블로그 본문용 아파트 생활·입지 이미지 1장을 만들어줘.",
     "",
@@ -427,12 +454,14 @@ export function buildLifeImagePrompt(snapshot: DataSnapshot, kick: { title: stri
     kick.title,
     kick.category ? "종류: " + kick.category : "",
     kick.summary,
+    walkingLine,
     "",
     "[제작 규칙]",
     "- 1600×900 가로형 한 장.",
     "- 검증 완료된 생활 킥 1개만 시각화할 것. 다른 시설·역·공원·상권을 새로 추가하지 말 것.",
     "- 실제 생활에서 왜 의미 있는지 한눈에 이해되는 장면으로 구성할 것.",
-    "- 확인되지 않은 거리·도보시간·차량시간·노선·행사일정을 새로 쓰지 말 것.",
+    "- 위에 '검증된 도보 정보'가 있을 때만 도보 시간·거리를 표시할 것.",
+    "- 검증된 도보 정보가 없으면 거리·도보시간·차량시간을 새로 만들지 말 것.",
     "- 실제 브랜드/기관 로고를 임의로 변형하거나 복제하지 말 것.",
     "- 과장된 광고·네온·3D 인포그래픽 느낌보다 자연스럽고 신뢰감 있는 블로그 정보 이미지.",
     "- 하단에 별도 출처문구나 새로운 사실을 추가하지 말 것."
@@ -460,7 +489,15 @@ export function buildThumbnailPrompt(snapshot: DataSnapshot) {
 export function buildFinalArticlePrompt(
   snapshot: DataSnapshot,
   structures: Array<{ area_group: number; room_count: number | null; bath_count: number | null; status: string }>,
-  kick: { title: string; summary: string },
+  kick: {
+    title: string;
+    summary: string;
+    walkingVerified?: boolean;
+    walkingMinutes?: number | null;
+    walkingDistanceM?: number | null;
+    routeFrom?: string;
+    routeTo?: string;
+  },
   includeStructure: boolean
 ) {
   const structureLines = structures
@@ -504,6 +541,10 @@ export function buildFinalArticlePrompt(
     "[검증된 생활 킥 1개]",
     kick.title,
     kick.summary,
+    ...(kick.walkingVerified && kick.walkingMinutes ? [
+      "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
+        (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
+    ] : []),
     "",
     "[최종 글 구성 — 순서 고정]",
     "제목: " + snapshot.complex.name + " 얼마일까?",
@@ -529,6 +570,8 @@ export function buildFinalArticlePrompt(
     "[생활 킥 섹션]",
     "- [생활 킥 이미지]를 한 줄로 표시.",
     "- 검증된 킥이 실제 생활에서 어떤 의미가 있는지 짧은 생활 시나리오 느낌으로 2~4문장.",
+    "- 검증된 도보 정보가 제공된 경우에만 '도보 약 ○분'과 확인된 거리 정보를 자연스럽게 포함할 것.",
+    "- 도보 정보가 제공되지 않았으면 거리나 시간을 추정해서 넣지 말 것.",
     "- 직접 살아본 후기처럼 쓰지 말 것.",
     "",
     "[마무리]",
