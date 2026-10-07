@@ -264,7 +264,11 @@ export async function POST(req: NextRequest) {
   if (!sameSiteRequest(req)) {
     return NextResponse.json({ error: "허용되지 않은 요청입니다." }, { status: 403 });
   }
-  if (!rateAllowed(req)) {
+
+  const body = await req.json().catch(() => ({}));
+  const manualImport = body?.mode === "manual-import";
+
+  if (!manualImport && !rateAllowed(req)) {
     return NextResponse.json({ error: "자동 조사는 10분에 최대 3회까지 실행할 수 있습니다." }, { status: 429 });
   }
 
@@ -273,13 +277,94 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "후보 저장소를 사용할 수 없습니다. SUPABASE_SERVICE_ROLE_KEY 설정을 확인해 주세요." }, { status: 503 });
   }
 
+  if (manualImport) {
+    try {
+      const dateKey = safeText(body?.checkedAt || body?.dateKey, 20) || new Date().toISOString().slice(0, 10);
+      const checkedAt = /^\d{4}-\d{2}-\d{2}$/.test(dateKey)
+        ? dateKey
+        : new Date().toISOString().slice(0, 10);
+      const summary = safeText(body?.summary, 1200);
+      const questions = (Array.isArray(body?.questions) ? body.questions : [])
+        .map((item: unknown) => safeText(item, 400))
+        .filter(Boolean)
+        .slice(0, 12);
+
+      const existing = await loadStoredCandidates(client);
+      const existingIds = new Set(existing.map((item) => item.id));
+      const candidates: NormalizedCandidate[] = [];
+      let skipped = 0;
+
+      for (const raw of (Array.isArray(body?.candidates) ? body.candidates : []).slice(0, 20)) {
+        const candidate = normalizeCandidate(raw as RawCandidate, existingIds);
+        if (!candidate) {
+          skipped += 1;
+          continue;
+        }
+        candidates.push(candidate);
+        existingIds.add(candidate.id);
+      }
+
+      if (!Array.isArray(body?.candidates) || body.candidates.length === 0) {
+        return NextResponse.json({ error: "가져올 후보 데이터가 없습니다." }, { status: 400 });
+      }
+
+      const { data: run, error: runError } = await client
+        .from("presale_discovery_runs")
+        .insert({
+          checked_at: checkedAt,
+          summary,
+          questions,
+          provider: "manual-chatgpt",
+          model: "manual-import",
+          candidate_count: candidates.length,
+        })
+        .select("id")
+        .single();
+      if (runError) throw runError;
+
+      if (candidates.length) {
+        const now = new Date().toISOString();
+        const rows = candidates.map((candidate) => ({
+          id: candidate.id,
+          event_key: candidate.eventKey,
+          candidate_json: candidate,
+          publication_status: "queue",
+          origin: "manual",
+          discovery_run_id: run.id,
+          checked_at: checkedAt,
+          published_at: null,
+          updated_at: now,
+        }));
+        const { error: saveError } = await client
+          .from("presale_discovery_candidates")
+          .upsert(rows, { onConflict: "id" });
+        if (saveError) throw saveError;
+      }
+
+      return NextResponse.json({
+        ok: true,
+        stored: true,
+        checkedAt,
+        summary,
+        questions,
+        candidates,
+        skipped,
+        provider: "manual-chatgpt",
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "수동 조사 결과를 저장하지 못했습니다." },
+        { status: 500 },
+      );
+    }
+  }
+
   const auth = await resolveAiAuth();
   if (!auth.apiKey) {
     return NextResponse.json({ error: "자동 조사용 AI 인증을 사용할 수 없습니다. Vercel AI Gateway OIDC 또는 OpenAI API 설정을 확인해 주세요." }, { status: 503 });
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
     const dateKey = safeText(body?.dateKey, 20) || new Date().toISOString().slice(0, 10);
     const existing = await loadStoredCandidates(client);
     const existingIds = new Set(existing.map((item) => item.id));
