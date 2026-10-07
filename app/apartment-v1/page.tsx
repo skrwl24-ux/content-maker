@@ -1130,8 +1130,8 @@ export default function ApartmentV1Page() {
 
             <div className={styles.actionStrip}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "이중 검수 요청서")}>이중 검수 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 웹 이중검수 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "이중 검수 요청서")}>단지 데이터 수집·검수 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 자료수집·이중검수 열기</button>
               </div>
               <span className={article.data_status === "pass" ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
                 {article.data_status === "pass" ? "✓ 이중 검수 완료" : article.data_status === "warning" ? "⚠ 이중 검수 확인 필요" : "검수 전"}
@@ -1139,13 +1139,13 @@ export default function ApartmentV1Page() {
             </div>
 
             <div className={styles.pasteBox}>
-              <label>GPT 이중 검수 결과 붙여넣기 · 응답 JSON 코드블록의 복사 버튼을 누른 뒤 여기에 붙여넣으세요</label>
+              <label>GPT 수집·이중검수 결과 붙여넣기 · 응답 JSON 코드블록의 복사 버튼을 누른 뒤 여기에 붙여넣으세요</label>
               <textarea
                 value={dataCheckRaw}
                 onChange={(event) => setDataCheckRaw(event.target.value)}
                 placeholder='{"status":"pass","internalCheck":{...},"externalCheck":{"performed":true,"identityMatch":true,"recentTradeMatch":true,"sources":[...]}, "warnings":[],"chartReady":true}'
               />
-              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>이중 검수 결과 적용</button>
+              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>수집·검수 결과 적용</button>
             </div>
 
             {article.data_status !== "pending" ? (
