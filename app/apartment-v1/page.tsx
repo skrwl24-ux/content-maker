@@ -67,6 +67,7 @@ type TemplateRow = {
   name: string;
   is_active: boolean;
   template_text: string;
+  reference_image_url: string;
 };
 
 function kstDate() {
@@ -124,6 +125,7 @@ export default function ApartmentV1Page() {
     name: "평형별 가격 흐름 V1",
     is_active: true,
     template_text: DEFAULT_CHART_TEMPLATE,
+    reference_image_url: "",
   });
 
   const year = Number(kstDate().slice(0, 4));
@@ -152,7 +154,7 @@ export default function ApartmentV1Page() {
     if (!supabase || !userId) return;
     const { data } = await supabase
       .from("apt_content_prompt_templates")
-      .select("id,template_key,name,is_active,template_text")
+      .select("id,template_key,name,is_active,template_text,reference_image_url")
       .eq("user_id", userId)
       .eq("template_key", "APT_PRICE_FLOW_V1")
       .maybeSingle();
@@ -168,11 +170,12 @@ export default function ApartmentV1Page() {
       name: "평형별 가격 흐름 V1",
       is_active: true,
       template_text: DEFAULT_CHART_TEMPLATE,
+      reference_image_url: "",
     };
     const { data: inserted } = await supabase
       .from("apt_content_prompt_templates")
       .insert(row)
-      .select("id,template_key,name,is_active,template_text")
+      .select("id,template_key,name,is_active,template_text,reference_image_url")
       .single();
     if (inserted) setChartTemplate(inserted as TemplateRow);
   }, []);
@@ -695,6 +698,75 @@ export default function ApartmentV1Page() {
     }
   }, [loadHome, recommendations, year, notify]);
 
+  const uploadTemplateReferenceImage = useCallback(async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("이미지 파일만 등록할 수 있습니다.");
+      return;
+    }
+    const supabase = supabaseRef.current;
+    const userId = userIdRef.current;
+    if (!supabase || !userId) return;
+
+    setBusy("template-image");
+    setError("");
+    try {
+      const extension = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+      const path = userId + "/apartment-template/apt-price-flow-v1." + extension;
+      const { error: uploadError } = await supabase.storage
+        .from("content-maker-assets")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data: publicData } = supabase.storage.from("content-maker-assets").getPublicUrl(path);
+      const url = publicData.publicUrl + "?v=" + Date.now();
+      const next = { ...chartTemplate, reference_image_url: url };
+      setChartTemplate(next);
+
+      const { error: saveError } = await supabase
+        .from("apt_content_prompt_templates")
+        .upsert({
+          user_id: userId,
+          template_key: "APT_PRICE_FLOW_V1",
+          name: next.name || "평형별 가격 흐름 V1",
+          is_active: next.is_active,
+          template_text: next.template_text || DEFAULT_CHART_TEMPLATE,
+          reference_image_url: url,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,template_key" });
+      if (saveError) throw saveError;
+      notify("기준 디자인 이미지 저장 완료");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "기준 이미지를 저장하지 못했습니다.");
+    } finally {
+      setBusy("");
+    }
+  }, [chartTemplate, notify]);
+
+  const copyReferenceImage = useCallback(async () => {
+    if (!chartTemplate.reference_image_url) return;
+    try {
+      const response = await fetch(chartTemplate.reference_image_url);
+      if (!response.ok) throw new Error("기준 이미지를 불러오지 못했습니다.");
+      const blob = await response.blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("이미지 변환에 실패했습니다.");
+      context.drawImage(bitmap, 0, 0);
+      const pngBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("PNG 변환에 실패했습니다.")), "image/png");
+      });
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+      notify("기준 디자인 이미지 복사 완료");
+    } catch {
+      window.open(chartTemplate.reference_image_url, "_blank", "noopener,noreferrer");
+      notify("복사가 지원되지 않아 기준 이미지를 새 창으로 열었습니다.");
+    }
+  }, [chartTemplate.reference_image_url, notify]);
+
   const saveChartTemplate = useCallback(async () => {
     const row = {
       user_id: userIdRef.current,
@@ -702,12 +774,13 @@ export default function ApartmentV1Page() {
       name: chartTemplate.name || "평형별 가격 흐름 V1",
       is_active: chartTemplate.is_active,
       template_text: chartTemplate.template_text || DEFAULT_CHART_TEMPLATE,
+      reference_image_url: chartTemplate.reference_image_url || "",
       updated_at: new Date().toISOString(),
     };
     const { data, error: templateError } = await supabaseRef.current
       .from("apt_content_prompt_templates")
       .upsert(row, { onConflict: "user_id,template_key" })
-      .select("id,template_key,name,is_active,template_text")
+      .select("id,template_key,name,is_active,template_text,reference_image_url")
       .single();
     if (templateError) {
       setError(templateError.message);
@@ -775,7 +848,40 @@ export default function ApartmentV1Page() {
               <span>{chartTemplate.is_active ? "활성화" : "비활성화"}</span>
             </label>
           </div>
-          <p className={styles.muted}>한 번 저장해두면 매 단지마다 같은 디자인 요청서에 이번 데이터만 자동으로 들어갑니다.</p>
+          <p className={styles.muted}>한 번 저장해두면 매 단지마다 같은 디자인 이미지와 요청서를 사용하고, 이번 단지 데이터만 바뀝니다.</p>
+          <div className={styles.referenceImageBox}>
+            <div className={styles.referenceImagePreview}>
+              {chartTemplate.reference_image_url ? (
+                <img src={chartTemplate.reference_image_url} alt="평형별 가격 차트 기준 디자인" />
+              ) : (
+                <div className={styles.referenceImageEmpty}>기준 디자인 이미지 미등록</div>
+              )}
+            </div>
+            <div className={styles.referenceImageInfo}>
+              <strong>기준 디자인 이미지</strong>
+              <span>{chartTemplate.reference_image_url ? "APT_PRICE_FLOW_V1에 이미지가 저장되어 있습니다." : "마음에 든 완성 예시 이미지를 한 번 등록해주세요."}</span>
+              <div className={styles.referenceImageActions}>
+                <label className={styles.uploadButton}>
+                  {busy === "template-image" ? "업로드 중…" : chartTemplate.reference_image_url ? "기준 이미지 교체" : "기준 이미지 등록"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    disabled={busy === "template-image"}
+                    onChange={(event) => {
+                      void uploadTemplateReferenceImage(event.target.files?.[0] || null);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {chartTemplate.reference_image_url ? (
+                  <>
+                    <button className={styles.copyButton} onClick={copyReferenceImage}>기준 이미지 복사</button>
+                    <a className={styles.secondaryLink} href={chartTemplate.reference_image_url} target="_blank" rel="noreferrer">이미지 열기</a>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <textarea
             className={styles.templateArea}
             value={chartTemplate.template_text}
@@ -915,15 +1021,27 @@ export default function ApartmentV1Page() {
             <div className={styles.imageRequestRow}>
               <div>
                 <strong>평형별 가격 차트</strong>
-                <span>이미지 미리보기 없이 고정 템플릿 요청서만 복사합니다.</span>
+                <span>
+                  기준 디자인 APT_PRICE_FLOW_V1 {chartTemplate.reference_image_url ? "✓" : "· 이미지 미등록"}
+                  {" · "}이번 단지 숫자만 요청서에 바뀝니다.
+                </span>
               </div>
-              <button
-                className={styles.primaryButton}
-                disabled={!chartReady || !chartTemplate.is_active}
-                onClick={() => copyText(buildChartPrompt(snapshot, chartTemplate.template_text), "차트 이미지 요청서")}
-              >
-                차트 이미지 요청서 복사
-              </button>
+              <div className={styles.imageActionButtons}>
+                {chartTemplate.reference_image_url ? (
+                  <button className={styles.copyButton} onClick={copyReferenceImage}>기준 이미지 복사</button>
+                ) : null}
+                <button
+                  className={styles.primaryButton}
+                  disabled={!chartReady || !chartTemplate.is_active}
+                  onClick={() => copyText(
+                    buildChartPrompt(snapshot, chartTemplate.template_text) +
+                    (chartTemplate.reference_image_url ? "\n\n[중요]\n함께 붙여넣은 기준 디자인 이미지를 레이아웃·정보 배치의 레퍼런스로 사용하고, 이번 단지 데이터만 교체할 것." : ""),
+                    "차트 이미지 요청서"
+                  )}
+                >
+                  차트 이미지 요청서 복사
+                </button>
+              </div>
             </div>
             {!chartTemplate.is_active ? <p className={styles.inlineWarning}>차트 템플릿이 비활성화되어 있습니다. 상단 설정에서 켤 수 있습니다.</p> : null}
           </section>
