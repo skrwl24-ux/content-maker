@@ -82,6 +82,7 @@ export function parseApartmentV1Naver(raw: string): ApartmentV1NaverBlock[] {
       while (cursor < lines.length) {
         const candidateOriginal = lines[cursor].trim();
         if (!candidateOriginal) {
+          if (collected.length > 1) break;
           cursor += 1;
           continue;
         }
@@ -90,13 +91,22 @@ export function parseApartmentV1Naver(raw: string): ApartmentV1NaverBlock[] {
         collected.push(candidate);
         cursor += 1;
       }
+
+      const hasFaqInArticle = lines.some((line) =>
+        /^(?:#{1,6}\s+)?(?:\d+\.\s+)?자주\s*묻는\s*질문$/i.test(line.trim())
+      );
+      const hasFaqInToc = collected.some((item) => /자주\s*묻는\s*질문/i.test(item));
+      if (hasFaqInArticle && !hasFaqInToc) {
+        collected.push(String(collected.length) + ". 자주 묻는 질문");
+      }
+
       blocks.push({ type: "tocbox", text: collected.join("\n") });
       firstContent = false;
       index = cursor - 1;
       continue;
     }
 
-    if (/^자주\s*묻는\s*질문$/i.test(cleaned)) {
+    if (/^(?:\d+\.\s+)?자주\s*묻는\s*질문$/i.test(cleaned)) {
       blocks.push({ type: "qaheading", text: cleaned });
       firstContent = false;
       qaMode = true;
@@ -327,6 +337,7 @@ export function auditApartmentV1Article(input: {
     "평형별 지금 가격은 얼마일까?",
     ...(input.includeStructure ? ["평형별 구조는 어떻게 다를까?"] : []),
     "여기 살면 어떤 점이 좋을까?",
+    "자주 묻는 질문",
   ];
   const missingSections = requiredSections.filter((section) => !normalized.includes(normalizeForSearch(section)));
   checks.push(missingSections.length
