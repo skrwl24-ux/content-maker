@@ -132,6 +132,39 @@ function isPublishedCandidate(id: string, value: PublicationState) {
   return BASELINE_PUBLISHED.has(id) || value.published.includes(id);
 }
 
+function parseImportPayload(raw: string) {
+  const text = raw.trim();
+  if (!text) throw new Error("ChatGPT 조사 결과를 붙여넣어 주세요.");
+
+  const attempts: string[] = [];
+  const fenced = Array.from(text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi))
+    .map((match) => String(match[1] || "").trim())
+    .reverse();
+  attempts.push(...fenced, text);
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    attempts.push(text.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const value of attempts) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return { checkedAt: "", summary: "", questions: [], candidates: parsed };
+      }
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.candidates)) {
+        return parsed;
+      }
+    } catch {
+      // Try the next JSON candidate.
+    }
+  }
+
+  throw new Error("가져오기용 JSON을 찾지 못했습니다. ChatGPT 답변의 마지막 JSON 코드블록까지 함께 복사해 주세요.");
+}
+
 export default function PresaleDiscoverPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -144,6 +177,9 @@ export default function PresaleDiscoverPage() {
   const [autoResearchProvider, setAutoResearchProvider] = useState<string | null>(null);
   const [storageReady, setStorageReady] = useState<boolean | null>(null);
   const [researching, setResearching] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
   const [today, setToday] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -276,6 +312,51 @@ export default function PresaleDiscoverPage() {
     }
   }
 
+  async function importResearchResult() {
+    if (importing) return;
+
+    try {
+      const payload = parseImportPayload(importText);
+      setImporting(true);
+      setNotice("붙여넣은 조사 결과를 검증하고 새 사건만 미발행 큐에 저장하고 있습니다…");
+
+      const response = await fetch("/api/apartment-presale/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "manual-import",
+          checkedAt: typeof payload?.checkedAt === "string" ? payload.checkedAt : today || localDate(),
+          summary: typeof payload?.summary === "string" ? payload.summary : "",
+          questions: Array.isArray(payload?.questions) ? payload.questions : [],
+          candidates: Array.isArray(payload?.candidates) ? payload.candidates : [],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "조사 결과를 가져오지 못했습니다.");
+
+      const added = Array.isArray(data?.candidates) ? data.candidates.length : 0;
+      const skipped = typeof data?.skipped === "number" ? data.skipped : 0;
+      await refreshServerState();
+      setQueueView("queue");
+      clearFilters();
+
+      if (added > 0) {
+        setImportText("");
+        setImportOpen(false);
+      }
+      setNotice(
+        added > 0
+          ? "수동 조사 후보 " + added + "개를 미발행 큐에 저장했습니다." +
+            (skipped > 0 ? " 중복·형식 오류 " + skipped + "개는 제외했습니다." : "")
+          : "새로 추가할 사건이 없습니다. 기존 후보와 중복이거나 필수 정보가 부족합니다.",
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "조사 결과를 가져오지 못했습니다.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function clearFilters() {
     setQuery("");
     setFilter("all");
@@ -324,18 +405,51 @@ export default function PresaleDiscoverPage() {
               ? "🔑 자동 조사 설정 필요 · 수동 조사 ↗"
               : "🔎 최신 후보 자동 조사"}
         </button>
+        <button type="button" className={styles.ghostButton} onClick={() => setImportOpen((value) => !value)}>
+          📥 조사 결과 가져오기
+        </button>
         <button type="button" className={styles.ghostButton} onClick={openChatGptResearch}>ChatGPT에서 수동 조사 ↗</button>
         <button type="button" className={styles.ghostButton} onClick={() => void copyResearch()}>요청서 복사</button>
       </div>
     </section>
 
     <div className={styles.pageInner}>
+      {importOpen && <section className={styles.importPanel} aria-label="ChatGPT 조사 결과 가져오기">
+        <div className={styles.importHead}>
+          <div>
+            <small>CHATGPT → 미발행 큐</small>
+            <h2>조사 결과 가져오기</h2>
+            <p>ChatGPT 답변 전체를 붙여넣어도 됩니다. 마지막 JSON 코드블록을 찾아 같은 사건은 제외하고 새 후보만 저장합니다.</p>
+          </div>
+          <button type="button" className={styles.importClose} aria-label="가져오기 닫기"
+            onClick={() => setImportOpen(false)}>×</button>
+        </div>
+        <textarea
+          className={styles.importTextarea}
+          value={importText}
+          onChange={(event) => setImportText(event.target.value)}
+          placeholder={"ChatGPT 조사 결과 전체 또는 마지막 ```json ... ``` 블록을 붙여넣으세요.\n\n사이트에서 ‘요청서 복사’ → ChatGPT 조사 → 답변 전체 복사 순서로 사용하면 됩니다."}
+          rows={11}
+        />
+        <div className={styles.importActions}>
+          <button type="button" className={styles.importPrimary} disabled={importing || !importText.trim()}
+            onClick={() => void importResearchResult()}>
+            {importing ? "검증·저장 중…" : "새 사건만 미발행 큐에 추가"}
+          </button>
+          <button type="button" className={styles.importSecondary} disabled={importing}
+            onClick={() => { setImportText(""); setImportOpen(false); }}>
+            취소
+          </button>
+        </div>
+        <p className={styles.importHint}>필수 필드·https 근거 URL·지역·진행상태를 서버에서 다시 검사합니다. 단지명이 같아도 eventKey가 다른 새 사건은 별도 후보로 저장됩니다.</p>
+      </section>}
+
       <section className={styles.snapshot}>
         <div>
           <small>기본 조사 스냅샷</small>
           <strong>{PRESALE_CANDIDATE_SNAPSHOT_DATE.replace(/-/g, ".")}</strong>
           <span>{researchMeta?.checkedAt
-            ? "마지막 자동 조사 " + researchMeta.checkedAt.replace(/-/g, ".")
+            ? "마지막 후보 조사 " + researchMeta.checkedAt.replace(/-/g, ".")
             : autoResearchReady === false
               ? "자동 조사 인증 설정 필요 · 수동 조사 기능은 계속 사용 가능"
               : autoResearchProvider
@@ -353,14 +467,14 @@ export default function PresaleDiscoverPage() {
         {autoResearchReady === false
           ? "자동 조사 인증을 사용할 수 없습니다. 상단 버튼은 수동 ChatGPT 조사로 연결됩니다."
           : queueCandidates.length === 0
-            ? "현재 미발행 후보가 없습니다. 상단의 ‘최신 후보 자동 조사’를 누르면 발행 이력과 기존 카드를 제외한 새 사건을 웹에서 직접 찾아 카드로 추가합니다."
+            ? "현재 미발행 후보가 없습니다. ‘최신 후보 자동 조사’를 실행하거나 ChatGPT 조사 결과를 가져오면 새 사건만 카드로 추가합니다."
             : "자동 조사 카드도 최종 발행 전에는 제작실에서 최신 공식 모집공고·정정공고와 가격·물량을 다시 교차확인하세요. 카드 자체가 청약 권유나 확정 공고를 대신하지 않습니다."}
       </p>
 
       {researchMeta && (researchMeta.summary || researchMeta.questions.length > 0) &&
         <section className={styles.researchBox}>
           <div>
-            <small>최근 자동 조사 · {researchMeta.checkedAt || "날짜 미상"}</small>
+            <small>최근 후보 조사 · {researchMeta.checkedAt || "날짜 미상"}</small>
             <h2>이번 조사 요약</h2>
             {researchMeta.summary && <p>{researchMeta.summary}</p>}
           </div>
@@ -427,11 +541,12 @@ export default function PresaleDiscoverPage() {
         </div> : matches.map((item) => {
           const published = isPublishedCandidate(item.id, publicationState);
           const live = item.id.startsWith("live-");
+          const origin = (item as ServerCandidate).origin;
           return <article key={item.id} className={published ? `${styles.card} ${styles.cardPublished}` : styles.card}>
             <div className={styles.cardTop}>
               <span className={styles.region}>{item.region}</span>
               <div className={styles.statusGroup}>
-                {live && <span className={styles.liveBadge}>자동 조사</span>}
+                {live && <span className={styles.liveBadge}>{origin === "manual" ? "수동 가져오기" : "자동 조사"}</span>}
                 {published && <span className={styles.publishedBadge}>발행 완료</span>}
                 <span className={styles.status}>{item.status}</span>
               </div>
@@ -464,8 +579,8 @@ export default function PresaleDiscoverPage() {
 
       <section className={styles.footerGuide}>
         <h2>자동 조사 → 제작 → 발행완료</h2>
-        <p>‘최신 후보 자동 조사’를 누르면 웹 검색을 실행하고, 이미 발행한 같은 사건과 기존 카드를 제외한 후보만 Supabase 공용 미발행 큐에 저장합니다.</p>
-        <p>새 카드의 ‘이 단지 글 만들기’를 누르면 자동 조사 당시의 근거 URL·공급 메모·킥이 분양정보 제작실의 조사 출발점으로 넘어갑니다. 발행 완료 상태도 공용 저장소에 기록되어 다른 PC와 다음 자동 조사에서 그대로 적용됩니다.</p>
+        <p>‘최신 후보 자동 조사’는 웹 검색 결과를 직접 저장하고, ‘조사 결과 가져오기’는 ChatGPT에서 수동 검토한 결과를 같은 Supabase 공용 미발행 큐에 저장합니다.</p>
+        <p>두 방식 모두 같은 사건 중복 검사를 거칩니다. 새 카드의 ‘이 단지 글 만들기’를 누르면 근거 URL·공급 메모·킥이 분양정보 제작실의 조사 출발점으로 넘어가며, 발행 완료 상태도 다른 PC와 다음 조사에 그대로 적용됩니다.</p>
         <p>단지 자체를 영구 차단하지는 않습니다. 새 모집공고·정정공고·무순위·잔여세대·청약결과·의미 있는 일정 변경은 같은 단지라도 새로운 사건으로 다시 후보화할 수 있습니다.</p>
       </section>
     </div>
