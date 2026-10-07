@@ -571,6 +571,7 @@ export function buildFinalArticlePrompt(
   const tocItems = ["1. 평형별 지금 가격은 얼마일까?"];
   if (hasStructure) tocItems.push((tocItems.length + 1) + ". 평형별 구조는 어떻게 다를까?");
   if (hasLifeKick) tocItems.push((tocItems.length + 1) + ". 여기 살면 어떤 점이 좋을까?");
+  tocItems.push((tocItems.length + 1) + ". 자주 묻는 질문");
   const tocBlock = tocItems.join("\n");
   const lifeKickBlock = hasLifeKick
     ? [
