@@ -20,6 +20,12 @@ import {
   formatWon,
   safeParseJson,
 } from "../../lib/apartment-content-v1";
+import {
+  apartmentV1NaverPlainText,
+  apartmentV1NaverRichHtml,
+  auditApartmentV1Article,
+  parseApartmentV1Naver,
+} from "../../lib/apartment-v1-naver";
 
 type RecommendationRow = {
   id: string;
@@ -48,6 +54,7 @@ type ArticleRow = {
   kick_source_text: string;
   kick_snapshot: Record<string, unknown>;
   final_article: string;
+  naver_formatted: string;
 };
 
 type StructureRow = {
@@ -119,6 +126,9 @@ export default function ApartmentV1Page() {
   const [structureRaw, setStructureRaw] = useState("");
   const [lifeRaw, setLifeRaw] = useState("");
   const [finalRaw, setFinalRaw] = useState("");
+  const [naverApplied, setNaverApplied] = useState(false);
+  const [naverCopyMessage, setNaverCopyMessage] = useState("");
+  const [publishAuditVisible, setPublishAuditVisible] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chartTemplate, setChartTemplate] = useState<TemplateRow>({
     template_key: "APT_PRICE_FLOW_V1",
@@ -379,6 +389,9 @@ export default function ApartmentV1Page() {
       setStructureRaw("");
       setLifeRaw("");
       setFinalRaw(articleRow.final_article || "");
+      setNaverApplied(Boolean(articleRow.naver_formatted));
+      setNaverCopyMessage("");
+      setPublishAuditVisible(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "단지 작업을 열지 못했습니다.");
     } finally {
@@ -568,6 +581,7 @@ export default function ApartmentV1Page() {
       .from("apt_content_articles")
       .update({
         final_article: finalRaw.trim(),
+        naver_formatted: "",
         status: "ready",
         updated_at: new Date().toISOString(),
       })
@@ -577,9 +591,82 @@ export default function ApartmentV1Page() {
       setError(updateError.message);
       return;
     }
-    setArticle({ ...article, final_article: finalRaw.trim(), status: "ready" });
+    setArticle({ ...article, final_article: finalRaw.trim(), naver_formatted: "", status: "ready" });
+    setNaverApplied(false);
+    setPublishAuditVisible(false);
+    setNaverCopyMessage("");
     notify("최종 원고 저장 완료");
   }, [article, finalRaw, notify]);
+
+  const naverBlocks = useMemo(() => parseApartmentV1Naver(finalRaw), [finalRaw]);
+
+  const publishAudit = useMemo(() => {
+    if (!snapshot || !workspace) return null;
+    return auditApartmentV1Article({
+      body: finalRaw,
+      complexName: workspace.name,
+      referenceDate: snapshot.referenceDate,
+      areas: snapshot.areas.map((area) => ({
+        displayName: area.displayName,
+        currentMedian: area.currentMedian,
+      })),
+      includeStructure: article?.structure_mode !== "exclude",
+      kickTitle: article?.kick_title || "",
+    });
+  }, [article?.kick_title, article?.structure_mode, finalRaw, snapshot, workspace]);
+
+  const applyNaverFormatting = useCallback(async () => {
+    if (!article || !finalRaw.trim() || !naverBlocks.length) return;
+    const plain = apartmentV1NaverPlainText(naverBlocks);
+    const { error: updateError } = await supabaseRef.current
+      .from("apt_content_articles")
+      .update({
+        final_article: finalRaw.trim(),
+        naver_formatted: plain,
+        status: "ready",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", article.id)
+      .eq("user_id", userIdRef.current);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setArticle({ ...article, final_article: finalRaw.trim(), naver_formatted: plain, status: "ready" });
+    setNaverApplied(true);
+    setNaverCopyMessage("✓ 네이버 서식 적용 완료");
+    notify("네이버 서식 적용 완료");
+  }, [article, finalRaw, naverBlocks, notify]);
+
+  const copyNaverRichText = useCallback(async () => {
+    if (!naverApplied || !naverBlocks.length) {
+      setNaverCopyMessage("네이버 서식 적용을 먼저 눌러주세요.");
+      return;
+    }
+    const plain = apartmentV1NaverPlainText(naverBlocks);
+    const html = apartmentV1NaverRichHtml(naverBlocks);
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([plain], { type: "text/plain" }),
+          }),
+        ]);
+        setNaverCopyMessage("✓ 네이버 서식 복사 완료 · 네이버에서 Ctrl+V");
+      } else {
+        await navigator.clipboard.writeText(plain);
+        setNaverCopyMessage("브라우저 제한으로 문단 간격 텍스트를 복사했습니다.");
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(plain);
+        setNaverCopyMessage("서식 복사가 제한되어 문단 간격 텍스트를 복사했습니다.");
+      } catch {
+        setNaverCopyMessage("복사에 실패했습니다. 클립보드 권한을 확인해주세요.");
+      }
+    }
+  }, [naverApplied, naverBlocks]);
 
   const publishArticle = useCallback(async () => {
     if (!article || !workspace) return;
@@ -1168,22 +1255,96 @@ export default function ApartmentV1Page() {
 
             <div className={styles.pasteBox}>
               <label>GPT 최종 원고 붙여넣기</label>
-              <textarea className={styles.articleArea} value={finalRaw} onChange={(event) => setFinalRaw(event.target.value)} placeholder="최종 원고를 붙여넣으세요." />
+              <textarea
+                className={styles.articleArea}
+                value={finalRaw}
+                onChange={(event) => {
+                  setFinalRaw(event.target.value);
+                  setNaverApplied(false);
+                  setPublishAuditVisible(false);
+                  setNaverCopyMessage("");
+                }}
+                placeholder="최종 원고를 붙여넣으세요."
+              />
               <button className={styles.smallButton} disabled={!finalRaw.trim()} onClick={saveFinalArticle}>원고 저장</button>
             </div>
 
-            {article.final_article ? (
-              <div className={styles.publishBox}>
-                <div>
-                  <strong>네이버 발행 단계</strong>
-                  <span>기존 네이버 서식 기능을 그대로 사용합니다.</span>
+            {finalRaw.trim() ? (
+              <div className={styles.naverPanel}>
+                <div className={styles.naverPanelHead}>
+                  <div>
+                    <span className={styles.stepLabel}>NAVER FINAL COPY</span>
+                    <h3>네이버 최종편집 · 발행 전 검사</h3>
+                    <p>옛 작업실로 이동하지 않고 여기서 바로 서식 적용 → 복사 → 검사까지 끝냅니다.</p>
+                  </div>
+                  <span className={naverApplied ? styles.goodPill : styles.statusMuted}>{naverApplied ? "✓ 서식 적용됨" : "서식 적용 전"}</span>
                 </div>
-                <div className={styles.publishActions}>
-                  <button className={styles.copyButton} onClick={() => copyText(article.final_article, "최종 원고")}>최종 원고 복사</button>
-                  <Link href="/apartment-bulk" target="_blank" className={styles.secondaryLink}>기존 네이버 서식 열기</Link>
-                  <button className={styles.publishButton} disabled={busy === "publish"} onClick={publishArticle}>
-                    {busy === "publish" ? "처리 중…" : "발행 완료"}
-                  </button>
+
+                <div className={styles.naverToolBar}>
+                  <button className={styles.secondaryButton} onClick={applyNaverFormatting}>네이버 서식 적용</button>
+                  <button className={styles.primaryButton} disabled={!naverApplied} onClick={copyNaverRichText}>네이버용 복사</button>
+                  <button className={styles.copyButton} onClick={() => setPublishAuditVisible(true)}>발행 전 검사</button>
+                </div>
+                {naverCopyMessage ? <p className={styles.naverMessage}>{naverCopyMessage}</p> : null}
+
+                {naverApplied ? (
+                  <div className={styles.naverPreview}>
+                    <div className={styles.naverPreviewLabel}>네이버 서식 미리보기</div>
+                    {naverBlocks.map((block, index) => (
+                      <div
+                        key={block.type + "-" + index}
+                        className={
+                          block.type === "title" ? styles.naverTitle :
+                          block.type === "subheading" ? styles.naverSubheading :
+                          block.type === "emphasis" ? styles.naverEmphasis :
+                          block.type === "image" ? styles.naverImageMarker :
+                          block.type === "tags" ? styles.naverTags :
+                          block.type === "card" ? styles.naverCard :
+                          styles.naverBody
+                        }
+                      >
+                        {block.text.split("\n").map((line, lineIndex) => <span key={lineIndex}>{line}{lineIndex < block.text.split("\n").length - 1 ? <br /> : null}</span>)}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {publishAuditVisible && publishAudit ? (
+                  <div className={styles.auditPanel}>
+                    <div className={styles.auditHead}>
+                      <div>
+                        <strong>발행 전 자동 검사</strong>
+                        <span>현재 단지·평형 가격·이미지 자리·생활 킥·출처를 확인합니다.</span>
+                      </div>
+                      <b>{publishAudit.checks.filter((item) => item.status === "warning").length
+                        ? "확인 " + publishAudit.checks.filter((item) => item.status === "warning").length + "건"
+                        : "✓ 주요 항목 통과"}</b>
+                    </div>
+                    <div className={styles.auditList}>
+                      {publishAudit.checks.map((check, index) => (
+                        <div
+                          key={check.label + index}
+                          className={check.status === "warning" ? styles.auditWarning : check.status === "review" ? styles.auditReview : styles.auditPass}
+                        >
+                          <b>{check.status === "warning" ? "!" : check.status === "review" ? "·" : "✓"} {check.label}</b>
+                          <span>{check.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className={styles.publishBox}>
+                  <div>
+                    <strong>발행 준비</strong>
+                    <span>{naverApplied ? "네이버용 복사가 준비됐습니다. 검사 후 발행 완료 처리하세요." : "먼저 네이버 서식을 적용해주세요."}</span>
+                  </div>
+                  <div className={styles.publishActions}>
+                    <button className={styles.copyButton} onClick={() => copyText(finalRaw, "최종 원고")}>원문 복사</button>
+                    <button className={styles.publishButton} disabled={busy === "publish" || !naverApplied} onClick={publishArticle}>
+                      {busy === "publish" ? "처리 중…" : "발행 완료"}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : null}
