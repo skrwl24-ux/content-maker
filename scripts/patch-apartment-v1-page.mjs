@@ -9,6 +9,48 @@ function once(oldText, newText, label) {
   s = s.replace(oldText, newText);
 }
 
+if (!s.includes("function kstDateFromTimestamp")) {
+  once(
+`function kstDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return values.year + "-" + values.month + "-" + values.day;
+}
+`,
+`function kstDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return values.year + "-" + values.month + "-" + values.day;
+}
+
+function kstDateFromTimestamp(value: string) {
+  if (!value) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return values.year && values.month && values.day
+    ? values.year + "-" + values.month + "-" + values.day
+    : "";
+}
+`,
+"kst timestamp helper"
+  );
+}
+
 once(
 `type ComplexIdentityState = {
   loaded: boolean;
@@ -122,7 +164,7 @@ once(
       const missingCoverage = expectedMonths.filter((month) => !coverageMap.has(month));
       const currentCoverage = coverageMap.get(referenceDate.slice(0, 7));
       const currentCoverageFresh = Boolean(
-        currentCoverage && String(currentCoverage.fetched_at || "").slice(0, 10) >= referenceDate
+        currentCoverage && kstDateFromTimestamp(currentCoverage.fetched_at) >= referenceDate
       );
       const coverageReady = missingCoverage.length === 0 && currentCoverageFresh;
 
@@ -189,7 +231,7 @@ once(
     snapshot &&
     missingTradeMonths.length === 0 &&
     currentTradeCoverage &&
-    String(currentTradeCoverage.fetched_at || "").slice(0, 10) >= snapshot.referenceDate
+    kstDateFromTimestamp(currentTradeCoverage.fetched_at) >= snapshot.referenceDate
   );
   const identityReady = Boolean(
     identityState.loaded &&
