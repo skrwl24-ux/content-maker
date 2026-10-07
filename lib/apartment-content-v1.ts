@@ -272,7 +272,7 @@ export function buildResearchSnapshot(base: DataSnapshot, result: any): DataSnap
         monthly,
       };
     })
-    .sort((a, b) => a.areaGroup - b.areaGroup);
+    .sort((a: AreaSnapshot, b: AreaSnapshot) => a.areaGroup - b.areaGroup);
 
   if (!areas.length) return base;
 
