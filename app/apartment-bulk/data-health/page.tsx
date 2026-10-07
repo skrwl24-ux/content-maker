@@ -25,6 +25,7 @@ export default function DataHealthPage(){
   const [health,setHealth]=useState<Health|null>(null);
   const [loading,setLoading]=useState(false);
   const [refreshing,setRefreshing]=useState("");
+  const [syncingRegion,setSyncingRegion]=useState(false);
   const [message,setMessage]=useState("");
   const [error,setError]=useState("");
 
@@ -57,6 +58,27 @@ export default function DataHealthPage(){
       await load();
     }catch(e){setError(e instanceof Error?e.message:"재수집에 실패했습니다.");}
     finally{setRefreshing("");}
+  }
+  async function syncYearTrades(){
+    if(!secret.trim())return;
+    setSyncingRegion(true);setMessage("");setError("");
+    try{
+      const res=await fetch("/api/apartment/sync",{
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "x-apartment-sync-secret":secret
+        },
+        body:JSON.stringify({regionCode}),
+        cache:"no-store"
+      });
+      const result=await res.json();
+      if(!res.ok)throw new Error(result.error||"2026년 실거래 재수집에 실패했습니다.");
+      setMessage("2026년 1월~현재 실거래 재수집 완료 · 원자료 "+viewNumber(result.trades)+
+        "건 / 연결 정상거래 "+viewNumber(result.matchedTrades)+"건");
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:"2026년 실거래 재수집에 실패했습니다.");}
+    finally{setSyncingRegion(false);}
   }
   return (
     <main className={styles.page}>
@@ -105,7 +127,11 @@ export default function DataHealthPage(){
         </section>
         <section className={styles.panel}>
           <h2>지역 동기화 이력</h2>
-          <p>최근 실행 상태를 확인한 뒤 재수집이 필요하면 해당 단지의 기본정보만 별도로 확인하세요.</p>
+          <p>현재 동기화는 2026년 1월부터 현재 월까지 국토부 실거래 원자료를 다시 가져옵니다.
+            1~3월 누락처럼 연간 데이터 공백이 발견되면 먼저 이 지역을 재수집하세요.</p>
+          <button disabled={syncingRegion||loading||!secret.trim()} onClick={()=>void syncYearTrades()}>
+            {syncingRegion?"2026년 원자료 재수집 중…":"이 지역 2026년 실거래 전체 재수집"}
+          </button>
           <div className={styles.tableWrap}><table><thead><tr>
             <th>시작</th><th>결과</th><th>종료</th><th>등록 단지</th><th>원자료</th><th>연결 정상거래</th><th>K-apt 상세 누락/오류</th>
           </tr></thead><tbody>
