@@ -112,6 +112,7 @@ create table if not exists public.apt_content_prompt_templates (
   name text not null,
   is_active boolean not null default true,
   template_text text not null default '',
+  reference_image_url text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, template_key)
