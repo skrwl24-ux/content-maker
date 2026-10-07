@@ -490,6 +490,26 @@ export async function syncApartmentRegion(regionCode: string) {
     // the latest seven months only.
     const yearMonths = currentCalendarYearMonths();
     const rawTradeMonths = await mapInBatches(yearMonths, 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
+
+    // Record fetch coverage independently from actual trade counts. A month
+    // returning zero rows is still a successfully checked month, which lets the
+    // content UI distinguish "0 trades" from "not fetched yet".
+    const coverageFetchedAt = new Date().toISOString();
+    const coverageRows = yearMonths.map((ym, index) => ({
+      region_code: regionCode,
+      year_month: ym.slice(0, 4) + "-" + ym.slice(4),
+      fetched_at: coverageFetchedAt,
+      raw_trade_count: rawTradeMonths[index]?.length || 0,
+      source: "molit_api",
+    })) as unknown as JsonRecord[];
+    await upsertInChunks(
+      client,
+      "apt_trade_month_coverage",
+      coverageRows,
+      "region_code,year_month",
+      50
+    );
+
     const normalized = rawTradeMonths
       .flat()
       .map((row) => normalizeTrade(row, regionCode, complexes))
@@ -689,6 +709,7 @@ export async function syncApartmentRegion(regionCode: string) {
       obsoleteMonthlyRowsRemoved: Number(removedObsoleteMonthly || 0),
       unmatchedSourceGroups,
       autoLinkedTrades,
+      coveredMonths: yearMonths.length,
       kaptDetailEmpty,
       kaptDetailErrors,
       kaptAddressMissing,
