@@ -640,7 +640,10 @@ export default function ApartmentV1Page() {
 
   const publishAudit = useMemo(() => {
     if (!snapshot || !workspace) return null;
-    const auditSnapshot = researchReady && researchSnapshot ? researchSnapshot : snapshot;
+    const savedResearch = (article?.data_check_result as any) || {};
+    const auditSnapshot = savedResearch?.collectionReady
+      ? buildResearchSnapshot(snapshot, savedResearch)
+      : snapshot;
     return auditApartmentV1Article({
       body: finalRaw,
       complexName: workspace.name,
@@ -652,8 +655,7 @@ export default function ApartmentV1Page() {
       includeStructure: article?.structure_mode !== "exclude",
       kickTitle: article?.kick_title || "",
     });
-  }, [article?.kick_title, article?.structure_mode, finalRaw, researchReady, researchSnapshot, snapshot, workspace]);
-
+  }, [article?.data_check_result, article?.kick_title, article?.structure_mode, finalRaw, snapshot, workspace]);
   const applyNaverFormatting = useCallback(async () => {
     if (!article || !finalRaw.trim() || !naverBlocks.length) return;
     const plain = apartmentV1NaverPlainText(naverBlocks);
@@ -1145,7 +1147,7 @@ export default function ApartmentV1Page() {
               <textarea
                 value={dataCheckRaw}
                 onChange={(event) => setDataCheckRaw(event.target.value)}
-                placeholder='{"status":"pass","internalCheck":{...},"externalCheck":{"performed":true,"identityMatch":true,"recentTradeMatch":true,"sources":[...]}, "warnings":[],"chartReady":true}'
+                placeholder='{"externalCollection":{"performed":true,"identityConfirmed":true,"areaGroups":[...],"sources":[...]}, "warnings":[]}'
               />
               <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>실거래 자료 저장</button>
             </div>
