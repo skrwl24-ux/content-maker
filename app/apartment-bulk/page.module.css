@@ -50,6 +50,8 @@
 .naverEmphasis{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:19px;line-height:1.65;font-weight:700;color:#172033;word-break:keep-all}
 .naverBody,.naverImageLine{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.8;color:#222;font-weight:400;word-break:keep-all}
 .naverImageLine{font-weight:600;color:#526476}
+.naverToc{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.7;color:#202c31;font-weight:400;word-break:keep-all;white-space:pre-line;background:#f3f6fa;border-left:4px solid #2673d5;padding:11px 15px}
+.naverToc::first-line{font-weight:700;color:#2468c1}
 .naverCard{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.75;color:#222;font-weight:400;word-break:keep-all;white-space:pre-line;border-left:3px solid #8aa99d;background:#f7faf8;border-radius:0 10px 10px 0;padding:10px 12px}
 .naverCard::first-line{font-weight:700;color:#173e32}
 .naverTags{font-family:"Nanum Gothic","Noto Sans KR","Apple SD Gothic Neo",sans-serif;font-size:15px;line-height:1.7;color:#506071;font-weight:400;word-break:break-word}

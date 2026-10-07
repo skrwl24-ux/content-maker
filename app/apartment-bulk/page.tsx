@@ -137,7 +137,7 @@ type OutputKey = "price" | "map";
 type Outputs = Record<OutputKey, string>;
 type MonthlyStat = { month: string; medianPrice: number | null; tradeCount: number };
 type NaverBlock = {
-  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags" | "card";
+  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags" | "card" | "toc";
   text: string;
 };
 type MarkdownTable = {
@@ -993,6 +993,8 @@ function normalizeNaverParagraphLines(raw: string) {
     if (/^(\*\*|__)[\s\S]+\1$/.test(trimmed)) return true;
     if (/^>\s+/.test(trimmed)) return true;
     if (/^\[\/?분양 핵심 POINT\]$/i.test(trimmed)) return true;
+    if (/^(?:[┃│|]\s*)?📋\s*목차$/u.test(trimmed)) return true;
+    if (/^(?:[┃│|]\s*)?\d+\.\s+\S+/u.test(trimmed)) return true;
     if (/^\[이미지\s*\d+/i.test(cleanNaverLine(trimmed))) return true;
     if (/^#[^\s#]+(?:\s+#[^\s#]+)+/.test(cleanNaverLine(trimmed))) return true;
     if (trimmed.includes("|") && splitMarkdownTableRow(trimmed).length >= 2) return true;
@@ -1144,6 +1146,22 @@ function parseNaverBlog(raw: string, tableMode: TableHandlingMode = "image", pla
       }
     }
 
+    const tocHeading = original.replace(/^[┃│|]\s*/u, "").trim();
+    if (/^📋\s*목차$/u.test(tocHeading)) {
+      const tocItems: string[] = [];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const candidate = cleanNaverLine(lines[cursor]).replace(/^[┃│|]\s*/u, "").trim();
+        if (!/^\d+\.\s+\S+/u.test(candidate)) break;
+        tocItems.push(candidate);
+        cursor += 1;
+      }
+      blocks.push({ type: "toc", text: ["📋 목차", ...tocItems].join("\n") });
+      index = cursor - 1;
+      firstContent = false;
+      continue;
+    }
+
     const line = cleanNaverLine(original);
     if (!line) continue;
 
@@ -1274,6 +1292,11 @@ function naverRichHtml(blocks: NaverBlock[]) {
     }
     if (block.type === "image") {
       return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:600;margin:0;">${safe}</div>`;
+    }
+    if (block.type === "toc") {
+      const [tocTitle, ...tocItems] = safe.split("\n");
+      const itemHtml = tocItems.join("<br>");
+      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:400;margin:0;background:#f3f6fa;border-left:4px solid #2673d5;padding:11px 15px;color:#202c31;"><div style="font-weight:700;color:#2468c1;margin:0 0 6px;">${tocTitle || "📋 목차"}</div>${itemHtml ? `<div>${itemHtml}</div>` : ""}</div>`;
     }
     if (block.type === "card") {
       const [cardTitle, ...cardDetails] = safe.split("\n");
@@ -4702,6 +4725,7 @@ export default function ApartmentBulkPage() {
                           block.type === "emphasis" ? styles.naverEmphasis :
                           block.type === "tags" ? styles.naverTags :
                           block.type === "image" ? styles.naverImageLine :
+                          block.type === "toc" ? styles.naverToc :
                           block.type === "card" ? styles.naverCard :
                           styles.naverBody
                         }
