@@ -1220,3 +1220,116 @@
   color: #7b8799;
   font-size: 11px;
 }
+
+
+.settingsTabs {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 22px;
+  padding: 5px;
+  border-radius: 14px;
+  background: #f2f5fa;
+}
+
+.settingsTabs button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: transparent;
+  color: #667085;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.settingsTabs .settingsTabActive {
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 4px 14px rgba(31, 48, 77, 0.08);
+}
+
+.promptEditorTop {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.6fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.promptEditorTop > label,
+.promptHelp {
+  padding: 14px;
+  border: 1px solid #e1e7f0;
+  border-radius: 14px;
+  background: #fbfcfe;
+}
+
+.promptEditorTop label > span,
+.promptHelp span,
+.placeholderBox > span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+}
+
+.promptEditorTop select {
+  width: 100%;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border: 1px solid #d8dfeb;
+  border-radius: 10px;
+  background: #fff;
+  color: #263246;
+  font: inherit;
+  font-weight: 750;
+}
+
+.promptHelp {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.placeholderBox {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #d9e4f6;
+  border-radius: 14px;
+  background: #f7faff;
+}
+
+.placeholderBox > strong {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 13px;
+}
+
+.placeholderBox > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.placeholderBox code {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #eaf1ff;
+  color: #245de8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+@media (max-width: 820px) {
+  .settingsTabs {
+    width: 100%;
+  }
+
+  .settingsTabs button {
+    flex: 1;
+  }
+
+  .promptEditorTop {
+    grid-template-columns: 1fr;
+  }
+}
