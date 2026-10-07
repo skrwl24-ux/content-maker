@@ -257,8 +257,14 @@ export function buildDataCheckPrompt(snapshot: DataSnapshot) {
     "- 최근 실거래 샘플을 최소 1건 이상 외부 자료에서 대조했고 충돌이 없어야 함",
     "- 올해 누적거래 총건수는 외부에서 정확히 확인이 불가능해도 샘플 대조가 됐다면 null 허용",
     "",
-    "[출력 형식]",
-    "설명 없이 아래 JSON만 출력:",
+    "[출력 형식 — 복사하기 쉽게 반드시 지킬 것]",
+    "- 최종 응답의 첫 블록을 반드시 ```json 코드블록 하나로 출력할 것.",
+    "- JSON 코드블록 안에는 유효한 JSON만 넣을 것. 설명문, 마크다운, 출처 칩, 인용표시를 JSON 문자열 안에 섞지 말 것.",
+    "- 웹 검색 출처는 sources 배열의 name/url/checked 문자열로 정리할 것.",
+    "- UI상 인용표시가 꼭 필요하면 JSON 코드블록 바깥, 코드블록 아래에만 표시할 것.",
+    "- 사용자가 코드블록 우측 상단 복사 버튼으로 JSON만 한 번에 복사할 수 있어야 함.",
+    "",
+    "```json",
     "{",
     '  "status": "pass" 또는 "warning",',
     '  "internalCheck": {',
@@ -283,7 +289,8 @@ export function buildDataCheckPrompt(snapshot: DataSnapshot) {
     "  },",
     '  "warnings": ["차이가 있거나 확인 못한 항목"],',
     '  "chartReady": true 또는 false',
-    "}"
+    "}",
+    "```"
   ].join("\n");
 }
 
@@ -306,14 +313,19 @@ export function buildStructurePrompt(snapshot: DataSnapshot, needsCheckGroups: n
     "- 신뢰할 만한 자료로 확정하기 어렵다면 반드시 status를 needs_check로 할 것.",
     "- 확인이 어렵다고 판단한 항목은 억지로 채우지 말 것.",
     "",
-    "[출력 형식]",
-    "설명 없이 JSON만 출력:",
+    "[출력 형식 — 복사하기 쉽게 반드시 지킬 것]",
+    "- 반드시 ```json 코드블록 하나로 출력할 것.",
+    "- 코드블록 안에는 유효한 JSON만 넣고, 출처 칩·인용표시·설명을 JSON 문자열 안에 섞지 말 것.",
+    "- UI상 인용표시가 필요하면 코드블록 아래에만 표시할 것.",
+    "",
+    "```json",
     '{',
     '  "areas": [',
     '    {"areaGroup": 84, "rooms": 3, "baths": 2, "status": "verified", "source": "확인 근거"},',
     '    {"areaGroup": 114, "rooms": null, "baths": null, "status": "needs_check", "source": "확인 불가 사유"}',
     "  ]",
-    "}"
+    "}",
+    "```"
   ].join("\n");
 }
 
@@ -338,16 +350,23 @@ export function buildLifeKickPrompt(snapshot: DataSnapshot) {
     "- 가장 강한 1개만 선택할 것.",
     "- 적절한 킥을 검증하지 못하면 kickFound=false로 끝낼 것.",
     "",
-    "[출력 형식]",
-    "설명 없이 JSON만 출력:",
+    "[출력 형식 — 복사하기 쉽게 반드시 지킬 것]",
+    "- 반드시 ```json 코드블록 하나로 출력할 것.",
+    "- 코드블록 안에는 유효한 JSON만 넣고, 출처 칩·인용표시·설명을 JSON 문자열 안에 섞지 말 것.",
+    "- sourceText에는 출처명을 글자로만 적고, 웹 인용 UI를 끼워 넣지 말 것.",
+    "- UI상 인용표시가 필요하면 코드블록 아래에만 표시할 것.",
+    "",
+    "```json",
     '{',
     '  "kickFound": true,',
     '  "title": "시설 또는 장소명",',
     '  "category": "공원/마트/시장/교통/문화 등",',
     '  "summary": "거주 생활에서 어떤 의미가 있는지 짧게",',
     '  "sourceText": "확인한 근거와 출처 요약",',
+    '  "sources": [{"name":"출처명","url":"https://...","checked":"확인한 내용"}],',
     '  "verified": true',
-    '}'
+    '}',
+    "```"
   ].join("\n");
 }
 
@@ -453,7 +472,12 @@ export function buildFinalArticlePrompt(
     "[출처 표기]",
     snapshot.referenceDate.replace(/-/g, ".") + " 기준 · 국토부 실거래 자료",
     "",
-    "도입은 짧게, 각 섹션도 불필요하게 늘리지 말고 최종 발행본만 출력해줘."
+    "도입은 짧게, 각 섹션도 불필요하게 늘리지 말고 최종 발행본만 출력해줘.",
+    "",
+    "[출력 형식]",
+    "- 최종 글 전체를 ```text 코드블록 하나로 출력할 것.",
+    "- 코드블록 밖에는 설명을 붙이지 말 것.",
+    "- 사용자가 코드블록 우측 상단 복사 버튼으로 글 전체를 한 번에 복사할 수 있어야 함."
   ].join("\n");
 }
 
