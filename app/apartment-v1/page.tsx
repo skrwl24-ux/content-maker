@@ -299,7 +299,9 @@ export default function ApartmentV1Page() {
       .in("template_key", keys);
     if (loadError) throw loadError;
 
-    const existing = new Map((data || []).map((row: any) => [row.template_key, row as TemplateRow]));
+    const existing = new Map<string, TemplateRow>(
+      ((data || []) as TemplateRow[]).map((row) => [row.template_key, row])
+    );
     const missingRows: any[] = [];
 
     const chart = existing.get("APT_PRICE_FLOW_V1");
@@ -341,7 +343,9 @@ export default function ApartmentV1Page() {
         .upsert(missingRows, { onConflict: "user_id,template_key", ignoreDuplicates: true })
         .select("id,template_key,name,is_active,template_text,reference_image_url");
       if (insertError) throw insertError;
-      const insertedMap = new Map((inserted || []).map((row: any) => [row.template_key, row as TemplateRow]));
+      const insertedMap = new Map<string, TemplateRow>(
+        ((inserted || []) as TemplateRow[]).map((row) => [row.template_key, row])
+      );
       if (insertedMap.has("APT_PRICE_FLOW_V1")) {
         setChartTemplate(insertedMap.get("APT_PRICE_FLOW_V1") as TemplateRow);
       }
