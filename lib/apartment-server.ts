@@ -519,6 +519,19 @@ export async function syncApartmentRegion(regionCode: string) {
     const tradeRows = normalized.map((row) => ({ ...row, updated_at: new Date().toISOString() })) as unknown as JsonRecord[];
     await upsertInChunks(client, "apt_trades", tradeRows, "source_trade_key", 400);
 
+    // If one K-apt management complex is the only complex on the exact
+    // legal-dong + cadastral lot, any residual MOLIT source name on that lot
+    // belongs to that management complex unless construction year conflicts.
+    // This repairs older rows collected before K-apt address details were known.
+    const { data: autoLinkResult, error: autoLinkError } = await client.rpc(
+      "auto_link_unique_kapt_lot_trades",
+      { p_region_code: regionCode, p_analysis_date: currentAnalysisDate() }
+    );
+    if (autoLinkError) throw autoLinkError;
+    const autoLinkedTrades = Number(
+      (autoLinkResult as Record<string, unknown> | null)?.linkedTradeCount || 0
+    );
+
     const matchedCodes = new Set(normalized.filter((t) => t.complex_id).map((t) => t.complex_id as string));
     if (matchedCodes.size) {
       const { error } = await client
@@ -675,6 +688,7 @@ export async function syncApartmentRegion(regionCode: string) {
       matchedTrades: activeTrades.length,
       obsoleteMonthlyRowsRemoved: Number(removedObsoleteMonthly || 0),
       unmatchedSourceGroups,
+      autoLinkedTrades,
       kaptDetailEmpty,
       kaptDetailErrors,
       kaptAddressMissing,
