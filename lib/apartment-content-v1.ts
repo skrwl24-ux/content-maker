@@ -194,6 +194,95 @@ export function buildDataSnapshot(
   };
 }
 
+
+function researchPriceWon(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value >= 1000000 ? Math.round(value) : null;
+  }
+  const raw = String(value ?? "").trim().replace(/,/g, "");
+  if (!raw) return null;
+  const eok = raw.match(/^([0-9]+(?:\.[0-9]+)?)\s*억$/);
+  if (eok) return Math.round(Number(eok[1]) * 100000000);
+  const man = raw.match(/^([0-9]+(?:\.[0-9]+)?)\s*만(?:원)?$/);
+  if (man) return Math.round(Number(man[1]) * 10000);
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1000000 ? Math.round(n) : null;
+}
+
+function parseExclusiveRange(value: unknown, fallbackMin: number, fallbackMax: number) {
+  const raw = String(value ?? "").replace(/㎡/g, "").trim();
+  const nums = raw.match(/[0-9]+(?:\.[0-9]+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  if (nums.length >= 2) return { min: Math.min(nums[0], nums[1]), max: Math.max(nums[0], nums[1]) };
+  if (nums.length === 1) return { min: nums[0], max: nums[0] };
+  return { min: fallbackMin, max: fallbackMax };
+}
+
+export function buildResearchSnapshot(base: DataSnapshot, result: any): DataSnapshot {
+  const collection = result?.externalCollection;
+  if (!collection?.performed || !Array.isArray(collection?.areaGroups) || !collection.areaGroups.length) {
+    return base;
+  }
+
+  const months = monthKeys(base.year, base.referenceDate);
+  const areas: AreaSnapshot[] = collection.areaGroups
+    .filter((group: any) => Number.isFinite(Number(group?.areaGroup)))
+    .map((group: any) => {
+      const areaGroup = Number(group.areaGroup);
+      const fallback = base.areas.find((area) => area.areaGroup === areaGroup);
+      const range = parseExclusiveRange(
+        group.exclusiveRange,
+        fallback?.exclusiveMin ?? areaGroup,
+        fallback?.exclusiveMax ?? areaGroup
+      );
+      const sourceMonthly = Array.isArray(group.monthly) ? group.monthly : [];
+
+      const monthly: MonthlyPoint[] = months.map((month) => {
+        const point = sourceMonthly.find((item: any) => String(item?.month || "") === month);
+        return {
+          month,
+          median: researchPriceWon(point?.medianPriceWon ?? point?.medianPrice ?? null),
+          tradeCount: Math.max(0, Number(point?.tradeCount) || 0),
+        };
+      });
+
+      const latest = [...monthly].reverse().find((point) => point.tradeCount > 0 && point.median !== null) || null;
+      const countByMonths = (from: number, to: number) => monthly
+        .filter((point) => {
+          const m = Number(point.month.slice(5, 7));
+          return m >= from && m <= to;
+        })
+        .reduce((sum, point) => sum + point.tradeCount, 0);
+
+      const totalCount = monthly.reduce((sum, point) => sum + point.tradeCount, 0);
+
+      return {
+        areaGroup,
+        displayName: fallback?.displayName || areaDisplayName(areaGroup),
+        exclusiveLabel: range.min === range.max
+          ? "전용 " + range.min.toFixed(1).replace(/\.0$/, "") + "㎡"
+          : "전용 " + range.min.toFixed(1) + "~" + range.max.toFixed(1) + "㎡",
+        exclusiveMin: range.min,
+        exclusiveMax: range.max,
+        currentMedian: latest?.median ?? researchPriceWon(group.latestMedianPriceWon ?? group.latestMedianPrice ?? null),
+        latestMonth: latest?.month || String(group.latestValidMonth || "") || null,
+        q1Count: Number.isFinite(Number(group.q1Count)) ? Number(group.q1Count) : countByMonths(1, 3),
+        q2Count: Number.isFinite(Number(group.q2Count)) ? Number(group.q2Count) : countByMonths(4, 6),
+        h2Count: Number.isFinite(Number(group.h2Count)) ? Number(group.h2Count) : countByMonths(7, 12),
+        totalCount,
+        monthly,
+      };
+    })
+    .sort((a, b) => a.areaGroup - b.areaGroup);
+
+  if (!areas.length) return base;
+
+  return {
+    ...base,
+    totalTransactions: areas.reduce((sum, area) => sum + area.totalCount, 0),
+    areas,
+  };
+}
+
 function dataLines(snapshot: DataSnapshot) {
   const lines: string[] = [];
   for (const area of snapshot.areas) {
@@ -238,6 +327,7 @@ export function buildDataCheckPrompt(snapshot: DataSnapshot) {
     "- 확인 가능한 경우 취소·해제·정정 여부도 같이 확인하고 정상 거래만 집계한다.",
     "- 해당 단지에서 실제 존재하는 전용면적군을 확인한다.",
     "- 외부 자료로 확인 가능한 범위에서 월별 거래건수와 월 대표가격을 정리한다.",
+    "- JSON의 medianPriceWon/latestMedianPriceWon은 반드시 원 단위 정수로 넣는다. 예: 6억원이면 600000000.",
     "- 월 대표가격은 해당 평형군의 그 달 정상 거래가격 중앙값으로 계산한다.",
     "- 거래가 없는 달은 거래 없음/null로 유지하고 값을 만들지 않는다.",
     "",
@@ -293,10 +383,10 @@ export function buildDataCheckPrompt(snapshot: DataSnapshot) {
     '        "areaGroup": 59,',
     '        "exclusiveRange": "59.7~59.8㎡",',
     '        "monthly": [',
-    '          {"month":"2026-01","tradeCount":0,"medianPrice":null}',
+    '          {"month":"2026-01","tradeCount":0,"medianPriceWon":null}',
     '        ],',
     '        "latestValidMonth": null,',
-    '        "latestMedianPrice": null,',
+    '        "latestMedianPriceWon": null,',
     '        "q1Count": 0,',
     '        "q2Count": 0,',
     '        "h2Count": 0',
