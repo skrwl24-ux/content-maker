@@ -489,9 +489,29 @@ export default function ApartmentV1Page() {
     if (!article) return;
     try {
       const parsed = safeParseJson(dataCheckRaw) as any;
-      const status = parsed.status === "pass" ? "pass" : "warning";
-      const chartReady = Boolean(parsed.chartReady);
-      const result = { ...parsed, chartReady };
+      const external = parsed?.externalCheck || {};
+      const sourceCount = Array.isArray(external.sources) ? external.sources.length : 0;
+      const hasIndependentWebCheck =
+        external.performed === true &&
+        external.identityMatch === true &&
+        external.recentTradeMatch === true &&
+        sourceCount >= 2;
+
+      const warnings = Array.isArray(parsed.warnings) ? [...parsed.warnings] : [];
+      if (!hasIndependentWebCheck) {
+        warnings.unshift("웹 독립 교차검증이 완료되지 않았습니다. 공식·공공 출처를 포함한 최소 2개 출처와 최근 실거래 샘플 대조가 필요합니다.");
+      }
+
+      const chartReady = Boolean(parsed.chartReady) && hasIndependentWebCheck;
+      const status = parsed.status === "pass" && chartReady ? "pass" : "warning";
+      const result = {
+        ...parsed,
+        status,
+        warnings,
+        chartReady,
+        doubleCheckReady: hasIndependentWebCheck,
+      };
+
       const { error: updateError } = await supabaseRef.current
         .from("apt_content_articles")
         .update({
@@ -503,7 +523,7 @@ export default function ApartmentV1Page() {
         .eq("user_id", userIdRef.current);
       if (updateError) throw updateError;
       setArticle({ ...article, data_status: status, data_check_result: result });
-      notify(chartReady ? "데이터 검수 완료" : "확인 필요 상태로 저장");
+      notify(chartReady ? "내부 + 웹 이중 검수 완료" : "이중 검수 확인 필요");
     } catch (cause) {
       setError(cause instanceof Error ? "검수 결과 JSON 오류: " + cause.message : "검수 결과를 읽지 못했습니다.");
     }
@@ -907,7 +927,9 @@ export default function ApartmentV1Page() {
       .map((area) => area.areaGroup);
   }, [snapshot, structureByArea]);
 
-  const chartReady = Boolean((article?.data_check_result as any)?.chartReady);
+  const dataCheckResult = (article?.data_check_result as any) || {};
+  const externalDataCheck = dataCheckResult?.externalCheck || null;
+  const chartReady = Boolean(dataCheckResult?.chartReady);
   const structureReady = article?.structure_mode === "exclude" || needsCheckGroups.length === 0;
   const lifeReady = article?.kick_status === "verified";
   const finalReady = article?.data_status === "pass" && structureReady && lifeReady;
@@ -1108,19 +1130,71 @@ export default function ApartmentV1Page() {
 
             <div className={styles.actionStrip}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "데이터 검수 요청서")}>데이터 검수 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "이중 검수 요청서")}>이중 검수 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 웹 이중검수 열기</button>
               </div>
               <span className={article.data_status === "pass" ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
-                {article.data_status === "pass" ? "✓ 검수 완료" : article.data_status === "warning" ? "⚠ 확인 필요" : "검수 전"}
+                {article.data_status === "pass" ? "✓ 이중 검수 완료" : article.data_status === "warning" ? "⚠ 이중 검수 확인 필요" : "검수 전"}
               </span>
             </div>
 
             <div className={styles.pasteBox}>
-              <label>GPT 검수 결과 붙여넣기</label>
-              <textarea value={dataCheckRaw} onChange={(event) => setDataCheckRaw(event.target.value)} placeholder='{"status":"pass","warnings":[],"chartReady":true}' />
-              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>검수 결과 적용</button>
+              <label>GPT 이중 검수 결과 붙여넣기</label>
+              <textarea
+                value={dataCheckRaw}
+                onChange={(event) => setDataCheckRaw(event.target.value)}
+                placeholder='{"status":"pass","internalCheck":{...},"externalCheck":{"performed":true,"identityMatch":true,"recentTradeMatch":true,"sources":[...]}, "warnings":[],"chartReady":true}'
+              />
+              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>이중 검수 결과 적용</button>
             </div>
+
+            {article.data_status !== "pending" ? (
+              <div className={styles.doubleCheckPanel}>
+                <div className={styles.doubleCheckHead}>
+                  <div>
+                    <strong>이중 검수 결과</strong>
+                    <span>사이트 내부 계산 + GPT 웹 독립 확인</span>
+                  </div>
+                  <b className={chartReady ? styles.statusGood : styles.statusWarn}>
+                    {chartReady ? "✓ 차트 사용 가능" : "⚠ 차트 보류"}
+                  </b>
+                </div>
+                <div className={styles.doubleCheckGrid}>
+                  <div>
+                    <span>1차 · 내부 계산</span>
+                    <strong>{dataCheckResult?.internalCheck ? "확인됨" : "결과 없음"}</strong>
+                  </div>
+                  <div>
+                    <span>2차 · 웹 검색</span>
+                    <strong>{externalDataCheck?.performed ? "수행됨" : "미수행"}</strong>
+                  </div>
+                  <div>
+                    <span>단지 식별</span>
+                    <strong>{externalDataCheck?.identityMatch === true ? "일치" : externalDataCheck?.identityMatch === false ? "불일치" : "미확인"}</strong>
+                  </div>
+                  <div>
+                    <span>최근 거래 샘플</span>
+                    <strong>{externalDataCheck?.recentTradeMatch === true ? "일치" : externalDataCheck?.recentTradeMatch === false ? "불일치" : "미확인"}</strong>
+                  </div>
+                </div>
+                {Array.isArray(externalDataCheck?.sources) && externalDataCheck.sources.length ? (
+                  <div className={styles.doubleCheckSources}>
+                    <strong>확인 출처</strong>
+                    {externalDataCheck.sources.map((source: any, index: number) => (
+                      <div key={(source?.name || "source") + index}>
+                        <span>{source?.name || "출처"}{source?.checked ? " · " + source.checked : ""}</span>
+                        {source?.url ? <a href={source.url} target="_blank" rel="noreferrer">열기</a> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {Array.isArray(dataCheckResult?.warnings) && dataCheckResult.warnings.length ? (
+                  <div className={styles.doubleCheckWarnings}>
+                    {dataCheckResult.warnings.map((warning: string, index: number) => <div key={index}>⚠ {warning}</div>)}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className={styles.imageRequestRow}>
               <div>
