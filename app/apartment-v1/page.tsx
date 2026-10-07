@@ -108,6 +108,15 @@ function areaRangeText(area: AreaSnapshot) {
   return "전용 " + area.exclusiveMin.toFixed(1) + "~" + area.exclusiveMax.toFixed(1) + "㎡";
 }
 
+function errorMessage(cause: unknown, fallback: string) {
+  if (cause instanceof Error && cause.message) return cause.message;
+  if (cause && typeof cause === "object" && "message" in cause) {
+    const message = String((cause as { message?: unknown }).message || "").trim();
+    if (message) return message;
+  }
+  return fallback;
+}
+
 export default function ApartmentV1Page() {
   const supabaseRef = useRef<any>(null);
   const userIdRef = useRef("");
@@ -315,7 +324,7 @@ export default function ApartmentV1Page() {
       setRecommendations((recRows || []) as RecommendationRow[]);
       await loadTemplate();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "추천 후보를 불러오지 못했습니다.");
+      setError(errorMessage(cause, "추천 후보를 불러오지 못했습니다."));
     } finally {
       setLoading(false);
     }
