@@ -112,6 +112,18 @@ export default function UnmatchedCandidatePage() {
   const [reviewMessage, setReviewMessage] = useState("");
 
   useEffect(() => {
+    const initial = new URLSearchParams(window.location.search);
+    const initialRegion = (initial.get("regionCode") || "").trim();
+    const initialName = (initial.get("name") || "").trim();
+    if (/^\d{5}$/.test(initialRegion)) setRegion(initialRegion);
+    if (initialName) {
+      setSearch(initialName);
+      setAppliedName(initialName);
+      setPage(0);
+    }
+  }, []);
+
+  useEffect(() => {
     fetch("/api/apartment/regions", { cache: "no-store" })
       .then(async r => {
         const body = await r.json();
