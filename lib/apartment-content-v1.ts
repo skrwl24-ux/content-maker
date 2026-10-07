@@ -287,7 +287,7 @@ export const DEFAULT_FINAL_ARTICLE_TEMPLATE = [
   "- 직접 살아본 후기처럼 쓰지 말 것.",
   "",
   "[Q&A 섹션]",
-  "- 제목: 자주 묻는 질문",
+  "- 제목: {{FAQ_HEADING}}",
   "- Q&A는 3~4개만 작성할 것.",
   "- 반드시 위 조사자료 안에서만 답할 것.",
   "- 현재 대표가격, 확인된 평형, 구조 정보, 생활 킥처럼 독자가 실제로 궁금해할 질문을 우선할 것.",
@@ -572,6 +572,7 @@ export function buildFinalArticlePrompt(
   if (hasStructure) tocItems.push((tocItems.length + 1) + ". 평형별 구조는 어떻게 다를까?");
   if (hasLifeKick) tocItems.push((tocItems.length + 1) + ". 여기 살면 어떤 점이 좋을까?");
   tocItems.push((tocItems.length + 1) + ". 자주 묻는 질문");
+  const faqHeading = tocItems[tocItems.length - 1];
   const tocBlock = tocItems.join("\n");
   const lifeKickBlock = hasLifeKick
     ? [
@@ -587,6 +588,10 @@ export function buildFinalArticlePrompt(
   const sourceLine = referenceDate + " 기준 · 국토부 실거래 API 자료";
 
   const normalizedTemplate = template
+    .replace(
+      "- 제목: 자주 묻는 질문",
+      "- 제목: " + faqHeading
+    )
     .replace(
       "- 생활 킥은 아래 검증 완료된 1개만 사용할 것.",
       "- 생활 킥은 아래 검증 완료된 자료가 있을 때만 사용할 것. 검증 완료된 생활 킥이 없으면 해당 섹션과 관련 Q&A를 생략할 것."
@@ -618,6 +623,7 @@ export function buildFinalArticlePrompt(
     STRUCTURE_SECTION_BLOCK: structureSectionBlock,
     LIFE_KICK_BLOCK: lifeKickBlock,
     TOC_BLOCK: tocBlock,
+    FAQ_HEADING: faqHeading,
     SOURCE_LINE: sourceLine,
   });
 }
