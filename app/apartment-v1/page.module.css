@@ -1190,3 +1190,33 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+.walkingInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #cfe8da;
+}
+
+.walkingInfo strong {
+  color: #157347;
+  font-size: 14px;
+}
+
+.walkingInfo span {
+  color: #52627a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.walkingInfo small {
+  width: 100%;
+  color: #7b8799;
+  font-size: 11px;
+}
