@@ -1062,3 +1062,21 @@
     gap: 4px;
   }
 }
+
+
+.inlineButtons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 820px) {
+  .inlineButtons {
+    width: 100%;
+  }
+
+  .inlineButtons > * {
+    flex: 1;
+  }
+}
