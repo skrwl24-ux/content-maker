@@ -1222,8 +1222,12 @@ export default function ApartmentV1Page() {
                       ⚠ {item.source_apartment_name} · 지번 {identityState.lot} · 원자료 {item.raw_trade_count}건
                     </div>
                   ))}
-                  <Link className={styles.secondaryLink} href="/apartment-bulk/unmatched">
-                    단지 식별 검토함 열기 →
+                  <Link
+                    className={styles.secondaryLink}
+                    href={"/apartment-bulk/unmatched?regionCode=" + encodeURIComponent(identityState.regionCode) +
+                      "&name=" + encodeURIComponent(identityState.unresolved[0]?.source_apartment_name || workspace.name)}
+                  >
+                    이 단지 식별 검토함 열기 →
                   </Link>
                 </div>
               ) : !identityState.lot ? (
