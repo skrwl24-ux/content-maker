@@ -99,6 +99,7 @@ function stableHash(value: string) {
 }
 
 function normalizeCandidate(raw: RawCandidate, existingIds: Set<string>) {
+  if (!raw || typeof raw !== "object") return null;
   const stage = STAGES.has(raw.stage) ? raw.stage : "watch";
   const area = AREAS.has(raw.area) ? raw.area : null;
   const name = safeText(raw.name, 120);
