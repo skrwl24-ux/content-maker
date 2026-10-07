@@ -12,6 +12,7 @@ import {
   buildChartPrompt,
   buildDataCheckPrompt,
   buildDataSnapshot,
+  buildResearchSnapshot,
   buildFinalArticlePrompt,
   buildLifeImagePrompt,
   buildLifeKickPrompt,
@@ -489,64 +490,47 @@ export default function ApartmentV1Page() {
     if (!article) return;
     try {
       const parsed = safeParseJson(dataCheckRaw) as any;
-      const external = parsed?.externalCollection || parsed?.externalCheck || {};
-      const comparison = parsed?.comparison || {};
+      const external = parsed?.externalCollection || {};
       const sourceCount = Array.isArray(external.sources) ? external.sources.length : 0;
-      const hasIndependentCollection =
+      const areaGroups = Array.isArray(external.areaGroups) ? external.areaGroups : [];
+      const collectionReady =
         external.performed === true &&
-        (external.identityConfirmed === true || external.identityMatch === true) &&
-        sourceCount >= 2;
-
-      const hasCriticalGap =
-        parsed?.issues?.dataGap === true ||
-        parsed?.issues?.mixedComplexSuspected === true ||
-        parsed?.issues?.cancellationIssue === true ||
-        parsed?.issues?.identityNeedsReview === true;
-
-      const comparisonFailed =
-        comparison.areaGroupsMatch === false ||
-        comparison.monthlyCountsMatch === false ||
-        comparison.monthlyMediansMatch === false ||
-        comparison.periodCountsMatch === false ||
-        comparison.latestPriceRuleOk === false;
+        external.identityConfirmed === true &&
+        sourceCount >= 2 &&
+        areaGroups.length > 0 &&
+        areaGroups.every((area: any) =>
+          Number.isFinite(Number(area?.areaGroup)) &&
+          Array.isArray(area?.monthly) &&
+          area.monthly.length > 0
+        );
 
       const warnings = Array.isArray(parsed.warnings) ? [...parsed.warnings] : [];
-      if (!hasIndependentCollection) {
-        warnings.unshift("2026년 외부 실거래 자료 수집이 충분히 완료되지 않았습니다. 공식·공공 출처를 포함한 최소 2개 출처가 필요합니다.");
-      }
-      if (hasCriticalGap && !warnings.some((item: string) => item.includes("누락") || item.includes("혼입") || item.includes("취소") || item.includes("식별"))) {
-        warnings.push("외부 수집 결과에서 데이터 누락·단지 식별·혼입·취소 처리 중 확인이 필요한 문제가 발견됐습니다.");
+      if (!collectionReady) {
+        warnings.unshift("실거래 조사자료가 아직 완성되지 않았습니다. 단지 식별, 평형별 월 데이터, 출처를 다시 확인해주세요.");
       }
 
-      const chartReady =
-        Boolean(parsed.chartReady) &&
-        hasIndependentCollection &&
-        !hasCriticalGap &&
-        !comparisonFailed;
-
-      const status = parsed.status === "pass" && chartReady ? "pass" : "warning";
       const result = {
         ...parsed,
-        status,
+        status: collectionReady ? "pass" : "warning",
         warnings,
-        chartReady,
-        collectionReady: hasIndependentCollection,
+        chartReady: collectionReady,
+        collectionReady,
       };
 
       const { error: updateError } = await supabaseRef.current
         .from("apt_content_articles")
         .update({
-          data_status: status,
+          data_status: collectionReady ? "pass" : "warning",
           data_check_result: result,
           updated_at: new Date().toISOString(),
         })
         .eq("id", article.id)
         .eq("user_id", userIdRef.current);
       if (updateError) throw updateError;
-      setArticle({ ...article, data_status: status, data_check_result: result });
-      notify(chartReady ? "2026년 자료 수집·이중검수 완료 · 차트 제작 가능" : "자료 수집·검수 확인 필요");
+      setArticle({ ...article, data_status: collectionReady ? "pass" : "warning", data_check_result: result });
+      notify(collectionReady ? "실거래 조사자료 저장 완료" : "실거래 조사자료 확인 필요");
     } catch (cause) {
-      setError(cause instanceof Error ? "수집·검수 결과 JSON 오류: " + cause.message : "수집·검수 결과를 읽지 못했습니다.");
+      setError(cause instanceof Error ? "실거래 조사 결과 JSON 오류: " + cause.message : "실거래 조사 결과를 읽지 못했습니다.");
     }
   }, [article, dataCheckRaw, notify]);
   const applyStructureResult = useCallback(async () => {
@@ -656,18 +640,19 @@ export default function ApartmentV1Page() {
 
   const publishAudit = useMemo(() => {
     if (!snapshot || !workspace) return null;
+    const auditSnapshot = researchReady && researchSnapshot ? researchSnapshot : snapshot;
     return auditApartmentV1Article({
       body: finalRaw,
       complexName: workspace.name,
-      referenceDate: snapshot.referenceDate,
-      areas: snapshot.areas.map((area) => ({
+      referenceDate: auditSnapshot.referenceDate,
+      areas: auditSnapshot.areas.map((area) => ({
         displayName: area.displayName,
         currentMedian: area.currentMedian,
       })),
       includeStructure: article?.structure_mode !== "exclude",
       kickTitle: article?.kick_title || "",
     });
-  }, [article?.kick_title, article?.structure_mode, finalRaw, snapshot, workspace]);
+  }, [article?.kick_title, article?.structure_mode, finalRaw, researchReady, researchSnapshot, snapshot, workspace]);
 
   const applyNaverFormatting = useCallback(async () => {
     if (!article || !finalRaw.trim() || !naverBlocks.length) return;
@@ -931,6 +916,12 @@ export default function ApartmentV1Page() {
     notify("차트 템플릿 저장 완료");
   }, [chartTemplate, notify]);
 
+  const dataCheckResult = (article?.data_check_result as any) || {};
+  const externalDataCheck = dataCheckResult?.externalCollection || null;
+  const researchSnapshot = snapshot ? buildResearchSnapshot(snapshot, dataCheckResult) : null;
+  const researchReady = Boolean(dataCheckResult?.collectionReady && researchSnapshot?.areas?.length);
+  const workingSnapshot = researchReady && researchSnapshot ? researchSnapshot : snapshot;
+
   const structureByArea = useMemo(() => {
     const map = new Map<number, StructureRow>();
     structures.forEach((item) => map.set(Number(item.area_group), item));
@@ -938,24 +929,18 @@ export default function ApartmentV1Page() {
   }, [structures]);
 
   const needsCheckGroups = useMemo(() => {
-    if (!snapshot) return [] as number[];
-    return snapshot.areas
+    if (!workingSnapshot) return [] as number[];
+    return workingSnapshot.areas
       .filter((area) => {
         const value = structureByArea.get(area.areaGroup);
         return !value || value.status === "needs_check";
       })
       .map((area) => area.areaGroup);
-  }, [snapshot, structureByArea]);
+  }, [workingSnapshot, structureByArea]);
 
-  const dataCheckResult = (article?.data_check_result as any) || {};
-  const externalDataCheck = dataCheckResult?.externalCollection || dataCheckResult?.externalCheck || null;
-  const comparisonDataCheck = dataCheckResult?.comparison || null;
-  const issueDataCheck = dataCheckResult?.issues || null;
-  const chartReady = Boolean(dataCheckResult?.chartReady);
   const structureReady = article?.structure_mode === "exclude" || needsCheckGroups.length === 0;
   const lifeReady = article?.kick_status === "verified";
-  const finalReady = article?.data_status === "pass" && structureReady && lifeReady;
-
+  const finalReady = researchReady && structureReady && lifeReady;
   if (loading) {
     return <main className={styles.page}><div className={styles.loading}>아파트 콘텐츠메이커를 준비하고 있습니다…</div></main>;
   }
@@ -1113,34 +1098,29 @@ export default function ApartmentV1Page() {
               <p>{displayLocation(workspace)}</p>
             </div>
             <div className={styles.heroStats}>
-              <span>{year} 누적 거래 <strong>{snapshot.totalTransactions}건</strong></span>
+              <span>{year} 거래 <strong>{workingSnapshot?.totalTransactions ?? snapshot.totalTransactions}건</strong></span>
               <span>{rankScopeLabel} <strong>{workspace.national_rank}위</strong></span>
               <span>기준일 <strong>{snapshot.referenceDate.replace(/-/g, ".")}</strong></span>
             </div>
           </section>
 
-          <div className={styles.progressBar}>
-            <span className={article.data_status === "pass" ? styles.done : styles.current}>1 데이터</span>
-            <i />
-            <span className={structureReady ? styles.done : ""}>2 구조</span>
-            <i />
-            <span className={lifeReady ? styles.done : ""}>3 생활 킥</span>
-            <i />
-            <span className={article.final_article ? styles.done : ""}>4 최종 원고</span>
-          </div>
+
 
           <section className={styles.workflowCard}>
             <div className={styles.sectionHeading}>
               <div>
-                <span className={styles.stepLabel}>STEP 1</span>
-                <h2>단지 데이터</h2>
+                <span className={styles.stepLabel}>자료 조사</span>
+                <h2>실거래 자료</h2>
               </div>
               <span className={styles.sourcePill}>{snapshot.referenceDate.replace(/-/g, ".")} 기준 · 국토부 실거래 자료</span>
             </div>
 
+            <p className={styles.muted}>
+              {researchReady ? "GPT가 웹에서 조사해 저장한 자료입니다. 차트와 최종 글은 이 값을 사용합니다." : "아래 값은 GPT 조사 요청에 함께 보내는 사이트 참고자료입니다. 조사 결과를 저장하면 조사자료로 교체됩니다."}
+            </p>
             <div className={styles.areaTable}>
               <div className={styles.tableHeader}><span>평형</span><span>현재 대표가격</span><span>올해 거래</span><span>기준월</span></div>
-              {snapshot.areas.map((area) => (
+              {(workingSnapshot?.areas || snapshot.areas).map((area) => (
                 <div key={area.areaGroup} className={styles.tableRow}>
                   <span><strong>{area.displayName}</strong><small>{areaRangeText(area)}</small></span>
                   <span>{formatWon(area.currentMedian)}</span>
@@ -1152,62 +1132,48 @@ export default function ApartmentV1Page() {
 
             <div className={styles.actionStrip}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "이중 검수 요청서")}>단지 데이터 수집·검수 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 자료수집·이중검수 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "실거래 자료 조사 요청서")}>실거래 자료 조사 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildDataCheckPrompt(snapshot))}>GPT 열기</button>
               </div>
-              <span className={article.data_status === "pass" ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
-                {article.data_status === "pass" ? "✓ 이중 검수 완료" : article.data_status === "warning" ? "⚠ 이중 검수 확인 필요" : "검수 전"}
+              <span className={researchReady ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
+                {researchReady ? "✓ 자료 저장됨" : article.data_status === "warning" ? "⚠ 확인 필요" : "조사 전"}
               </span>
             </div>
 
             <div className={styles.pasteBox}>
-              <label>GPT 수집·이중검수 결과 붙여넣기 · 응답 JSON 코드블록의 복사 버튼을 누른 뒤 여기에 붙여넣으세요</label>
+              <label>GPT 실거래 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
               <textarea
                 value={dataCheckRaw}
                 onChange={(event) => setDataCheckRaw(event.target.value)}
                 placeholder='{"status":"pass","internalCheck":{...},"externalCheck":{"performed":true,"identityMatch":true,"recentTradeMatch":true,"sources":[...]}, "warnings":[],"chartReady":true}'
               />
-              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>수집·검수 결과 적용</button>
+              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>실거래 자료 저장</button>
             </div>
 
             {article.data_status !== "pending" ? (
               <div className={styles.doubleCheckPanel}>
                 <div className={styles.doubleCheckHead}>
                   <div>
-                    <strong>2026년 자료 수집·이중검수 결과</strong>
-                    <span>GPT 외부 자료 수집 + 사이트 데이터 비교</span>
+                    <strong>{researchReady ? "실거래 조사자료 저장됨" : "실거래 조사자료 확인 필요"}</strong>
+                    <span>{researchReady ? "이 자료가 차트와 최종 글의 기준입니다." : "조사 결과의 단지 식별·월별 데이터·출처를 확인해주세요."}</span>
                   </div>
-                  <b className={chartReady ? styles.statusGood : styles.statusWarn}>
-                    {chartReady ? "✓ 차트 사용 가능" : "⚠ 차트 보류"}
+                  <b className={researchReady ? styles.statusGood : styles.statusWarn}>
+                    {researchReady ? "✓ 사용 가능" : "⚠ 확인 필요"}
                   </b>
-                </div>
-                <div className={styles.doubleCheckGrid}>
-                  <div>
-                    <span>1차 · 내부 계산</span>
-                    <strong>{dataCheckResult?.internalCheck ? "확인됨" : "결과 없음"}</strong>
-                  </div>
-                  <div>
-                    <span>2차 · 외부 자료 수집</span>
-                    <strong>{externalDataCheck?.performed ? "수집됨" : "미수집"}</strong>
-                  </div>
-                  <div>
-                    <span>단지 식별</span>
-                    <strong>{(externalDataCheck?.identityConfirmed ?? externalDataCheck?.identityMatch) === true ? "일치" : (externalDataCheck?.identityConfirmed ?? externalDataCheck?.identityMatch) === false ? "불일치" : "미확인"}</strong>
-                  </div>
-                  <div>
-                    <span>월별 데이터 비교</span>
-                    <strong>{comparisonDataCheck?.monthlyCountsMatch === true && comparisonDataCheck?.monthlyMediansMatch === true ? "일치" : comparisonDataCheck?.monthlyCountsMatch === false || comparisonDataCheck?.monthlyMediansMatch === false ? "불일치" : "미확인"}</strong>
-                  </div>
                 </div>
                 {Array.isArray(externalDataCheck?.sources) && externalDataCheck.sources.length ? (
                   <div className={styles.doubleCheckSources}>
-                    <strong>확인 출처</strong>
-                    {externalDataCheck.sources.map((source: any, index: number) => (
-                      <div key={(source?.name || "source") + index}>
-                        <span>{source?.name || "출처"}{source?.checked ? " · " + source.checked : ""}</span>
-                        {source?.url ? <a href={source.url} target="_blank" rel="noreferrer">열기</a> : null}
-                      </div>
-                    ))}
+                    <strong>조사 출처</strong>
+                    {externalDataCheck.sources.map((source: any, index: number) => {
+                      const label = typeof source === "string" ? source : (source?.name || source?.title || source?.url || "출처");
+                      const url = typeof source === "object" ? source?.url : "";
+                      return (
+                        <div key={label + index}>
+                          <span>{label}</span>
+                          {url ? <a href={url} target="_blank" rel="noreferrer">원문 보기</a> : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
                 {Array.isArray(dataCheckResult?.warnings) && dataCheckResult.warnings.length ? (
@@ -1220,10 +1186,10 @@ export default function ApartmentV1Page() {
 
             <div className={styles.imageRequestRow}>
               <div>
-                <strong>STEP 1 결과 · 평형별 가격 차트 만들기</strong>
+                <strong>가격 차트 이미지</strong>
                 <span>
                   기준 디자인 APT_PRICE_FLOW_V1 {chartTemplate.reference_image_url ? "✓" : "· 이미지 미등록"}
-                  {" · "}2026년 자료 수집·이중검수가 통과하면 바로 제작할 수 있습니다.
+                  {" · "}저장된 실거래 조사자료로 제작합니다.
                 </span>
               </div>
               <div className={styles.imageActionButtons}>
@@ -1232,9 +1198,9 @@ export default function ApartmentV1Page() {
                 ) : null}
                 <button
                   className={styles.primaryButton}
-                  disabled={!chartReady || !chartTemplate.is_active}
+                  disabled={!researchReady || !chartTemplate.is_active}
                   onClick={() => copyText(
-                    buildChartPrompt(snapshot, chartTemplate.template_text) +
+                    buildChartPrompt(researchSnapshot || snapshot, chartTemplate.template_text) +
                     (chartTemplate.reference_image_url ? "\n\n[중요]\n함께 붙여넣은 기준 디자인 이미지를 레이아웃·정보 배치의 레퍼런스로 사용하고, 이번 단지 데이터만 교체할 것." : ""),
                     "차트 이미지 요청서"
                   )}
@@ -1243,9 +1209,9 @@ export default function ApartmentV1Page() {
                 </button>
                 <button
                   className={styles.secondaryButton}
-                  disabled={!chartReady || !chartTemplate.is_active}
+                  disabled={!researchReady || !chartTemplate.is_active}
                   onClick={() => openInChatGPT(
-                    buildChartPrompt(snapshot, chartTemplate.template_text) +
+                    buildChartPrompt(researchSnapshot || snapshot, chartTemplate.template_text) +
                     (chartTemplate.reference_image_url ? "\n\n[중요]\n기준 디자인 이미지는 사이트의 [기준 이미지 복사] 버튼으로 복사한 뒤 ChatGPT 입력창에 Ctrl+V로 붙여넣고, 이 요청서를 함께 사용할 것." : "")
                   )}
                 >
@@ -1259,7 +1225,7 @@ export default function ApartmentV1Page() {
           <section className={styles.workflowCard}>
             <div className={styles.sectionHeading}>
               <div>
-                <span className={styles.stepLabel}>STEP 2</span>
+                <span className={styles.stepLabel}>자료 조사</span>
                 <h2>평형별 구조</h2>
               </div>
               {needsCheckGroups.length ? <span className={styles.warningPill}>⚠ 확인 필요 {needsCheckGroups.length}개</span> : <span className={styles.goodPill}>✓ 확인 완료</span>}
@@ -1286,14 +1252,14 @@ export default function ApartmentV1Page() {
             {needsCheckGroups.length ? (
               <>
                 <div className={styles.inlineButtons}>
-                  <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
-                  <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(snapshot, needsCheckGroups))}>GPT 열기</button>
+                  <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(workingSnapshot || snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
+                  <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(workingSnapshot || snapshot, needsCheckGroups))}>GPT 열기</button>
                 </div>
                 <div className={styles.pasteBox}>
                   <label>GPT 구조 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
                   <textarea value={structureRaw} onChange={(event) => setStructureRaw(event.target.value)} placeholder='{"areas":[{"areaGroup":84,"rooms":3,"baths":2,"status":"verified","source":"..."}]}' />
                   <div className={styles.splitActions}>
-                    <button className={styles.smallButton} disabled={!structureRaw.trim()} onClick={applyStructureResult}>구조 결과 적용</button>
+                    <button className={styles.smallButton} disabled={!structureRaw.trim()} onClick={applyStructureResult}>구조 자료 저장</button>
                     <button className={styles.textButton} onClick={excludeStructure}>확인이 어려우면 구조 섹션 제외</button>
                   </div>
                 </div>
@@ -1305,8 +1271,8 @@ export default function ApartmentV1Page() {
           <section className={styles.workflowCard}>
             <div className={styles.sectionHeading}>
               <div>
-                <span className={styles.stepLabel}>STEP 3</span>
-                <h2>여기 살면 어떤 점이 좋을까?</h2>
+                <span className={styles.stepLabel}>자료 조사</span>
+                <h2>생활·입지 킥</h2>
               </div>
               {article.kick_status === "verified" ? <span className={styles.goodPill}>✓ 생활 킥 1개 확정</span> : <span className={styles.statusMuted}>조사 전</span>}
             </div>
@@ -1334,14 +1300,14 @@ export default function ApartmentV1Page() {
 
             <div className={styles.actionStrip}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildLifeKickPrompt(snapshot))}>GPT 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(workingSnapshot || snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildLifeKickPrompt(workingSnapshot || snapshot))}>GPT 열기</button>
               </div>
             </div>
             <div className={styles.pasteBox}>
               <label>GPT 생활 킥 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
               <textarea value={lifeRaw} onChange={(event) => setLifeRaw(event.target.value)} placeholder='{"kickFound":true,"title":"...","summary":"...","walkingVerified":true,"walkingMinutes":8,"walkingDistanceM":600,"routeFrom":"단지","routeTo":"○○역 1번 출구","sourceText":"...","verified":true}' />
-              <button className={styles.smallButton} disabled={!lifeRaw.trim()} onClick={applyLifeResult}>생활 킥 결과 적용</button>
+              <button className={styles.smallButton} disabled={!lifeRaw.trim()} onClick={applyLifeResult}>생활·입지 자료 저장</button>
             </div>
 
             <div className={styles.imageRequestRow}>
@@ -1353,7 +1319,7 @@ export default function ApartmentV1Page() {
                 <button
                   className={styles.primaryButton}
                   disabled={!lifeReady}
-                  onClick={() => copyText(buildLifeImagePrompt(snapshot, {
+                  onClick={() => copyText(buildLifeImagePrompt(workingSnapshot || snapshot, {
                     title: article.kick_title,
                     summary: article.kick_summary,
                     category: String((article.kick_snapshot as any)?.category || ""),
@@ -1369,7 +1335,7 @@ export default function ApartmentV1Page() {
                 <button
                   className={styles.secondaryButton}
                   disabled={!lifeReady}
-                  onClick={() => openInChatGPT(buildLifeImagePrompt(snapshot, {
+                  onClick={() => openInChatGPT(buildLifeImagePrompt(workingSnapshot || snapshot, {
                     title: article.kick_title,
                     summary: article.kick_summary,
                     category: String((article.kick_snapshot as any)?.category || ""),
@@ -1389,10 +1355,10 @@ export default function ApartmentV1Page() {
           <section className={styles.workflowCard}>
             <div className={styles.sectionHeading}>
               <div>
-                <span className={styles.stepLabel}>STEP 4</span>
-                <h2>최종 원고</h2>
+                <span className={styles.stepLabel}>제작</span>
+                <h2>최종 글 만들기</h2>
               </div>
-              <span className={finalReady ? styles.goodPill : styles.statusMuted}>{finalReady ? "✓ 준비 완료" : "앞 단계 확인 필요"}</span>
+              <span className={finalReady ? styles.goodPill : styles.statusMuted}>{finalReady ? "✓ 자료 준비 완료" : "조사자료 준비 필요"}</span>
             </div>
 
             <div className={styles.titlePreview}>
@@ -1402,15 +1368,15 @@ export default function ApartmentV1Page() {
 
             <div className={styles.requestGrid}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildThumbnailPrompt(snapshot))}>GPT 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(workingSnapshot || snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildThumbnailPrompt(workingSnapshot || snapshot))}>GPT 열기</button>
               </div>
               <div className={styles.inlineButtons}>
                 <button
                   className={styles.primaryButton}
                   disabled={!finalReady}
                   onClick={() => copyText(buildFinalArticlePrompt(
-                    snapshot,
+                    researchSnapshot || snapshot,
                     structures,
                     {
                       title: article.kick_title,
@@ -1430,7 +1396,7 @@ export default function ApartmentV1Page() {
                   className={styles.secondaryButton}
                   disabled={!finalReady}
                   onClick={() => openInChatGPT(buildFinalArticlePrompt(
-                    snapshot,
+                    researchSnapshot || snapshot,
                     structures,
                     {
                       title: article.kick_title,
