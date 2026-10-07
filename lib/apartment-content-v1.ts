@@ -92,6 +92,229 @@ export const DEFAULT_CHART_TEMPLATE = [
   "{{DATA_BLOCK}}"
 ].join("\n");
 
+export const DEFAULT_STRUCTURE_PROMPT_TEMPLATE = [
+  "아파트 평형별 방·욕실 구조를 웹 검색으로 사실 확인해줘.",
+  "",
+  "[대상 단지]",
+  "단지명: {{COMPLEX_NAME}}",
+  "지역: {{LOCATION}}",
+  "주소: {{ADDRESS}}",
+  "",
+  "[확인할 평형]",
+  "{{AREA_LIST}}",
+  "",
+  "[검증 원칙 — 반드시 지킬 것]",
+  "- 반드시 웹 검색을 실제로 수행할 것.",
+  "- 공식 분양자료, 건설사 원문, 공공기관·지자체·공동주택 관련 원문을 최우선으로 확인할 것.",
+  "- 면적만 보고 방·욕실 수를 추정하지 말 것.",
+  "- 같은 전용면적에 A/B/C 등 여러 타입이 있으면 타입별 방·욕실 수가 같은지 확인할 것.",
+  "- 같은 평형군의 실제 타입별 방·욕실 수가 다르면 status=varies.",
+  "- 신뢰할 만한 원문으로 확정하면 status=verified.",
+  "- 자료가 불충분하거나 서로 충돌하면 status=needs_check로 두고 rooms/baths는 null.",
+  "- 확인이 어렵다고 판단한 항목을 억지로 채우지 말 것.",
+  "- 다른 단지나 같은 이름의 인접 단지 평면도를 섞지 말 것.",
+  "",
+  "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
+  "- 반드시 ```json 코드블록 하나로 출력할 것.",
+  "- 코드블록 안에는 유효한 JSON만 넣을 것.",
+  "- 출처 칩·웹 인용 UI는 JSON 문자열 안에 넣지 말 것.",
+  "",
+  "```json",
+  "{",
+  '  "areas": [',
+  '    {"areaGroup":84,"rooms":null,"baths":null,"status":"needs_check","source":"","note":""}',
+  "  ]",
+  "}",
+  "```"
+].join("\n");
+
+export const DEFAULT_LIFE_KICK_PROMPT_TEMPLATE = [
+  "아파트 단지의 생활·입지 킥을 웹 검색으로 1개만 조사해줘.",
+  "",
+  "[대상]",
+  "단지명: {{COMPLEX_NAME}}",
+  "지역: {{LOCATION}}",
+  "주소: {{ADDRESS}}",
+  "",
+  "[목표]",
+  "이 아파트에 실제로 살 때 의미가 큰 대표 생활 요소 1개만 고른다.",
+  "후보: 대형마트·트레이더스·코스트코·주요 역·중심상권·전통시장·공원·호수·하천·산책로·도서관·문화시설·체육시설·지역 대표 축제·가족생활 시설.",
+  "",
+  "[검증 원칙 — 반드시 지킬 것]",
+  "- 반드시 웹 검색을 실제로 수행할 것.",
+  "- 지자체·공공기관·운영기관·공식 시설 페이지 등 최신 공식자료를 우선 확인할 것.",
+  "- 현재 운영 여부와 정확한 시설/역/공원 지점을 확인할 것.",
+  "- 단지와 실제 같은 생활권에서 이용 가능한지 확인할 것.",
+  "- 생활 킥이 역·마트·시장·공원·도서관 등 실제 방문 지점이라면 도보 경로도 추가로 확인할 것.",
+  "- 도보 시간·거리는 지도/길찾기 결과나 경로 자료에서 실제 경로가 확인된 경우에만 입력할 것.",
+  "- 직선거리로 도보시간을 계산하거나 평균 보행속도로 추정하지 말 것.",
+  "- 도보 경로 시작점과 도착점을 명확히 적을 것. 역이면 가능하면 출구 번호까지 확인할 것.",
+  "- 경로 자료가 없거나 검색 결과를 신뢰하기 어려우면 walkingVerified=false, walkingMinutes=null, walkingDistanceM=null.",
+  "- 축제는 {{YEAR}}년 실제 개최 여부를 공식 자료로 확인한 경우에만 선택할 것.",
+  "- 광고성 표현이나 '초역세권·바로 앞·도보권' 같은 과장 표현은 근거 없으면 쓰지 말 것.",
+  "- 내부적으로 여러 후보를 비교해도 최종 출력은 가장 강한 1개만.",
+  "- 적절한 킥을 검증하지 못하면 kickFound=false.",
+  "",
+  "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
+  "- 반드시 ```json 코드블록 하나로 출력할 것.",
+  "- 코드블록 안에는 유효한 JSON만 넣을 것.",
+  "- 출처 칩·웹 인용 UI는 JSON 문자열 안에 넣지 말 것.",
+  "",
+  "```json",
+  "{",
+  '  "kickFound": false,',
+  '  "title": "",',
+  '  "category": "",',
+  '  "summary": "",',
+  '  "walkingVerified": false,',
+  '  "walkingMinutes": null,',
+  '  "walkingDistanceM": null,',
+  '  "routeFrom": "",',
+  '  "routeTo": "",',
+  '  "routeSource": {"name":"","url":"","checked":""},',
+  '  "sourceText": "",',
+  '  "sources": [],',
+  '  "verified": false',
+  "}",
+  "```"
+].join("\n");
+
+export const DEFAULT_LIFE_IMAGE_PROMPT_TEMPLATE = [
+  "네이버 블로그 본문용 아파트 생활·입지 이미지 1장을 만들어줘.",
+  "",
+  "[단지]",
+  "{{COMPLEX_NAME}} / {{LOCATION}}",
+  "",
+  "[검증 완료된 생활 킥 — 이것만 사용]",
+  "{{KICK_TITLE}}",
+  "{{KICK_CATEGORY_LINE}}",
+  "{{KICK_SUMMARY}}",
+  "{{WALKING_LINE}}",
+  "",
+  "[제작 규칙]",
+  "- 1600×900 가로형 한 장.",
+  "- 검증 완료된 생활 킥 1개만 시각화할 것. 다른 시설·역·공원·상권을 새로 추가하지 말 것.",
+  "- 실제 생활에서 왜 의미 있는지 한눈에 이해되는 장면으로 구성할 것.",
+  "- 위에 '검증된 도보 정보'가 있을 때만 도보 시간·거리를 표시할 것.",
+  "- 검증된 도보 정보가 없으면 거리·도보시간·차량시간을 새로 만들지 말 것.",
+  "- 실제 브랜드/기관 로고를 임의로 변형하거나 복제하지 말 것.",
+  "- 과장된 광고·네온·3D 인포그래픽 느낌보다 자연스럽고 신뢰감 있는 블로그 정보 이미지.",
+  "- 하단에 별도 출처문구나 새로운 사실을 추가하지 말 것."
+].join("\n");
+
+export const DEFAULT_THUMBNAIL_PROMPT_TEMPLATE = [
+  "네이버 블로그용 아파트 단지 글 썸네일 이미지를 1장 만들어줘.",
+  "",
+  "[고정 문구 — 다른 글자 추가 금지]",
+  "{{TITLE}}",
+  "",
+  "[제작 규칙]",
+  "- 1254×1254px, 1:1 정사각형.",
+  "- 문구는 정확히 '{{TITLE}}'만 사용하고 부제·가격·평형·지역·숫자 추가 금지.",
+  "- 문구는 1~2줄 카드형으로 크고 선명하게.",
+  "- 색상은 2~3개 안에서 정돈하고 배경과 글자 대비를 충분히 확보.",
+  "- 아파트 조감도/주거단지 느낌을 자연스럽게 사용하되 실제 특정 동 배치나 건축 디테일을 사실처럼 만들어내지 말 것.",
+  "- 네이버 블로그 운영자가 직접 편집한 것처럼 깔끔하고 신뢰감 있게.",
+  "- 과도한 AI 느낌, 네온, 번쩍이는 효과, 복잡한 아이콘, 불필요한 배지 금지."
+].join("\n");
+
+export const DEFAULT_FINAL_ARTICLE_TEMPLATE = [
+  "네이버 블로그용 아파트 단지 글을 최종 발행본으로 작성해줘.",
+  "",
+  "[작성 기준일]",
+  "{{REFERENCE_DATE}}",
+  "",
+  "[고정 제목]",
+  "{{TITLE}}",
+  "",
+  "[이 글의 목적]",
+  "- 독자가 지금 가격, 어떤 평형이 있는지, 방·욕실 구조, {{YEAR}}년 가격·거래 흐름, 생활 킥 1개를 빠르게 확인하게 한다.",
+  "- 길게 분석하는 투자글이 아니라 실제 데이터 확인형 단지 글이다.",
+  "",
+  "[가장 중요한 원칙]",
+  "- 아래에 모아둔 자료만 사용할 것.",
+  "- 새 가격·새 거래건수·새 변화율·새 거리·새 생활시설을 만들어내지 말 것.",
+  "- 제공되지 않은 방·욕실 수를 면적만 보고 추정하지 말 것.",
+  "- 반등·심리·호재·저점·고점·매수추천 같은 투자 해석을 길게 하지 말 것.",
+  "- 가격 흐름은 월 대표가격의 실제 방향을 1~2문장으로만 짧게 설명할 것.",
+  "- 거래 없는 월의 값을 보간하거나 거래가 있었던 것처럼 쓰지 말 것.",
+  "- 생활 킥은 아래 검증 완료된 1개만 사용할 것.",
+  "- Q&A도 반드시 아래 자료 안에서만 만들 것.",
+  "- 모바일에서 읽기 쉽게 문장마다 한 줄씩 띄울 것.",
+  "",
+  "[국토부 실거래 API로 수집·식별된 {{YEAR}}년 자료]",
+  "{{DATA_BLOCK}}",
+  "",
+  "{{STRUCTURE_DATA_BLOCK}}",
+  "",
+  "[저장된 생활·입지 조사자료]",
+  "{{LIFE_KICK_BLOCK}}",
+  "",
+  "[최종 글 구성 — 순서 고정]",
+  "제목: {{TITLE}}",
+  "",
+  "짧은 도입:",
+  "- 이 단지의 {{YEAR}}년 현재 가격과 거래 흐름을 확인한다는 내용으로 2~3문장.",
+  "- 너무 길게 쓰지 말 것.",
+  "",
+  "핵심 포인트:",
+  "- 상단에 '✨ 이 단지 핵심 POINT' 형식의 요약 박스를 넣을 것.",
+  "- 5~7개 bullet로 짧게 정리할 것.",
+  "- 아래 조사자료에서만 단지명, 현재 대표가격, 확인된 평형, {{YEAR}}년 거래 흐름 특징, 구조 정보 상태, 생활 킥 핵심을 요약할 것.",
+  "- 없는 정보는 추가하지 말 것.",
+  "",
+  "목차:",
+  "{{TOC_BLOCK}}",
+  "",
+  "[가격 섹션]",
+  "- 제목: 1. 평형별 지금 가격은 얼마일까?",
+  "- [평형별 가격 흐름 차트 이미지]를 한 줄로 표시.",
+  "- 주요 평형의 현재 대표가격을 짧게 정리.",
+  "- {{YEAR}}년 월별 대표가격 흐름을 근거로 1~2문장만 설명.",
+  "- 1~3월, 4~6월, 7월~현재 거래량도 자연스럽게 한 문단 안에서 짧게 정리.",
+  "- 별도 투자 해석은 하지 말 것.",
+  "",
+  "{{STRUCTURE_SECTION_BLOCK}}",
+  "",
+  "[생활 킥 섹션]",
+  "- 제목은 목차 번호에 맞춰 '여기 살면 어떤 점이 좋을까?'로 쓸 것.",
+  "- [생활 킥 이미지]를 한 줄로 표시.",
+  "- 검증된 킥 1개만 사용할 것.",
+  "- 검증된 도보 정보가 제공된 경우에만 도보 시간과 확인된 거리를 자연스럽게 포함할 것.",
+  "- 실제 생활에서 어떤 의미가 있는지 짧은 생활 시나리오 느낌으로 2~4문장.",
+  "- 직접 살아본 후기처럼 쓰지 말 것.",
+  "",
+  "[Q&A 섹션]",
+  "- 제목: 자주 묻는 질문",
+  "- Q&A는 3~4개만 작성할 것.",
+  "- 반드시 위 조사자료 안에서만 답할 것.",
+  "- 현재 대표가격, 확인된 평형, 구조 정보, 생활 킥처럼 독자가 실제로 궁금해할 질문을 우선할 것.",
+  "- 답변은 2~3문장 이내로 짧고 명확하게 작성할 것.",
+  "- 없는 정보를 추정하지 말 것.",
+  "",
+  "[마무리]",
+  "- 2~3문장으로 짧게 끝낼 것.",
+  "- 매수·매도 권유 금지.",
+  "",
+  "[출처 표기 — 마지막에 한 줄만]",
+  "{{SOURCE_LINE}}",
+  "",
+  "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
+  "- 최종 글 전체를 ```text 코드블록 하나로 출력할 것.",
+  "- 코드블록 밖에는 설명을 붙이지 말 것.",
+  "- 해시태그나 별도 SEO 메모를 추가하지 말 것.",
+  "- 블로그 본문에서 핵심 POINT, 목차, Q&A가 눈에 띄도록 이모지·번호·bullet을 적절히 활용하되 과하지 않게 정리할 것."
+].join("\n");
+
+function fillPromptTemplate(template: string, values: Record<string, string>) {
+  let output = String(template || "");
+  for (const [key, value] of Object.entries(values)) {
+    output = output.replaceAll("{{" + key + "}}", value);
+  }
+  return output;
+}
+
+
 function numberValue(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return 0;
   return Number(value);
@@ -212,103 +435,31 @@ function dataLines(snapshot: DataSnapshot) {
   return lines.join("\n").trim();
 }
 
-export function buildStructurePrompt(snapshot: DataSnapshot, needsCheckGroups: number[]) {
+export function buildStructurePrompt(
+  snapshot: DataSnapshot,
+  needsCheckGroups: number[],
+  template = DEFAULT_STRUCTURE_PROMPT_TEMPLATE
+) {
   const areas = snapshot.areas.filter((area) => needsCheckGroups.includes(area.areaGroup));
-  return [
-    "아파트 평형별 방·욕실 구조를 웹 검색으로 사실 확인해줘.",
-    "",
-    "[대상 단지]",
-    "단지명: " + snapshot.complex.name,
-    "지역: " + [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
-    "주소: " + (snapshot.complex.road_address || snapshot.complex.address || "주소 정보 없음"),
-    "",
-    "[확인할 평형]",
-    ...areas.map((area) => "- areaGroup " + area.areaGroup + " / " + area.displayName + " / " + area.exclusiveLabel),
-    "",
-    "[검증 원칙 — 반드시 지킬 것]",
-    "- 반드시 웹 검색을 실제로 수행할 것.",
-    "- 공식 분양자료, 건설사 원문, 공공기관·지자체·공동주택 관련 원문을 최우선으로 확인할 것.",
-    "- 면적만 보고 방·욕실 수를 추정하지 말 것.",
-    "- 같은 전용면적에 A/B/C 등 여러 타입이 있으면 타입별 방·욕실 수가 같은지 확인할 것.",
-    "- 같은 평형군의 실제 타입별 방·욕실 수가 다르면 status=varies.",
-    "- 신뢰할 만한 원문으로 확정하면 status=verified.",
-    "- 자료가 불충분하거나 서로 충돌하면 status=needs_check로 두고 rooms/baths는 null.",
-    "- 확인이 어렵다고 판단한 항목을 억지로 채우지 말 것.",
-    "- 다른 단지나 같은 이름의 인접 단지 평면도를 섞지 말 것.",
-    "",
-    "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
-    "- 반드시 ```json 코드블록 하나로 출력할 것.",
-    "- 코드블록 안에는 유효한 JSON만 넣을 것.",
-    "- 출처 칩·웹 인용 UI는 JSON 문자열 안에 넣지 말 것.",
-    "",
-    "```json",
-    "{",
-    '  "areas": [',
-    '    {',
-    '      "areaGroup": 84,',
-    '      "rooms": null,',
-    '      "baths": null,',
-    '      "status": "needs_check",',
-    '      "source": "",',
-    '      "note": ""',
-    "    }",
-    "  ]",
-    "}",
-    "```"
-  ].join("\n");
+  return fillPromptTemplate(template, {
+    COMPLEX_NAME: snapshot.complex.name,
+    LOCATION: [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
+    ADDRESS: snapshot.complex.road_address || snapshot.complex.address || "주소 정보 없음",
+    AREA_LIST: areas.map((area) => "- areaGroup " + area.areaGroup + " / " + area.displayName + " / " + area.exclusiveLabel).join("\n"),
+    YEAR: String(snapshot.year),
+  });
 }
 
-export function buildLifeKickPrompt(snapshot: DataSnapshot) {
-  return [
-    "아파트 단지의 생활·입지 킥을 웹 검색으로 1개만 조사해줘.",
-    "",
-    "[대상]",
-    "단지명: " + snapshot.complex.name,
-    "지역: " + [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
-    "주소: " + (snapshot.complex.road_address || snapshot.complex.address || "주소 정보 없음"),
-    "",
-    "[목표]",
-    "이 아파트에 실제로 살 때 의미가 큰 대표 생활 요소 1개만 고른다.",
-    "후보: 대형마트·트레이더스·코스트코·주요 역·중심상권·전통시장·공원·호수·하천·산책로·도서관·문화시설·체육시설·지역 대표 축제·가족생활 시설.",
-    "",
-    "[검증 원칙 — 반드시 지킬 것]",
-    "- 반드시 웹 검색을 실제로 수행할 것.",
-    "- 지자체·공공기관·운영기관·공식 시설 페이지 등 최신 공식자료를 우선 확인할 것.",
-    "- 현재 운영 여부와 정확한 시설/역/공원 지점을 확인할 것.",
-    "- 단지와 실제 같은 생활권에서 이용 가능한지 확인할 것.",
-    "- 생활 킥이 역·마트·시장·공원·도서관 등 실제 방문 지점이라면 도보 경로도 추가로 확인할 것.",
-    "- 도보 시간·거리는 지도/길찾기 결과나 경로 자료에서 실제 경로가 확인된 경우에만 입력할 것.",
-    "- 직선거리로 도보시간을 계산하거나 평균 보행속도로 추정하지 말 것.",
-    "- 도보 경로 시작점과 도착점을 명확히 적을 것. 역이면 가능하면 출구 번호까지 확인할 것.",
-    "- 경로 자료가 없거나 검색 결과를 신뢰하기 어려우면 walkingVerified=false, walkingMinutes=null, walkingDistanceM=null.",
-    "- 축제는 " + snapshot.year + "년 실제 개최 여부를 공식 자료로 확인한 경우에만 선택할 것.",
-    "- 광고성 표현이나 '초역세권·바로 앞·도보권' 같은 과장 표현은 근거 없으면 쓰지 말 것.",
-    "- 내부적으로 여러 후보를 비교해도 최종 출력은 가장 강한 1개만.",
-    "- 적절한 킥을 검증하지 못하면 kickFound=false.",
-    "",
-    "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
-    "- 반드시 ```json 코드블록 하나로 출력할 것.",
-    "- 코드블록 안에는 유효한 JSON만 넣을 것.",
-    "- 출처 칩·웹 인용 UI는 JSON 문자열 안에 넣지 말 것.",
-    "",
-    "```json",
-    "{",
-    '  "kickFound": false,',
-    '  "title": "",',
-    '  "category": "",',
-    '  "summary": "",',
-    '  "walkingVerified": false,',
-    '  "walkingMinutes": null,',
-    '  "walkingDistanceM": null,',
-    '  "routeFrom": "",',
-    '  "routeTo": "",',
-    '  "routeSource": {"name":"","url":"","checked":""},',
-    '  "sourceText": "",',
-    '  "sources": [],',
-    '  "verified": false',
-    "}",
-    "```"
-  ].join("\n");
+export function buildLifeKickPrompt(
+  snapshot: DataSnapshot,
+  template = DEFAULT_LIFE_KICK_PROMPT_TEMPLATE
+) {
+  return fillPromptTemplate(template, {
+    COMPLEX_NAME: snapshot.complex.name,
+    LOCATION: [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
+    ADDRESS: snapshot.complex.road_address || snapshot.complex.address || "주소 정보 없음",
+    YEAR: String(snapshot.year),
+  });
 }
 
 export function buildChartPrompt(snapshot: DataSnapshot, template: string) {
@@ -345,53 +496,35 @@ export function buildLifeImagePrompt(
     walkingDistanceM?: number | null;
     routeFrom?: string;
     routeTo?: string;
-  }
+  },
+  template = DEFAULT_LIFE_IMAGE_PROMPT_TEMPLATE
 ) {
   const walkingLine = kick.walkingVerified && kick.walkingMinutes
     ? "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
       (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
     : "";
 
-  return [
-    "네이버 블로그 본문용 아파트 생활·입지 이미지 1장을 만들어줘.",
-    "",
-    "[단지]",
-    snapshot.complex.name + " / " + [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
-    "",
-    "[검증 완료된 생활 킥 — 이것만 사용]",
-    kick.title,
-    kick.category ? "종류: " + kick.category : "",
-    kick.summary,
-    walkingLine,
-    "",
-    "[제작 규칙]",
-    "- 1600×900 가로형 한 장.",
-    "- 검증 완료된 생활 킥 1개만 시각화할 것. 다른 시설·역·공원·상권을 새로 추가하지 말 것.",
-    "- 실제 생활에서 왜 의미 있는지 한눈에 이해되는 장면으로 구성할 것.",
-    "- 위에 '검증된 도보 정보'가 있을 때만 도보 시간·거리를 표시할 것.",
-    "- 검증된 도보 정보가 없으면 거리·도보시간·차량시간을 새로 만들지 말 것.",
-    "- 실제 브랜드/기관 로고를 임의로 변형하거나 복제하지 말 것.",
-    "- 과장된 광고·네온·3D 인포그래픽 느낌보다 자연스럽고 신뢰감 있는 블로그 정보 이미지.",
-    "- 하단에 별도 출처문구나 새로운 사실을 추가하지 말 것."
-  ].filter(Boolean).join("\n");
+  return fillPromptTemplate(template, {
+    COMPLEX_NAME: snapshot.complex.name,
+    LOCATION: [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
+    KICK_TITLE: kick.title,
+    KICK_CATEGORY_LINE: kick.category ? "종류: " + kick.category : "",
+    KICK_SUMMARY: kick.summary,
+    WALKING_LINE: walkingLine,
+    YEAR: String(snapshot.year),
+  });
 }
 
-export function buildThumbnailPrompt(snapshot: DataSnapshot) {
-  return [
-    "네이버 블로그용 아파트 단지 글 썸네일 이미지를 1장 만들어줘.",
-    "",
-    "[고정 문구 — 다른 글자 추가 금지]",
-    snapshot.complex.name + " 얼마일까?",
-    "",
-    "[제작 규칙]",
-    "- 1254×1254px, 1:1 정사각형.",
-    "- 문구는 정확히 '" + snapshot.complex.name + " 얼마일까?'만 사용하고 부제·가격·평형·지역·숫자 추가 금지.",
-    "- 문구는 1~2줄 카드형으로 크고 선명하게.",
-    "- 색상은 2~3개 안에서 정돈하고 배경과 글자 대비를 충분히 확보.",
-    "- 아파트 조감도/주거단지 느낌을 자연스럽게 사용하되 실제 특정 동 배치나 건축 디테일을 사실처럼 만들어내지 말 것.",
-    "- 네이버 블로그 운영자가 직접 편집한 것처럼 깔끔하고 신뢰감 있게.",
-    "- 과도한 AI 느낌, 네온, 번쩍이는 효과, 복잡한 아이콘, 불필요한 배지 금지."
-  ].join("\n");
+export function buildThumbnailPrompt(
+  snapshot: DataSnapshot,
+  template = DEFAULT_THUMBNAIL_PROMPT_TEMPLATE
+) {
+  return fillPromptTemplate(template, {
+    COMPLEX_NAME: snapshot.complex.name,
+    TITLE: snapshot.complex.name + " 얼마일까?",
+    LOCATION: [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong].filter(Boolean).join(" "),
+    YEAR: String(snapshot.year),
+  });
 }
 
 export function buildFinalArticlePrompt(
@@ -406,7 +539,8 @@ export function buildFinalArticlePrompt(
     routeFrom?: string;
     routeTo?: string;
   },
-  includeStructure: boolean
+  includeStructure: boolean,
+  template = DEFAULT_FINAL_ARTICLE_TEMPLATE
 ) {
   const validAreaGroups = new Set(snapshot.areas.map((area) => area.areaGroup));
   const structureLines = structures
@@ -419,83 +553,44 @@ export function buildFinalArticlePrompt(
       return "- " + label + " / 방 " + item.room_count + " / 욕실 " + item.bath_count;
     });
 
-  return [
-    "네이버 블로그용 아파트 단지 글을 최종 발행본으로 작성해줘.",
-    "",
-    "[작성 기준일]",
-    snapshot.referenceDate.replace(/-/g, "."),
-    "",
-    "[고정 제목]",
-    snapshot.complex.name + " 얼마일까?",
-    "",
-    "[이 글의 목적]",
-    "- 독자가 지금 가격, 어떤 평형이 있는지, 방·욕실 구조, 2026년 가격·거래 흐름, 생활 킥 1개를 빠르게 확인하게 한다.",
-    "- 길게 분석하는 투자글이 아니라 실제 데이터 확인형 단지 글이다.",
-    "",
-    "[가장 중요한 원칙]",
-    "- 아래에 모아둔 자료만 사용할 것.",
-    "- 새 가격·새 거래건수·새 변화율·새 거리·새 생활시설을 만들어내지 말 것.",
-    "- 제공되지 않은 방·욕실 수를 면적만 보고 추정하지 말 것.",
-    "- 반등·심리·호재·저점·고점·매수추천 같은 투자 해석을 길게 하지 말 것.",
-    "- 가격 흐름은 월 대표가격의 실제 방향을 1~2문장으로만 짧게 설명할 것.",
-    "- 거래 없는 월의 값을 보간하거나 거래가 있었던 것처럼 쓰지 말 것.",
-    "- 생활 킥은 아래 검증 완료된 1개만 사용할 것.",
-    "- 모바일에서 읽기 쉽게 문장마다 한 줄씩 띄울 것.",
-    "",
-    "[국토부 실거래 API로 수집·식별된 2026년 자료]",
-    dataLines(snapshot),
-    "",
-    includeStructure ? "[저장된 평형 구조 조사자료]" : "[평형 구조]",
-    includeStructure && structureLines.length ? structureLines.join("\n") : "구조 섹션 제외",
-    "",
-    "[저장된 생활·입지 조사자료]",
+  const hasStructure = includeStructure && structureLines.length > 0;
+  const structureDataBlock = hasStructure
+    ? "[저장된 평형 구조 조사자료]\n" + structureLines.join("\n")
+    : "[평형 구조]\n구조 섹션 제외";
+  const structureSectionBlock = hasStructure
+    ? [
+        "[평형 구조 섹션]",
+        "- 제목: 2. 평형별 구조는 어떻게 다를까?",
+        "- 확인된 정보만 표 형태로 정리: 평형대 | 전용면적 | 방 | 욕실.",
+        "- status=varies인 경우 숫자를 억지로 하나로 만들지 말고 '타입별 상이'라고 표시."
+      ].join("\n")
+    : "";
+  const tocBlock = hasStructure
+    ? "1. 평형별 지금 가격은 얼마일까?\n2. 평형별 구조는 어떻게 다를까?\n3. 여기 살면 어떤 점이 좋을까?"
+    : "1. 평형별 지금 가격은 얼마일까?\n2. 여기 살면 어떤 점이 좋을까?";
+  const lifeKickBlock = [
     kick.title,
     kick.summary,
-    ...(kick.walkingVerified && kick.walkingMinutes ? [
-      "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
+    kick.walkingVerified && kick.walkingMinutes
+      ? "검증된 도보 정보: " + (kick.routeFrom || "단지") + " → " + (kick.routeTo || kick.title) + " / 약 " + kick.walkingMinutes + "분" +
         (kick.walkingDistanceM ? " / " + kick.walkingDistanceM + "m" : "")
-    ] : []),
-    "",
-    "[최종 글 구성 — 순서 고정]",
-    "제목: " + snapshot.complex.name + " 얼마일까?",
-    "짧은 도입: 이 단지의 2026년 평형별 현재 가격과 거래 흐름을 확인한다는 내용 2~3문장.",
-    "목차:",
-    "1. 평형별 지금 가격은 얼마일까?",
-    ...(includeStructure && structureLines.length
-      ? ["2. 평형별 구조는 어떻게 다를까?", "3. 여기 살면 어떤 점이 좋을까?"]
-      : ["2. 여기 살면 어떤 점이 좋을까?"]),
-    "",
-    "[1번 섹션]",
-    "- [평형별 가격 흐름 차트 이미지]를 한 줄로 표시.",
-    "- 주요 평형의 현재 대표가격을 짧게 정리.",
-    "- 2026년 월별 대표가격 흐름을 근거로 1~2문장만 설명.",
-    "- 별도 투자 해석은 하지 말 것.",
-    "",
-    ...(includeStructure && structureLines.length ? [
-      "[2번 섹션]",
-      "- 확인된 정보만 표 형태로 정리: 평형대 | 전용면적 | 방 | 욕실.",
-      "- status=varies인 경우 숫자를 억지로 하나로 만들지 말고 '타입별 상이'라고 표시.",
-      ""
-    ] : []),
-    "[생활 킥 섹션]",
-    "- [생활 킥 이미지]를 한 줄로 표시.",
-    "- 검증된 킥이 실제 생활에서 어떤 의미가 있는지 짧은 생활 시나리오 느낌으로 2~4문장.",
-    "- 검증된 도보 정보가 제공된 경우에만 '도보 약 ○분'과 확인된 거리 정보를 자연스럽게 포함할 것.",
-    "- 도보 정보가 제공되지 않았으면 거리나 시간을 추정해서 넣지 말 것.",
-    "- 직접 살아본 후기처럼 쓰지 말 것.",
-    "",
-    "[마무리]",
-    "- 2~3문장으로 짧게 끝낼 것.",
-    "- 매수·매도 권유 금지.",
-    "",
-    "[출처 표기 — 마지막에 한 줄만]",
-    snapshot.referenceDate.replace(/-/g, ".") + " 기준 · 국토부 실거래 API 자료",
-    "",
-    "[출력 형식 — 복사 버튼 한 번으로 가져갈 수 있게]",
-    "- 최종 글 전체를 ```text 코드블록 하나로 출력할 것.",
-    "- 코드블록 밖에는 설명을 붙이지 말 것.",
-    "- 해시태그나 별도 SEO 메모를 추가하지 말 것."
-  ].join("\n");
+      : ""
+  ].filter(Boolean).join("\n");
+  const referenceDate = snapshot.referenceDate.replace(/-/g, ".");
+  const sourceLine = referenceDate + " 기준 · 국토부 실거래 API 자료";
+
+  return fillPromptTemplate(template, {
+    REFERENCE_DATE: referenceDate,
+    YEAR: String(snapshot.year),
+    COMPLEX_NAME: snapshot.complex.name,
+    TITLE: snapshot.complex.name + " 얼마일까?",
+    DATA_BLOCK: dataLines(snapshot),
+    STRUCTURE_DATA_BLOCK: structureDataBlock,
+    STRUCTURE_SECTION_BLOCK: structureSectionBlock,
+    LIFE_KICK_BLOCK: lifeKickBlock,
+    TOC_BLOCK: tocBlock,
+    SOURCE_LINE: sourceLine,
+  });
 }
 
 export function safeParseJson(raw: string) {
