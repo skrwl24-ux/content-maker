@@ -614,7 +614,9 @@ export function buildFinalArticlePrompt(
   },
   includeStructure: boolean
 ) {
+  const validAreaGroups = new Set(snapshot.areas.map((area) => area.areaGroup));
   const structureLines = structures
+    .filter((item) => validAreaGroups.has(item.area_group))
     .filter((item) => item.status === "verified" || item.status === "varies")
     .map((item) => {
       const area = snapshot.areas.find((candidate) => candidate.areaGroup === item.area_group);
