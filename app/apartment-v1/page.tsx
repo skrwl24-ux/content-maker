@@ -9,6 +9,11 @@ import {
   AreaSnapshot,
   DataSnapshot,
   DEFAULT_CHART_TEMPLATE,
+  DEFAULT_FINAL_ARTICLE_TEMPLATE,
+  DEFAULT_LIFE_IMAGE_PROMPT_TEMPLATE,
+  DEFAULT_LIFE_KICK_PROMPT_TEMPLATE,
+  DEFAULT_STRUCTURE_PROMPT_TEMPLATE,
+  DEFAULT_THUMBNAIL_PROMPT_TEMPLATE,
   buildChartPrompt,
   buildDataSnapshot,
   buildFinalArticlePrompt,
@@ -75,6 +80,64 @@ type TemplateRow = {
   template_text: string;
   reference_image_url: string;
 };
+
+type TextPromptKey =
+  | "APT_FINAL_ARTICLE_V1"
+  | "APT_STRUCTURE_V1"
+  | "APT_LIFE_KICK_V1"
+  | "APT_LIFE_IMAGE_V1"
+  | "APT_THUMBNAIL_V1";
+
+const TEXT_PROMPT_DEFINITIONS: Record<TextPromptKey, {
+  name: string;
+  defaultText: string;
+  description: string;
+  placeholders: string[];
+}> = {
+  APT_FINAL_ARTICLE_V1: {
+    name: "최종 글 요청서",
+    defaultText: DEFAULT_FINAL_ARTICLE_TEMPLATE,
+    description: "핵심 POINT · 목차 · 가격 · 구조 · 생활 킥 · Q&A · 마무리의 최종 글 구성입니다.",
+    placeholders: ["{{TITLE}}", "{{DATA_BLOCK}}", "{{STRUCTURE_DATA_BLOCK}}", "{{LIFE_KICK_BLOCK}}", "{{TOC_BLOCK}}", "{{SOURCE_LINE}}"],
+  },
+  APT_STRUCTURE_V1: {
+    name: "평형 구조 조사 요청서",
+    defaultText: DEFAULT_STRUCTURE_PROMPT_TEMPLATE,
+    description: "평형별 방·욕실과 타입 차이를 웹에서 조사하는 요청서입니다.",
+    placeholders: ["{{COMPLEX_NAME}}", "{{AREA_LIST}}"],
+  },
+  APT_LIFE_KICK_V1: {
+    name: "생활·입지 조사 요청서",
+    defaultText: DEFAULT_LIFE_KICK_PROMPT_TEMPLATE,
+    description: "생활 킥 1개와 검증 가능한 도보 정보를 조사하는 요청서입니다.",
+    placeholders: ["{{COMPLEX_NAME}}", "{{ADDRESS}}", "{{YEAR}}"],
+  },
+  APT_LIFE_IMAGE_V1: {
+    name: "생활 킥 이미지 요청서",
+    defaultText: DEFAULT_LIFE_IMAGE_PROMPT_TEMPLATE,
+    description: "저장된 생활 킥만 사용해 본문 이미지를 만드는 요청서입니다.",
+    placeholders: ["{{COMPLEX_NAME}}", "{{KICK_TITLE}}", "{{KICK_SUMMARY}}"],
+  },
+  APT_THUMBNAIL_V1: {
+    name: "썸네일 요청서",
+    defaultText: DEFAULT_THUMBNAIL_PROMPT_TEMPLATE,
+    description: "단지명과 고정 제목을 넣어 썸네일을 만드는 요청서입니다.",
+    placeholders: ["{{TITLE}}"],
+  },
+};
+
+function defaultTextPromptRows(): Record<TextPromptKey, TemplateRow> {
+  return Object.fromEntries(
+    (Object.entries(TEXT_PROMPT_DEFINITIONS) as Array<[TextPromptKey, typeof TEXT_PROMPT_DEFINITIONS[TextPromptKey]]>)
+      .map(([key, value]) => [key, {
+        template_key: key,
+        name: value.name,
+        is_active: true,
+        template_text: value.defaultText,
+        reference_image_url: "",
+      }])
+  ) as Record<TextPromptKey, TemplateRow>;
+}
 
 type IdentityCandidate = {
   candidate_key: string;
@@ -187,6 +250,9 @@ export default function ApartmentV1Page() {
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [publishAuditVisible, setPublishAuditVisible] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"prompts" | "chart">("prompts");
+  const [selectedPromptKey, setSelectedPromptKey] = useState<TextPromptKey>("APT_FINAL_ARTICLE_V1");
+  const [promptTemplates, setPromptTemplates] = useState<Record<TextPromptKey, TemplateRow>>(() => defaultTextPromptRows());
   const [chartTemplate, setChartTemplate] = useState<TemplateRow>({
     template_key: "APT_PRICE_FLOW_V1",
     name: "평형별 가격 흐름 V1",
@@ -220,38 +286,77 @@ export default function ApartmentV1Page() {
     return new Map(rankings.map((item) => [item.complex_id, item]));
   }, [rankings]);
 
-  const loadTemplate = useCallback(async () => {
+  const loadTemplates = useCallback(async () => {
     const supabase = supabaseRef.current;
     const userId = userIdRef.current;
     if (!supabase || !userId) return;
-    const { data } = await supabase
+
+    const keys = ["APT_PRICE_FLOW_V1", ...Object.keys(TEXT_PROMPT_DEFINITIONS)];
+    const { data, error: loadError } = await supabase
       .from("apt_content_prompt_templates")
       .select("id,template_key,name,is_active,template_text,reference_image_url")
       .eq("user_id", userId)
-      .eq("template_key", "APT_PRICE_FLOW_V1")
-      .maybeSingle();
+      .in("template_key", keys);
+    if (loadError) throw loadError;
 
-    if (data) {
-      setChartTemplate(data as TemplateRow);
-      return;
+    const existing = new Map((data || []).map((row: any) => [row.template_key, row as TemplateRow]));
+    const missingRows: any[] = [];
+
+    const chart = existing.get("APT_PRICE_FLOW_V1");
+    if (chart) {
+      setChartTemplate(chart);
+    } else {
+      missingRows.push({
+        user_id: userId,
+        template_key: "APT_PRICE_FLOW_V1",
+        name: "평형별 가격 흐름 V1",
+        is_active: true,
+        template_text: DEFAULT_CHART_TEMPLATE,
+        reference_image_url: "",
+      });
     }
 
-    const row = {
-      user_id: userId,
-      template_key: "APT_PRICE_FLOW_V1",
-      name: "평형별 가격 흐름 V1",
-      is_active: true,
-      template_text: DEFAULT_CHART_TEMPLATE,
-      reference_image_url: "",
-    };
-    const { data: inserted } = await supabase
-      .from("apt_content_prompt_templates")
-      .insert(row)
-      .select("id,template_key,name,is_active,template_text,reference_image_url")
-      .single();
-    if (inserted) setChartTemplate(inserted as TemplateRow);
-  }, []);
+    const nextTextRows = defaultTextPromptRows();
+    (Object.keys(TEXT_PROMPT_DEFINITIONS) as TextPromptKey[]).forEach((key) => {
+      const row = existing.get(key);
+      if (row) {
+        nextTextRows[key] = row;
+      } else {
+        const definition = TEXT_PROMPT_DEFINITIONS[key];
+        missingRows.push({
+          user_id: userId,
+          template_key: key,
+          name: definition.name,
+          is_active: true,
+          template_text: definition.defaultText,
+          reference_image_url: "",
+        });
+      }
+    });
+    setPromptTemplates(nextTextRows);
 
+    if (missingRows.length) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("apt_content_prompt_templates")
+        .upsert(missingRows, { onConflict: "user_id,template_key", ignoreDuplicates: true })
+        .select("id,template_key,name,is_active,template_text,reference_image_url");
+      if (insertError) throw insertError;
+      const insertedMap = new Map((inserted || []).map((row: any) => [row.template_key, row as TemplateRow]));
+      if (insertedMap.has("APT_PRICE_FLOW_V1")) {
+        setChartTemplate(insertedMap.get("APT_PRICE_FLOW_V1") as TemplateRow);
+      }
+      if (inserted?.length) {
+        setPromptTemplates((current) => {
+          const next = { ...current };
+          (Object.keys(TEXT_PROMPT_DEFINITIONS) as TextPromptKey[]).forEach((key) => {
+            const row = insertedMap.get(key);
+            if (row) next[key] = row;
+          });
+          return next;
+        });
+      }
+    }
+  }, []);
   const loadHome = useCallback(async () => {
     const supabase = supabaseRef.current;
     const userId = userIdRef.current;
@@ -375,13 +480,13 @@ export default function ApartmentV1Page() {
       }
 
       setRecommendations((recRows || []) as RecommendationRow[]);
-      await loadTemplate();
+      await loadTemplates();
     } catch (cause) {
       setError(errorMessage(cause, "추천 후보를 불러오지 못했습니다."));
     } finally {
       setLoading(false);
     }
-  }, [loadTemplate, year]);
+  }, [loadTemplates, year]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1006,6 +1111,57 @@ export default function ApartmentV1Page() {
     notify("차트 템플릿 저장 완료");
   }, [chartTemplate, notify]);
 
+  const saveTextPromptTemplate = useCallback(async () => {
+    const definition = TEXT_PROMPT_DEFINITIONS[selectedPromptKey];
+    const current = promptTemplates[selectedPromptKey];
+    const text = current.template_text.trim();
+    if (!text) {
+      setError("요청서 내용을 비워둘 수 없습니다.");
+      return;
+    }
+    const missing = definition.placeholders.filter((placeholder) => !text.includes(placeholder));
+    if (missing.length) {
+      setError("필수 치환값이 빠졌습니다: " + missing.join(", "));
+      return;
+    }
+
+    const row = {
+      user_id: userIdRef.current,
+      template_key: selectedPromptKey,
+      name: definition.name,
+      is_active: true,
+      template_text: text,
+      reference_image_url: "",
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error: templateError } = await supabaseRef.current
+      .from("apt_content_prompt_templates")
+      .upsert(row, { onConflict: "user_id,template_key" })
+      .select("id,template_key,name,is_active,template_text,reference_image_url")
+      .single();
+    if (templateError) {
+      setError(templateError.message);
+      return;
+    }
+    setPromptTemplates((currentRows) => ({
+      ...currentRows,
+      [selectedPromptKey]: data as TemplateRow,
+    }));
+    notify(definition.name + " 저장 완료");
+  }, [notify, promptTemplates, selectedPromptKey]);
+
+  const resetTextPromptTemplate = useCallback(() => {
+    const definition = TEXT_PROMPT_DEFINITIONS[selectedPromptKey];
+    setPromptTemplates((currentRows) => ({
+      ...currentRows,
+      [selectedPromptKey]: {
+        ...currentRows[selectedPromptKey],
+        template_text: definition.defaultText,
+      },
+    }));
+    notify("기본 요청서를 불러왔습니다. 저장을 누르면 고정됩니다.");
+  }, [notify, selectedPromptKey]);
+
   const apiDataReady = Boolean(
     snapshot &&
     identityState.loaded &&
@@ -1056,62 +1212,137 @@ export default function ApartmentV1Page() {
 
       {settingsOpen ? (
         <section className={styles.settingsCard}>
-          <div className={styles.sectionHeading}>
-            <div>
-              <span className={styles.stepLabel}>설정</span>
-              <h2>차트 이미지 템플릿</h2>
-            </div>
-            <label className={styles.switchRow}>
-              <input
-                type="checkbox"
-                checked={chartTemplate.is_active}
-                onChange={(event) => setChartTemplate((current) => ({ ...current, is_active: event.target.checked }))}
-              />
-              <span>{chartTemplate.is_active ? "활성화" : "비활성화"}</span>
-            </label>
+          <div className={styles.settingsTabs}>
+            <button
+              className={settingsTab === "prompts" ? styles.settingsTabActive : ""}
+              onClick={() => setSettingsTab("prompts")}
+            >
+              요청서 관리
+            </button>
+            <button
+              className={settingsTab === "chart" ? styles.settingsTabActive : ""}
+              onClick={() => setSettingsTab("chart")}
+            >
+              차트 디자인
+            </button>
           </div>
-          <p className={styles.muted}>한 번 저장해두면 매 단지마다 같은 디자인 이미지와 요청서를 사용하고, 이번 단지 데이터만 바뀝니다.</p>
-          <div className={styles.referenceImageBox}>
-            <div className={styles.referenceImagePreview}>
-              {chartTemplate.reference_image_url ? (
-                <img src={chartTemplate.reference_image_url} alt="평형별 가격 차트 기준 디자인" />
-              ) : (
-                <div className={styles.referenceImageEmpty}>기준 디자인 이미지 미등록</div>
-              )}
-            </div>
-            <div className={styles.referenceImageInfo}>
-              <strong>기준 디자인 이미지</strong>
-              <span>{chartTemplate.reference_image_url ? "APT_PRICE_FLOW_V1에 이미지가 저장되어 있습니다." : "마음에 든 완성 예시 이미지를 한 번 등록해주세요."}</span>
-              <div className={styles.referenceImageActions}>
-                <label className={styles.uploadButton}>
-                  {busy === "template-image" ? "업로드 중…" : chartTemplate.reference_image_url ? "기준 이미지 교체" : "기준 이미지 등록"}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    disabled={busy === "template-image"}
-                    onChange={(event) => {
-                      void uploadTemplateReferenceImage(event.target.files?.[0] || null);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
-                {chartTemplate.reference_image_url ? (
-                  <>
-                    <button className={styles.copyButton} onClick={copyReferenceImage}>기준 이미지 복사</button>
-                    <a className={styles.secondaryLink} href={chartTemplate.reference_image_url} target="_blank" rel="noreferrer">이미지 열기</a>
-                  </>
-                ) : null}
+
+          {settingsTab === "prompts" ? (
+            <>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.stepLabel}>PROMPT SETTINGS</span>
+                  <h2>요청서 관리</h2>
+                </div>
               </div>
-            </div>
-          </div>
-          <textarea
-            className={styles.templateArea}
-            value={chartTemplate.template_text}
-            onChange={(event) => setChartTemplate((current) => ({ ...current, template_text: event.target.value }))}
-          />
-          <div className={styles.rightActions}>
-            <button className={styles.primaryButton} onClick={saveChartTemplate}>템플릿 저장</button>
-          </div>
+              <p className={styles.muted}>
+                여기서 저장한 요청서는 다음 아파트에도 계속 사용됩니다. ChatGPT에서 새 요청서를 만들어달라고 한 뒤 그대로 붙여넣고 저장하면 됩니다.
+              </p>
+
+              <div className={styles.promptEditorTop}>
+                <label>
+                  <span>수정할 요청서</span>
+                  <select
+                    value={selectedPromptKey}
+                    onChange={(event) => setSelectedPromptKey(event.target.value as TextPromptKey)}
+                  >
+                    {(Object.keys(TEXT_PROMPT_DEFINITIONS) as TextPromptKey[]).map((key) => (
+                      <option key={key} value={key}>{TEXT_PROMPT_DEFINITIONS[key].name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className={styles.promptHelp}>
+                  <strong>{TEXT_PROMPT_DEFINITIONS[selectedPromptKey].name}</strong>
+                  <span>{TEXT_PROMPT_DEFINITIONS[selectedPromptKey].description}</span>
+                </div>
+              </div>
+
+              <div className={styles.placeholderBox}>
+                <strong>유지해야 하는 자동 치환값</strong>
+                <div>
+                  {TEXT_PROMPT_DEFINITIONS[selectedPromptKey].placeholders.map((placeholder) => (
+                    <code key={placeholder}>{placeholder}</code>
+                  ))}
+                </div>
+                <span>이 표시는 단지명·실거래·구조·생활 킥 같은 저장자료가 자동으로 들어가는 자리이므로 삭제하지 않는 것이 안전합니다.</span>
+              </div>
+
+              <textarea
+                className={styles.templateArea}
+                value={promptTemplates[selectedPromptKey].template_text}
+                onChange={(event) => setPromptTemplates((current) => ({
+                  ...current,
+                  [selectedPromptKey]: {
+                    ...current[selectedPromptKey],
+                    template_text: event.target.value,
+                  },
+                }))}
+              />
+              <div className={styles.rightActions}>
+                <button className={styles.copyButton} onClick={resetTextPromptTemplate}>기본 요청서 불러오기</button>
+                <button className={styles.primaryButton} onClick={saveTextPromptTemplate}>이 요청서 저장</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <span className={styles.stepLabel}>CHART SETTINGS</span>
+                  <h2>차트 이미지 템플릿</h2>
+                </div>
+                <label className={styles.switchRow}>
+                  <input
+                    type="checkbox"
+                    checked={chartTemplate.is_active}
+                    onChange={(event) => setChartTemplate((current) => ({ ...current, is_active: event.target.checked }))}
+                  />
+                  <span>{chartTemplate.is_active ? "활성화" : "비활성화"}</span>
+                </label>
+              </div>
+              <p className={styles.muted}>한 번 저장해두면 매 단지마다 같은 디자인 이미지와 요청서를 사용하고, 이번 단지 데이터만 바뀝니다.</p>
+              <div className={styles.referenceImageBox}>
+                <div className={styles.referenceImagePreview}>
+                  {chartTemplate.reference_image_url ? (
+                    <img src={chartTemplate.reference_image_url} alt="평형별 가격 차트 기준 디자인" />
+                  ) : (
+                    <div className={styles.referenceImageEmpty}>기준 디자인 이미지 미등록</div>
+                  )}
+                </div>
+                <div className={styles.referenceImageInfo}>
+                  <strong>기준 디자인 이미지</strong>
+                  <span>{chartTemplate.reference_image_url ? "APT_PRICE_FLOW_V1에 이미지가 저장되어 있습니다." : "마음에 든 완성 예시 이미지를 한 번 등록해주세요."}</span>
+                  <div className={styles.referenceImageActions}>
+                    <label className={styles.uploadButton}>
+                      {busy === "template-image" ? "업로드 중…" : chartTemplate.reference_image_url ? "기준 이미지 교체" : "기준 이미지 등록"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={busy === "template-image"}
+                        onChange={(event) => {
+                          void uploadTemplateReferenceImage(event.target.files?.[0] || null);
+                          event.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                    {chartTemplate.reference_image_url ? (
+                      <>
+                        <button className={styles.copyButton} onClick={copyReferenceImage}>기준 이미지 복사</button>
+                        <a className={styles.secondaryLink} href={chartTemplate.reference_image_url} target="_blank" rel="noreferrer">이미지 열기</a>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <textarea
+                className={styles.templateArea}
+                value={chartTemplate.template_text}
+                onChange={(event) => setChartTemplate((current) => ({ ...current, template_text: event.target.value }))}
+              />
+              <div className={styles.rightActions}>
+                <button className={styles.primaryButton} onClick={saveChartTemplate}>차트 템플릿 저장</button>
+              </div>
+            </>
+          )}
         </section>
       ) : null}
 
@@ -1357,8 +1588,8 @@ export default function ApartmentV1Page() {
             {needsCheckGroups.length ? (
               <>
                 <div className={styles.inlineButtons}>
-                  <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
-                  <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(snapshot, needsCheckGroups))}>GPT 열기</button>
+                  <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups, promptTemplates.APT_STRUCTURE_V1.template_text), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
+                  <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(snapshot, needsCheckGroups, promptTemplates.APT_STRUCTURE_V1.template_text))}>GPT 열기</button>
                 </div>
                 <div className={styles.pasteBox}>
                   <label>GPT 구조 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
@@ -1405,8 +1636,8 @@ export default function ApartmentV1Page() {
 
             <div className={styles.actionStrip}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildLifeKickPrompt(snapshot))}>GPT 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot, promptTemplates.APT_LIFE_KICK_V1.template_text), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildLifeKickPrompt(snapshot, promptTemplates.APT_LIFE_KICK_V1.template_text))}>GPT 열기</button>
               </div>
             </div>
             <div className={styles.pasteBox}>
@@ -1433,7 +1664,7 @@ export default function ApartmentV1Page() {
                     walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
                     routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
                     routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
-                  }), "생활 킥 이미지 요청서")}
+                  }, promptTemplates.APT_LIFE_IMAGE_V1.template_text), "생활 킥 이미지 요청서")}
                 >
                   생활 킥 이미지 요청서 복사
                 </button>
@@ -1449,7 +1680,7 @@ export default function ApartmentV1Page() {
                     walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
                     routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
                     routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
-                  }))}
+                  }, promptTemplates.APT_LIFE_IMAGE_V1.template_text))}
                 >
                   GPT 열기
                 </button>
@@ -1473,8 +1704,8 @@ export default function ApartmentV1Page() {
 
             <div className={styles.requestGrid}>
               <div className={styles.inlineButtons}>
-                <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
-                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildThumbnailPrompt(snapshot))}>GPT 열기</button>
+                <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot, promptTemplates.APT_THUMBNAIL_V1.template_text), "썸네일 요청서")}>썸네일 요청서 복사</button>
+                <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildThumbnailPrompt(snapshot, promptTemplates.APT_THUMBNAIL_V1.template_text))}>GPT 열기</button>
               </div>
               <div className={styles.inlineButtons}>
                 <button
@@ -1492,7 +1723,8 @@ export default function ApartmentV1Page() {
                       routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
                       routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                     },
-                    article.structure_mode !== "exclude"
+                    article.structure_mode !== "exclude",
+                    promptTemplates.APT_FINAL_ARTICLE_V1.template_text
                   ), "최종 원고 요청서")}
                 >
                   최종 원고 요청서 복사
@@ -1512,7 +1744,8 @@ export default function ApartmentV1Page() {
                       routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
                       routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                     },
-                    article.structure_mode !== "exclude"
+                    article.structure_mode !== "exclude",
+                    promptTemplates.APT_FINAL_ARTICLE_V1.template_text
                   ))}
                 >
                   GPT 열기
