@@ -489,27 +489,48 @@ export default function ApartmentV1Page() {
     if (!article) return;
     try {
       const parsed = safeParseJson(dataCheckRaw) as any;
-      const external = parsed?.externalCheck || {};
+      const external = parsed?.externalCollection || parsed?.externalCheck || {};
+      const comparison = parsed?.comparison || {};
       const sourceCount = Array.isArray(external.sources) ? external.sources.length : 0;
-      const hasIndependentWebCheck =
+      const hasIndependentCollection =
         external.performed === true &&
-        external.identityMatch === true &&
-        external.recentTradeMatch === true &&
+        (external.identityConfirmed === true || external.identityMatch === true) &&
         sourceCount >= 2;
 
+      const hasCriticalGap =
+        parsed?.issues?.dataGap === true ||
+        parsed?.issues?.mixedComplexSuspected === true ||
+        parsed?.issues?.cancellationIssue === true ||
+        parsed?.issues?.identityNeedsReview === true;
+
+      const comparisonFailed =
+        comparison.areaGroupsMatch === false ||
+        comparison.monthlyCountsMatch === false ||
+        comparison.monthlyMediansMatch === false ||
+        comparison.periodCountsMatch === false ||
+        comparison.latestPriceRuleOk === false;
+
       const warnings = Array.isArray(parsed.warnings) ? [...parsed.warnings] : [];
-      if (!hasIndependentWebCheck) {
-        warnings.unshift("웹 독립 교차검증이 완료되지 않았습니다. 공식·공공 출처를 포함한 최소 2개 출처와 최근 실거래 샘플 대조가 필요합니다.");
+      if (!hasIndependentCollection) {
+        warnings.unshift("2026년 외부 실거래 자료 수집이 충분히 완료되지 않았습니다. 공식·공공 출처를 포함한 최소 2개 출처가 필요합니다.");
+      }
+      if (hasCriticalGap && !warnings.some((item: string) => item.includes("누락") || item.includes("혼입") || item.includes("취소") || item.includes("식별"))) {
+        warnings.push("외부 수집 결과에서 데이터 누락·단지 식별·혼입·취소 처리 중 확인이 필요한 문제가 발견됐습니다.");
       }
 
-      const chartReady = Boolean(parsed.chartReady) && hasIndependentWebCheck;
+      const chartReady =
+        Boolean(parsed.chartReady) &&
+        hasIndependentCollection &&
+        !hasCriticalGap &&
+        !comparisonFailed;
+
       const status = parsed.status === "pass" && chartReady ? "pass" : "warning";
       const result = {
         ...parsed,
         status,
         warnings,
         chartReady,
-        doubleCheckReady: hasIndependentWebCheck,
+        collectionReady: hasIndependentCollection,
       };
 
       const { error: updateError } = await supabaseRef.current
@@ -523,12 +544,11 @@ export default function ApartmentV1Page() {
         .eq("user_id", userIdRef.current);
       if (updateError) throw updateError;
       setArticle({ ...article, data_status: status, data_check_result: result });
-      notify(chartReady ? "내부 + 웹 이중 검수 완료" : "이중 검수 확인 필요");
+      notify(chartReady ? "2026년 자료 수집·이중검수 완료 · 차트 제작 가능" : "자료 수집·검수 확인 필요");
     } catch (cause) {
-      setError(cause instanceof Error ? "검수 결과 JSON 오류: " + cause.message : "검수 결과를 읽지 못했습니다.");
+      setError(cause instanceof Error ? "수집·검수 결과 JSON 오류: " + cause.message : "수집·검수 결과를 읽지 못했습니다.");
     }
   }, [article, dataCheckRaw, notify]);
-
   const applyStructureResult = useCallback(async () => {
     if (!workspace || !article) return;
     try {
@@ -928,7 +948,9 @@ export default function ApartmentV1Page() {
   }, [snapshot, structureByArea]);
 
   const dataCheckResult = (article?.data_check_result as any) || {};
-  const externalDataCheck = dataCheckResult?.externalCheck || null;
+  const externalDataCheck = dataCheckResult?.externalCollection || dataCheckResult?.externalCheck || null;
+  const comparisonDataCheck = dataCheckResult?.comparison || null;
+  const issueDataCheck = dataCheckResult?.issues || null;
   const chartReady = Boolean(dataCheckResult?.chartReady);
   const structureReady = article?.structure_mode === "exclude" || needsCheckGroups.length === 0;
   const lifeReady = article?.kick_status === "verified";
@@ -1152,8 +1174,8 @@ export default function ApartmentV1Page() {
               <div className={styles.doubleCheckPanel}>
                 <div className={styles.doubleCheckHead}>
                   <div>
-                    <strong>이중 검수 결과</strong>
-                    <span>사이트 내부 계산 + GPT 웹 독립 확인</span>
+                    <strong>2026년 자료 수집·이중검수 결과</strong>
+                    <span>GPT 외부 자료 수집 + 사이트 데이터 비교</span>
                   </div>
                   <b className={chartReady ? styles.statusGood : styles.statusWarn}>
                     {chartReady ? "✓ 차트 사용 가능" : "⚠ 차트 보류"}
@@ -1165,16 +1187,16 @@ export default function ApartmentV1Page() {
                     <strong>{dataCheckResult?.internalCheck ? "확인됨" : "결과 없음"}</strong>
                   </div>
                   <div>
-                    <span>2차 · 웹 검색</span>
-                    <strong>{externalDataCheck?.performed ? "수행됨" : "미수행"}</strong>
+                    <span>2차 · 외부 자료 수집</span>
+                    <strong>{externalDataCheck?.performed ? "수집됨" : "미수집"}</strong>
                   </div>
                   <div>
                     <span>단지 식별</span>
-                    <strong>{externalDataCheck?.identityMatch === true ? "일치" : externalDataCheck?.identityMatch === false ? "불일치" : "미확인"}</strong>
+                    <strong>{(externalDataCheck?.identityConfirmed ?? externalDataCheck?.identityMatch) === true ? "일치" : (externalDataCheck?.identityConfirmed ?? externalDataCheck?.identityMatch) === false ? "불일치" : "미확인"}</strong>
                   </div>
                   <div>
-                    <span>최근 거래 샘플</span>
-                    <strong>{externalDataCheck?.recentTradeMatch === true ? "일치" : externalDataCheck?.recentTradeMatch === false ? "불일치" : "미확인"}</strong>
+                    <span>월별 데이터 비교</span>
+                    <strong>{comparisonDataCheck?.monthlyCountsMatch === true && comparisonDataCheck?.monthlyMediansMatch === true ? "일치" : comparisonDataCheck?.monthlyCountsMatch === false || comparisonDataCheck?.monthlyMediansMatch === false ? "불일치" : "미확인"}</strong>
                   </div>
                 </div>
                 {Array.isArray(externalDataCheck?.sources) && externalDataCheck.sources.length ? (
@@ -1198,10 +1220,10 @@ export default function ApartmentV1Page() {
 
             <div className={styles.imageRequestRow}>
               <div>
-                <strong>평형별 가격 차트</strong>
+                <strong>STEP 1 결과 · 평형별 가격 차트 만들기</strong>
                 <span>
                   기준 디자인 APT_PRICE_FLOW_V1 {chartTemplate.reference_image_url ? "✓" : "· 이미지 미등록"}
-                  {" · "}이번 단지 숫자만 요청서에 바뀝니다.
+                  {" · "}2026년 자료 수집·이중검수가 통과하면 바로 제작할 수 있습니다.
                 </span>
               </div>
               <div className={styles.imageActionButtons}>
