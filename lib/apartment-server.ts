@@ -257,8 +257,21 @@ function recentYearMonths(count: number) {
   return result;
 }
 
+function currentCalendarYearMonths() {
+  const d = koreaNow();
+  const year = d.getUTCFullYear();
+  const currentMonth = d.getUTCMonth() + 1;
+  return Array.from({ length: currentMonth }, (_, index) =>
+    String(year) + String(index + 1).padStart(2, "0")
+  );
+}
+
 function monthLabels(count: number) {
   return recentYearMonths(count).map((v) => v.slice(0, 4) + "-" + v.slice(4));
+}
+
+function currentCalendarYearLabels() {
+  return currentCalendarYearMonths().map((v) => v.slice(0, 4) + "-" + v.slice(4));
 }
 
 async function fetchTradeMonth(regionCode: string, yyyymm: string, key: string) {
@@ -472,7 +485,11 @@ export async function syncApartmentRegion(regionCode: string) {
       row.target_complex_id as string,
     ]));
 
-    const rawTradeMonths = await mapInBatches(recentYearMonths(7), 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
+    // Content/ranking uses the full current calendar year, so always backfill
+    // January through the current month. Candidate scoring below still uses
+    // the latest seven months only.
+    const yearMonths = currentCalendarYearMonths();
+    const rawTradeMonths = await mapInBatches(yearMonths, 2, async (ym) => fetchTradeMonth(regionCode, ym, publicKey));
     const normalized = rawTradeMonths
       .flat()
       .map((row) => normalizeTrade(row, regionCode, complexes))
@@ -541,7 +558,7 @@ export async function syncApartmentRegion(regionCode: string) {
     // were successfully upserted; never delete the underlying government data.
     const { data: removedObsoleteMonthly, error: cleanupError } = await client.rpc(
       "cleanup_apartment_monthly_stats",
-      { p_region_code: regionCode, p_months: monthLabels(7) }
+      { p_region_code: regionCode, p_months: currentCalendarYearLabels() }
     );
     if (cleanupError) throw cleanupError;
 
