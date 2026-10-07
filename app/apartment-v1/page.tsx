@@ -1139,7 +1139,7 @@ export default function ApartmentV1Page() {
             </div>
 
             <div className={styles.pasteBox}>
-              <label>GPT 이중 검수 결과 붙여넣기</label>
+              <label>GPT 이중 검수 결과 붙여넣기 · 응답 JSON 코드블록의 복사 버튼을 누른 뒤 여기에 붙여넣으세요</label>
               <textarea
                 value={dataCheckRaw}
                 onChange={(event) => setDataCheckRaw(event.target.value)}
@@ -1268,7 +1268,7 @@ export default function ApartmentV1Page() {
                   <button className={styles.secondaryButton} onClick={() => openInChatGPT(buildStructurePrompt(snapshot, needsCheckGroups))}>GPT 열기</button>
                 </div>
                 <div className={styles.pasteBox}>
-                  <label>GPT 구조 조사 결과 붙여넣기</label>
+                  <label>GPT 구조 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
                   <textarea value={structureRaw} onChange={(event) => setStructureRaw(event.target.value)} placeholder='{"areas":[{"areaGroup":84,"rooms":3,"baths":2,"status":"verified","source":"..."}]}' />
                   <div className={styles.splitActions}>
                     <button className={styles.smallButton} disabled={!structureRaw.trim()} onClick={applyStructureResult}>구조 결과 적용</button>
@@ -1306,7 +1306,7 @@ export default function ApartmentV1Page() {
               </div>
             </div>
             <div className={styles.pasteBox}>
-              <label>GPT 생활 킥 조사 결과 붙여넣기</label>
+              <label>GPT 생활 킥 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
               <textarea value={lifeRaw} onChange={(event) => setLifeRaw(event.target.value)} placeholder='{"kickFound":true,"title":"...","summary":"...","sourceText":"...","verified":true}' />
               <button className={styles.smallButton} disabled={!lifeRaw.trim()} onClick={applyLifeResult}>생활 킥 결과 적용</button>
             </div>
@@ -1391,7 +1391,7 @@ export default function ApartmentV1Page() {
             </div>
 
             <div className={styles.pasteBox}>
-              <label>GPT 최종 원고 붙여넣기</label>
+              <label>GPT 최종 원고 붙여넣기 · 응답 코드블록의 복사 버튼으로 글 전체를 복사하세요</label>
               <textarea
                 className={styles.articleArea}
                 value={finalRaw}
