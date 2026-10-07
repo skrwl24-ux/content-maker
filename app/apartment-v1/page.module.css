@@ -854,3 +854,211 @@
     flex: 1;
   }
 }
+
+
+.naverPanel {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid #dce3ee;
+  border-radius: 18px;
+  background: #ffffff;
+}
+
+.naverPanelHead,
+.auditHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.naverPanelHead h3 {
+  margin: 5px 0 5px;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.naverPanelHead p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.naverToolBar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.naverMessage {
+  margin: 10px 0 0;
+  color: #245de8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.naverPreview {
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid #e1e7f0;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.naverPreviewLabel {
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf0f5;
+  color: #8a94a6;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .05em;
+}
+
+.naverTitle {
+  margin: 0 0 24px;
+  font-size: 32px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+
+.naverSubheading {
+  margin: 30px 0 14px;
+  font-size: 28px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.naverEmphasis {
+  margin: 16px 0;
+  font-size: 18px;
+  line-height: 1.65;
+  font-weight: 700;
+}
+
+.naverBody,
+.naverTags,
+.naverImageMarker {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.naverTags {
+  color: #52627a;
+}
+
+.naverImageMarker {
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #f4f7fb;
+  color: #52627a;
+  font-weight: 700;
+}
+
+.naverCard {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid #8aa99d;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.naverCard + .naverCard {
+  margin-top: 2px;
+}
+
+.auditPanel {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 16px;
+  background: #f7f9fc;
+  border: 1px solid #e0e6ef;
+}
+
+.auditHead > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auditHead span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.auditHead > b {
+  color: #344054;
+  font-size: 13px;
+}
+
+.auditList {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.auditPass,
+.auditWarning,
+.auditReview {
+  display: grid;
+  grid-template-columns: minmax(150px, .7fr) 2fr;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.auditPass {
+  background: #eaf7ef;
+  color: #176b44;
+}
+
+.auditWarning {
+  background: #fff2de;
+  color: #8b5e00;
+}
+
+.auditReview {
+  background: #eef3fb;
+  color: #52627a;
+}
+
+.auditPass span,
+.auditWarning span,
+.auditReview span {
+  line-height: 1.5;
+}
+
+@media (max-width: 820px) {
+  .naverPanelHead,
+  .auditHead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .naverToolBar > * {
+    flex: 1;
+  }
+
+  .naverPreview {
+    padding: 16px;
+  }
+
+  .naverTitle {
+    font-size: 27px;
+  }
+
+  .naverSubheading {
+    font-size: 24px;
+  }
+
+  .auditPass,
+  .auditWarning,
+  .auditReview {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
