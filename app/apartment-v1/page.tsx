@@ -1294,6 +1294,17 @@ export default function ApartmentV1Page() {
                 <span>생활 킥</span>
                 <h3>{article.kick_title}</h3>
                 <p>{article.kick_summary}</p>
+                {(article.kick_snapshot as any)?.walkingVerified && (article.kick_snapshot as any)?.walkingMinutes ? (
+                  <div className={styles.walkingInfo}>
+                    <strong>도보 약 {(article.kick_snapshot as any).walkingMinutes}분</strong>
+                    {(article.kick_snapshot as any)?.walkingDistanceM ? <span>약 {(article.kick_snapshot as any).walkingDistanceM}m</span> : null}
+                    <small>
+                      {String((article.kick_snapshot as any)?.routeFrom || "단지")}
+                      {" → "}
+                      {String((article.kick_snapshot as any)?.routeTo || article.kick_title)}
+                    </small>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <p className={styles.muted}>단지 위치를 기준으로 실제 생활에 의미 있는 시설·공원·시장·교통·문화 요소 중 하나만 검증합니다.</p>
@@ -1307,7 +1318,7 @@ export default function ApartmentV1Page() {
             </div>
             <div className={styles.pasteBox}>
               <label>GPT 생활 킥 조사 결과 붙여넣기 · JSON 코드블록만 복사해서 붙여넣으세요</label>
-              <textarea value={lifeRaw} onChange={(event) => setLifeRaw(event.target.value)} placeholder='{"kickFound":true,"title":"...","summary":"...","sourceText":"...","verified":true}' />
+              <textarea value={lifeRaw} onChange={(event) => setLifeRaw(event.target.value)} placeholder='{"kickFound":true,"title":"...","summary":"...","walkingVerified":true,"walkingMinutes":8,"walkingDistanceM":600,"routeFrom":"단지","routeTo":"○○역 1번 출구","sourceText":"...","verified":true}' />
               <button className={styles.smallButton} disabled={!lifeRaw.trim()} onClick={applyLifeResult}>생활 킥 결과 적용</button>
             </div>
 
@@ -1324,6 +1335,11 @@ export default function ApartmentV1Page() {
                     title: article.kick_title,
                     summary: article.kick_summary,
                     category: String((article.kick_snapshot as any)?.category || ""),
+                    walkingVerified: Boolean((article.kick_snapshot as any)?.walkingVerified),
+                    walkingMinutes: (article.kick_snapshot as any)?.walkingMinutes ?? null,
+                    walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
+                    routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
+                    routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                   }), "생활 킥 이미지 요청서")}
                 >
                   생활 킥 이미지 요청서 복사
@@ -1335,6 +1351,11 @@ export default function ApartmentV1Page() {
                     title: article.kick_title,
                     summary: article.kick_summary,
                     category: String((article.kick_snapshot as any)?.category || ""),
+                    walkingVerified: Boolean((article.kick_snapshot as any)?.walkingVerified),
+                    walkingMinutes: (article.kick_snapshot as any)?.walkingMinutes ?? null,
+                    walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
+                    routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
+                    routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                   }))}
                 >
                   GPT 열기
@@ -1369,7 +1390,15 @@ export default function ApartmentV1Page() {
                   onClick={() => copyText(buildFinalArticlePrompt(
                     snapshot,
                     structures,
-                    { title: article.kick_title, summary: article.kick_summary },
+                    {
+                      title: article.kick_title,
+                      summary: article.kick_summary,
+                      walkingVerified: Boolean((article.kick_snapshot as any)?.walkingVerified),
+                      walkingMinutes: (article.kick_snapshot as any)?.walkingMinutes ?? null,
+                      walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
+                      routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
+                      routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
+                    },
                     article.structure_mode !== "exclude"
                   ), "최종 원고 요청서")}
                 >
@@ -1381,7 +1410,15 @@ export default function ApartmentV1Page() {
                   onClick={() => openInChatGPT(buildFinalArticlePrompt(
                     snapshot,
                     structures,
-                    { title: article.kick_title, summary: article.kick_summary },
+                    {
+                      title: article.kick_title,
+                      summary: article.kick_summary,
+                      walkingVerified: Boolean((article.kick_snapshot as any)?.walkingVerified),
+                      walkingMinutes: (article.kick_snapshot as any)?.walkingMinutes ?? null,
+                      walkingDistanceM: (article.kick_snapshot as any)?.walkingDistanceM ?? null,
+                      routeFrom: String((article.kick_snapshot as any)?.routeFrom || ""),
+                      routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
+                    },
                     article.structure_mode !== "exclude"
                   ))}
                 >
