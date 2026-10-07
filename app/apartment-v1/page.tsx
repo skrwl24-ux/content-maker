@@ -1,0 +1,1077 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import styles from "./page.module.css";
+import { ensureAnonymousSession } from "../../lib/supabase-browser";
+import {
+  ApartmentRankingRow,
+  AreaSnapshot,
+  DataSnapshot,
+  DEFAULT_CHART_TEMPLATE,
+  buildChartPrompt,
+  buildDataCheckPrompt,
+  buildDataSnapshot,
+  buildFinalArticlePrompt,
+  buildLifeImagePrompt,
+  buildLifeKickPrompt,
+  buildStructurePrompt,
+  buildThumbnailPrompt,
+  formatWon,
+  safeParseJson,
+} from "../../lib/apartment-content-v1";
+
+type RecommendationRow = {
+  id: string;
+  user_id: string;
+  year: number;
+  slot_no: number;
+  complex_id: string;
+  article_id: string | null;
+  status: "recommended" | "working" | "replaceable";
+};
+
+type ArticleRow = {
+  id: string;
+  user_id: string;
+  complex_id: string;
+  reference_date: string;
+  status: "draft" | "preparing" | "ready" | "published";
+  data_status: "pending" | "pass" | "warning";
+  data_snapshot: Record<string, unknown>;
+  data_check_result: Record<string, unknown>;
+  structure_mode: "include" | "exclude";
+  structure_snapshot: unknown[];
+  kick_status: "pending" | "verified" | "not_found";
+  kick_title: string;
+  kick_summary: string;
+  kick_source_text: string;
+  kick_snapshot: Record<string, unknown>;
+  final_article: string;
+};
+
+type StructureRow = {
+  id?: string;
+  user_id: string;
+  complex_id: string;
+  area_group: number;
+  room_count: number | null;
+  bath_count: number | null;
+  status: "verified" | "varies" | "needs_check";
+  source_text: string;
+};
+
+type TemplateRow = {
+  id?: string;
+  template_key: string;
+  name: string;
+  is_active: boolean;
+  template_text: string;
+};
+
+function kstDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return values.year + "-" + values.month + "-" + values.day;
+}
+
+function normalizeName(value: string) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/아파트/g, "")
+    .replace(/[\s·ㆍ.\-_,()[\]{}]/g, "")
+    .trim();
+}
+
+function displayLocation(item: ApartmentRankingRow) {
+  return [item.sido, item.sigungu, item.legal_dong].filter(Boolean).join(" ");
+}
+
+function areaRangeText(area: AreaSnapshot) {
+  if (Math.abs(area.exclusiveMin - area.exclusiveMax) < 0.05) {
+    return "전용 " + area.exclusiveMin.toFixed(1).replace(/\.0$/, "") + "㎡";
+  }
+  return "전용 " + area.exclusiveMin.toFixed(1) + "~" + area.exclusiveMax.toFixed(1) + "㎡";
+}
+
+export default function ApartmentV1Page() {
+  const supabaseRef = useRef<any>(null);
+  const userIdRef = useRef("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const [rankings, setRankings] = useState<ApartmentRankingRow[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationRow[]>([]);
+  const [rankScopeLabel, setRankScopeLabel] = useState("현재 수집 범위");
+  const [workspace, setWorkspace] = useState<ApartmentRankingRow | null>(null);
+  const [article, setArticle] = useState<ArticleRow | null>(null);
+  const [snapshot, setSnapshot] = useState<DataSnapshot | null>(null);
+  const [structures, setStructures] = useState<StructureRow[]>([]);
+  const [dataCheckRaw, setDataCheckRaw] = useState("");
+  const [structureRaw, setStructureRaw] = useState("");
+  const [lifeRaw, setLifeRaw] = useState("");
+  const [finalRaw, setFinalRaw] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [chartTemplate, setChartTemplate] = useState<TemplateRow>({
+    template_key: "APT_PRICE_FLOW_V1",
+    name: "평형별 가격 흐름 V1",
+    is_active: true,
+    template_text: DEFAULT_CHART_TEMPLATE,
+  });
+
+  const year = Number(kstDate().slice(0, 4));
+
+  const notify = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 1800);
+  }, []);
+
+  const copyText = useCallback(async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify(label + " 복사 완료");
+    } catch {
+      setError("클립보드 복사에 실패했습니다. 브라우저 권한을 확인해주세요.");
+    }
+  }, [notify]);
+
+  const rankingMap = useMemo(() => {
+    return new Map(rankings.map((item) => [item.complex_id, item]));
+  }, [rankings]);
+
+  const loadTemplate = useCallback(async () => {
+    const supabase = supabaseRef.current;
+    const userId = userIdRef.current;
+    if (!supabase || !userId) return;
+    const { data } = await supabase
+      .from("apt_content_prompt_templates")
+      .select("id,template_key,name,is_active,template_text")
+      .eq("user_id", userId)
+      .eq("template_key", "APT_PRICE_FLOW_V1")
+      .maybeSingle();
+
+    if (data) {
+      setChartTemplate(data as TemplateRow);
+      return;
+    }
+
+    const row = {
+      user_id: userId,
+      template_key: "APT_PRICE_FLOW_V1",
+      name: "평형별 가격 흐름 V1",
+      is_active: true,
+      template_text: DEFAULT_CHART_TEMPLATE,
+    };
+    const { data: inserted } = await supabase
+      .from("apt_content_prompt_templates")
+      .insert(row)
+      .select("id,template_key,name,is_active,template_text")
+      .single();
+    if (inserted) setChartTemplate(inserted as TemplateRow);
+  }, []);
+
+  const loadHome = useCallback(async () => {
+    const supabase = supabaseRef.current;
+    const userId = userIdRef.current;
+    if (!supabase || !userId) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const [rankingResult, regionResult, historyResponse] = await Promise.all([
+        supabase
+          .from("apt_content_year_ranking")
+          .select("*")
+          .eq("year", year)
+          .order("national_rank", { ascending: true })
+          .limit(80),
+        supabase
+          .from("apt_tracked_regions")
+          .select("sido_name")
+          .eq("enabled", true),
+        fetch("/api/publish-history", { cache: "no-store" }).then((response) => response.ok ? response.json() : { items: [] }),
+      ]);
+
+      if (rankingResult.error) throw rankingResult.error;
+      const rankingRows = (rankingResult.data || []) as ApartmentRankingRow[];
+      setRankings(rankingRows);
+
+      const sidoCount = new Set((regionResult.data || []).map((row: any) => row.sido_name).filter(Boolean)).size;
+      const scopeLabel = sidoCount >= 17 ? "전국" : "현재 수집 범위";
+      setRankScopeLabel(scopeLabel);
+
+      const historyItems = Array.isArray(historyResponse?.items) ? historyResponse.items : [];
+      const publishedIds = new Set(
+        historyItems
+          .filter((item: any) => item.item_type === "complex" && String(item.published_on || "").startsWith(String(year)))
+          .map((item: any) => String(item.complex_id || ""))
+          .filter(Boolean)
+      );
+      const publishedNames = new Set(
+        historyItems
+          .filter((item: any) => item.item_type === "complex" && String(item.published_on || "").startsWith(String(year)))
+          .map((item: any) => normalizeName(item.complex_name || item.title || ""))
+          .filter(Boolean)
+      );
+
+      let { data: poolRows, error: poolError } = await supabase
+        .from("apt_content_candidate_pool")
+        .select("complex_id,rank,transaction_count,status")
+        .eq("user_id", userId)
+        .eq("year", year)
+        .order("rank", { ascending: true });
+      if (poolError) throw poolError;
+      poolRows = poolRows || [];
+
+      const activeCount = poolRows.filter((row: any) => row.status === "ready" || row.status === "reserved").length;
+      if (activeCount <= 3) {
+        const existing = new Set(poolRows.map((row: any) => row.complex_id));
+        const candidates = rankingRows.filter((row) => {
+          if (existing.has(row.complex_id)) return false;
+          if (publishedIds.has(row.complex_id)) return false;
+          if (publishedNames.has(normalizeName(row.name))) return false;
+          return true;
+        }).slice(0, Math.max(0, 20 - activeCount));
+
+        if (candidates.length) {
+          const { error: insertError } = await supabase
+            .from("apt_content_candidate_pool")
+            .insert(candidates.map((row) => ({
+              user_id: userId,
+              year,
+              complex_id: row.complex_id,
+              rank: row.national_rank,
+              transaction_count: row.transaction_count,
+              status: "ready",
+            })));
+          if (insertError) throw insertError;
+          const refreshed = await supabase
+            .from("apt_content_candidate_pool")
+            .select("complex_id,rank,transaction_count,status")
+            .eq("user_id", userId)
+            .eq("year", year)
+            .order("rank", { ascending: true });
+          if (refreshed.error) throw refreshed.error;
+          poolRows = refreshed.data || [];
+        }
+      }
+
+      let { data: recRows, error: recError } = await supabase
+        .from("apt_content_recommendations")
+        .select("id,user_id,year,slot_no,complex_id,article_id,status")
+        .eq("user_id", userId)
+        .eq("year", year)
+        .order("slot_no", { ascending: true });
+      if (recError) throw recError;
+      recRows = recRows || [];
+
+      const used = new Set(recRows.map((row: any) => row.complex_id));
+      for (const slotNo of [1, 2]) {
+        if (recRows.some((row: any) => row.slot_no === slotNo)) continue;
+        const next = poolRows.find((row: any) => row.status === "ready" && !used.has(row.complex_id));
+        if (!next) break;
+        const { data: inserted, error: insertRecError } = await supabase
+          .from("apt_content_recommendations")
+          .insert({
+            user_id: userId,
+            year,
+            slot_no: slotNo,
+            complex_id: next.complex_id,
+            status: "recommended",
+          })
+          .select("id,user_id,year,slot_no,complex_id,article_id,status")
+          .single();
+        if (insertRecError) throw insertRecError;
+        await supabase
+          .from("apt_content_candidate_pool")
+          .update({ status: "reserved", updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("year", year)
+          .eq("complex_id", next.complex_id);
+        recRows.push(inserted);
+        used.add(next.complex_id);
+      }
+
+      setRecommendations((recRows || []) as RecommendationRow[]);
+      await loadTemplate();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "추천 후보를 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  }, [loadTemplate, year]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { supabase, session } = await ensureAnonymousSession();
+        if (cancelled) return;
+        supabaseRef.current = supabase;
+        userIdRef.current = session.user.id;
+        await loadHome();
+      } catch (cause) {
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "초기화에 실패했습니다.");
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadHome]);
+
+  const loadWorkspace = useCallback(async (articleRow: ArticleRow, complex: ApartmentRankingRow) => {
+    const supabase = supabaseRef.current;
+    if (!supabase) return;
+    setBusy("workspace");
+    setError("");
+    try {
+      const referenceDate = articleRow.reference_date || kstDate();
+      const yearStart = referenceDate.slice(0, 4) + "-01-01";
+      const [tradeResult, structureResult] = await Promise.all([
+        supabase
+          .from("apt_trades")
+          .select("contract_date,exclusive_area,area_group,price_won")
+          .eq("complex_id", complex.complex_id)
+          .eq("cancelled", false)
+          .gte("contract_date", yearStart)
+          .lte("contract_date", referenceDate)
+          .order("contract_date", { ascending: true })
+          .limit(1000),
+        supabase
+          .from("apt_content_area_structures")
+          .select("id,user_id,complex_id,area_group,room_count,bath_count,status,source_text")
+          .eq("user_id", userIdRef.current)
+          .eq("complex_id", complex.complex_id)
+          .order("area_group", { ascending: true }),
+      ]);
+      if (tradeResult.error) throw tradeResult.error;
+      if (structureResult.error) throw structureResult.error;
+
+      const built = buildDataSnapshot(complex, tradeResult.data || [], referenceDate, rankScopeLabel);
+      await supabase
+        .from("apt_content_articles")
+        .update({
+          data_snapshot: built,
+          structure_snapshot: structureResult.data || [],
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", articleRow.id)
+        .eq("user_id", userIdRef.current);
+
+      setWorkspace(complex);
+      setArticle({ ...articleRow, data_snapshot: built, structure_snapshot: structureResult.data || [] });
+      setSnapshot(built);
+      setStructures((structureResult.data || []) as StructureRow[]);
+      setDataCheckRaw("");
+      setStructureRaw("");
+      setLifeRaw("");
+      setFinalRaw(articleRow.final_article || "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "단지 작업을 열지 못했습니다.");
+    } finally {
+      setBusy("");
+    }
+  }, [rankScopeLabel]);
+
+  const startArticle = useCallback(async (rec: RecommendationRow, complex: ApartmentRankingRow) => {
+    const supabase = supabaseRef.current;
+    const userId = userIdRef.current;
+    if (!supabase || !userId) return;
+    setBusy("start-" + rec.slot_no);
+    setError("");
+    try {
+      let articleRow: ArticleRow;
+      if (rec.article_id) {
+        const { data, error: articleError } = await supabase
+          .from("apt_content_articles")
+          .select("*")
+          .eq("id", rec.article_id)
+          .eq("user_id", userId)
+          .single();
+        if (articleError) throw articleError;
+        articleRow = data as ArticleRow;
+      } else {
+        const { data, error: createError } = await supabase
+          .from("apt_content_articles")
+          .insert({
+            user_id: userId,
+            complex_id: complex.complex_id,
+            reference_date: kstDate(),
+            status: "preparing",
+          })
+          .select("*")
+          .single();
+        if (createError) throw createError;
+        articleRow = data as ArticleRow;
+        const { error: recUpdateError } = await supabase
+          .from("apt_content_recommendations")
+          .update({
+            article_id: articleRow.id,
+            status: "working",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", rec.id)
+          .eq("user_id", userId);
+        if (recUpdateError) throw recUpdateError;
+        setRecommendations((current) => current.map((item) => item.id === rec.id
+          ? { ...item, article_id: articleRow.id, status: "working" }
+          : item));
+      }
+      await loadWorkspace(articleRow, complex);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "글 작업을 시작하지 못했습니다.");
+    } finally {
+      setBusy("");
+    }
+  }, [loadWorkspace]);
+
+  const refreshStructures = useCallback(async () => {
+    if (!workspace) return;
+    const supabase = supabaseRef.current;
+    const { data, error: structureError } = await supabase
+      .from("apt_content_area_structures")
+      .select("id,user_id,complex_id,area_group,room_count,bath_count,status,source_text")
+      .eq("user_id", userIdRef.current)
+      .eq("complex_id", workspace.complex_id)
+      .order("area_group", { ascending: true });
+    if (structureError) throw structureError;
+    setStructures((data || []) as StructureRow[]);
+    if (article) {
+      await supabase
+        .from("apt_content_articles")
+        .update({ structure_snapshot: data || [], updated_at: new Date().toISOString() })
+        .eq("id", article.id)
+        .eq("user_id", userIdRef.current);
+    }
+  }, [article, workspace]);
+
+  const applyDataCheck = useCallback(async () => {
+    if (!article) return;
+    try {
+      const parsed = safeParseJson(dataCheckRaw) as any;
+      const status = parsed.status === "pass" ? "pass" : "warning";
+      const chartReady = Boolean(parsed.chartReady);
+      const result = { ...parsed, chartReady };
+      const { error: updateError } = await supabaseRef.current
+        .from("apt_content_articles")
+        .update({
+          data_status: status,
+          data_check_result: result,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", article.id)
+        .eq("user_id", userIdRef.current);
+      if (updateError) throw updateError;
+      setArticle({ ...article, data_status: status, data_check_result: result });
+      notify(chartReady ? "데이터 검수 완료" : "확인 필요 상태로 저장");
+    } catch (cause) {
+      setError(cause instanceof Error ? "검수 결과 JSON 오류: " + cause.message : "검수 결과를 읽지 못했습니다.");
+    }
+  }, [article, dataCheckRaw, notify]);
+
+  const applyStructureResult = useCallback(async () => {
+    if (!workspace || !article) return;
+    try {
+      const parsed = safeParseJson(structureRaw) as any;
+      const areas = Array.isArray(parsed.areas) ? parsed.areas : [];
+      if (!areas.length) throw new Error("areas 배열이 없습니다.");
+      const rows = areas
+        .filter((item: any) => Number.isFinite(Number(item.areaGroup)))
+        .map((item: any) => {
+          const status = item.status === "verified" || item.status === "varies" ? item.status : "needs_check";
+          return {
+            user_id: userIdRef.current,
+            complex_id: workspace.complex_id,
+            area_group: Number(item.areaGroup),
+            room_count: status === "verified" && item.rooms !== null ? Number(item.rooms) : null,
+            bath_count: status === "verified" && item.baths !== null ? Number(item.baths) : null,
+            status,
+            source_text: String(item.source || ""),
+            verified_at: status === "needs_check" ? null : new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+        });
+      if (!rows.length) throw new Error("저장 가능한 평형 정보가 없습니다.");
+      const { error: upsertError } = await supabaseRef.current
+        .from("apt_content_area_structures")
+        .upsert(rows, { onConflict: "user_id,complex_id,area_group" });
+      if (upsertError) throw upsertError;
+      await refreshStructures();
+      notify("평형 구조 결과 적용 완료");
+    } catch (cause) {
+      setError(cause instanceof Error ? "구조 결과 JSON 오류: " + cause.message : "구조 결과를 적용하지 못했습니다.");
+    }
+  }, [article, refreshStructures, structureRaw, workspace, notify]);
+
+  const excludeStructure = useCallback(async () => {
+    if (!article) return;
+    const { error: updateError } = await supabaseRef.current
+      .from("apt_content_articles")
+      .update({ structure_mode: "exclude", updated_at: new Date().toISOString() })
+      .eq("id", article.id)
+      .eq("user_id", userIdRef.current);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setArticle({ ...article, structure_mode: "exclude" });
+    notify("구조 섹션 제외로 설정");
+  }, [article, notify]);
+
+  const applyLifeResult = useCallback(async () => {
+    if (!article) return;
+    try {
+      const parsed = safeParseJson(lifeRaw) as any;
+      const verified = parsed.kickFound === true && parsed.verified === true && String(parsed.title || "").trim();
+      const patch = verified ? {
+        kick_status: "verified",
+        kick_title: String(parsed.title || "").trim(),
+        kick_summary: String(parsed.summary || "").trim(),
+        kick_source_text: String(parsed.sourceText || "").trim(),
+        kick_snapshot: parsed,
+      } : {
+        kick_status: "not_found",
+        kick_title: "",
+        kick_summary: "",
+        kick_source_text: String(parsed.sourceText || ""),
+        kick_snapshot: parsed,
+      };
+      const { error: updateError } = await supabaseRef.current
+        .from("apt_content_articles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", article.id)
+        .eq("user_id", userIdRef.current);
+      if (updateError) throw updateError;
+      setArticle({ ...article, ...(patch as any) });
+      notify(verified ? "생활 킥 1개 확정" : "생활 킥 확인 필요");
+    } catch (cause) {
+      setError(cause instanceof Error ? "생활 킥 JSON 오류: " + cause.message : "생활 킥 결과를 적용하지 못했습니다.");
+    }
+  }, [article, lifeRaw, notify]);
+
+  const saveFinalArticle = useCallback(async () => {
+    if (!article || !finalRaw.trim()) return;
+    const { error: updateError } = await supabaseRef.current
+      .from("apt_content_articles")
+      .update({
+        final_article: finalRaw.trim(),
+        status: "ready",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", article.id)
+      .eq("user_id", userIdRef.current);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setArticle({ ...article, final_article: finalRaw.trim(), status: "ready" });
+    notify("최종 원고 저장 완료");
+  }, [article, finalRaw, notify]);
+
+  const publishArticle = useCallback(async () => {
+    if (!article || !workspace) return;
+    const supabase = supabaseRef.current;
+    setBusy("publish");
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      const { error: articleError } = await supabase
+        .from("apt_content_articles")
+        .update({ status: "published", published_at: now, updated_at: now })
+        .eq("id", article.id)
+        .eq("user_id", userIdRef.current);
+      if (articleError) throw articleError;
+
+      const recommendation = recommendations.find((item) => item.article_id === article.id);
+      if (recommendation) {
+        const { error: recError } = await supabase
+          .from("apt_content_recommendations")
+          .update({ status: "replaceable", updated_at: now })
+          .eq("id", recommendation.id)
+          .eq("user_id", userIdRef.current);
+        if (recError) throw recError;
+        await supabase
+          .from("apt_content_candidate_pool")
+          .update({ status: "published", updated_at: now })
+          .eq("user_id", userIdRef.current)
+          .eq("year", year)
+          .eq("complex_id", workspace.complex_id);
+      }
+
+      await fetch("/api/publish-history", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          itemType: "complex",
+          title: workspace.name + " 얼마일까?",
+          contentType: "bulk",
+          complexId: workspace.complex_id,
+          complexName: workspace.name,
+          publishedOn: kstDate(),
+          source: "apartment-v1",
+        }),
+      });
+
+      setWorkspace(null);
+      setArticle(null);
+      setSnapshot(null);
+      await loadHome();
+      notify("발행 완료 처리");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "발행 완료 처리에 실패했습니다.");
+    } finally {
+      setBusy("");
+    }
+  }, [article, loadHome, recommendations, workspace, year, notify]);
+
+  const replaceCandidate = useCallback(async (rec: RecommendationRow) => {
+    const supabase = supabaseRef.current;
+    setBusy("replace-" + rec.slot_no);
+    setError("");
+    try {
+      let { data: poolRows, error: poolError } = await supabase
+        .from("apt_content_candidate_pool")
+        .select("complex_id,rank,status")
+        .eq("user_id", userIdRef.current)
+        .eq("year", year)
+        .eq("status", "ready")
+        .order("rank", { ascending: true });
+      if (poolError) throw poolError;
+      const used = new Set(recommendations.map((item) => item.complex_id));
+      let next = (poolRows || []).find((row: any) => !used.has(row.complex_id));
+
+      if (!next) {
+        await loadHome();
+        const refreshed = await supabase
+          .from("apt_content_candidate_pool")
+          .select("complex_id,rank,status")
+          .eq("user_id", userIdRef.current)
+          .eq("year", year)
+          .eq("status", "ready")
+          .order("rank", { ascending: true });
+        poolRows = refreshed.data || [];
+        next = poolRows.find((row: any) => !used.has(row.complex_id));
+      }
+
+      if (!next) throw new Error("교체할 새 후보가 없습니다.");
+
+      const now = new Date().toISOString();
+      const { error: recError } = await supabase
+        .from("apt_content_recommendations")
+        .update({
+          complex_id: next.complex_id,
+          article_id: null,
+          status: "recommended",
+          assigned_at: now,
+          updated_at: now,
+        })
+        .eq("id", rec.id)
+        .eq("user_id", userIdRef.current);
+      if (recError) throw recError;
+
+      await supabase
+        .from("apt_content_candidate_pool")
+        .update({ status: "reserved", updated_at: now })
+        .eq("user_id", userIdRef.current)
+        .eq("year", year)
+        .eq("complex_id", next.complex_id);
+
+      await loadHome();
+      notify("새 후보로 교체 완료");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "후보 교체에 실패했습니다.");
+    } finally {
+      setBusy("");
+    }
+  }, [loadHome, recommendations, year, notify]);
+
+  const saveChartTemplate = useCallback(async () => {
+    const row = {
+      user_id: userIdRef.current,
+      template_key: "APT_PRICE_FLOW_V1",
+      name: chartTemplate.name || "평형별 가격 흐름 V1",
+      is_active: chartTemplate.is_active,
+      template_text: chartTemplate.template_text || DEFAULT_CHART_TEMPLATE,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error: templateError } = await supabaseRef.current
+      .from("apt_content_prompt_templates")
+      .upsert(row, { onConflict: "user_id,template_key" })
+      .select("id,template_key,name,is_active,template_text")
+      .single();
+    if (templateError) {
+      setError(templateError.message);
+      return;
+    }
+    setChartTemplate(data as TemplateRow);
+    notify("차트 템플릿 저장 완료");
+  }, [chartTemplate, notify]);
+
+  const structureByArea = useMemo(() => {
+    const map = new Map<number, StructureRow>();
+    structures.forEach((item) => map.set(Number(item.area_group), item));
+    return map;
+  }, [structures]);
+
+  const needsCheckGroups = useMemo(() => {
+    if (!snapshot) return [] as number[];
+    return snapshot.areas
+      .filter((area) => {
+        const value = structureByArea.get(area.areaGroup);
+        return !value || value.status === "needs_check";
+      })
+      .map((area) => area.areaGroup);
+  }, [snapshot, structureByArea]);
+
+  const chartReady = Boolean((article?.data_check_result as any)?.chartReady);
+  const structureReady = article?.structure_mode === "exclude" || needsCheckGroups.length === 0;
+  const lifeReady = article?.kick_status === "verified";
+  const finalReady = article?.data_status === "pass" && structureReady && lifeReady;
+
+  if (loading) {
+    return <main className={styles.page}><div className={styles.loading}>아파트 콘텐츠메이커를 준비하고 있습니다…</div></main>;
+  }
+
+  return (
+    <main className={styles.page}>
+      {toast ? <div className={styles.toast}>✓ {toast}</div> : null}
+      <header className={styles.header}>
+        <div>
+          <p className={styles.eyebrow}>NAVER REAL ESTATE CONTENT</p>
+          <h1>아파트 콘텐츠메이커</h1>
+          <p className={styles.headerCopy}>거래가 많은 단지를 고르고, 데이터·생활 킥·원고까지 한 흐름으로 만듭니다.</p>
+        </div>
+        <div className={styles.headerActions}>
+          <Link href="/" className={styles.ghostButton}>기존 홈</Link>
+          <button className={styles.ghostButton} onClick={() => setSettingsOpen((value) => !value)}>⚙ 설정</button>
+        </div>
+      </header>
+
+      {error ? <div className={styles.errorBox}>{error}<button onClick={() => setError("")}>닫기</button></div> : null}
+
+      {settingsOpen ? (
+        <section className={styles.settingsCard}>
+          <div className={styles.sectionHeading}>
+            <div>
+              <span className={styles.stepLabel}>설정</span>
+              <h2>차트 이미지 템플릿</h2>
+            </div>
+            <label className={styles.switchRow}>
+              <input
+                type="checkbox"
+                checked={chartTemplate.is_active}
+                onChange={(event) => setChartTemplate((current) => ({ ...current, is_active: event.target.checked }))}
+              />
+              <span>{chartTemplate.is_active ? "활성화" : "비활성화"}</span>
+            </label>
+          </div>
+          <p className={styles.muted}>한 번 저장해두면 매 단지마다 같은 디자인 요청서에 이번 데이터만 자동으로 들어갑니다.</p>
+          <textarea
+            className={styles.templateArea}
+            value={chartTemplate.template_text}
+            onChange={(event) => setChartTemplate((current) => ({ ...current, template_text: event.target.value }))}
+          />
+          <div className={styles.rightActions}>
+            <button className={styles.primaryButton} onClick={saveChartTemplate}>템플릿 저장</button>
+          </div>
+        </section>
+      ) : null}
+
+      {!workspace ? (
+        <>
+          <nav className={styles.categoryNav}>
+            <button className={styles.categoryActive}>아파트 단지 글</button>
+            <button disabled>분양 글</button>
+            <button disabled>금융·재테크 글</button>
+            <button disabled>부동산 꿀팁</button>
+          </nav>
+
+          <section className={styles.hero}>
+            <div>
+              <span className={styles.stepLabel}>오늘 만들 콘텐츠</span>
+              <h2>올해 실제 거래가 많은 단지부터</h2>
+              <p>{year}년 1월 1일부터 현재까지 국토부 실거래 누적 건수 기준입니다.</p>
+            </div>
+            <div className={styles.scopeBadge}>{rankScopeLabel} 순위</div>
+          </section>
+
+          <section className={styles.recommendationGrid}>
+            {[1, 2].map((slotNo) => {
+              const rec = recommendations.find((item) => item.slot_no === slotNo);
+              const complex = rec ? rankingMap.get(rec.complex_id) : null;
+              if (!rec || !complex) {
+                return <div key={slotNo} className={styles.recommendationCard}><div className={styles.emptyCard}>추천 후보 준비 중</div></div>;
+              }
+              return (
+                <article key={rec.id} className={styles.recommendationCard}>
+                  <div className={styles.cardTopLine}>
+                    <span>추천 {slotNo}</span>
+                    <span className={styles.rankBadge}>{rankScopeLabel} {complex.national_rank}위</span>
+                  </div>
+                  <h3>{complex.name}</h3>
+                  <p className={styles.location}>{displayLocation(complex)}</p>
+                  <div className={styles.metricRow}>
+                    <div><strong>{complex.transaction_count}</strong><span>{year} 거래</span></div>
+                    <div><strong>{complex.households ? complex.households.toLocaleString() : "-"}</strong><span>세대</span></div>
+                  </div>
+                  {rec.status === "replaceable" ? (
+                    <button
+                      className={styles.secondaryButton}
+                      disabled={busy === "replace-" + slotNo}
+                      onClick={() => replaceCandidate(rec)}
+                    >
+                      {busy === "replace-" + slotNo ? "교체 중…" : "새 후보로 갈아끼우기"}
+                    </button>
+                  ) : (
+                    <button
+                      className={styles.primaryButton}
+                      disabled={busy === "start-" + slotNo || busy === "workspace"}
+                      onClick={() => startArticle(rec, complex)}
+                    >
+                      {rec.status === "working" ? "이어하기" : "글 만들기"}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </section>
+
+          <section className={styles.noteCard}>
+            <strong>현재 구현 범위</strong>
+            <span>아파트 단지 글 V1만 먼저 연결했습니다. 다른 3개 카테고리는 다음 단계에서 같은 2-slot 구조로 붙이면 됩니다.</span>
+          </section>
+        </>
+      ) : snapshot && article ? (
+        <>
+          <button className={styles.backButton} onClick={() => { setWorkspace(null); setArticle(null); setSnapshot(null); }}>← 추천으로 돌아가기</button>
+
+          <section className={styles.workspaceHero}>
+            <div>
+              <span className={styles.stepLabel}>단지 작업</span>
+              <h2>{workspace.name}</h2>
+              <p>{displayLocation(workspace)}</p>
+            </div>
+            <div className={styles.heroStats}>
+              <span>{year} 누적 거래 <strong>{snapshot.totalTransactions}건</strong></span>
+              <span>{rankScopeLabel} <strong>{workspace.national_rank}위</strong></span>
+              <span>기준일 <strong>{snapshot.referenceDate.replace(/-/g, ".")}</strong></span>
+            </div>
+          </section>
+
+          <div className={styles.progressBar}>
+            <span className={article.data_status === "pass" ? styles.done : styles.current}>1 데이터</span>
+            <i />
+            <span className={structureReady ? styles.done : ""}>2 구조</span>
+            <i />
+            <span className={lifeReady ? styles.done : ""}>3 생활 킥</span>
+            <i />
+            <span className={article.final_article ? styles.done : ""}>4 최종 원고</span>
+          </div>
+
+          <section className={styles.workflowCard}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <span className={styles.stepLabel}>STEP 1</span>
+                <h2>단지 데이터</h2>
+              </div>
+              <span className={styles.sourcePill}>{snapshot.referenceDate.replace(/-/g, ".")} 기준 · 국토부 실거래 자료</span>
+            </div>
+
+            <div className={styles.areaTable}>
+              <div className={styles.tableHeader}><span>평형</span><span>현재 대표가격</span><span>올해 거래</span><span>기준월</span></div>
+              {snapshot.areas.map((area) => (
+                <div key={area.areaGroup} className={styles.tableRow}>
+                  <span><strong>{area.displayName}</strong><small>{areaRangeText(area)}</small></span>
+                  <span>{formatWon(area.currentMedian)}</span>
+                  <span>{area.totalCount}건</span>
+                  <span>{area.latestMonth ? area.latestMonth.replace("-", ".") : "-"}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.actionStrip}>
+              <button className={styles.copyButton} onClick={() => copyText(buildDataCheckPrompt(snapshot), "데이터 검수 요청서")}>데이터 검수 요청서 복사</button>
+              <span className={article.data_status === "pass" ? styles.statusGood : article.data_status === "warning" ? styles.statusWarn : styles.statusMuted}>
+                {article.data_status === "pass" ? "✓ 검수 완료" : article.data_status === "warning" ? "⚠ 확인 필요" : "검수 전"}
+              </span>
+            </div>
+
+            <div className={styles.pasteBox}>
+              <label>GPT 검수 결과 붙여넣기</label>
+              <textarea value={dataCheckRaw} onChange={(event) => setDataCheckRaw(event.target.value)} placeholder='{"status":"pass","warnings":[],"chartReady":true}' />
+              <button className={styles.smallButton} disabled={!dataCheckRaw.trim()} onClick={applyDataCheck}>검수 결과 적용</button>
+            </div>
+
+            <div className={styles.imageRequestRow}>
+              <div>
+                <strong>평형별 가격 차트</strong>
+                <span>이미지 미리보기 없이 고정 템플릿 요청서만 복사합니다.</span>
+              </div>
+              <button
+                className={styles.primaryButton}
+                disabled={!chartReady || !chartTemplate.is_active}
+                onClick={() => copyText(buildChartPrompt(snapshot, chartTemplate.template_text), "차트 이미지 요청서")}
+              >
+                차트 이미지 요청서 복사
+              </button>
+            </div>
+            {!chartTemplate.is_active ? <p className={styles.inlineWarning}>차트 템플릿이 비활성화되어 있습니다. 상단 설정에서 켤 수 있습니다.</p> : null}
+          </section>
+
+          <section className={styles.workflowCard}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <span className={styles.stepLabel}>STEP 2</span>
+                <h2>평형별 구조</h2>
+              </div>
+              {needsCheckGroups.length ? <span className={styles.warningPill}>⚠ 확인 필요 {needsCheckGroups.length}개</span> : <span className={styles.goodPill}>✓ 확인 완료</span>}
+            </div>
+
+            <div className={styles.structureGrid}>
+              {snapshot.areas.map((area) => {
+                const value = structureByArea.get(area.areaGroup);
+                return (
+                  <div key={area.areaGroup} className={styles.structureItem}>
+                    <div><strong>{area.displayName}</strong><small>{area.exclusiveLabel}</small></div>
+                    {value?.status === "verified" ? (
+                      <span>방 {value.room_count} · 욕실 {value.bath_count}</span>
+                    ) : value?.status === "varies" ? (
+                      <span className={styles.statusWarn}>타입별 상이</span>
+                    ) : (
+                      <span className={styles.statusWarn}>⚠ 확인 필요</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {needsCheckGroups.length ? (
+              <>
+                <button className={styles.copyButton} onClick={() => copyText(buildStructurePrompt(snapshot, needsCheckGroups), "구조 조사 요청서")}>구조 조사 요청서 복사</button>
+                <div className={styles.pasteBox}>
+                  <label>GPT 구조 조사 결과 붙여넣기</label>
+                  <textarea value={structureRaw} onChange={(event) => setStructureRaw(event.target.value)} placeholder='{"areas":[{"areaGroup":84,"rooms":3,"baths":2,"status":"verified","source":"..."}]}' />
+                  <div className={styles.splitActions}>
+                    <button className={styles.smallButton} disabled={!structureRaw.trim()} onClick={applyStructureResult}>구조 결과 적용</button>
+                    <button className={styles.textButton} onClick={excludeStructure}>확인이 어려우면 구조 섹션 제외</button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+            {article.structure_mode === "exclude" ? <p className={styles.inlineWarning}>최종 글에서는 평형 구조 목차를 제외합니다.</p> : null}
+          </section>
+
+          <section className={styles.workflowCard}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <span className={styles.stepLabel}>STEP 3</span>
+                <h2>여기 살면 어떤 점이 좋을까?</h2>
+              </div>
+              {article.kick_status === "verified" ? <span className={styles.goodPill}>✓ 생활 킥 1개 확정</span> : <span className={styles.statusMuted}>조사 전</span>}
+            </div>
+
+            {article.kick_status === "verified" ? (
+              <div className={styles.kickResult}>
+                <span>생활 킥</span>
+                <h3>{article.kick_title}</h3>
+                <p>{article.kick_summary}</p>
+              </div>
+            ) : (
+              <p className={styles.muted}>단지 위치를 기준으로 실제 생활에 의미 있는 시설·공원·시장·교통·문화 요소 중 하나만 검증합니다.</p>
+            )}
+
+            <div className={styles.actionStrip}>
+              <button className={styles.copyButton} onClick={() => copyText(buildLifeKickPrompt(snapshot), "생활 킥 조사 요청서")}>생활 킥 조사 요청서 복사</button>
+            </div>
+            <div className={styles.pasteBox}>
+              <label>GPT 생활 킥 조사 결과 붙여넣기</label>
+              <textarea value={lifeRaw} onChange={(event) => setLifeRaw(event.target.value)} placeholder='{"kickFound":true,"title":"...","summary":"...","sourceText":"...","verified":true}' />
+              <button className={styles.smallButton} disabled={!lifeRaw.trim()} onClick={applyLifeResult}>생활 킥 결과 적용</button>
+            </div>
+
+            <div className={styles.imageRequestRow}>
+              <div>
+                <strong>생활 킥 이미지</strong>
+                <span>확정된 생활 킥 1개만 이미지 요청서에 사용합니다.</span>
+              </div>
+              <button
+                className={styles.primaryButton}
+                disabled={!lifeReady}
+                onClick={() => copyText(buildLifeImagePrompt(snapshot, {
+                  title: article.kick_title,
+                  summary: article.kick_summary,
+                  category: String((article.kick_snapshot as any)?.category || ""),
+                }), "생활 킥 이미지 요청서")}
+              >
+                생활 킥 이미지 요청서 복사
+              </button>
+            </div>
+          </section>
+
+          <section className={styles.workflowCard}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <span className={styles.stepLabel}>STEP 4</span>
+                <h2>최종 원고</h2>
+              </div>
+              <span className={finalReady ? styles.goodPill : styles.statusMuted}>{finalReady ? "✓ 준비 완료" : "앞 단계 확인 필요"}</span>
+            </div>
+
+            <div className={styles.titlePreview}>
+              <span>제목</span>
+              <strong>{workspace.name} 얼마일까?</strong>
+            </div>
+
+            <div className={styles.requestGrid}>
+              <button className={styles.copyButton} onClick={() => copyText(buildThumbnailPrompt(snapshot), "썸네일 요청서")}>썸네일 요청서 복사</button>
+              <button
+                className={styles.primaryButton}
+                disabled={!finalReady}
+                onClick={() => copyText(buildFinalArticlePrompt(
+                  snapshot,
+                  structures,
+                  { title: article.kick_title, summary: article.kick_summary },
+                  article.structure_mode !== "exclude"
+                ), "최종 원고 요청서")}
+              >
+                최종 원고 요청서 복사
+              </button>
+            </div>
+
+            <div className={styles.pasteBox}>
+              <label>GPT 최종 원고 붙여넣기</label>
+              <textarea className={styles.articleArea} value={finalRaw} onChange={(event) => setFinalRaw(event.target.value)} placeholder="최종 원고를 붙여넣으세요." />
+              <button className={styles.smallButton} disabled={!finalRaw.trim()} onClick={saveFinalArticle}>원고 저장</button>
+            </div>
+
+            {article.final_article ? (
+              <div className={styles.publishBox}>
+                <div>
+                  <strong>네이버 발행 단계</strong>
+                  <span>기존 네이버 서식 기능을 그대로 사용합니다.</span>
+                </div>
+                <div className={styles.publishActions}>
+                  <button className={styles.copyButton} onClick={() => copyText(article.final_article, "최종 원고")}>최종 원고 복사</button>
+                  <Link href="/apartment-bulk" target="_blank" className={styles.secondaryLink}>기존 네이버 서식 열기</Link>
+                  <button className={styles.publishButton} disabled={busy === "publish"} onClick={publishArticle}>
+                    {busy === "publish" ? "처리 중…" : "발행 완료"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </>
+      ) : null}
+    </main>
+  );
+}
