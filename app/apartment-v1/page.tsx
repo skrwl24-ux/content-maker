@@ -126,6 +126,8 @@ const TEXT_PROMPT_DEFINITIONS: Record<TextPromptKey, {
   },
 };
 
+const LOCKED_TEXT_PROMPT_KEYS = new Set<TextPromptKey>(["APT_FINAL_ARTICLE_V1"]);
+
 function defaultTextPromptRows(): Record<TextPromptKey, TemplateRow> {
   return Object.fromEntries(
     (Object.entries(TEXT_PROMPT_DEFINITIONS) as Array<[TextPromptKey, typeof TEXT_PROMPT_DEFINITIONS[TextPromptKey]]>)
@@ -307,8 +309,18 @@ export default function ApartmentV1Page() {
   }, [notify]);
 
   const openInChatGPT = useCallback((prompt: string) => {
-    const url = "https://chatgpt.com/?q=" + encodeURIComponent(prompt);
-    window.open(url, "_blank", "noopener,noreferrer");
+    const encoded = encodeURIComponent(prompt);
+
+    if (encoded.length > 7000) {
+      window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+      navigator.clipboard.writeText(prompt).then(() => {
+        setToast("긴 요청서 복사 완료 · 열린 ChatGPT에서 Ctrl+V");
+        window.setTimeout(() => setToast(""), 2400);
+      }).catch(() => setError("ChatGPT는 열었지만 요청서 복사에 실패했습니다. 복사 버튼을 이용해주세요."));
+      return;
+    }
+
+    window.open("https://chatgpt.com/?q=" + encoded, "_blank", "noopener,noreferrer");
   }, []);
 
   const rankingMap = useMemo(() => {
@@ -350,10 +362,34 @@ export default function ApartmentV1Page() {
     const nextTextRows = defaultTextPromptRows();
     (Object.keys(TEXT_PROMPT_DEFINITIONS) as TextPromptKey[]).forEach((key) => {
       const row = existing.get(key);
+      const definition = TEXT_PROMPT_DEFINITIONS[key];
+
+      if (LOCKED_TEXT_PROMPT_KEYS.has(key)) {
+        nextTextRows[key] = {
+          ...(row || nextTextRows[key]),
+          template_key: key,
+          name: definition.name,
+          is_active: true,
+          template_text: definition.defaultText,
+          reference_image_url: "",
+        };
+        if (!row || row.template_text !== definition.defaultText) {
+          missingRows.push({
+            user_id: userId,
+            template_key: key,
+            name: definition.name,
+            is_active: true,
+            template_text: definition.defaultText,
+            reference_image_url: "",
+            updated_at: new Date().toISOString(),
+          });
+        }
+        return;
+      }
+
       if (row) {
         nextTextRows[key] = row;
       } else {
-        const definition = TEXT_PROMPT_DEFINITIONS[key];
         missingRows.push({
           user_id: userId,
           template_key: key,
@@ -369,7 +405,7 @@ export default function ApartmentV1Page() {
     if (missingRows.length) {
       const { data: inserted, error: insertError } = await supabase
         .from("apt_content_prompt_templates")
-        .upsert(missingRows, { onConflict: "user_id,template_key", ignoreDuplicates: true })
+        .upsert(missingRows, { onConflict: "user_id,template_key" })
         .select("id,template_key,name,is_active,template_text,reference_image_url");
       if (insertError) throw insertError;
       const insertedMap = new Map<string, TemplateRow>(
@@ -1170,6 +1206,10 @@ export default function ApartmentV1Page() {
   }, [chartTemplate, notify]);
 
   const saveTextPromptTemplate = useCallback(async () => {
+    if (LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey)) {
+      notify("최종 글 요청서는 고정본을 사용합니다.");
+      return;
+    }
     const definition = TEXT_PROMPT_DEFINITIONS[selectedPromptKey];
     const current = promptTemplates[selectedPromptKey];
     const text = current.template_text.trim();
@@ -1209,6 +1249,10 @@ export default function ApartmentV1Page() {
   }, [notify, promptTemplates, selectedPromptKey]);
 
   const resetTextPromptTemplate = useCallback(() => {
+    if (LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey)) {
+      notify("최종 글 요청서는 이미 최신 고정본입니다.");
+      return;
+    }
     const definition = TEXT_PROMPT_DEFINITIONS[selectedPromptKey];
     setPromptTemplates((currentRows) => ({
       ...currentRows,
@@ -1317,7 +1361,7 @@ export default function ApartmentV1Page() {
                 </div>
               </div>
               <p className={styles.muted}>
-                여기서 저장한 요청서는 다음 아파트에도 계속 사용됩니다. ChatGPT에서 새 요청서를 만들어달라고 한 뒤 그대로 붙여넣고 저장하면 됩니다.
+                구조·생활·이미지 요청서는 여기서 저장해 다음 아파트에도 계속 사용할 수 있습니다. 최종 글 요청서는 버전이 섞이지 않도록 코드의 최신 고정본을 사용합니다.
               </p>
 
               <div className={styles.promptEditorTop}>
@@ -1351,6 +1395,7 @@ export default function ApartmentV1Page() {
               <textarea
                 className={styles.templateArea}
                 value={promptTemplates[selectedPromptKey].template_text}
+                readOnly={LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey)}
                 onChange={(event) => setPromptTemplates((current) => ({
                   ...current,
                   [selectedPromptKey]: {
@@ -1360,8 +1405,8 @@ export default function ApartmentV1Page() {
                 }))}
               />
               <div className={styles.rightActions}>
-                <button className={styles.copyButton} onClick={resetTextPromptTemplate}>기본 요청서 불러오기</button>
-                <button className={styles.primaryButton} onClick={saveTextPromptTemplate}>이 요청서 저장</button>
+                <button className={styles.copyButton} disabled={LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey)} onClick={resetTextPromptTemplate}>기본 요청서 불러오기</button>
+                <button className={styles.primaryButton} disabled={LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey)} onClick={saveTextPromptTemplate}>{LOCKED_TEXT_PROMPT_KEYS.has(selectedPromptKey) ? "최종 글 요청서 고정됨" : "이 요청서 저장"}</button>
               </div>
             </>
           ) : (
@@ -1819,7 +1864,7 @@ export default function ApartmentV1Page() {
                       routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                     },
                     article.structure_mode !== "exclude",
-                    promptTemplates.APT_FINAL_ARTICLE_V1.template_text
+                    DEFAULT_FINAL_ARTICLE_TEMPLATE
                   ), "최종 원고 요청서")}
                 >
                   최종 원고 요청서 복사
@@ -1840,7 +1885,7 @@ export default function ApartmentV1Page() {
                       routeTo: String((article.kick_snapshot as any)?.routeTo || ""),
                     },
                     article.structure_mode !== "exclude",
-                    promptTemplates.APT_FINAL_ARTICLE_V1.template_text
+                    DEFAULT_FINAL_ARTICLE_TEMPLATE
                   ))}
                 >
                   GPT 열기
