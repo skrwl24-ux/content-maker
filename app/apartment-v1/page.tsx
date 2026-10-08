@@ -309,8 +309,18 @@ export default function ApartmentV1Page() {
   }, [notify]);
 
   const openInChatGPT = useCallback((prompt: string) => {
-    const url = "https://chatgpt.com/?q=" + encodeURIComponent(prompt);
-    window.open(url, "_blank", "noopener,noreferrer");
+    const encoded = encodeURIComponent(prompt);
+
+    if (encoded.length > 7000) {
+      window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+      navigator.clipboard.writeText(prompt).then(() => {
+        setToast("긴 요청서 복사 완료 · 열린 ChatGPT에서 Ctrl+V");
+        window.setTimeout(() => setToast(""), 2400);
+      }).catch(() => setError("ChatGPT는 열었지만 요청서 복사에 실패했습니다. 복사 버튼을 이용해주세요."));
+      return;
+    }
+
+    window.open("https://chatgpt.com/?q=" + encoded, "_blank", "noopener,noreferrer");
   }, []);
 
   const rankingMap = useMemo(() => {
