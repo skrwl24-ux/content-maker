@@ -632,6 +632,43 @@ ${article || "본문이 아직 입력되지 않았습니다."}
 중요: 위 글을 바탕으로 설명문을 답하지 말고, 바로 이미지 1장을 제작해줘.`;
 }
 
+
+function makePresaleMapImagePrompt(topic: string, body: string, imageNotes: string) {
+  const project = (topic.split("｜")[0] || topic).trim() || "분양 사업지";
+  return \`네이버 블로그 본문용 분양 입지 위치 안내 이미지 1장을 만들어줘.
+
+[단지/사업]
+\${project}
+
+[크기]
+1600×900px · 16:9 가로형
+
+[지도 참고 방식]
+- 이 요청과 함께 붙여넣은 네이버지도 캡처는 위치 관계 확인용 참고자료로만 사용.
+- 네이버지도 화면을 그대로 복제하거나 지도 타일·로고·UI를 최종 이미지에 복사하지 말 것.
+- 사업지 위치를 가장 크게 표시하고, 캡처에서 실제 확인되는 대표 지점 1~2개만 보조 표시.
+- 실제 도로거리·도보시간·축척을 추정하지 말 것.
+- 캡처에서 확인되지 않는 역·학교·공원·상권을 임의로 추가하지 말 것.
+
+[이미지 역할]
+정확한 길찾기 지도가 아니라 '이 분양 사업지가 어느 지역·생활권에 있는지'를 한눈에 보여주는 위치 안내 이미지.
+
+[디자인]
+- 밝고 깔끔한 편집형 스타일
+- 정보 중심, 색상 2~3개
+- 사업지 위치 핀 + 지역명 + 대표 지점 1~2개
+- 광고 배너, 과한 3D·네온·AI 느낌 금지
+- 모바일에서도 위치 관계가 바로 읽히게 구성
+
+[운영자 메모]
+\${imageNotes.trim() || "별도 메모 없음"}
+
+[완성 글 참고]
+\${compactArticleForImagePrompt(body || "").slice(0, 3500) || "완성 글 없음 — 지도 캡처와 사업명만 기준으로 제작"}
+
+중요: 지도 캡처의 위치 관계만 참고해 새로운 안내형 이미지 1장을 바로 생성해줘.\`;
+}
+
 function openWorkDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(WORK_DB_NAME, 1);
@@ -2589,18 +2626,29 @@ export default function ApartmentBulkPage() {
     [activeWorkType, workTopic, workMaterials, dailyDateKey, workSearchPlanBlock]
   );
   const workBodyReadyForImages = workBody.trim().length >= 80;
+  const presaleMapAttachment = useMemo(
+    () => workAttachments.find((item) => item.name.startsWith("__presale_map__")) || null,
+    [workAttachments]
+  );
   const workTables = useMemo(() => extractMarkdownTables(workBody), [workBody]);
   const workTableCount = workTables.length;
   const workImagePlan = useMemo(
-    () => activeWorkType === "presale" ? makePresaleImagePlan() : makeWorkImagePlan(workTables.map((table) => ({
-      heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
-    }))),
+    () => activeWorkType === "presale"
+      ? [...makePresaleImagePlan(), {
+          slot: "03", kind: "summary" as const, label: "입지 위치", role: "네이버지도 캡처 참고 위치 안내",
+          heading: "사업지 위치·생활권", tableIndex: null, width: 1600, height: 900,
+        }]
+      : makeWorkImagePlan(workTables.map((table) => ({
+          heading: table.heading, isTimeSeries: isTimeSeriesTable(table),
+        }))),
     [activeWorkType, workTables]
   );
   const workImagePrompts = useMemo<Record<WorkImageSlot, string>>(
     () => Object.fromEntries(workImagePlan.map((item) => [
       item.slot, activeWorkType === "presale"
-        ? makePresaleImagePrompt(item, workTopic, workBody, workImageNotes)
+        ? item.slot === "03"
+          ? makePresaleMapImagePrompt(workTopic, workBody, workImageNotes)
+          : makePresaleImagePrompt(item, workTopic, workBody, workImageNotes)
         : makeSavedWorkImagePrompt(item, workTopic, workBody, workImageNotes, workTables),
     ])),
     [activeWorkType, workImagePlan, workTopic, workBody, workImageNotes, workTables]
@@ -3420,6 +3468,57 @@ export default function ApartmentBulkPage() {
     setWorkAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  async function addPresaleMapAttachment(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const dataUrl = await fileToDataUrl(file);
+    const next: WorkAttachment = {
+      name: "__presale_map__" + file.name,
+      type: file.type || "image/png",
+      dataUrl,
+    };
+    setWorkAttachments((prev) => [
+      ...prev.filter((item) => !item.name.startsWith("__presale_map__")),
+      next,
+    ].slice(0, 6));
+    setWorkImageNotes((prev) => prev || "네이버지도 캡처는 위치 참고자료로만 사용. 사업지 위치와 확인 가능한 대표 지점 1~2개만 표시.");
+    e.target.value = "";
+  }
+
+  function openPresaleNaverMap() {
+    const query = (workTopic.split("｜")[0] || workTopic).trim();
+    if (!query) return;
+    window.open("https://map.naver.com/p/search/" + encodeURIComponent(query), "_blank", "noopener,noreferrer");
+  }
+
+  async function copyPresaleMapCapture() {
+    if (!presaleMapAttachment) {
+      setWorkSaveMessage("네이버지도 캡처를 먼저 올려주세요.");
+      return false;
+    }
+    try {
+      const image = await loadImage(presaleMapAttachment.dataUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("이미지 변환을 사용할 수 없습니다.");
+      ctx.drawImage(image, 0, 0);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error("PNG 변환 실패")), "image/png");
+      });
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+        throw new Error("이 브라우저는 이미지 클립보드 복사를 지원하지 않습니다.");
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setWorkSaveMessage("네이버지도 캡처 복사 완료 · ChatGPT에서 Ctrl+V");
+      return true;
+    } catch (error) {
+      setWorkSaveMessage(error instanceof Error ? "지도 복사 실패 · " + error.message : "지도 복사 실패");
+      return false;
+    }
+  }
+
   async function copyThumbnailPrompt() {
     try {
       await navigator.clipboard.writeText(thumbnailPrompt);
@@ -3597,7 +3696,8 @@ export default function ApartmentBulkPage() {
   }
 
   async function copyWorkImagePrompt(slot: WorkImageSlot) {
-    if (!workBodyReadyForImages) return;
+    const presaleMapReady = activeWorkType === "presale" && slot === "03" && Boolean(presaleMapAttachment);
+    if (!workBodyReadyForImages && !presaleMapReady) return;
     try {
       await navigator.clipboard.writeText(workImagePrompts[slot]);
       setWorkImagePromptCopied(slot);
@@ -3608,9 +3708,24 @@ export default function ApartmentBulkPage() {
   }
 
   function openWorkImagePromptInChatGPT(slot: WorkImageSlot) {
-    if (!workBodyReadyForImages) return;
-    const url = "https://chatgpt.com/?q=" + encodeURIComponent(workImagePrompts[slot]);
-    window.open(url, "_blank", "noopener,noreferrer");
+    const presaleMapReady = activeWorkType === "presale" && slot === "03" && Boolean(presaleMapAttachment);
+    if (!workBodyReadyForImages && !presaleMapReady) return;
+    const prompt = workImagePrompts[slot];
+    const encoded = encodeURIComponent(prompt);
+    const targetUrl = encoded.length > 7000 ? "https://chatgpt.com/" : "https://chatgpt.com/?q=" + encoded;
+
+    if (activeWorkType === "presale" && slot === "03") {
+      const chatWindow = window.open("about:blank", "_blank");
+      void copyPresaleMapCapture().finally(() => {
+        if (encoded.length > 7000) void navigator.clipboard.writeText(prompt);
+        if (chatWindow) chatWindow.location.href = targetUrl;
+        else window.open(targetUrl, "_blank", "noopener,noreferrer");
+      });
+      return;
+    }
+
+    if (encoded.length > 7000) void navigator.clipboard.writeText(prompt);
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
   }
 
   function openBodyPromptInChatGPT() {
@@ -4134,17 +4249,56 @@ export default function ApartmentBulkPage() {
                 </div>
               )}
 
+              {activeWorkType === "presale" && (
+                <section className={styles.searchPlanPanel}>
+                  <div className={styles.searchPlanHead}>
+                    <div>
+                      <p className={styles.eyebrow}>NAVER MAP</p>
+                      <h3>🗺️ 네이버지도</h3>
+                      <p>사업지를 네이버지도에서 확인하고 캡처를 저장해두면, 입지 위치 이미지 제작 때 자동으로 참고합니다.</p>
+                    </div>
+                    <span className={presaleMapAttachment ? styles.searchPlanReady : styles.searchPlanPending}>
+                      {presaleMapAttachment ? "✓ 지도 준비" : "캡처 필요"}
+                    </span>
+                  </div>
+                  <div className={styles.searchPlanActions}>
+                    <button type="button" onClick={openPresaleNaverMap}>1 · 네이버지도 열기</button>
+                    <label className={styles.uploadBox} style={{ maxWidth: 280 }}>
+                      <input type="file" accept="image/*" onChange={(e) => void addPresaleMapAttachment(e)} />
+                      <span className={styles.uploadIcon}>📍</span>
+                      <b>{presaleMapAttachment ? "지도 캡처 교체" : "2 · 지도 캡처 저장"}</b>
+                      <small>사업지와 주변 생활권이 보이게 캡처</small>
+                    </label>
+                    {presaleMapAttachment && <button type="button" onClick={() => void copyPresaleMapCapture()}>지도 캡처 복사</button>}
+                  </div>
+                  {presaleMapAttachment && (
+                    <div className={styles.mapReferencePanel}>
+                      <div className={styles.mapReferenceHead}>
+                        <div>
+                          <b>분양 입지 참고용 지도</b>
+                          <span>최종 이미지에 그대로 복제하지 않고 위치 관계 참고용으로만 사용합니다.</span>
+                        </div>
+                        <button type="button" onClick={() => openWorkImagePromptInChatGPT("03")}>3 · 입지 이미지 GPT 제작</button>
+                      </div>
+                      <div className={styles.mapPreview}>
+                        <img src={presaleMapAttachment.dataUrl} alt="분양 사업지 네이버지도 참고 캡처" />
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
               <section className={styles.actionPanel}>
                 <div className={styles.actionHead}>
                   <p className={styles.eyebrow}>IMAGE REQUESTS</p>
-                  <h2>{activeWorkType === "presale" ? "분양 전용 이미지 3장: 대표 이미지 · 공급물량 · 분양조건 킥" : `완성 글을 바탕으로 필요한 이미지 ${workImagePlan.length}장을 GPT에서 제작합니다.`}</h2>
-                  <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}{activeWorkType === "presale" ? " 표가 여러 개여도 3장 고정이며, 본문 숫자 원문은 유지합니다." : ""}</span>
+                  <h2>{activeWorkType === "presale" ? "분양 이미지: 대표 · 공급물량 · 분양조건 킥 + 입지 위치" : `완성 글을 바탕으로 필요한 이미지 ${workImagePlan.length}장을 GPT에서 제작합니다.`}</h2>
+                  <span>{workBodyReadyForImages ? "본문 내용이 이미지 요청서에 자동 반영됐습니다." : "완성 글을 먼저 붙여넣으면 이미지 제작 버튼이 활성화됩니다."}{activeWorkType === "presale" ? " 입지 위치는 네이버지도 캡처가 있을 때만 활성화되며, 본문 숫자 원문은 유지합니다." : ""}</span>
                 </div>
                 <div className={styles.actionGrid}>
                   {workImagePlan.map((item) => (
                     <button key={item.slot} type="button" className={styles.actionButton}
-                      disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>
-                      <span className={styles.actionIcon}>{item.kind === "thumbnail" ? "🖼️" : item.kind === "flow" ? "🔗" : item.kind === "chart" ? "📈" : "📊"}</span>
+                      disabled={item.slot === "03" && activeWorkType === "presale" ? !presaleMapAttachment : !workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>
+                      <span className={styles.actionIcon}>{item.slot === "03" && activeWorkType === "presale" ? "🗺️" : item.kind === "thumbnail" ? "🖼️" : item.kind === "flow" ? "🔗" : item.kind === "chart" ? "📈" : "📊"}</span>
                       <b>{item.slot} · {item.label} GPT 제작</b>
                       <small>{item.width}×{item.height} · {item.heading || item.role}</small>
                     </button>
@@ -4165,8 +4319,8 @@ export default function ApartmentBulkPage() {
                       </div>
                       <textarea className={styles.promptBoxCompact} value={workImagePrompts[item.slot]} readOnly />
                       <div className={styles.promptActionsCompact}>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>ChatGPT에서 열기</button>
-                        <button type="button" disabled={!workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(item.slot)}>
+                        <button type="button" disabled={item.slot === "03" && activeWorkType === "presale" ? !presaleMapAttachment : !workBodyReadyForImages} onClick={() => openWorkImagePromptInChatGPT(item.slot)}>ChatGPT에서 열기</button>
+                        <button type="button" disabled={item.slot === "03" && activeWorkType === "presale" ? !presaleMapAttachment : !workBodyReadyForImages} onClick={() => void copyWorkImagePrompt(item.slot)}>
                           {workImagePromptCopied === item.slot ? "✓ 복사 완료" : "요청서 복사"}
                         </button>
                       </div>
