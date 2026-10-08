@@ -1513,7 +1513,7 @@ export default function GoogleBlogSchedulePage() {
       date = nextDate(date);
       const topic = pickRollingTopic(date, [...simulated, ...extra], publishHistory) || ROLLING_TOPIC_POOL[(rollingSeed(date) + i) % ROLLING_TOPIC_POOL.length];
       extra.push({
-        id: \`experiment-\${Date.now()}-\${i}-\${Math.random().toString(36).slice(2, 7)}\`,
+        id: `experiment-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
         date,
         title: topic.title,
         keyword: topic.keyword,
