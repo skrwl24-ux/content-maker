@@ -748,11 +748,19 @@ function createSyncKey() {
 
 function normalizeScheduleRows(value: unknown): ScheduleRow[] {
   if (!Array.isArray(value)) return [];
-  return value
+  const rows = value
     .filter((row): row is ScheduleRow => !!row && typeof row === "object" && typeof (row as ScheduleRow).id === "string")
     .map(row => row.status === "발행 완료" && !isValidPublishedUrl(row.url || "")
       ? { ...row, status: "작성 중" as Status }
       : row);
+
+  if (!rows.length) return [];
+  if (rows.every(row => row.kind === "experiment")) return rows;
+
+  const experimentByDate = new Map(
+    rows.filter(row => row.kind === "experiment").map(row => [row.date, row] as const)
+  );
+  return DEFAULT_ROWS.map(row => experimentByDate.get(row.date) || row);
 }
 function extractImageUrl(value: string) {
   const raw = value.trim();
@@ -838,19 +846,32 @@ export default function GoogleBlogSchedulePage() {
       const imported: ScheduleRow = {
         id: incoming.id,
         kind: "experiment",
-        labVersion: incoming.labVersion || "",
+        labVersion: incoming.labVersion || "WORLD-LAB-V1",
         labReport: incoming.labReport,
         labPrompt: incoming.labPrompt,
         date: incoming.date || todayLocal(),
         title: incoming.title,
-        keyword: incoming.keyword || "AI PDF accuracy test",
+        keyword: incoming.keyword || "AI experiment",
         slug: incoming.slug || "",
-        note: incoming.note || "실전 검증실에서 생성한 증거 기반 글",
+        note: incoming.note || "글로벌 AI 실험 제작실에서 검증한 실제 실험 글",
         status: "작성 중", url: "", body: "", relatedIds: [],
+        experimentCategory: incoming.experimentCategory || "",
+        experimentHook: incoming.experimentHook || "",
       };
-      setRows(prev => prev.some(item => item.id === imported.id) ? prev : [imported, ...prev]);
+      setRows(prev => prev.some(item => item.id === imported.id)
+        ? prev.map(item => item.id === imported.id ? {
+            ...item,
+            ...imported,
+            date: item.date,
+            url: item.url,
+            relatedIds: item.relatedIds || [],
+            backlinkDoneIds: item.backlinkDoneIds || [],
+            imageUrls: item.imageUrls,
+            imageMeta: item.imageMeta,
+          } : item)
+        : [imported, ...prev]);
       setSelectedId(imported.id);
-      setNotice("실전 검증 완료 기록을 발행 큐로 가져왔습니다. 본문·이미지 요청서는 해당 실험 증거에 맞게 전환됩니다.");
+      setNotice("글로벌 AI 실험 검증 결과를 발행리스트에 반영했습니다. 이제 본문·이미지 요청서를 만들 수 있습니다.");
     } catch {
       setNotice("실험 기록을 가져오지 못했습니다. 검증실에서 다시 등록해 주세요.");
     } finally {
