@@ -1364,7 +1364,7 @@ export default function Home() {
       <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V13 · 정보판 가독성 V4</span></button>
       <div className="inlineActions">
         <a className="presaleNavLink" href="/apartment-presale/discover">🔎 관심 분양 찾기</a>
-        <a className="presaleNavLink" href="/apartment-presale">🏙️ 분양 제작실</a>
+        <a className="presaleNavLink" href="/presale-v1">🏙️ 분양 제작실 V2</a>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule/lab"}>🔬 AI 실전 검증실</button>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
@@ -1391,10 +1391,10 @@ export default function Home() {
           <b>아파트 단지 글</b>
           <small>거래량 추천 2개 · 새 제작 흐름</small>
         </a>
-        <a className="contentHubTab" href="/apartment-presale/discover">
+        <a className="contentHubTab" href="/presale-v1">
           <span className="contentHubIcon">🏙️</span>
           <b>분양 글</b>
-          <small>기존 분양 후보·제작실 연결</small>
+          <small>후보 10개 · 파트별 조사 · 최종 원고</small>
         </a>
         <button className="contentHubTab" type="button" disabled>
           <span className="contentHubIcon">💰</span>
