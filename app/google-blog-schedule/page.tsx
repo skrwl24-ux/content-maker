@@ -51,6 +51,8 @@ type ScheduleRow = {
   labVersion?: string;
   labReport?: string;
   labPrompt?: string;
+  experimentCategory?: string;
+  experimentHook?: string;
 };
 
 type SeoTopicCandidate = {
@@ -71,6 +73,8 @@ type RollingTopicSeed = {
   keyword: string;
   slug: string;
   note: string;
+  category: string;
+  hook: string;
 };
 
 type GooglePublishHistoryItem = {
@@ -127,57 +131,63 @@ const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
   },
 ];
 
-const DEFAULT_ROWS: ScheduleRow[] = [
-  { id: "2026-09-29-1", date: "2026-09-29", title: "Claude Pro Price in South Korea 2026: Web, App & Billing Guide", keyword: "Claude Pro Korea price", status: "예정", url: "", slug: "claude-pro-price-south-korea-2026", relatedIds: ["2026-10-02-1","2026-09-30-1","2026-10-12-1"], note: "가격 검증형 · 웹/앱 가격 · 세금 · 실제 결제 단계까지 확인" },
-  { id: "2026-09-30-1", date: "2026-09-30", title: "Gemini AI Subscription Price in South Korea 2026: Plans, Tax & Payment", keyword: "Gemini Korea price", status: "예정", url: "", slug: "gemini-ai-price-south-korea-2026", relatedIds: ["2026-10-02-1","2026-09-29-1","2026-10-12-1"], note: "가격 검증형 · 플랜별 가격 · 세금 · 결제 방식 구분" },
-  { id: "2026-10-01-1", date: "2026-10-01", title: "ChatGPT Plus Web vs App Store Price 2026: Why Mobile Can Cost More", keyword: "ChatGPT web vs app price", status: "예정", url: "", slug: "chatgpt-plus-web-vs-app-store-price-2026", relatedIds: ["2026-10-10-1","2026-10-11-1","2026-10-06-1","2026-10-05-1"], note: "문제 해결형 · 웹/iOS/Android 가격 차이 원인과 확인 방법" },
-  { id: "2026-10-02-1", date: "2026-10-02", title: "ChatGPT vs Claude vs Gemini Price in South Korea 2026", keyword: "AI subscription price Korea", status: "예정", url: "", slug: "chatgpt-claude-gemini-price-south-korea-2026", relatedIds: ["2026-09-29-1","2026-09-30-1","2026-10-12-1"], note: "비교형 · 동일 기준일에 가격·세금·결제 방식·주요 플랜 비교" },
-  { id: "2026-10-03-1", date: "2026-10-03", title: "ChatGPT Plus Price in Taiwan 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Taiwan price", status: "예정", url: "", slug: "chatgpt-plus-price-taiwan-2026", relatedIds: ["2026-10-05-1","2026-10-04-1","2026-10-11-1"], note: "국가 가격 검증형 · TWD 실제 표시 여부 · 앱 가격 · 세금 확인" },
-  { id: "2026-10-04-1", date: "2026-10-04", title: "ChatGPT Plus Price in Singapore 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Singapore price", status: "예정", url: "", slug: "chatgpt-plus-price-singapore-2026", relatedIds: ["2026-10-05-1","2026-10-03-1","2026-10-11-1"], note: "국가 가격 검증형 · SGD · GST · 웹/앱 차이 확인" },
-  { id: "2026-10-05-1", date: "2026-10-05", title: "ChatGPT Plus Price by Country 2026: Live Comparison Table", keyword: "ChatGPT Plus price by country", status: "예정", url: "", slug: "chatgpt-plus-price-by-country-2026", relatedIds: ["2026-10-03-1","2026-10-04-1","2026-10-11-1","2026-10-08-1"], note: "대표 기둥글 · 동일 날짜 기준 국가별 가격·통화·세금·플랫폼을 직접 비교하고 계속 업데이트" },
-  { id: "2026-10-06-1", date: "2026-10-06", title: "ChatGPT Plus Payment Failed? Common Causes and Fixes in 2026", keyword: "ChatGPT Plus payment failed", status: "예정", url: "", slug: "chatgpt-plus-payment-failed-fixes-2026", relatedIds: ["2026-10-01-1","2026-10-10-1","2026-10-11-1"], note: "문제 해결형 · 카드 거절·앱스토어·지역·결제 프로필 등 공식 해결책 중심" },
-  { id: "2026-10-07-1", date: "2026-10-07", title: "Claude Pro Price in Japan 2026: Web, App & Billing Guide", keyword: "Claude Pro Japan price", status: "예정", url: "", slug: "claude-pro-price-japan-2026", relatedIds: ["2026-10-09-1","2026-09-29-1","2026-10-12-1"], note: "국가 가격 검증형 · JPY 실제 가격 · 세금 · 웹/앱 결제 차이" },
-  { id: "2026-10-08-1", date: "2026-10-08", title: "ChatGPT Plus Price History 2025–2026: What Changed?", keyword: "ChatGPT Plus price history", status: "예정", url: "", slug: "chatgpt-plus-price-history-2025-2026", relatedIds: ["2026-10-05-1","2026-10-11-1","2026-10-01-1"], note: "가격 추적형 · 날짜별 확인 가능한 변화만 연표로 정리 · 과거와 현재 가격 구분" },
-  { id: "2026-10-09-1", date: "2026-10-09", title: "AI Subscription Prices in Japan 2026: ChatGPT vs Claude vs Gemini", keyword: "AI subscription price Japan", status: "예정", url: "", slug: "ai-subscription-prices-japan-2026", relatedIds: ["2026-10-07-1","2026-10-12-1","2026-10-05-1"], note: "비교형 · JPY 기준 동일 시점 가격·세금·플랜·결제 차이 비교" },
-  { id: "2026-10-10-1", date: "2026-10-10", title: "How to Switch ChatGPT Plus From App Store to Web Billing", keyword: "switch ChatGPT Plus to web billing", status: "예정", url: "", slug: "switch-chatgpt-plus-app-store-to-web-billing", relatedIds: ["2026-10-01-1","2026-10-06-1","2026-10-11-1"], note: "실전 가이드형 · 중복 결제 방지 · 구독 취소/재구독 단계는 공식 안내 기준" },
-  { id: "2026-10-11-1", date: "2026-10-11", title: "Does ChatGPT Plus Include Tax? Country-by-Country Billing Guide 2026", keyword: "ChatGPT Plus tax", status: "예정", url: "", slug: "does-chatgpt-plus-include-tax-2026", relatedIds: ["2026-10-05-1","2026-10-01-1","2026-10-03-1","2026-10-04-1"], note: "결제 가이드형 · VAT/GST/판매세 포함 여부를 국가별로 확인하고 불확실한 지역은 구분" },
-  { id: "2026-10-12-1", date: "2026-10-12", title: "AI Subscription Price Comparison by Country 2026: ChatGPT, Claude & Gemini", keyword: "AI subscription prices by country", status: "예정", url: "", slug: "ai-subscription-price-comparison-by-country-2026", relatedIds: ["2026-10-05-1","2026-10-02-1","2026-10-09-1","2026-09-29-1"], note: "종합 데이터형 · 국가·서비스별 가격을 동일 기준으로 비교하는 장기 업데이트 페이지" },
+const ROLLING_TOPIC_POOL: RollingTopicSeed[] = [
+  { category: "World & Geography", title: "I Gave AI 10 Countries — One Was Fake. Would It Notice?", keyword: "AI fake country test", slug: "ai-fake-country-test", note: "글로벌 호기심형 · 실제 국가 9개 + 가짜 국가 1개 · 정답은 사전 고정", hook: "Nine countries are real. One is completely invented but designed to look believable." },
+  { category: "Everyday Documents", title: "Can AI Guess the Country From a Supermarket Receipt?", keyword: "AI guess country receipt", slug: "ai-guess-country-supermarket-receipt", note: "영수증 국가 맞히기 · 상호/국가명 제거 · 통화·세금·상품 단서만 제공", hook: "Hide the store and country names, then see whether everyday shopping clues are enough." },
+  { category: "Food", title: "Can AI Identify 20 Foods From Around the World With the Names Removed?", keyword: "AI world food challenge", slug: "ai-world-food-identification-test", note: "세계 음식 맞히기 · 이름 제거 · 재료/형태 단서만 제공", hook: "Twenty foods, no names. How far can AI get from ingredients and visual clues alone?" },
+  { category: "Languages", title: "Can AI Guess a Language From Just One Sentence?", keyword: "AI language guessing test", slug: "ai-language-guessing-test", note: "언어 맞히기 · 흔한 언어와 덜 알려진 언어 혼합 · 가짜 문장 1개 가능", hook: "One sentence each, no country labels, and one sample may not be a real language at all." },
+  { category: "Maps & Geography", title: "Can AI Guess the City From a Subway Map With Station Names Hidden?", keyword: "AI subway map city test", slug: "ai-subway-map-city-test", note: "도시 맞히기 · 역명/도시명 제거 · 노선 구조만 제공", hook: "Remove every station name and city label. Is the shape of a metro network enough?" },
+  { category: "Animals", title: "I Mixed Real and Fake Animal Facts — Could AI Catch Them?", keyword: "AI animal fact test", slug: "ai-real-fake-animal-facts", note: "동물 사실 검증 · 검증된 사실과 그럴듯한 가짜를 혼합", hook: "Real zoology facts sit beside believable inventions. The challenge is to spot the impostors." },
+  { category: "Weather", title: "Can AI Guess the City From 12 Months of Weather Data?", keyword: "AI weather city guessing test", slug: "ai-weather-data-city-test", note: "도시 맞히기 · 월별 기온/강수 자료 · 도시명 제거", hook: "A full year of climate clues, but no city name. Can AI read the seasons correctly?" },
+  { category: "History", title: "Can AI Put 15 World Events in the Right Order Without Dates?", keyword: "AI history timeline test", slug: "ai-history-timeline-without-dates", note: "역사 순서 맞히기 · 연도 제거 · 사건 설명만 제공", hook: "Take away every year and ask AI to rebuild the timeline from context alone." },
+  { category: "Prices", title: "Can AI Tell Which Country Has the Higher Grocery Bill?", keyword: "AI grocery price country test", slug: "ai-grocery-bill-country-test", note: "가격 비교 실험 · 비슷한 장바구니 · 국가명 숨기기", hook: "Two grocery baskets look similar, but one country is much more expensive. Can AI tell which?" },
+  { category: "Travel", title: "Can AI Spot the One Fake Landmark in a List of Real Places?", keyword: "AI fake landmark test", slug: "ai-fake-landmark-test", note: "랜드마크 검증 · 실제 9개 + 가짜 1개", hook: "Nine landmarks exist. One has a convincing name, location and backstory that were invented." },
+  { category: "World Records", title: "I Gave AI 12 Weird World Records — Which Ones Did It Believe?", keyword: "AI world records fact check", slug: "ai-weird-world-records-test", note: "세계 기록 검증 · 실제 기록과 가짜 기록 혼합", hook: "Some records are stranger than fiction, which makes the fake ones harder to catch." },
+  { category: "Numbers", title: "Can AI Find the One Impossible Number in a Real-Looking Data Table?", keyword: "AI data table error test", slug: "ai-impossible-number-table-test", note: "숫자 오류 찾기 · 합계/비율이 맞는 표에 오류 1개 심기", hook: "Every row looks plausible, but one value breaks the math." },
+  { category: "Air Travel", title: "Can AI Guess the Airport From a Departure Board With the Airport Name Hidden?", keyword: "AI airport departure board test", slug: "ai-airport-departure-board-test", note: "공항 맞히기 · 공항명 제거 · 목적지/시간대 단서 활용", hook: "Only destinations and departure times remain. Can AI work backward to the airport?" },
+  { category: "Time Zones", title: "Can AI Guess the City From Sunrise, Sunset and Time-Zone Clues?", keyword: "AI city sunrise sunset test", slug: "ai-city-sunrise-sunset-test", note: "도시 추론 · 일출/일몰/UTC 오프셋 · 도시명 숨기기", hook: "Three ordinary time clues can reveal a surprising amount about where a city might be." },
+  { category: "Geography", title: "Can AI Name Countries From Their Outlines With No Labels?", keyword: "AI country outline test", slug: "ai-country-outline-test", note: "국가 윤곽 맞히기 · 라벨/국기 제거 · 난이도 혼합", hook: "No flags, no names, just outlines — from obvious shapes to countries people often confuse." },
+  { category: "Population", title: "Can AI Rank 12 Countries by Population Without Looking Anything Up?", keyword: "AI population ranking test", slug: "ai-country-population-ranking-test", note: "인구 순위 실험 · 기준 연도 정답 고정 · 웹검색 금지 조건", hook: "The countries are familiar, but the middle of the ranking is much harder than it looks." },
+  { category: "Travel", title: "Can AI Guess the Country From a Train Ticket With the Names Removed?", keyword: "AI train ticket country test", slug: "ai-train-ticket-country-test", note: "기차표 국가 맞히기 · 도시명/철도사명 제거 · 형식/통화 단서", hook: "Strip away the obvious labels and leave only the layout, fare and travel clues." },
+  { category: "Culture", title: "Can AI Match 15 Unusual Holidays to the Right Countries?", keyword: "AI world holiday matching test", slug: "ai-world-holiday-matching-test", note: "세계 기념일 매칭 · 공식/문화기관 출처로 정답 고정", hook: "Some holidays sound invented even when they are real. Can AI match them correctly?" },
+  { category: "Earth Science", title: "Can AI Guess the Region From a Week of Earthquake Data?", keyword: "AI earthquake data region test", slug: "ai-earthquake-region-test", note: "지진 데이터 추론 · 위치명 제거 · 규모/깊이/빈도 단서", hook: "Hide the map and place names, then ask whether the pattern itself points to a region." },
+  { category: "Food", title: "Can AI Tell Which Country a School Lunch Comes From?", keyword: "AI school lunch country test", slug: "ai-school-lunch-country-test", note: "학교 급식 국가 맞히기 · 메뉴 구성만 제공 · 출처 검증", hook: "A lunch tray can carry cultural clues, but stereotypes can also send AI in the wrong direction." },
+  { category: "Money", title: "Can AI Identify a Country From Currency Clues Without Seeing the Currency Name?", keyword: "AI currency country clues test", slug: "ai-currency-country-clues-test", note: "통화 추론 · 통화명 제거 · 금액 체계/동전·지폐 단서", hook: "Remove the currency name and symbol. Are denomination patterns enough to identify the country?" },
+  { category: "Addresses", title: "Can AI Guess the Country From a Postal Address Format?", keyword: "AI postal address country test", slug: "ai-postal-address-country-test", note: "주소 형식 국가 맞히기 · 개인정보 없이 합성 주소 사용", hook: "Use synthetic addresses only and see whether formatting conventions reveal the country." },
+  { category: "Nature", title: "Can AI Match 12 National Parks to Their Countries From Landscape Clues?", keyword: "AI national park country test", slug: "ai-national-park-country-test", note: "국립공원 추론 · 이름 제거 · 지형/기후 설명 활용", hook: "Remove every park name and let landscapes do the talking." },
+  { category: "Cities", title: "Can AI Guess the City From Average Rent, Rainfall and Population?", keyword: "AI city data guessing test", slug: "ai-city-data-guessing-test", note: "도시 데이터 추론 · 서로 다른 데이터 3종 결합 · 기준일 고정", hook: "Three unrelated statistics may create a surprisingly distinctive city fingerprint." },
+  { category: "Languages", title: "I Added One Fake Word to 20 Real Words — Would AI Catch It?", keyword: "AI fake word language test", slug: "ai-fake-word-language-test", note: "가짜 단어 찾기 · 실제 사전 단어 20개 + 조작 1개", hook: "The fake word follows the language's spelling patterns, so confidence can become a trap." },
+  { category: "Geography", title: "Can AI Match 10 Flags After I Remove Their Colors?", keyword: "AI flag shape test", slug: "ai-flags-without-color-test", note: "국기 추론 · 색 제거 · 문양/구조만 사용", hook: "Take away the most obvious clue — color — and see how much flag structure AI remembers." },
+  { category: "Climate", title: "Can AI Tell Which Hemisphere a City Is In From Monthly Temperatures?", keyword: "AI hemisphere temperature test", slug: "ai-hemisphere-temperature-test", note: "남북반구 맞히기 · 월별 기온만 제공 · 도시명 제거", hook: "The season pattern looks easy until tropical and high-altitude cities enter the mix." },
+  { category: "Data", title: "I Gave AI Two Nearly Identical Charts — Could It Find the Misleading One?", keyword: "AI misleading chart test", slug: "ai-misleading-chart-test", note: "차트 판독 · 축/기준 차이 1개 심기 · 정답 사전 고정", hook: "The numbers are the same, but one chart quietly changes how the story looks." },
+  { category: "Travel", title: "Can AI Guess the Country From Road Signs With the Text Blurred?", keyword: "AI road sign country test", slug: "ai-road-sign-country-test", note: "도로표지 국가 맞히기 · 글자 흐림 처리 · 색/형태/기호 단서", hook: "Blur the words and leave only shapes, symbols and road-design conventions." },
+  { category: "Science", title: "Can AI Spot the Fake Planet Fact Hidden Among Real Space Facts?", keyword: "AI fake space fact test", slug: "ai-fake-space-fact-test", note: "우주 사실 검증 · NASA/기관 자료 기반 실제 사실 + 가짜 1개", hook: "Space is already strange enough that a made-up fact can sound perfectly believable." },
+  { category: "Sports", title: "Can AI Guess the Sport From a Box Score With the Team Names Removed?", keyword: "AI sport box score test", slug: "ai-sport-box-score-test", note: "스포츠 데이터 추론 · 팀명/리그명 제거 · 기록 구조만 제공", hook: "Strip away the teams and leagues. Can the statistics alone reveal the sport?" },
+  { category: "Everyday Life", title: "Can AI Guess the Country From a Restaurant Menu With Prices but No Names?", keyword: "AI restaurant menu country test", slug: "ai-restaurant-menu-country-test", note: "메뉴 국가 맞히기 · 가게/도시명 제거 · 음식/가격 단서", hook: "A menu carries language, food and price clues — but some cuisines travel extremely well." }
 ];
 
-const ROLLING_TOPIC_POOL: RollingTopicSeed[] = [
-  { title: "ChatGPT Plus Price in Australia 2026: Web, iOS & Android Compared", keyword: "ChatGPT Plus Australia price", slug: "chatgpt-plus-price-australia-2026", note: "국가 가격 검증형 · AUD · 웹/앱 가격 · 세금 포함 여부를 최신 공식 자료로 확인" },
-  { title: "ChatGPT Plus Price in Canada 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus Canada price", slug: "chatgpt-plus-price-canada-2026", note: "국가 가격 검증형 · CAD · 웹/앱 · 세금 표시 방식 확인" },
-  { title: "ChatGPT Plus Price in the UK 2026: Web, App & VAT Guide", keyword: "ChatGPT Plus UK price", slug: "chatgpt-plus-price-uk-2026", note: "국가 가격 검증형 · GBP · VAT · 웹/앱 결제 차이 확인" },
-  { title: "ChatGPT Plus Price in Hong Kong 2026: Web, iOS & Android", keyword: "ChatGPT Plus Hong Kong price", slug: "chatgpt-plus-price-hong-kong-2026", note: "국가 가격 검증형 · HKD 표시 여부 · 플랫폼별 결제 차이 확인" },
-  { title: "ChatGPT Plus Price in India 2026: Web, App & Billing Guide", keyword: "ChatGPT Plus India price", slug: "chatgpt-plus-price-india-2026", note: "국가 가격 검증형 · INR · 웹/앱 · 세금·결제수단 최신 확인" },
-  { title: "ChatGPT Plus Price in Indonesia 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus Indonesia price", slug: "chatgpt-plus-price-indonesia-2026", note: "국가 가격 검증형 · IDR · 세금 · 웹/앱 가격 차이 확인" },
-  { title: "ChatGPT Plus Price in Malaysia 2026: Web, App & Billing Guide", keyword: "ChatGPT Plus Malaysia price", slug: "chatgpt-plus-price-malaysia-2026", note: "국가 가격 검증형 · MYR · 웹/앱 · 실제 결제 단계 확인" },
-  { title: "ChatGPT Plus Price in the Philippines 2026: Web, App & Tax", keyword: "ChatGPT Plus Philippines price", slug: "chatgpt-plus-price-philippines-2026", note: "국가 가격 검증형 · PHP · 웹/앱 · 세금 표시 방식 확인" },
-  { title: "ChatGPT Plus Price in Thailand 2026: Web, iOS & Android", keyword: "ChatGPT Plus Thailand price", slug: "chatgpt-plus-price-thailand-2026", note: "국가 가격 검증형 · THB · 플랫폼별 가격과 결제 방식 확인" },
-  { title: "ChatGPT Plus Price in the UAE 2026: Web, App & Tax Guide", keyword: "ChatGPT Plus UAE price", slug: "chatgpt-plus-price-uae-2026", note: "국가 가격 검증형 · AED · VAT · 웹/앱 결제 차이 확인" },
-  { title: "Claude Pro Price in Singapore 2026: Web, App & Billing Guide", keyword: "Claude Pro Singapore price", slug: "claude-pro-price-singapore-2026", note: "국가 가격 검증형 · SGD · 공식 웹 가격 · 앱 결제 가능 여부 최신 확인" },
-  { title: "Claude Pro Price in Taiwan 2026: Web, App & Billing Guide", keyword: "Claude Pro Taiwan price", slug: "claude-pro-price-taiwan-2026", note: "국가 가격 검증형 · TWD · 웹/앱 · 세금 표시 방식 확인" },
-  { title: "Claude Pro Price in Australia 2026: Web, App & Tax Guide", keyword: "Claude Pro Australia price", slug: "claude-pro-price-australia-2026", note: "국가 가격 검증형 · AUD · 웹 가격 · 세금·결제 차이 확인" },
-  { title: "Claude Pro Price in Canada 2026: Web, App & Tax Guide", keyword: "Claude Pro Canada price", slug: "claude-pro-price-canada-2026", note: "국가 가격 검증형 · CAD · 웹/앱 · 세금 최신 확인" },
-  { title: "Claude Pro Price in the UK 2026: Web, App & VAT Guide", keyword: "Claude Pro UK price", slug: "claude-pro-price-uk-2026", note: "국가 가격 검증형 · GBP · VAT · 결제 방식 확인" },
-  { title: "Claude Pro Price in India 2026: Web, App & Billing Guide", keyword: "Claude Pro India price", slug: "claude-pro-price-india-2026", note: "국가 가격 검증형 · INR · 공식 가격과 결제수단 최신 확인" },
-  { title: "Google AI Pro Price in Japan 2026: Plans, Tax & Payment", keyword: "Google AI Pro Japan price", slug: "google-ai-pro-price-japan-2026", note: "Google AI 요금제 검증형 · JPY · 월간/연간 표시 · 세금·결제 방식 확인" },
-  { title: "Google AI Pro Price in Singapore 2026: Plans, Tax & Payment", keyword: "Google AI Pro Singapore price", slug: "google-ai-pro-price-singapore-2026", note: "Google AI 요금제 검증형 · SGD · 플랜 가격 · 세금·결제 방식 확인" },
-  { title: "Google AI Pro Price in Taiwan 2026: Plans, Tax & Payment", keyword: "Google AI Pro Taiwan price", slug: "google-ai-pro-price-taiwan-2026", note: "Google AI 요금제 검증형 · TWD · 플랜 가격과 결제 조건 확인" },
-  { title: "Google AI Pro Price in Australia 2026: Plans, Tax & Payment", keyword: "Google AI Pro Australia price", slug: "google-ai-pro-price-australia-2026", note: "Google AI 요금제 검증형 · AUD · 플랜·세금·결제 방식 확인" },
-  { title: "Google AI Pro Price in Canada 2026: Plans, Tax & Payment", keyword: "Google AI Pro Canada price", slug: "google-ai-pro-price-canada-2026", note: "Google AI 요금제 검증형 · CAD · 플랜·세금·결제 방식 확인" },
-  { title: "Google AI Pro Price in the UK 2026: Plans, VAT & Payment", keyword: "Google AI Pro UK price", slug: "google-ai-pro-price-uk-2026", note: "Google AI 요금제 검증형 · GBP · VAT · 월간/연간 결제 조건 확인" },
-  { title: "Google AI Pro Price in India 2026: Plans, Tax & Payment", keyword: "Google AI Pro India price", slug: "google-ai-pro-price-india-2026", note: "Google AI 요금제 검증형 · INR · 플랜·세금·결제 방식 확인" },
-  { title: "AI Subscription Prices in Singapore 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Singapore", slug: "ai-subscription-prices-singapore-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 SGD 기준으로 비교" },
-  { title: "AI Subscription Prices in Taiwan 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Taiwan", slug: "ai-subscription-prices-taiwan-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 TWD 기준으로 비교" },
-  { title: "AI Subscription Prices in Australia 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Australia", slug: "ai-subscription-prices-australia-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 AUD 기준으로 비교" },
-  { title: "AI Subscription Prices in Canada 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price Canada", slug: "ai-subscription-prices-canada-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 CAD 기준으로 비교" },
-  { title: "AI Subscription Prices in the UK 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price UK", slug: "ai-subscription-prices-uk-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·VAT·결제 방식을 GBP 기준으로 비교" },
-  { title: "AI Subscription Prices in India 2026: ChatGPT vs Claude vs Google AI", keyword: "AI subscription price India", slug: "ai-subscription-prices-india-2026", note: "비교형 · 동일 기준일에 주요 AI 구독 가격·세금·결제 방식을 INR 기준으로 비교" },
-  { title: "ChatGPT Plus Refund Guide 2026: Web, Apple & Google Play", keyword: "ChatGPT Plus refund", slug: "chatgpt-plus-refund-guide-2026", note: "문제 해결형 · 웹·Apple·Google Play 환불 경로를 공식 도움말 기준으로 구분" },
-  { title: "Claude Pro Billing Guide 2026: Invoice, Tax and Payment Methods", keyword: "Claude Pro billing guide", slug: "claude-pro-billing-guide-2026", note: "결제 가이드형 · 청구서·세금·지원 결제수단을 공식 문서 기준으로 정리" },
-  { title: "Google AI Pro Billing Guide 2026: Monthly, Annual, Tax & Payment", keyword: "Google AI Pro billing guide", slug: "google-ai-pro-billing-guide-2026", note: "결제 가이드형 · 월간/연간 옵션·세금·결제수단을 지역별 차이와 함께 확인" }
-];
+const DEFAULT_ROWS: ScheduleRow[] = ROLLING_TOPIC_POOL.slice(0, 14).map((topic, index) => {
+  const date = shiftDate(todayLocal(), index - 1);
+  return {
+    id: "experiment-" + date + "-" + index,
+    date,
+    title: topic.title,
+    keyword: topic.keyword,
+    status: "예정",
+    url: "",
+    slug: topic.slug,
+    relatedIds: [],
+    backlinkDoneIds: [],
+    note: topic.note,
+    body: "",
+    kind: "experiment",
+    labVersion: "WORLD-LAB-V1-PLANNED",
+    labReport: "",
+    labPrompt: "",
+    experimentCategory: topic.category,
+    experimentHook: topic.hook,
+  };
+});
 
 function todayLocal() {
   const d = new Date();
@@ -916,6 +926,7 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverse = selected ? reverseLinkRows(selected, rows) : [];
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
+  const selectedExperimentReady = Boolean(selected?.kind === "experiment" && selected.labReport?.trim() && selected.labPrompt?.trim());
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
@@ -1012,8 +1023,10 @@ export default function GoogleBlogSchedulePage() {
         url: "",
         slug: "",
         relatedIds: [],
-        note: "자동 주제 풀이 소진되었습니다. ChatGPT에 Google Blog 주제 풀 보충을 요청하세요.",
+        note: "엉뚱한 AI 실험 주제 풀이 소진되었습니다. 글로벌 AI 실험 제작실에서 새 주제를 추가하세요.",
         body: "",
+        kind: "experiment",
+        labVersion: "WORLD-LAB-V1-PLANNED",
       };
     }
 
@@ -1038,6 +1051,12 @@ export default function GoogleBlogSchedulePage() {
       backlinkDoneIds: [],
       note: topic.note,
       body: "",
+      kind: "experiment",
+      labVersion: "WORLD-LAB-V1-PLANNED",
+      labReport: "",
+      labPrompt: "",
+      experimentCategory: topic.category,
+      experimentHook: topic.hook,
     };
   }
 
@@ -1444,37 +1463,49 @@ export default function GoogleBlogSchedulePage() {
   function addRow() {
     const lastDate = rows.length ? [...rows].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date : today;
     const date = nextDate(lastDate);
-    setRows(prev => [...prev, {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    const topic = pickRollingTopic(date, rows, publishHistory) || ROLLING_TOPIC_POOL[rollingSeed(date) % ROLLING_TOPIC_POOL.length];
+    const row: ScheduleRow = {
+      id: `experiment-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       date,
-      title: "",
-      keyword: "",
+      title: topic.title,
+      keyword: topic.keyword,
       status: "예정",
       url: "",
-      slug: "",
+      slug: topic.slug,
       relatedIds: [],
-      note: "",
+      note: topic.note,
       body: "",
-    }]);
-    setSelectedId(prev => prev || rows[0]?.id || "");
+      kind: "experiment",
+      labVersion: "WORLD-LAB-V1-PLANNED",
+      experimentCategory: topic.category,
+      experimentHook: topic.hook,
+    };
+    setRows(prev => [...prev, row]);
+    setSelectedId(prev => prev || row.id);
   }
 
   function addWeek() {
     let date = rows.length ? [...rows].sort((a, b) => a.date.localeCompare(b.date)).at(-1)!.date : today;
     const extra: ScheduleRow[] = [];
+    const simulated = [...rows];
     for (let i = 0; i < 7; i++) {
       date = nextDate(date);
+      const topic = pickRollingTopic(date, [...simulated, ...extra], publishHistory) || ROLLING_TOPIC_POOL[(rollingSeed(date) + i) % ROLLING_TOPIC_POOL.length];
       extra.push({
-        id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
+        id: \`experiment-\${Date.now()}-\${i}-\${Math.random().toString(36).slice(2, 7)}\`,
         date,
-        title: "",
-        keyword: "",
+        title: topic.title,
+        keyword: topic.keyword,
         status: "예정",
         url: "",
-        slug: "",
+        slug: topic.slug,
         relatedIds: [],
-        note: "",
+        note: topic.note,
         body: "",
+        kind: "experiment",
+        labVersion: "WORLD-LAB-V1-PLANNED",
+        experimentCategory: topic.category,
+        experimentHook: topic.hook,
       });
     }
     setRows(prev => [...prev, ...extra]);
@@ -1488,8 +1519,21 @@ export default function GoogleBlogSchedulePage() {
     }
   }
 
+  function startExperimentDesign(row: ScheduleRow) {
+    try {
+      window.localStorage.setItem("ai-world-experiment-seed-v1", JSON.stringify({
+        scheduleId: row.id,
+        title: row.title,
+        keyword: row.keyword,
+        category: row.experimentCategory || "Global Curiosity",
+        hook: row.experimentHook || row.note || "",
+      }));
+    } catch {}
+    window.location.href = "/google-blog-schedule/experiment?fromSchedule=1";
+  }
+
   function resetRows() {
-    if (!window.confirm("현재 스케줄을 지우고 기본 14일 스케줄로 되돌릴까요?")) return;
+    if (!window.confirm("현재 스케줄을 지우고 엉뚱한 AI 실험 14일 발행리스트로 되돌릴까요?")) return;
     setRows(DEFAULT_ROWS);
     setSelectedId(DEFAULT_ROWS[0].id);
     setNotice("");
@@ -1567,8 +1611,8 @@ export default function GoogleBlogSchedulePage() {
       <section className={styles.panel}>
         <div className={styles.panelHead}>
           <div>
-            <h2>기존 가격·정보 글 · 14일 롤링 일정표</h2>
-            <p>어제 + 오늘 + 앞으로 12일을 기본으로 유지합니다. 오래된 완료 글은 발행 이력으로 이동하고, 미완료 글은 사라지지 않습니다.</p>
+            <h2>엉뚱한 AI 실험 · 14일 롤링 발행리스트</h2>
+            <p>어제 + 오늘 + 앞으로 12일을 모두 글로벌 호기심형 AI 실험으로 유지합니다. 가격·결제 신규 주제는 자동 발행리스트에 넣지 않습니다.</p>
           </div>
           <div className={styles.actions}>
             <span className={styles.rollingBadge}>자동 롤링 · 발행 이력 {publishHistory.length}개</span>
@@ -1583,7 +1627,7 @@ export default function GoogleBlogSchedulePage() {
                 <th>상태</th>
                 <th>글 제목</th>
                 <th>핵심 키워드</th>
-                <th>검증</th>
+                <th>실험</th>
                 <th>URL</th>
                 <th>작업</th>
                 <th aria-label="삭제"></th>
@@ -1616,11 +1660,9 @@ export default function GoogleBlogSchedulePage() {
                     <td><input value={row.keyword} placeholder="SEO 키워드" onChange={e => updateRow(row.id, { keyword: e.target.value })} /></td>
                     <td className={styles.miniStateCell}>
                       {row.kind === "experiment" ? (
-                        <span className={styles.miniGood}>EXP</span>
+                        <span className={row.labReport?.trim() ? styles.miniGood : styles.miniWait}>{row.labReport?.trim() ? "DONE" : "LAB"}</span>
                       ) : (
-                        <span className={verificationResolvedCount(row) === 6 ? styles.miniGood : styles.miniWait}>
-                          {verificationResolvedCount(row)}/6
-                        </span>
+                        <span className={styles.miniWait}>OLD</span>
                       )}
                     </td>
                     <td className={styles.miniStateCell}>
@@ -1653,8 +1695,8 @@ export default function GoogleBlogSchedulePage() {
             <span className={styles.workStatus}>{selected.status}</span>
             <div className={styles.workHealth}>
               {selected.kind === "experiment"
-                ? <span className={styles.healthGood}>실전 검증 근거</span>
-                : <span className={selectedVerificationResolved === 6 ? styles.healthGood : styles.healthWait}>가격 검증 {selectedVerificationResolved}/6</span>}
+                ? <span className={selectedExperimentReady ? styles.healthGood : styles.healthWait}>{selectedExperimentReady ? "실험 검증 완료" : "실험 설계 필요"}</span>
+                : <span className={styles.healthNeutral}>기존 가격 글</span>}
               {selected.kind !== "experiment" && <span className={selected.contentPlan ? styles.healthGood : styles.healthWait}>{selected.contentPlan ? "기획 완료" : "통합 기획 필요"}</span>}
               <span className={duplicateCount ? styles.healthDanger : styles.healthGood}>{duplicateCount ? `중복 ${duplicateCount}` : "SEO OK"}</span>
               <span className={selectedUrlValid ? styles.healthGood : styles.healthNeutral}>{selectedUrlValid ? "LIVE" : "URL 대기"}</span>
@@ -1663,14 +1705,15 @@ export default function GoogleBlogSchedulePage() {
           </div>
 
           {selected.kind === "experiment" && <section className={styles.labEvidencePanel}>
-            <div><span>FIRST-HAND EXPERIMENT · {selected.labVersion || "실험 결과"}</span>
-              <strong>기획 근거: 사전에 잠근 Ground Truth + 실제 AI 답변 + 기록된 채점</strong>
-              <p>일반 AI 정보글처럼 추측해서 쓰지 않고, 실험 제작실에서 저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다.</p>
+            <div><span>GLOBAL EXPERIMENT · {selected.experimentCategory || selected.labVersion || "실험 예정"}</span>
+              <strong>{selectedExperimentReady ? "검증 완료: Ground Truth + 실제 AI 답변 + 기록된 채점" : "이 주제는 먼저 글로벌 AI 실험 제작실에서 설계·검증하세요."}</strong>
+              <p>{selectedExperimentReady ? "저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다." : (selected.experimentHook || selected.note || "해외 독자가 궁금해할 한 가지 질문을 실제 자료로 시험합니다.")}</p>
             </div>
             <div className={styles.labEvidenceActions}>
-              <a href="/google-blog-schedule/experiment">글로벌 실험 제작실 ↗</a>
+              {!selectedExperimentReady && <button type="button" onClick={() => startExperimentDesign(selected)}>🧪 이 주제로 실험 설계 시작 →</button>}
+              {selectedExperimentReady && <a href="/google-blog-schedule/experiment">글로벌 실험 제작실 ↗</a>}
               <a href="/google-blog-schedule/lab">숫자·PDF 검증실 ↗</a>
-              <button type="button" onClick={() => void copyText(selected.labReport || "", "실험 검증 리포트를 복사했습니다.")}>검증 근거 복사</button>
+              {selectedExperimentReady && <button type="button" onClick={() => void copyText(selected.labReport || "", "실험 검증 리포트를 복사했습니다.")}>검증 근거 복사</button>}
             </div>
           </section>}
 
@@ -2029,19 +2072,25 @@ export default function GoogleBlogSchedulePage() {
               <h3>본문 요청서</h3>
               <p>{selected.kind === "experiment" ? "실전 검증실에서 가져온 원문 답변과 수동 판정 근거로 영문 Blogger 글을 작성합니다. 가격·세금 글 템플릿은 적용하지 않습니다." : selected.contentPlan ? "통합 기획에서 확정한 검색 의도·차별화 가치·첫 답을 반영해 SEO 메타와 Blogger HTML까지 한 번에 만듭니다." : "통합 기획 없이도 작성할 수 있지만, 검색 의도와 차별화 가치를 먼저 확정하면 글 품질이 더 안정적입니다."}</p>
               <div className={styles.requestActions}>
-                <a
-                  className={styles.primaryAction}
-                  href={articleChatUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => {
-                    startWork();
-                    void copyText(articlePrompt, "본문 요청서를 ChatGPT로 열고 클립보드에도 복사했습니다.");
-                  }}
-                >
-                  📝 GPT에 요청서 바로 열기
-                </a>
-                <button onClick={() => void copyText(articlePrompt, "본문 요청서를 복사했습니다.")}>요청서만 복사</button>
+                {selected.kind === "experiment" && !selectedExperimentReady ? (
+                  <button className={styles.primaryAction} type="button" onClick={() => startExperimentDesign(selected)}>🧪 먼저 실험 설계·검증하기</button>
+                ) : (
+                  <>
+                    <a
+                      className={styles.primaryAction}
+                      href={articleChatUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        startWork();
+                        void copyText(articlePrompt, "본문 요청서를 ChatGPT로 열고 클립보드에도 복사했습니다.");
+                      }}
+                    >
+                      📝 GPT에 요청서 바로 열기
+                    </a>
+                    <button onClick={() => void copyText(articlePrompt, "본문 요청서를 복사했습니다.")}>요청서만 복사</button>
+                  </>
+                )}
               </div>
               <details className={styles.promptDetails}>
                 <summary>본문 요청서 확인</summary>
