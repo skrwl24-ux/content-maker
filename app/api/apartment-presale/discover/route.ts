@@ -28,6 +28,15 @@ type RawCandidate = {
   officialLabel: string;
   caution: string;
   eventKey: string;
+  address?: string;
+  projectType?: string;
+  constructor?: string;
+  developer?: string;
+  totalUnits?: number | null;
+  generalSaleUnits?: number | null;
+  exclusiveAreas?: number[];
+  moveIn?: string;
+  noticeStatus?: string;
 };
 
 type StoredCandidate = RawCandidate & {
@@ -131,6 +140,18 @@ function normalizeCandidate(raw: RawCandidate, existingIds: Set<string>) {
     officialUrl,
     officialLabel: safeText(raw.officialLabel, 180),
     caution: safeText(raw.caution, 520),
+    address: safeText(raw.address, 240),
+    projectType: safeText(raw.projectType, 120),
+    constructor: safeText(raw.constructor, 120),
+    developer: safeText(raw.developer, 160),
+    totalUnits: Number.isFinite(Number(raw.totalUnits)) ? Number(raw.totalUnits) : null,
+    generalSaleUnits: Number.isFinite(Number(raw.generalSaleUnits)) ? Number(raw.generalSaleUnits) : null,
+    exclusiveAreas: (Array.isArray(raw.exclusiveAreas) ? raw.exclusiveAreas : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .slice(0, 20),
+    moveIn: safeText(raw.moveIn, 120),
+    noticeStatus: safeText(raw.noticeStatus, 120),
   };
 }
 
