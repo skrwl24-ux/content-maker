@@ -1544,6 +1544,7 @@ export default function GoogleBlogSchedulePage() {
     try {
       window.localStorage.setItem("ai-world-experiment-seed-v1", JSON.stringify({
         scheduleId: row.id,
+        date: row.date,
         title: row.title,
         keyword: row.keyword,
         category: row.experimentCategory || "Global Curiosity",
