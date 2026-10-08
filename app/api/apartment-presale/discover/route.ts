@@ -30,7 +30,6 @@ type RawCandidate = {
   eventKey: string;
   address?: string;
   projectType?: string;
-  constructor?: string;
   developer?: string;
   totalUnits?: number | null;
   generalSaleUnits?: number | null;
@@ -142,7 +141,7 @@ function normalizeCandidate(raw: RawCandidate, existingIds: Set<string>) {
     caution: safeText(raw.caution, 520),
     address: safeText(raw.address, 240),
     projectType: safeText(raw.projectType, 120),
-    constructor: safeText(raw.constructor, 120),
+    constructor: safeText((raw as any)["constructor"], 120),
     developer: safeText(raw.developer, 160),
     totalUnits: Number.isFinite(Number(raw.totalUnits)) ? Number(raw.totalUnits) : null,
     generalSaleUnits: Number.isFinite(Number(raw.generalSaleUnits)) ? Number(raw.generalSaleUnits) : null,
