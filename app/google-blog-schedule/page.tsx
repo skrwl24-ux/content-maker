@@ -99,12 +99,12 @@ const BLOG_BASE = "https://aipriceatlas.blogspot.com";
 const IMAGE_BUCKET = "content-maker-assets";
 const LAB_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 const LAB_IMAGE_ROLES: Record<string, { label: string; role: string }> = {
-  "00": { label: "실험 대표", role: "실제 수행한 AI PDF 비교 테스트의 핵심 질문형 대표 이미지" },
-  "01": { label: "테스트 문서", role: "실제 가상 PDF 문서의 데이터 구조 및 동일 질문을 보여주는 이미지" },
-  "02": { label: "검증 결과", role: "수동 채점이 완료된 AI별 오류 발견·부분 발견·오탐 비교" },
-  "03": { label: "오류 사례", role: "정답표 중 대표 숫자 오류 하나의 보고서 기재값과 올바른 계산" },
-  "04": { label: "채점 기준", role: "같은 PDF·같은 질문과 정답표의 발견·부분·누락 판정 구조" },
-  "05": { label: "한계·결론", role: "소규모 단회 실험의 한계와 독자가 확인할 실용적인 포인트" },
+  "00": { label: "실험 대표", role: "이 실험의 질문과 궁금증을 한눈에 보여주는 영어 대표 이미지" },
+  "01": { label: "테스트 설정", role: "AI에게 실제로 보여준 자료·조건·질문을 간결하게 보여주는 이미지" },
+  "02": { label: "AI 답변", role: "ChatGPT·Claude·Gemini의 실제 답변 차이를 검증 기록 범위에서 비교" },
+  "03": { label: "정답 공개", role: "사전에 잠가 둔 Ground Truth와 숨겨둔 트릭을 공개하는 이미지" },
+  "04": { label: "점수판", role: "이번 단일 실험의 정확도·지시 준수·환각 기록을 비교하는 이미지" },
+  "05": { label: "엉뚱한 실수", role: "검증된 Weirdest Mistake와 이번 실험의 한계를 재미있게 정리" },
 };
 function imageSlotFor(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
   return row.kind === "experiment" ? { ...slot, ...LAB_IMAGE_ROLES[slot.id] } : slot;
@@ -606,14 +606,15 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], co
   if (row.kind === "experiment") {
     const image = imageSlotFor(row, slot);
     return [
-      "AI Price Atlas의 실제 AI PDF 실험 결과를 보여주는 영문 정보 이미지 1장만 제작해줘.",
+      "전 세계 독자를 위한 실제 AI 실험 글의 영문 정보 이미지 1장만 제작해줘.",
       "글 제목: " + row.title,
       "이미지 슬롯: " + slot.id + " · " + image.label,
       "이 이미지의 역할: " + image.role,
-      "[실제 실험 검증 자료]",
-      row.labReport || "근거 자료 미입력 · 절대 결과 숫자를 만들어내지 말 것.",
-      "[스타일] 1600×900px / 16:9 / 영어 / 모바일에서 읽히는 간결한 정보 카드 / 과한 네온과 3D 금지.",
-      "[필수] 정답과 검증 완료된 점수만 시각화. 미검증 AI의 점수나 순위를 추정하지 말 것. 실제 스크린샷인 척 AI 답변 화면을 합성하지 말 것. 실제 시험 파일은 fictional synthetic dataset임을 필요할 때 표기.",
+      "[검증된 실험 기록]",
+      row.labReport || "근거 자료 미입력 · 결과 숫자나 정답을 새로 만들지 말 것.",
+      "[스타일] 1600×900px / 16:9 / 영어 / 호기심을 자극하되 정보가 읽히는 편집형 디자인 / 과한 네온·3D·미래형 AI 클리셰 금지.",
+      "[필수] Ground Truth, AI 답변, 점수, Weirdest Mistake는 위 검증 기록에 있는 것만 사용. 없는 점수·순위·모델 버전은 만들지 말 것. 실제 AI 화면 스크린샷처럼 합성하지 말 것.",
+      "[톤] 딱딱한 벤치마크 보고서보다 'Can AI really do this?' 실험 콘텐츠처럼 재미있게. 단, 이번 한 번의 실험으로 전체 모델 우열을 단정하지 말 것.",
       "6장 합본이 아니라 현재 요청한 슬롯 " + slot.id + " 1장만 제작.",
     ].join("\n");
   }
@@ -1499,24 +1500,24 @@ export default function GoogleBlogSchedulePage() {
     <main className={styles.wrap}>
       <header className={styles.header}>
         <button className={styles.back} onClick={() => window.location.href = "/"}>← 콘텐츠 메이커</button>
-        <div className={styles.headerLinks}><a className={styles.labHeaderLink} href="/google-blog-schedule/lab">🔬 AI 실전 검증실</a><div className={styles.saved}>자동 저장됨</div></div>
+        <div className={styles.headerLinks}><a className={styles.labHeaderLink} href="/google-blog-schedule/experiment">🧪 글로벌 AI 실험</a><a className={styles.labHeaderLink} href="/google-blog-schedule/lab">🧮 숫자·PDF 검증</a><div className={styles.saved}>자동 저장됨</div></div>
       </header>
 
       <section className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>Google Blog · AI Price Atlas</span>
-          <h1>AI Price Atlas · 발행 제작실</h1>
-          <p>독자적인 실전 검증 콘텐츠를 제작하고, 기존 가격·국가·결제 정보 글의 발행 스케줄도 계속 관리합니다.</p>
+          <span className={styles.eyebrow}>Google Blog · GLOBAL AI TESTS + PRICE ARCHIVE</span>
+          <h1>Google Blog · 발행 제작실</h1>
+          <p>기존 가격·국가·결제 검색글은 유지하고, 전 세계 공통 관심사를 활용한 엉뚱한 AI 실험 글을 함께 제작합니다.</p>
         </div>
         <div className={styles.heroDate}>오늘 {dayLabel(today)}</div>
       </section>
 
       <section className={styles.labSpotlight}>
-        <div><span>NEW · FIRST-HAND CONTENT</span><h2>가격표만 요약하지 말고 AI를 직접 시험해 보세요.</h2>
-          <p>동일한 테스트용 PDF → ChatGPT·Claude·Gemini 웹사이트에서 답변 수집 → 정답표 수동 대조 → 실제 결과가 담긴 영문 글 제작.</p>
-          <small>API 키나 API 비용 없이 기존 웹 계정 사용 · 모든 실험 자료는 ZIP으로 백업</small>
+        <div><span>NEW · GLOBAL CURIOSITY EXPERIMENTS</span><h2>나라·지도·음식·언어·동물까지, AI에게 엉뚱한 실험을 던져보세요.</h2>
+          <p>실험 주제 선택 → Ground Truth를 먼저 저장 → ChatGPT·Claude·Gemini에 같은 문제 → 실제 답변 채점 → 영어 Blogger 글과 이미지 6장 제작.</p>
+          <small>가격 글은 그대로 유지 · 실험 글은 Can AI...? / I gave AI... 형식의 해외 유입용 콘텐츠로 확장</small>
         </div>
-        <a href="/google-blog-schedule/lab">실전 검증실 시작 →</a>
+        <a href="/google-blog-schedule/experiment">글로벌 AI 실험 시작 →</a>
       </section>
 
       {notice && <div className={styles.notice}>{notice}</div>}
@@ -1614,9 +1615,13 @@ export default function GoogleBlogSchedulePage() {
                     <td><input className={styles.titleInput} value={row.title} placeholder="글 제목" onChange={e => updateRow(row.id, { title: e.target.value })} /></td>
                     <td><input value={row.keyword} placeholder="SEO 키워드" onChange={e => updateRow(row.id, { keyword: e.target.value })} /></td>
                     <td className={styles.miniStateCell}>
-                      <span className={verificationResolvedCount(row) === 6 ? styles.miniGood : styles.miniWait}>
-                        {verificationResolvedCount(row)}/6
-                      </span>
+                      {row.kind === "experiment" ? (
+                        <span className={styles.miniGood}>EXP</span>
+                      ) : (
+                        <span className={verificationResolvedCount(row) === 6 ? styles.miniGood : styles.miniWait}>
+                          {verificationResolvedCount(row)}/6
+                        </span>
+                      )}
                     </td>
                     <td className={styles.miniStateCell}>
                       <span className={isValidPublishedUrl(row.url) ? styles.miniGood : styles.miniNeutral}>
@@ -1658,12 +1663,13 @@ export default function GoogleBlogSchedulePage() {
           </div>
 
           {selected.kind === "experiment" && <section className={styles.labEvidencePanel}>
-            <div><span>FIRST-HAND LAB · {selected.labVersion || "실험 결과"}</span>
-              <strong>기획 근거: 실제 AI 답변과 수동 검증 결과</strong>
-              <p>일반 가격 기사와 다르게 검증실에서 가져온 결과만 본문·이미지 제작 요청서에 반영됩니다. 원본 PDF와 AI별 답변은 실전 검증실 ZIP에서 백업합니다.</p>
+            <div><span>FIRST-HAND EXPERIMENT · {selected.labVersion || "실험 결과"}</span>
+              <strong>기획 근거: 사전에 잠근 Ground Truth + 실제 AI 답변 + 기록된 채점</strong>
+              <p>일반 AI 정보글처럼 추측해서 쓰지 않고, 실험 제작실에서 저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다.</p>
             </div>
             <div className={styles.labEvidenceActions}>
-              <a href="/google-blog-schedule/lab">실전 검증실 열기 ↗</a>
+              <a href="/google-blog-schedule/experiment">글로벌 실험 제작실 ↗</a>
+              <a href="/google-blog-schedule/lab">숫자·PDF 검증실 ↗</a>
               <button type="button" onClick={() => void copyText(selected.labReport || "", "실험 검증 리포트를 복사했습니다.")}>검증 근거 복사</button>
             </div>
           </section>}
@@ -2046,7 +2052,7 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>02</span>
               <h3>이미지 요청서 6장</h3>
-              <p>{selected.kind === "experiment" ? "실험 대표·원본 문서·검증 결과·오류 사례·채점 기준·한계 6장. 확정되지 않은 수치는 넣지 않습니다." : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              <p>{selected.kind === "experiment" ? "실험 대표·테스트 설정·AI 답변·정답 공개·점수판·엉뚱한 실수 6장. Ground Truth와 실제 채점에 없는 내용은 넣지 않습니다." : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
                   const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
