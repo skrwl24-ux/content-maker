@@ -748,6 +748,24 @@ export function buildDataSnapshot(
 }
 
 
+function complexDataLines(snapshot: DataSnapshot) {
+  const location = [snapshot.complex.sido, snapshot.complex.sigungu, snapshot.complex.legal_dong]
+    .filter(Boolean)
+    .join(" ");
+  const areaSummary = snapshot.areas
+    .map((area) => area.displayName + " (" + area.exclusiveLabel + ")")
+    .join(", ");
+
+  return [
+    "단지명: " + snapshot.complex.name,
+    "지역: " + (location || "확인 필요"),
+    "주소: " + (snapshot.complex.road_address || snapshot.complex.address || "확인 필요"),
+    "세대수: " + (snapshot.complex.households ? snapshot.complex.households.toLocaleString() + "세대" : "확인 필요"),
+    "사용승인일: " + (snapshot.complex.use_date || "확인 필요"),
+    "확인된 평형 구성: " + (areaSummary || "확인 필요"),
+  ].join("\n");
+}
+
 function dataLines(snapshot: DataSnapshot) {
   const lines: string[] = [];
   for (const area of snapshot.areas) {
@@ -952,6 +970,7 @@ export function buildFinalArticlePrompt(
     YEAR: String(snapshot.year),
     COMPLEX_NAME: snapshot.complex.name,
     TITLE: snapshot.complex.name + " 얼마일까?",
+    COMPLEX_DATA_BLOCK: complexDataLines(snapshot),
     DATA_BLOCK: dataLines(snapshot),
     STRUCTURE_DATA_BLOCK: structureDataBlock,
     STRUCTURE_SECTION_BLOCK: structureSectionBlock,
