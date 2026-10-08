@@ -14,6 +14,8 @@ type ProviderRun = {
   notes: string;
 };
 type ExperimentState = {
+  scheduleId: string;
+  scheduleDate: string;
   title: string;
   category: string;
   hook: string;
@@ -28,6 +30,7 @@ type ExperimentState = {
 };
 
 const STORAGE_KEY = "ai-world-experiment-studio-v1";
+const SEED_TRANSFER_KEY = "ai-world-experiment-seed-v1";
 const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
 const PROVIDERS: Array<{id: ProviderId; label: string; url: string}> = [
@@ -56,6 +59,8 @@ function emptyRun(): ProviderRun {
 }
 function emptyState(): ExperimentState {
   return {
+    scheduleId: "",
+    scheduleDate: "",
     title: STARTERS[0].title,
     category: STARTERS[0].category,
     hook: STARTERS[0].hook,
@@ -275,8 +280,26 @@ export default function AiWorldExperimentStudio() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setState({ ...emptyState(), ...JSON.parse(raw) });
-    } catch {}
+      let next = raw ? { ...emptyState(), ...JSON.parse(raw) } : emptyState();
+      const seedRaw = localStorage.getItem(SEED_TRANSFER_KEY);
+      if (seedRaw) {
+        const seed = JSON.parse(seedRaw);
+        next = {
+          ...emptyState(),
+          scheduleId: typeof seed.scheduleId === "string" ? seed.scheduleId : "",
+          scheduleDate: typeof seed.date === "string" ? seed.date : "",
+          title: typeof seed.title === "string" ? seed.title : next.title,
+          keyword: typeof seed.keyword === "string" ? seed.keyword : next.keyword,
+          category: typeof seed.category === "string" ? seed.category : "Global Curiosity",
+          hook: typeof seed.hook === "string" ? seed.hook : "",
+        };
+        localStorage.removeItem(SEED_TRANSFER_KEY);
+        setNotice("발행리스트의 실험 주제를 불러왔습니다. Ground Truth부터 확정하세요.");
+      }
+      setState(next);
+    } catch {
+      setState(emptyState());
+    }
     setHydrated(true);
   }, []);
   useEffect(() => {
@@ -318,6 +341,8 @@ export default function AiWorldExperimentStudio() {
     const item = STARTERS[index];
     setState(prev => ({
       ...prev,
+      scheduleId: "",
+      scheduleDate: "",
       title: item.title,
       category: item.category,
       hook: item.hook,
@@ -338,9 +363,9 @@ export default function AiWorldExperimentStudio() {
       return;
     }
     const pending = {
-      id: "world-exp-" + Date.now(),
+      id: state.scheduleId || ("world-exp-" + Date.now()),
       kind: "experiment",
-      date: today(),
+      date: state.scheduleDate || today(),
       title: state.title,
       keyword: state.keyword || "AI experiment",
       slug: slugify(state.title),
@@ -348,6 +373,8 @@ export default function AiWorldExperimentStudio() {
       labVersion: "WORLD-LAB-V1",
       labReport: report,
       labPrompt: articlePrompt,
+      experimentCategory: state.category,
+      experimentHook: state.hook,
     };
     try {
       localStorage.setItem(QUEUE_TRANSFER_KEY, JSON.stringify(pending));
@@ -384,7 +411,7 @@ export default function AiWorldExperimentStudio() {
 
     <section className={styles.panel}>
       <div className={styles.panelHead}>
-        <div><span>STEP 01</span><h2>실험 주제 고르기</h2><p>검색형 정보글보다 “이걸 AI가 맞힐까?”라는 호기심을 먼저 만듭니다.</p></div>
+        <div><span>STEP 01</span><h2>실험 주제 고르기</h2><p>검색형 정보글보다 “이걸 AI가 맞힐까?”라는 호기심을 먼저 만듭니다.{state.scheduleId ? " · 발행리스트에서 선택한 주제를 작업 중입니다." : ""}</p></div>
         <div className={styles.actions}>
           <button onClick={() => void copy(buildIdeaPrompt(), "글로벌 실험 주제 요청서")}>주제 10개 요청서 복사</button>
           <button className={styles.primary} onClick={() => openPrompt(buildIdeaPrompt())}>GPT에서 아이디어 찾기</button>
