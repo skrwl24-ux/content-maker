@@ -635,10 +635,10 @@ ${article || "본문이 아직 입력되지 않았습니다."}
 
 function makePresaleMapImagePrompt(topic: string, body: string, imageNotes: string) {
   const project = (topic.split("｜")[0] || topic).trim() || "분양 사업지";
-  return \`네이버 블로그 본문용 분양 입지 위치 안내 이미지 1장을 만들어줘.
+  return `네이버 블로그 본문용 분양 입지 위치 안내 이미지 1장을 만들어줘.
 
 [단지/사업]
-\${project}
+${project}
 
 [크기]
 1600×900px · 16:9 가로형
@@ -661,12 +661,12 @@ function makePresaleMapImagePrompt(topic: string, body: string, imageNotes: stri
 - 모바일에서도 위치 관계가 바로 읽히게 구성
 
 [운영자 메모]
-\${imageNotes.trim() || "별도 메모 없음"}
+${imageNotes.trim() || "별도 메모 없음"}
 
 [완성 글 참고]
-\${compactArticleForImagePrompt(body || "").slice(0, 3500) || "완성 글 없음 — 지도 캡처와 사업명만 기준으로 제작"}
+${compactArticleForImagePrompt(body || "").slice(0, 3500) || "완성 글 없음 — 지도 캡처와 사업명만 기준으로 제작"}
 
-중요: 지도 캡처의 위치 관계만 참고해 새로운 안내형 이미지 1장을 바로 생성해줘.\`;
+중요: 지도 캡처의 위치 관계만 참고해 새로운 안내형 이미지 1장을 바로 생성해줘.`;
 }
 
 function openWorkDb(): Promise<IDBDatabase> {
