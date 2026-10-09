@@ -6,6 +6,7 @@ import styles from "./page.module.css";
 import { parseBloggerOutput } from "@/lib/google-blogger-parser.mjs";
 import { buildGoogleContentPlanPrompt, googleContentPlanBlock, googleImagePlanBlock, parseGoogleContentPlan } from "@/lib/google-content-plan.mjs";
 import type { GoogleContentPlan } from "@/lib/google-content-plan.mjs";
+import { buildRecommendationImagePrompt, parseRecommendationReport, recommendationImageSlot } from "@/lib/experiment-recommendation-images.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
 type VerificationValue = "pending" | "checked" | "na";
@@ -111,7 +112,9 @@ const LAB_IMAGE_ROLES: Record<string, { label: string; role: string }> = {
   "05": { label: "엉뚱한 실수", role: "검증된 Weirdest Mistake와 이번 실험의 한계를 재미있게 정리" },
 };
 function imageSlotFor(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
-  return row.kind === "experiment" ? { ...slot, ...LAB_IMAGE_ROLES[slot.id] } : slot;
+  if (row.kind !== "experiment") return slot;
+  const recommendation = recommendationImageSlot(parseRecommendationReport(row.labReport), slot.id);
+  return { ...slot, ...(recommendation || LAB_IMAGE_ROLES[slot.id]) };
 }
 
 const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
@@ -614,6 +617,8 @@ Blogger에 바로 넣을 최종 HTML 본문
 
 function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], contentPlan?: GoogleContentPlan | null) {
   if (row.kind === "experiment") {
+    const recommendationPrompt = buildRecommendationImagePrompt(row, slot);
+    if (recommendationPrompt) return recommendationPrompt;
     const image = imageSlotFor(row, slot);
     return [
       "전 세계 독자를 위한 실제 AI 실험 글의 영문 정보 이미지 1장만 제작해줘.",
@@ -948,6 +953,7 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
   const selectedExperimentReady = Boolean(selected?.kind === "experiment" && selected.labReport?.trim() && selected.labPrompt?.trim());
+  const selectedRecommendation = Boolean(selected?.kind === "experiment" && parseRecommendationReport(selected.labReport));
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
@@ -1728,8 +1734,8 @@ export default function GoogleBlogSchedulePage() {
 
           {selected.kind === "experiment" && <section className={styles.labEvidencePanel}>
             <div><span>GLOBAL EXPERIMENT · {selected.experimentCategory || selected.labVersion || "실험 예정"}</span>
-              <strong>{selectedExperimentReady ? "검증 완료: Ground Truth + 실제 AI 답변 + 기록된 채점" : "이 주제는 먼저 글로벌 AI 실험 제작실에서 설계·검증하세요."}</strong>
-              <p>{selectedExperimentReady ? "저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다." : (selected.experimentHook || selected.note || "해외 독자가 궁금해할 한 가지 질문을 실제 자료로 시험합니다.")}</p>
+              <strong>{selectedExperimentReady ? (selectedRecommendation ? "실험 답변 기록 완료: 실제 AI 추천 3사 비교" : "검증 완료: Ground Truth + 실제 AI 답변 + 기록된 채점") : "이 주제는 먼저 글로벌 AI 실험 제작실에서 설계·검증하세요."}</strong>
+              <p>{selectedExperimentReady ? (selectedRecommendation ? "실제 추천 답변을 6개 이미지 역할에 분리합니다. 00 관심·01 질문·02 선택·03 이유·04 단점·05 독자 체크리스트." : "저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다.") : (selected.experimentHook || selected.note || "해외 독자가 궁금해할 한 가지 질문을 실제 자료로 시험합니다.")}</p>
             </div>
             <div className={styles.labEvidenceActions}>
               {!selectedExperimentReady && <button type="button" onClick={() => startExperimentDesign(selected)}>🧪 이 주제로 실험 설계 시작 →</button>}
@@ -2123,7 +2129,7 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>02</span>
               <h3>이미지 요청서 6장</h3>
-              <p>{selected.kind === "experiment" ? "실험 대표·테스트 설정·AI 답변·정답 공개·점수판·엉뚱한 실수 6장. Ground Truth와 실제 채점에 없는 내용은 넣지 않습니다." : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              <p>{selected.kind === "experiment" ? (selectedRecommendation ? "확정된 6개 역할: 대표·공통 질문·AI 실제 선택·선택 이유·단점과 한계·독자 체크리스트. 이미지마다 근거와 레이아웃을 분리해 반복을 줄입니다." : "실험 대표·테스트 설정·AI 답변·정답 공개·점수판·엉뚱한 실수 6장. Ground Truth와 실제 채점에 없는 내용은 넣지 않습니다.") : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
                   const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
