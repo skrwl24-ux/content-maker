@@ -6,6 +6,7 @@ import styles from "./page.module.css";
 import { parseBloggerOutput } from "@/lib/google-blogger-parser.mjs";
 import { buildGoogleContentPlanPrompt, googleContentPlanBlock, googleImagePlanBlock, parseGoogleContentPlan } from "@/lib/google-content-plan.mjs";
 import type { GoogleContentPlan } from "@/lib/google-content-plan.mjs";
+import { buildRecommendationImagePrompt, parseRecommendationReport, recommendationImageSlot } from "@/lib/experiment-recommendation-images.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
 type BankTopic = {id:string;title:string;category:string;question:string;status:"pending"|"active"|"used";createdAt:string;usedAt:string};
@@ -124,9 +125,11 @@ const COMPARE_IMAGE_ROLES: Record<string, {label:string;role:string}> = {
   "05":{label:"핵심 비교 정리",role:"실제 답변에 근거한 공통점·차이점·독자가 고려할 점을 요약"},
 };
 function imageSlotFor(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
-  if(row.kind!=="experiment")return slot;
-  const roles=row.labVersion==="WORLD-COMPARISON-V2"?COMPARE_IMAGE_ROLES:LAB_IMAGE_ROLES;
-  return {...slot,...roles[slot.id]};
+  if (row.kind !== "experiment") return slot;
+  const recommendation = recommendationImageSlot(parseRecommendationReport(row.labReport), slot.id);
+  if (recommendation) return { ...slot, ...recommendation };
+  const roles = row.labVersion === "WORLD-COMPARISON-V2" ? COMPARE_IMAGE_ROLES : LAB_IMAGE_ROLES;
+  return { ...slot, ...roles[slot.id] };
 }
 
 const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
@@ -629,6 +632,8 @@ Blogger에 바로 넣을 최종 HTML 본문
 
 function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], contentPlan?: GoogleContentPlan | null) {
   if (row.kind === "experiment") {
+    const recommendationPrompt = buildRecommendationImagePrompt(row, slot);
+    if (recommendationPrompt) return recommendationPrompt;
     const image = imageSlotFor(row, slot);
     return [
       "전 세계 독자를 위한 실제 AI 실험 글의 영문 정보 이미지 1장만 제작해줘.",
@@ -1013,6 +1018,7 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
   const selectedExperimentReady = Boolean(selected?.kind === "experiment" && selected.labReport?.trim() && selected.labPrompt?.trim());
+  const selectedRecommendationImages = Boolean(selected?.kind === "experiment" && parseRecommendationReport(selected.labReport));
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
@@ -2204,7 +2210,7 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>02</span>
               <h3>이미지 요청서 6장</h3>
-              <p>{selected.kind === "experiment" ? (selected.experimentMode==="recommend"?"대표·공통 질문·3사 추천·선정 이유·장단점·요약 6장. 존재하지 않는 정답이나 승자는 넣지 않습니다.":"실험 대표·테스트 설정·실제 AI 답변·정답 공개·근거 검증·발견 6장. 없는 사실은 넣지 않습니다.") : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              <p>{selected.kind === "experiment" ? (selectedRecommendationImages ? "6장 중복 방지 적용: 00 관심·01 공통 질문·02 선택 결과·03 선정 이유·04 단점·05 독자 체크리스트. 각각 다른 근거와 디자인으로 제작합니다." : selected.experimentMode === "recommend" ? "대표·공통 질문·3사 추천·선정 이유·장단점·요약 6장. 존재하지 않는 정답이나 승자는 넣지 않습니다." : "실험 대표·테스트 설정·실제 AI 답변·정답 공개·근거 검증·발견 6장. 없는 사실은 넣지 않습니다.") : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
                   const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
