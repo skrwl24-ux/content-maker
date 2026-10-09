@@ -7,6 +7,8 @@ import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExper
 import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, deleteHumanPhoto } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
 import { BASELINE_PROFILE, getProviderBaselineHint, baselineStatus } from "@/lib/ai-world-experiment-baseline.mjs";
+import { TOPIC_BANK_VERSION, initialTopics, mergeTopics, parseBulkTopics, countTopics } from "@/lib/ai-world-experiment-topics.mjs";
+import type { Topic, TopicStatus } from "@/lib/ai-world-experiment-topics.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
@@ -40,6 +42,7 @@ type AutoDraft = {
   scores: Array<{provider: ProviderId; finalAnswer: string; verdict: ProviderRun["verdict"]; evidence: string; explanation: string}>;
 };
 type SavedDraft = { fingerprint: string; draft: AutoDraft };
+type TopicFilter = "open"|"used"|"all";
 type HumanChallenge = {
   choice: string;
   durationText: string;
@@ -54,6 +57,8 @@ type ExperimentState = {
   scheduleId: string;
   scheduleDate: string;
   title: string;
+  mode: "recommend"|"quiz";
+  topicId: string;
   category: string;
   hook: string;
   keyword: string;
@@ -75,6 +80,7 @@ type ExperimentState = {
 
 const STORAGE_KEY = "ai-world-experiment-studio-v1";
 const AUTO_DRAFT_KEY = "ai-world-experiment-auto-draft-v1";
+const TOPICS_KEY = "ai-world-experiment-topic-bank-v1";
 const SEED_TRANSFER_KEY = "ai-world-experiment-seed-v1";
 const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
@@ -120,6 +126,8 @@ function emptyState(): ExperimentState {
     scheduleId: "",
     scheduleDate: "",
     title: STARTERS[0].title,
+    mode: "quiz",
+    topicId: "",
     category: STARTERS[0].category,
     hook: STARTERS[0].hook,
     keyword: STARTERS[0].keyword,
@@ -391,6 +399,12 @@ export default function AiWorldExperimentStudio() {
   const [generatingDraft, setGeneratingDraft] = useState(false);
   const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null);
   const [draftApproved, setDraftApproved] = useState(false);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicsLoaded, setTopicsLoaded] = useState(false);
+  const [topicFilter, setTopicFilter] = useState<TopicFilter>("open");
+  const [bulkTopics, setBulkTopics] = useState("");
+  const [topicGeneratorBusy, setTopicGeneratorBusy] = useState(false);
+  const [topicImportBusy, setTopicImportBusy] = useState(false);
   const [pdfAvailable, setPdfAvailable] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -422,6 +436,8 @@ export default function AiWorldExperimentStudio() {
         setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
       if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
+      next.mode=next.mode==="recommend"?"recommend":"quiz";
+      next.topicId=typeof next.topicId==="string"?next.topicId:"";
       next.protocol=next.protocol==="basic"||next.protocol==="legacy" ? next.protocol :
         PROVIDERS.some(p=>Boolean(next.runs?.[p.id]?.response?.trim())) ? "legacy" : "basic";
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
@@ -433,6 +449,18 @@ export default function AiWorldExperimentStudio() {
     try { const rawDraft = localStorage.getItem(AUTO_DRAFT_KEY); if (rawDraft) setSavedDraft(JSON.parse(rawDraft)); } catch {}
     setHydrated(true);
   }, []);
+  useEffect(() => {
+    try {
+      const saved=localStorage.getItem(TOPICS_KEY);
+      const parsed=saved?JSON.parse(saved):null;
+      setTopics(saved && Array.isArray(parsed?.topics) ? mergeTopics([],parsed.topics) : initialTopics());
+    } catch {setTopics(initialTopics());}
+    setTopicsLoaded(true);
+  }, []);
+  useEffect(()=>{
+    if(!topicsLoaded)return;
+    try{localStorage.setItem(TOPICS_KEY,JSON.stringify({version:TOPIC_BANK_VERSION,topics}));}catch{}
+  },[topics,topicsLoaded]);
   useEffect(() => {
     if (!hydrated || !savedDraft) return;
     try { localStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(savedDraft)); } catch {}
@@ -485,8 +513,10 @@ export default function AiWorldExperimentStudio() {
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
+  const topicCounts = countTopics(topics);
+  const visibleTopics = topics.filter(t=>topicFilter==="all"||(topicFilter==="used"?t.status==="used":t.status!=="used"));
   // A draft is only valid for the exact PDF/key/original answers that produced it.
-  const draftFingerprint = JSON.stringify([state.title, state.testQuestion, state.material, state.pdf?.sha256,
+  const draftFingerprint = JSON.stringify([state.title, state.mode, state.topicId, state.testQuestion, state.material, state.pdf?.sha256,
     state.groundTruth, state.sources, state.hiddenTwist, state.human.choice, state.human.durationText,
     state.human.notes, state.human.photos.map(p => p.sha256), ...PROVIDERS.map(p => state.runs[p.id].response)]);
   const currentDraft = savedDraft?.fingerprint === draftFingerprint ? savedDraft.draft : null;
@@ -498,6 +528,9 @@ export default function AiWorldExperimentStudio() {
     groundTruth:state.groundTruth, hiddenTwist:state.hiddenTwist, sources:state.sources,
     runs:state.runs
   });
+  const comparisonReady = state.mode==="recommend" ?
+    (Boolean(state.testQuestion.trim() && state.material.trim()) && completed===3) :
+    (fixtureReady && keyReady && allAnswersCollected);
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
@@ -881,6 +914,7 @@ export default function AiWorldExperimentStudio() {
       scheduleId: "",
       scheduleDate: "",
       title: item.title,
+      mode: "quiz", topicId:"",
       category: item.category,
       hook: item.hook,
       keyword: item.keyword,
