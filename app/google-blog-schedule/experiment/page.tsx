@@ -677,7 +677,7 @@ export default function AiWorldExperimentStudio() {
       if (state.fixtureMode === "pdf") {
         const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
         if (!blob) throw new Error("원본 PDF를 현재 브라우저에서 찾을 수 없습니다. STEP 1에서 다시 등록하세요.");
-        if (blob.size > 5_000_000) throw new Error("자동 생성에 사용할 PDF는 최대 5MB입니다.");
+        if (blob.size > 2_500_000) throw new Error("자동 생성 PDF는 최대 2.5MB입니다. Vercel 요청 제한을 고려해 용량을 줄이거나 더 간단한 PDF를 사용하세요.");
         pdfDataUrl = await new Promise<string>((resolve,reject) => {
           const reader=new FileReader();
           reader.onload=()=>resolve(String(reader.result || ""));
@@ -858,7 +858,7 @@ export default function AiWorldExperimentStudio() {
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!allScored || (currentDraft && !draftApproved)) {
+    if (!allScored || (!advancedMode && (!currentDraft || !draftApproved))) {
       setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
       return;
     }
@@ -1022,6 +1022,8 @@ export default function AiWorldExperimentStudio() {
           <div className={styles.quickDraftActions}>
             <button onClick={()=>void copy(currentDraft.title,"최종 영문 제목")}>제목 복사</button>
             <button onClick={()=>void copy(currentDraft.html,"Blogger HTML 원고")}>글 HTML 복사</button>
+            <button onClick={()=>void copy(currentDraft.metaDescription,"검색 설명")}>검색 설명 복사</button>
+            <button onClick={()=>void copy(currentDraft.labels.join(", "),"블로그 라벨")}>라벨 복사</button>
           </div>
           <label className={styles.field}><span>Blogger 영문 HTML 초안 (여기서 바로 수정할 수 있습니다)</span>
             <textarea className={styles.quickDraftHtml} value={currentDraft.html}
