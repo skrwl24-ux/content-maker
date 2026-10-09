@@ -179,6 +179,21 @@ function defaultCommonPrompt(s: ExperimentState) {
 }
 
 function reportText(s: ExperimentState) {
+  const human=s.human||emptyHuman();
+  const humanParticipated=Boolean(human.choice.trim());
+  const humanRecord=[
+    "HUMAN PARTICIPANT — operator-provided testimony only",
+    "Participation: "+(humanParticipated?"yes":"no confirmed attempt"),
+    "Own answer: "+(human.choice||"not recorded"),
+    "Time: "+(validateChallengeDuration(human.durationText)&&human.durationText.trim()?human.durationText+" (mm:ss; "+(human.durationSource==="timer"?"on-page timer":"operator entered")+")":"not recorded"),
+    "Difficulty as self-reported: "+({easy:"easy",medium:"medium",hard:"hard"}[human.difficulty]||"not recorded"),
+    "Answered before seeing the AI outputs? "+(human.attemptedBeforeAI?"operator reports yes":"not confirmed"),
+    "Human verdict: "+(human.verdict||"not assessed"),
+    "Human's actual first-person note: "+(human.notes||"not recorded"),
+    "Actual photos saved locally (NOT automatically passed to ChatGPT or Blogger): "+
+      (human.photos.length?human.photos.map((p,i)=>"human_photo_"+String(i+1).padStart(2,"0")+" [original "+p.name+"; SHA-256 "+p.sha256+"]").join("; "):"none"),
+    "Never invent human experiences, visual content of photos, or timing results.",
+  ].join("\n");
   const rows = PROVIDERS.map(p => {
     const r = s.runs[p.id];
     return [
@@ -225,7 +240,10 @@ function reportText(s: ExperimentState) {
     "GROUND-TRUTH SOURCES",
     s.sources || "Not recorded",
     "",
-    "MODEL RESULTS",
+    "HUMAN CHALLENGE",
+    humanRecord,
+    "",
+    "THREE AI MODEL RESULTS",
     rows,
     "",
     "IMPORTANT LIMIT",
@@ -250,10 +268,17 @@ ${report}
 
 [CORE RULE]
 This is a real experiment write-up, not a generic AI article.
-Use only the recorded experiment setup, ground truth and model results above.
+Use only the recorded experiment setup, precommitted ground truth, real human attempt if recorded, and actual model results above.
 Do not invent scores, model versions, answers, sources or observations.
 Use the actual original answers to describe what ChatGPT, Claude and Gemini EACH selected, what their reasoning literally says, and how their approaches differ.
 Present the three provider answers with individually attributed short VERBATIM excerpts, not invented quotes or an AI-written imitation.
+If a human answer is present, weave a short engaging first-person "I Tried It Myself" section from the operator's REAL notes, actual choice, difficulty and recorded time (if supplied).
+Translate and polish any Korean notes into natural English, but NEVER fabricate hesitations, reactions, discoveries, dialogue, sensory details or actions.
+Include the human entry as a fourth row in the result comparison ONLY when an actual human choice is provided. If the human verdict is unassessed, say "not scored" and never infer correctness.
+Say the human attempt occurred before reading AI responses ONLY when the explicit operator checkbox confirms this. Otherwise keep the order and claimed independence neutral.
+Human time is an operator-entered or locally measured elapsed time. Never compare it to AI response times unless those times were actually measured and recorded.
+If real human photos are listed, tell the operator to attach the actual photo files to the blog writing request or upload them separately to Blogger. Never infer a photo's visual contents from the filename; only describe what is verifiably visible if the photo is actually attached and inspected.
+If no human answer was recorded, omit the human-attempt story. Do not invent one.
 If an excerpt was manually selected, confirm it occurs exactly in that providers original response; otherwise select a brief exact excerpt from its saved response.
 If there is no noteworthy error, do not invent a weirdest mistake. Use human-confirmed verdicts for the scoreboard; numeric metrics are optional and never inferred from blank fields.
 Make the reader guess before showing the private answer, but do not delay disclosure so long that the result becomes unclear.
@@ -274,26 +299,27 @@ If one field is missing, omit it or clearly label it as not recorded. The answer
 Use this as the default flow, adapting naturally:
 1. Short reader-facing hook and challenge (invite readers to try themselves)
 2. The identical PDF and question given to all three (include the recorded file checksum only if useful)
-3. What ChatGPT Actually Said (its choice, reasoning, accurate excerpt)
-4. What Claude Actually Said (its choice, reasoning, accurate excerpt)
-5. What Gemini Actually Said (its choice, reasoning, accurate excerpt)
-6. Where Their Reasoning Diverged (verified comparison, no invented thoughts)
-7. The Big Reveal: Correct Answer and Source
-8. Who Got It Right? Grounded three-row scoreboard
-9. Most Surprising Real Response (only if one was actually observed)
-10. What This One Experiment Does and Does Not Show
-11. Final Verdict and invitation to reader
+3. I Tried It Myself (ONLY if the human actually submitted an answer; first-person real experience with photo placeholder)
+4. What ChatGPT Actually Said (its choice, reasoning, accurate excerpt)
+5. What Claude Actually Said (its choice, reasoning, accurate excerpt)
+6. What Gemini Actually Said (its choice, reasoning, accurate excerpt)
+7. Where Their Reasoning Diverged (verified comparison, no invented thoughts)
+8. The Big Reveal: Correct Answer and Source
+9. Who Got It Right? Human + three AIs if human participated; otherwise three AIs
+10. Most Surprising Real Response (only if one was actually observed)
+11. What This One Experiment Does and Does Not Show
+12. Final Verdict and invitation to reader
 
-Include a compact comparison table when all three models have reviewed correctness verdicts.
+Include a compact comparison table for the three AI models. Include Human ONLY if their answer was recorded; never invent an answer or verdict.
 Mention the ground-truth source methodology with clickable primary links where verified.
 The "Weirdest Mistake" section should use only the recorded mistakes.
 
 [IMAGE PLACEHOLDERS — exact lines]
 [IMAGE 00 — Experiment hook]
-[IMAGE 01 — Test setup]
+[IMAGE 01 — Real human challenge photo if actually provided, otherwise test setup]
 [IMAGE 02 — AI answers]
 [IMAGE 03 — The reveal]
-[IMAGE 04 — Scoreboard]
+[IMAGE 04 — Human vs AI results when applicable, otherwise three-AI scoreboard]
 [IMAGE 05 — Weirdest mistake]
 
 [BLOGGER HTML]
