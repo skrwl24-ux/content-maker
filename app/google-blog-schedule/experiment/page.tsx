@@ -186,7 +186,7 @@ function reportText(s: ExperimentState) {
     "Participation: "+(humanParticipated?"yes":"no confirmed attempt"),
     "Own answer: "+(human.choice||"not recorded"),
     "Time: "+(validateChallengeDuration(human.durationText)&&human.durationText.trim()?human.durationText+" (mm:ss; "+(human.durationSource==="timer"?"on-page timer":"operator entered")+")":"not recorded"),
-    "Difficulty as self-reported: "+({easy:"easy",medium:"medium",hard:"hard"}[human.difficulty]||"not recorded"),
+    "Difficulty as self-reported: "+(human.difficulty ? {easy:"easy",medium:"medium",hard:"hard"}[human.difficulty] : "not recorded"),
     "Answered before seeing the AI outputs? "+(human.attemptedBeforeAI?"operator reports yes":"not confirmed"),
     "Human verdict: "+(human.verdict||"not assessed"),
     "Human's actual first-person note: "+(human.notes||"not recorded"),
@@ -464,7 +464,7 @@ export default function AiWorldExperimentStudio() {
     });
   }
   function updateGroundTruth(next: string) {
-    setState(prev=>({...prev,groundTruth:next,
+    setState(prev=>({...prev,groundTruth:next,human: next!==prev.groundTruth ? {...prev.human,verdict:""} : prev.human,
       runs:next!==prev.groundTruth?Object.fromEntries(PROVIDERS.map(p=>[p.id,{
         ...prev.runs[p.id], verdict:"", reviewed:false
       }])) as ExperimentState["runs"]:prev.runs}));
@@ -561,6 +561,7 @@ export default function AiWorldExperimentStudio() {
       groundTruth: packet.groundTruth, sources: packet.sources,
       sourceStatus: packet.sourceStatus, sourceVerified: false, lockedAt: "", commonPrompt: promptChanged ? "" : prev.commonPrompt,
       fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
+      human: packet.groundTruth!==prev.groundTruth?{...prev.human,verdict:""}:prev.human,
       runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : (packet.groundTruth !== prev.groundTruth ? Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"" as const,reviewed:false}])) as ExperimentState["runs"] : prev.runs) }));
     setNotice(preset ? "텍스트 예제 입력 완료. PDF 실험과는 별개입니다." :
       (hasResponses() && !promptChanged ? "기존 세 AI 답변은 유지하고 비공개 정답·출처만 가져왔습니다." : "Work 질문·비공개 정답·출처를 가져왔습니다. PDF와 질문이 맞는지 확인하세요."));
@@ -619,15 +620,39 @@ export default function AiWorldExperimentStudio() {
       PROVIDERS.forEach(p=>{const r=state.runs[p.id];zip.file("04_ORIGINAL_AI_ANSWERS/"+p.id+".txt",
         "Model: "+(r.model||"not recorded")+"\nDate: "+(r.testedAt||"not recorded")+
         "\nSame PDF verified by operator: "+(r.usedSamePdf?"yes":"not verified")+"\n\n"+(r.response||"NO ANSWER COLLECTED"));});
+      const human=state.human||emptyHuman();
+      if(human.photos.length){
+        const assets=[];
+        for(let i=0;i<human.photos.length;i++){
+          const meta=human.photos[i];
+          const photo=await getHumanPhoto(meta.sha256);
+          if(!photo)throw new Error("사람 도전 사진 원본이 없습니다: "+meta.name);
+          const ext=meta.mimeType==="image/png"?"png":meta.mimeType==="image/webp"?"webp":"jpg";
+          const filename="human_photo_"+String(i+1).padStart(2,"0")+"."+ext;
+          zip.file("05_HUMAN_CHALLENGE/"+filename,photo);
+          assets.push({filename,originalName:meta.name,sha256:meta.sha256,bytes:meta.bytes});
+        }
+        zip.file("05_HUMAN_CHALLENGE/photo_manifest.json",JSON.stringify(assets,null,2));
+      }
+      zip.file("05_HUMAN_CHALLENGE/human_notes.txt",[
+        "Human participant was optional; do not invent missing experiences.",
+        "Human actual answer: "+(human.choice||"not recorded"),
+        "Time (mm:ss): "+(validateChallengeDuration(human.durationText)?human.durationText:"invalid / not recorded"),
+        "Duration recorded by: "+(human.durationSource||"not recorded"),
+        "Difficulty: "+(human.difficulty||"not recorded"),
+        "Human notes: "+(human.notes||"not recorded"),
+        "Before viewing AI replies (operator confirmation): "+(human.attemptedBeforeAI?"yes":"not confirmed"),
+        "Human verdict: "+(human.verdict||"not assessed"),
+      ].join("\n"));
       zip.file("05_OPERATOR_RESULTS/report.txt",report);
       zip.file("05_OPERATOR_RESULTS/records.json",JSON.stringify(state,null,2));
       zip.file("06_BLOGGER/article_request.txt",articlePrompt);
-      zip.file("README.txt","PRIVATE EVIDENCE ARCHIVE. Never give the whole ZIP or the PRIVATE answer key to a test AI before collecting replies. Only submit the identical blind PDF and exact question. PDF file integrity is recorded by SHA-256; the operator must actually attach the same file to each model. Original responses are manually pasted, never fabricated.");
+      zip.file("README.txt","PRIVATE EVIDENCE ARCHIVE. Never give the whole ZIP or the PRIVATE answer key to test models. Send only the identical blind PDF and exact question. Human challenge photos are ORIGINAL user-provided image bytes; they can include EXIF/GPS/private content. Review them before publishing. Photos are never automatically attached to ChatGPT or Blogger. Attach chosen human photo(s) to the article-writing chat manually and upload them separately to Blogger. Human first-person details must come from the actual notes, not invented moments.");
       const archive=await zip.generateAsync({type:"blob"});
       const url=URL.createObjectURL(archive),a=document.createElement("a");
       a.href=url;a.download=(slugify(state.title)||"ai-world-experiment")+"-evidence.zip";a.click();
       window.setTimeout(()=>URL.revokeObjectURL(url),60000);
-      setNotice("PDF·비공개 정답·질문·원문 답변·블로그 요청서를 ZIP으로 보관했습니다.");
+      setNotice("PDF·AI 답변·사람 도전 사진과 후기·비공개 정답·블로그 요청서를 ZIP으로 백업했습니다.");
     }catch(e){setNotice(e instanceof Error?e.message:"ZIP 백업 실패");}
     finally{setArchiving(false);}
   }
@@ -667,6 +692,7 @@ export default function AiWorldExperimentStudio() {
       sourceStatus: "needs_verification",
       lockedAt: "",
       commonPrompt: "",
+      human:emptyHuman(),
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
     }));
     setPacketInput("");
@@ -702,6 +728,7 @@ export default function AiWorldExperimentStudio() {
     if (!window.confirm("현재 실험 설계와 AI 답변을 모두 초기화할까요?")) return;
     setState(emptyState());
     setActiveProvider("chatgpt");
+    setTimerStartedAt(null);setTimerNow(0);
   }
 
   const run = state.runs[activeProvider];
@@ -876,6 +903,17 @@ export default function AiWorldExperimentStudio() {
         <label className={styles.field}><span>비공개 트릭 · 테스트 AI에게 전달하지 않음</span><textarea value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="필요할 때만 기록" /></label>
       </details>
       {!keyReady && <p className={styles.muted}>답변 수집에는 필요하지 않습니다. 최종 글을 만들 때 Work의 원래 정답과 근거를 입력하세요.</p>}
+      {state.human.choice.trim() && <div className={styles.humanVerdict}>
+        <strong>Human · 내가 직접 고른 답</strong>
+        <text>{state.human.choice}</text>
+        <label><span>내 정답 여부 (선택)</span><select disabled={!keyReady} value={state.human.verdict}
+            onChange={e=>patchHuman({verdict:e.target.value as HumanChallenge["verdict"]})}>
+          <option value="">정답표와 비교해 선택하세요</option>
+          <option value="correct">정답</option><option value="incorrect">오답</option>
+          <option value="partial">부분 정답</option><option value="uncertain">판정 보류</option>
+        </select></label>
+        <small>미판정이어도 AI 3사 글 제작은 가능합니다. 최종 글에서는 '사람 미채점'이라고 표시합니다.</small>
+      </div>}
       <div className={styles.scoreCards}>
         {PROVIDERS.map(p => {
           const r=state.runs[p.id];
@@ -903,8 +941,10 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>독자에게 먼저 문제를 보여주고 → 세 AI의 선택과 원문 이유를 비교하고 → 마지막에 정답과 뜻밖의 반응을 공개하는 글 요청서를 만듭니다.</p></div></div>
-      <div className={styles.summaryRow}>{PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
+      <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>문제를 공개하고 → 실제 사람의 경험(선택 참여) → 세 AI의 원문 판단 → 네 참가자의 결과 비교 → 정답 공개 순서로 작성합니다.</p></div></div>
+      <div className={styles.summaryRow}>
+        {state.human.choice.trim() && <div><strong>Human</strong><span>{state.human.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[state.human.verdict]:"정답 미판정"}</span><small>{state.human.choice} {state.human.durationText ? " · "+state.human.durationText : ""}</small></div>}
+        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
@@ -912,6 +952,7 @@ export default function AiWorldExperimentStudio() {
         <button className={styles.queue} disabled={!allScored} onClick={sendToQueue}>최종 글 제작을 발행리스트로 보내기 →</button>
         <button disabled={!fixtureReady || archiving || (state.fixtureMode==="pdf" && !pdfAvailable)} onClick={()=>void exportEvidenceZip()}>비공개 원본·PDF·답변 ZIP 백업 ↓</button>
       </div>
+      {state.human.photos.length>0 && <p className={styles.muted}>중요: 등록한 실제 사진은 GPT로 자동 전송되지 않습니다. ZIP으로 백업하거나 사진별 다운로드 후 글 작성 대화에 직접 첨부하세요. Blogger에도 별도 업로드해야 합니다.</p>}
       <details className={styles.preview}><summary>검증 리포트 미리보기</summary><pre>{report}</pre></details>
       <details className={styles.preview}><summary>최종 글 요청서 미리보기</summary><textarea readOnly value={articlePrompt}/></details>
       <div className={styles.resetRow}><button onClick={reset}>현재 실험 초기화</button><small>실험 설계와 답변은 이 브라우저에 자동 저장됩니다.</small></div>
