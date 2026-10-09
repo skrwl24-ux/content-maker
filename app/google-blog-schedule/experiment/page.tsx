@@ -564,12 +564,12 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Work에서 만든 PDF 한 장 등록</h2><p>Work가 PDF·정답표·원클릭 가져오기 JSON을 만들고, 실험실은 동일 PDF를 세 AI에게 전달할 수 있게 보관합니다.</p></div><em className={state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?styles.good:styles.wait):(state.material.trim()?styles.good:styles.wait)}>{state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?"PDF 원본 등록됨":"PDF 원본 필요"):(state.material.trim()?"텍스트 자료 준비됨":"텍스트 자료 필요")}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Work에서 만든 PDF 한 장 등록</h2><p>Work에서 내려받을 파일은 블라인드 PDF 1개면 됩니다. 비공개 정답·출처·공통 질문은 Work 답변의 JSON 텍스트를 복사해 보관합니다.</p></div><em className={state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?styles.good:styles.wait):(state.material.trim()?styles.good:styles.wait)}>{state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?"PDF 원본 등록됨":"PDF 원본 필요"):(state.material.trim()?"텍스트 자료 준비됨":"텍스트 자료 필요")}</em></div>
       <div className={styles.actions}>
         <button className={styles.primary} disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildWorkPdfRequest(state), "Work용 PDF 제작 요청서")}>① Work용 PDF 제작 요청서 복사</button>
         <button disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildPacketRequest(state), "텍스트 실험 자료 제작 요청서")}>텍스트만 쓰는 경우 요청서 복사</button>
       </div>
-      <p>ChatGPT의 <strong>Work 모드</strong>에 제작 요청서를 붙여넣고 실제 blind_test.pdf, PRIVATE_answer_key.txt, EXPERIMENT_PACKET_JSON.txt를 받으세요. 일반 채팅에서 문서가 생성되었다는 설명만 받았다면 파일이 준비된 것이 아닙니다.</p>
+      <p>ChatGPT <strong>Work 모드</strong>에서 <strong>blind_test.pdf 한 개만</strong> 내려받으세요. Work가 채팅에 표시한 비공개 JSON은 아래 칸에 복사합니다. 세 AI에는 PDF와 공통 질문만 전달하고 JSON은 보여주지 않습니다.</p>
       <div className={styles.fixtureChoice}>
         <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="pdf"} onChange={()=>setState(prev=>({...prev,fixtureMode:"pdf",sourceVerified:false}))} /> PDF 실험 (권장)</label>
         <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="text"} onChange={()=>setState(prev=>({...prev,fixtureMode:"text",sourceVerified:false}))} /> 텍스트 실험</label>
@@ -585,9 +585,9 @@ export default function AiWorldExperimentStudio() {
       </div> : <div className={styles.actions}>
         {(state.title===FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button disabled={Boolean(state.lockedAt)} onClick={()=>applyPacket(FAKE_COUNTRY_PACKET,true)}>텍스트 국가 10개 예제 채우기</button>}
       </div>}
-      <label className={styles.field}><span>③ Work가 준 EXPERIMENT_PACKET_JSON.txt 내용 붙여넣기</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON] 내용을 그대로 붙여넣으세요. 질문·비공개 정답·출처를 자동으로 채웁니다." /></label>
+      <label className={styles.field}><span>③ Work 답변의 비공개 JSON 블록 붙여넣기 (별도 파일 필요 없음)</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON] 내용을 그대로 붙여넣으세요. 질문·비공개 정답·출처를 자동으로 채웁니다." /></label>
       <div className={styles.actions}><button disabled={Boolean(state.lockedAt)||!packetInput.trim()} onClick={importPacket}>질문·정답·출처 자동 채우기</button></div>
-      <p>PDF와 가져오기 JSON은 반드시 <strong>같은 Work 결과물</strong>이어야 합니다. 출처·정답이 PDF와 맞는지는 잠그기 전에 직접 확인하세요.</p>
+      <p>PDF와 비공개 JSON은 반드시 <strong>같은 Work 제작 결과</strong>여야 합니다. 정답·출처가 PDF와 맞는지 확인하고 잠그세요. 추가 PDF 미리보기 이미지는 나중에 필요할 때 만들면 됩니다.</p>
     </section>
 
     <section className={styles.panel}>
