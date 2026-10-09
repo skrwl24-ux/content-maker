@@ -48,14 +48,14 @@ export async function POST(req: NextRequest) {
     const question = clean(state.testQuestion, 2000);
     const truth = clean(state.groundTruth, 10000);
     const sources = clean(state.sources, 18000);
-    const pdf = clean(body?.pdfDataUrl, 7_500_000);
+    const pdf = clean(body?.pdfDataUrl, 3_800_000);
     const fixtureMode = state.fixtureMode === "text" ? "text" : "pdf";
     const material = clean(state.material, 16000);
     if (!title || !question || !truth || !sources || (fixtureMode === "text" ? !material : !pdf)) {
       return NextResponse.json({ error: "제목·공통 질문·원래 정답과 근거·원본 자료가 모두 필요합니다." }, { status: 400 });
     }
-    if (fixtureMode === "pdf" && (!pdf.startsWith("data:application/pdf;base64,") || pdf.length > 7_000_000)) {
-      return NextResponse.json({ error: "PDF 원본을 읽지 못했거나 5MB 제한을 초과했습니다." }, { status: 400 });
+    if (fixtureMode === "pdf" && (!pdf.startsWith("data:application/pdf;base64,") || pdf.length > 3_800_000)) {
+      return NextResponse.json({ error: "PDF 원본을 읽지 못했거나 2.5MB 제한을 초과했습니다." }, { status: 400 });
     }
     const runs = Object.fromEntries(NAMES.map(name => [name, {
       response: clean(state.runs?.[name]?.response, 35000),
