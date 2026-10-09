@@ -59,3 +59,23 @@ test("Work requests one blind PDF while private answer and question remain copya
   assert.match(request, /one.*PDF file/i);
   assert.match(request, /real selectable PDF text/i);
 });
+
+
+test("receipt topic gets receipt-specific prompt, not the fake-country question", async () => {
+  const { suggestedExperimentQuestion, mismatchedExperimentQuestion } = await load();
+  const title = "Can AI Guess the Country From a Supermarket Receipt?";
+  const suggested = suggestedExperimentQuestion(title);
+  assert.match(suggested, /supermarket receipt/i);
+  assert.match(suggested, /which country/i);
+  assert.doesNotMatch(suggested, /ten countries|fictional|fake/i);
+  assert.equal(mismatchedExperimentQuestion(title, "Which one of these ten countries is not real? Explain briefly."), true);
+  assert.equal(mismatchedExperimentQuestion(title, suggested), false);
+});
+test("fake country topic rejects a receipt country-identification question", async () => {
+  const { suggestedExperimentQuestion, mismatchedExperimentQuestion } = await load();
+  const title = "I Gave AI 10 Countries — One Was Fake. Would It Notice?";
+  const suggested = suggestedExperimentQuestion(title);
+  assert.match(suggested, /fictional/);
+  assert.equal(mismatchedExperimentQuestion(title, "Which country issued the supermarket receipt?"), true);
+  assert.equal(mismatchedExperimentQuestion(title, suggested), false);
+});
