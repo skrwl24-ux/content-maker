@@ -634,6 +634,7 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], co
   if (row.kind === "experiment") {
     const recommendationPrompt = buildRecommendationImagePrompt(row, slot);
     if (recommendationPrompt) return recommendationPrompt;
+    if (row.experimentMode === "recommend") return "추천 비교 이미지 요청서를 만들 수 없습니다. 실험 기록에 공통 질문 및 3사의 원문 답변이 있는지 확인하고 실험실에서 발행리스트로 다시 전달해 주세요. 근거 없이 이미지를 생성하지 않습니다.";
     const image = imageSlotFor(row, slot);
     return [
       "전 세계 독자를 위한 실제 AI 실험 글의 영문 정보 이미지 1장만 제작해줘.",
@@ -810,7 +811,10 @@ function replaceImagePlaceholders(html: string, row: ScheduleRow) {
     const loading = slot.id === "00" ? "eager" : "lazy";
     const imageHtml = `<p><img src="${escapeHtmlAttr(src)}" alt="${alt}" loading="${loading}"></p>`;
     const placeholder = new RegExp(`\\[IMAGE ${slot.id} — [^\\]]+\\]`, "g");
-    output = output.replace(placeholder, imageHtml);
+    // Legacy experiment drafts included only 00~03; append missing 04/05 images
+    // after the article so they are not silently dropped.
+    if (placeholder.test(output)) output = output.replace(placeholder, imageHtml);
+    else if (row.kind === "experiment" && !output.includes(src)) output += "\n" + imageHtml;
   }
   return output;
 }
@@ -1019,6 +1023,7 @@ export default function GoogleBlogSchedulePage() {
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
   const selectedExperimentReady = Boolean(selected?.kind === "experiment" && selected.labReport?.trim() && selected.labPrompt?.trim());
   const selectedRecommendationImages = Boolean(selected?.kind === "experiment" && parseRecommendationReport(selected.labReport));
+  const imageEvidenceReady = Boolean(selected?.kind !== "experiment" || selected?.experimentMode !== "recommend" || selectedRecommendationImages);
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
@@ -2211,6 +2216,7 @@ export default function GoogleBlogSchedulePage() {
               <span className={styles.stepNo}>02</span>
               <h3>이미지 요청서 6장</h3>
               <p>{selected.kind === "experiment" ? (selectedRecommendationImages ? "6장 중복 방지 적용: 00 관심·01 공통 질문·02 선택 결과·03 선정 이유·04 단점·05 독자 체크리스트. 각각 다른 근거와 디자인으로 제작합니다." : selected.experimentMode === "recommend" ? "대표·공통 질문·3사 추천·선정 이유·장단점·요약 6장. 존재하지 않는 정답이나 승자는 넣지 않습니다." : "실험 대표·테스트 설정·실제 AI 답변·정답 공개·근거 검증·발견 6장. 없는 사실은 넣지 않습니다.") : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              {!imageEvidenceReady && <p>⚠️ 현재 저장된 실험 자료에서 공통 질문과 실제 답변을 읽을 수 없습니다. 실험실에서 같은 발행리스트 항목으로 다시 전달하면 이미지를 제작할 수 있습니다.</p>}
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
                   const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
@@ -2219,7 +2225,7 @@ export default function GoogleBlogSchedulePage() {
                     <div key={slot.id} className={styles.imagePromptItem}>
                       <div><b>{slot.id} · {imageSlotFor(selected, slot).label}</b><small>{imageSlotFor(selected, slot).role}</small></div>
                       <div>
-                        <a
+                        {imageEvidenceReady ? <a
                           href={chatUrl}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -2227,9 +2233,13 @@ export default function GoogleBlogSchedulePage() {
                             startWork();
                             void copyText(prompt, `${slot.id} 이미지 요청서를 열고 복사했습니다.`);
                           }}
-                        >GPT 열기</a>
-                        <button onClick={() => void copyText(prompt, `${slot.id} 이미지 요청서를 복사했습니다.`)}>복사</button>
+                        >GPT 열기</a> : <span>실험 원문 확인 필요</span>}
+                        <button disabled={!imageEvidenceReady} onClick={() => void copyText(prompt, `${slot.id} 이미지 요청서를 복사했습니다.`)}>복사</button>
                       </div>
+                      <details className={styles.promptDetails}>
+                        <summary>요청서 내용 확인</summary>
+                        <textarea readOnly value={prompt} />
+                      </details>
                     </div>
                   );
                 })}
