@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
-import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion } from "@/lib/ai-world-experiment-packet.mjs";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion, getExperimentWorkflowStatus } from "@/lib/ai-world-experiment-packet.mjs";
 import { storeExperimentPdf, getExperimentPdf } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta } from "@/lib/ai-world-experiment-files.mjs";
 
@@ -361,17 +361,13 @@ export default function AiWorldExperimentStudio() {
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
   const suggestedQuestion = suggestedExperimentQuestion(state.title);
-  const mismatchedQuestion = mismatchedExperimentQuestion(state.title, state.testQuestion) || mismatchedExperimentQuestion(state.title, state.commonPrompt);
-  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim()))) && !(state.fixtureMode === "pdf" && /answer|solution|private|norvessa/i.test(state.pdf?.name || ""));
-  const fixtureReady = Boolean(state.testQuestion.trim() && !mismatchedQuestion && noKeyLeak &&
-    (state.fixtureMode === "pdf" ? (state.pdf && pdfAvailable) : state.material.trim()));
-  const allAnswersCollected = PROVIDERS.every(p => Boolean(state.runs[p.id].response.trim()) &&
-    (state.fixtureMode !== "pdf" || state.runs[p.id].usedSamePdf));
-  const keyReady = Boolean(state.groundTruth.trim() && state.sources.trim());
-  const allScored = Boolean(fixtureReady && keyReady && allAnswersCollected && PROVIDERS.every(p => {
-    const r = state.runs[p.id];
-    return r.reviewed && r.verdict && (!r.highlight.trim() || r.response.includes(r.highlight.trim()));
-  }));
+  const {mismatchedQuestion, noKeyLeak, fixtureReady, allAnswersCollected, keyReady, allScored} = getExperimentWorkflowStatus({
+    title:state.title, testQuestion:state.testQuestion, commonPrompt,
+    fixtureMode:state.fixtureMode, pdfSha256:state.pdf?.sha256 || "",
+    pdfName:state.pdf?.name || "", pdfAvailable, material:state.material,
+    groundTruth:state.groundTruth, hiddenTwist:state.hiddenTwist, sources:state.sources,
+    runs:state.runs
+  });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
