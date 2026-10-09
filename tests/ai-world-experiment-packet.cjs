@@ -176,3 +176,39 @@ test("changing a PDF or challenge prompt safeguards the user's real photo and hu
   assert.match(src,/human:emptyHuman\(\),\s*runs/);
   assert.match(src,/hasAnyResults\(\) && !window\.confirm\("기존 PDF와 다른 파일/);
 });
+
+
+test("default basic test uses identical model-neutral instructions and does not hardcode vendor model names", async () => {
+  const {BASELINE_PROFILE,getProviderBaselineHint}=await import("../lib/ai-world-experiment-baseline.mjs");
+  assert.match(BASELINE_PROFILE.commonInstruction,/Do not browse the web/);
+  assert.match(BASELINE_PROFILE.commonInstruction,/attached test material/);
+  for(const id of ["chatgpt","claude","gemini"]){
+    const info=getProviderBaselineHint(id);
+    assert.ok(info);
+    assert.ok(info.steps.length>=3);
+    assert.ok(!info.steps.join(" ").match(/GPT-5\.6|GPT-6|Sonnet 4\.5|Gemini 3\.1 Flash/));
+  }
+});
+test("free/basic comparison status requires actual model and confirmations; paid or web usage is disclosed", async () => {
+  const {baselineStatus}=await import("../lib/ai-world-experiment-baseline.mjs");
+  const intended={accountPlan:"free",chatMode:"standard",webUsed:"no",extraToolsUsed:"no",newChat:true,model:"displayed model",response:"result"};
+  assert.equal(baselineStatus(intended).strictFreeBaseline,true);
+  assert.equal(baselineStatus({...intended,accountPlan:"paid"}).strictFreeBaseline,false);
+  assert.match(baselineStatus({...intended,accountPlan:"paid"}).deviations.join(","),/paid plan/);
+  assert.equal(baselineStatus({...intended,webUsed:"yes"}).strictFreeBaseline,false);
+  assert.equal(baselineStatus({...intended,webUsed:"unknown"}).complete,false);
+  assert.equal(baselineStatus({...intended,extraToolsUsed:"yes"}).strictFreeBaseline,false);
+  assert.equal(baselineStatus({...intended,model:""}).complete,false);
+  assert.equal(baselineStatus({...intended,newChat:false}).strictFreeBaseline,false);
+});
+test("studio defaults new tests to basic instructions and preserves legacy stored replies",()=>{
+  const fs=require("node:fs"),path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  assert.match(src,/protocol:"basic"/);
+  assert.match(src,/next\.protocol=next\.protocol==="basic"/);
+  assert.match(src,/BASELINE_PROFILE\.commonInstruction/);
+  assert.match(src,/function switchToBasicProtocol\(/);
+  assert.match(src,/getProviderBaselineHint\(activeProvider\)/);
+  assert.match(src,/baselineStatus\(run\)/);
+  assert.match(src,/Actual departures from baseline/);
+});
