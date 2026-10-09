@@ -1076,11 +1076,13 @@ export default function AiWorldExperimentStudio() {
       keyword: state.keyword || "AI experiment",
       slug: slugify(currentDraft?.title||state.title) || "ai-comparison-"+today(),
       note: state.mode==="recommend"?"AI 3사 추천 비교 · 정답 없는 주관적 판단 비교":"Global curiosity experiment · precommitted answer key and three actual responses",
-      labVersion: state.mode==="recommend"?"WORLD-COMPARISON-V1":"WORLD-LAB-V1",
-      labReport: comparisonReport,
+      labVersion: state.mode==="recommend"?"WORLD-COMPARISON-V2":"WORLD-LAB-V1",
+      labReport: state.mode==="recommend" ? buildExperimentScheduleReport(state) : comparisonReport,
       labPrompt: finalPrompt,
       experimentCategory: state.category,
       experimentHook: state.hook,
+      experimentMode: state.mode,
+      experimentQuestion: state.testQuestion,
     };
     try {
       localStorage.setItem(QUEUE_TRANSFER_KEY, JSON.stringify(pending));
