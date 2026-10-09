@@ -429,7 +429,7 @@ export default function AiWorldExperimentStudio() {
       groundTruth: packet.groundTruth, sources: packet.sources,
       sourceStatus: packet.sourceStatus, sourceVerified: false, lockedAt: "", commonPrompt: promptChanged ? "" : prev.commonPrompt,
       fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
-      runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : prev.runs }));
+      runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : (packet.groundTruth !== prev.groundTruth ? Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"" as const,reviewed:false}])) as ExperimentState["runs"] : prev.runs) }));
     setNotice(preset ? "텍스트 예제 입력 완료. PDF 실험과는 별개입니다." :
       (hasResponses() && !promptChanged ? "기존 세 AI 답변은 유지하고 비공개 정답·출처만 가져왔습니다." : "Work 질문·비공개 정답·출처를 가져왔습니다. PDF와 질문이 맞는지 확인하세요."));
   }
@@ -440,14 +440,20 @@ export default function AiWorldExperimentStudio() {
   }
   async function uploadPdf(file: File | null) {
     if (!file || pdfBusy) return;
-    if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 PDF를 등록하면 이 실험의 답변·채점 기록을 초기화합니다. 계속할까요?")) return;
     setPdfBusy(true);
     try {
       const meta = await storeExperimentPdf(file);
+      const isIdentical = meta.sha256 === state.pdf?.sha256 && state.fixtureMode === "pdf";
+      if (!isIdentical && hasResponses() && !window.confirm("기존 PDF와 다른 파일입니다. PDF가 바뀌면 세 AI의 답변과 판정도 초기화해야 합니다. 계속할까요?")) {
+        setNotice("PDF 변경을 취소했습니다. 기존 AI 답변은 그대로 보관됩니다."); return;
+      }
       setPdfAvailable(true);
-      setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta, sourceVerified: false, lockedAt: "",
-        runs: {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
-      setNotice("PDF 저장 완료. 질문을 확인한 뒤 세 AI에 동일하게 첨부하고 답변을 수집하세요.");
+      setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta,
+        sourceVerified: isIdentical ? prev.sourceVerified : false,
+        lockedAt: "",
+        runs: isIdentical ? prev.runs : {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+      setNotice(isIdentical ? "동일 PDF 재등록 완료. 기존 AI 답변은 유지됩니다." :
+        "PDF 등록 완료. 공통 질문을 확인하고 세 AI 답변을 받아오세요. 정답 입력은 나중에 해도 됩니다.");
     } catch (e) { setNotice(e instanceof Error ? e.message : "PDF 등록 실패"); }
     finally { setPdfBusy(false); }
   }
