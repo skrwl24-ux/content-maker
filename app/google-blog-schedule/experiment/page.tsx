@@ -397,6 +397,7 @@ export default function AiWorldExperimentStudio() {
   const [packetInput, setPacketInput] = useState("");
   const [advancedMode, setAdvancedMode] = useState(false);
   const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [draftFeedback, setDraftFeedback] = useState<{kind:"loading"|"error"|"success"; message:string}|null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null);
   const [draftApproved, setDraftApproved] = useState(false);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -822,8 +823,11 @@ export default function AiWorldExperimentStudio() {
   async function generateQuickDraft() {
     if (generatingDraft) return;
     if (!comparisonReady) {
-      setNotice("원본 PDF와 질문, Work 정답·근거, 세 AI의 답변을 확인하세요. 동일 PDF 확인도 필요합니다.");return;
+      const msg=state.mode==="recommend"?"공통 질문과 ChatGPT·Claude·Gemini의 원문 답변 3개가 필요합니다.":
+        "원본 PDF·정답키·같은 질문·세 AI의 답변을 모두 확인하세요.";
+      setDraftFeedback({kind:"error",message:msg});setNotice(msg);return;
     }
+    setDraftFeedback({kind:"loading",message:"AI에 글 작성 요청을 보냈습니다. 답변 비교와 Blogger 원고를 만드는 중입니다. 잠시 기다려 주세요."});
     setGeneratingDraft(true);setDraftApproved(false);
     try {
       let pdfDataUrl = "";
@@ -842,14 +846,24 @@ export default function AiWorldExperimentStudio() {
         method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({experiment:state,pdfDataUrl})
       });
-      const data=await response.json();
-      if (!response.ok || !data.draft) throw new Error(data.error || "자동 생성에 실패했습니다.");
+      let data: {draft?:AutoDraft;error?:string}|null=null;
+      try {data=await response.json();} catch {
+        throw new Error("서버가 정상적인 응답을 주지 않았습니다 (HTTP "+response.status+"). 서버 제한이나 일시적 오류일 수 있습니다.");
+      }
+      if (!response.ok || !data?.draft) throw new Error((data?.error || "글 작성 서버 오류")+" (HTTP "+response.status+")");
       setSavedDraft({fingerprint:draftFingerprint,draft:data.draft as AutoDraft});
+      setDraftFeedback({kind:"success",message:"원고가 생성됐습니다. 바로 아래에 AI 3사 비교와 Blogger 영문 HTML 결과가 표시됩니다."});
+      window.setTimeout(()=>{
+        document.getElementById("auto-draft-result")?.scrollIntoView({behavior:"smooth",block:"start"});
+      },150);
       setNotice((data.draft.needsReview?.length || 0) ?
         "초안은 완성됐지만 정답/PDF/원문에서 확인할 부분이 있습니다. 아래 경고를 먼저 검토하세요." :
         "AI 3사 비교와 영문 Blogger 초안을 자동으로 만들었습니다. 내용을 확인하고 확정하세요.");
-    } catch(e) {setNotice(e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.");}
-    finally {setGeneratingDraft(false);}
+    } catch(e) {
+      const msg=e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.";
+      setDraftFeedback({kind:"error",message:"블로그 글 생성 실패: "+msg});
+      setNotice(msg);
+    } finally {setGeneratingDraft(false);}
   }
   function approveQuickDraft() {
     if (!currentDraft?.ready || currentDraft.needsReview.length) {
@@ -1248,8 +1262,19 @@ export default function AiWorldExperimentStudio() {
           <button className={styles.quickGenerate} disabled={generatingDraft||!comparisonReady||!validateChallengeDuration(state.human.durationText)}
             onClick={()=>void generateQuickDraft()}>{generatingDraft?"세 AI 답변 분석 중…":"✦ 블로그 글 자동 제작"}</button>
           <p className={styles.quickHint}>버튼을 누를 때만 입력한 답변·메모와, 정답형 실험이라면 PDF까지 OpenAI API로 전송해 분석합니다. 사진 원본은 전송하지 않습니다.</p>
+          {draftFeedback&&<div className={draftFeedback.kind==="error"?styles.draftError:
+             draftFeedback.kind==="success"?styles.draftSuccess:styles.draftLoading}
+             role={draftFeedback.kind==="error"?"alert":"status"} aria-live="polite">
+            <strong>{draftFeedback.kind==="error"?"생성에 문제가 생겼습니다":
+              draftFeedback.kind==="success"?"글 생성 완료":"글 생성 중"}</strong>
+            <p>{draftFeedback.message}</p>
+            {draftFeedback.kind==="error"&&<div className={styles.actions}>
+              <button type="button" onClick={()=>void copy(draftFeedback.message,"오류 내용")}>오류 내용 복사</button>
+              <button type="button" disabled={generatingDraft} onClick={()=>void generateQuickDraft()}>다시 시도</button>
+            </div>}
+          </div>}
         </div>
-        {currentDraft&&<>
+        {currentDraft&&<div id="auto-draft-result" className={styles.draftResult}>
           <h3 className={styles.quickResultHeading}>{currentDraft.title}</h3>
           {currentDraft.needsReview.length>0&&<div className={styles.quickWarnings}><strong>확인 필요 — 발행 전 수정</strong>
             <ul>{currentDraft.needsReview.map((v,i)=><li key={i}>{v}</li>)}</ul>
@@ -1279,7 +1304,7 @@ export default function AiWorldExperimentStudio() {
             <button className={styles.queue} disabled={!draftApproved||(state.mode==="quiz"&&!allScored)} onClick={sendToQueue}>작성된 글 그대로 발행리스트에 등록 →</button>
             {state.mode==="quiz"&&<button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>}
           </div>
-        </>}
+        </div>}
         <div className={styles.resetRow}><button onClick={reset}>새 실험 초기화</button><small>입력값과 생성 글은 브라우저에 저장됩니다. 발행은 최종 확인 후 진행하세요.</small></div>
       </section>
     </>}
