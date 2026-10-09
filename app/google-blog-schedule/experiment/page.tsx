@@ -905,7 +905,7 @@ export default function AiWorldExperimentStudio() {
       {!keyReady && <p className={styles.muted}>답변 수집에는 필요하지 않습니다. 최종 글을 만들 때 Work의 원래 정답과 근거를 입력하세요.</p>}
       {state.human.choice.trim() && <div className={styles.humanVerdict}>
         <strong>Human · 내가 직접 고른 답</strong>
-        <text>{state.human.choice}</text>
+        <span>{state.human.choice}</span>
         <label><span>내 정답 여부 (선택)</span><select disabled={!keyReady} value={state.human.verdict}
             onChange={e=>patchHuman({verdict:e.target.value as HumanChallenge["verdict"]})}>
           <option value="">정답표와 비교해 선택하세요</option>
