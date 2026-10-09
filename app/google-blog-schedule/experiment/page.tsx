@@ -1086,7 +1086,7 @@ export default function AiWorldExperimentStudio() {
         </div>
       </div>
       <div className={styles.topicBankTools}>
-        <button className={styles.topicNewButton} disabled={topicGeneratorBusy}
+        <button className={styles.topicNewButton}
           onClick={requestMoreTopics}>✦ ChatGPT에서 주제 10개 받기</button>
         <button onClick={()=>setTopicFilter("open")} aria-pressed={topicFilter==="open"}>미사용·진행 중</button>
         <button onClick={()=>setTopicFilter("used")} aria-pressed={topicFilter==="used"}>사용 완료</button>
