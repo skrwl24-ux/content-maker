@@ -460,27 +460,45 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Ground Truth부터 잠그기</h2><p>AI 답변을 보기 전에 정답과 출처를 먼저 저장해야 결과를 끼워 맞추지 않습니다.</p></div><em className={truthReady ? styles.good : styles.wait}>{truthReady ? "✓ 정답 준비" : "정답·출처 필요"}</em></div>
-      <div className={styles.grid2}>
-        <label><span>영문 제목</span><input value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
-        <label><span>카테고리</span><input value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
-        <label><span>검색 문구</span><input value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
-        <label><span>후킹 포인트</span><input value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
+      <div className={styles.panelHead}><div><span>STEP 02</span><h2>질문에 맞는 실험 자료 만들기</h2><p>제목만으로는 실험할 수 없습니다. AI에게 보여줄 자료와 비공개 정답표를 별도로 준비합니다.</p></div><em className={state.material.trim() ? styles.good : styles.wait}>{state.material.trim() ? "자료 준비됨" : "자료 없음"}</em></div>
+      <div className={styles.actions}>
+        {(state.title === FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button className={styles.primary} disabled={Boolean(state.lockedAt)} onClick={() => applyPacket(FAKE_COUNTRY_PACKET, true)}>국가 9개 + 가상국가 1개 · 예제 자료 즉시 채우기</button>}
+        <button disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildPacketRequest(state), "실험 자료 제작 요청서")}>자료·정답 제작 요청서 복사</button>
+        <button disabled={Boolean(state.lockedAt)} onClick={() => openPrompt(buildPacketRequest(state))}>GPT에서 실험 자료 만들기 ↗</button>
       </div>
-      <label className={styles.field}><span>AI에게 물을 질문</span><textarea value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder="예: Which one of these ten countries is not real? Explain briefly." /></label>
-      <label className={styles.field}><span>AI에게 보여줄 자료</span><textarea value={state.material} onChange={e=>patch("material",e.target.value)} placeholder="표, 목록, 데이터, 설명문 등 실제 테스트 재료를 붙여넣기. 이미지/파일을 쓸 경우 여기에는 구성과 출처를 기록." /></label>
-      <label className={styles.field}><span>숨겨둔 트릭</span><textarea value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
-      <div className={styles.truthGrid}>
-        <label><span>🔒 Ground Truth · 정답</span><textarea value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="AI 답변을 보기 전에 정답과 판정 기준을 확정." /></label>
-        <label><span>🔗 Ground Truth 출처</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="공식/공공/신뢰 가능한 출처 URL과 확인 메모. 한 줄에 하나씩." /></label>
-      </div>
+      <label className={styles.field}><span>생성된 EXPERIMENT_PACKET_JSON 가져오기 (선택)</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e => setPacketInput(e.target.value)} placeholder="GPT가 만든 [EXPERIMENT_PACKET_JSON] 블록 전체를 붙여넣으세요. 자동 생성 답변의 사실·출처는 운영자가 다시 확인해야 합니다." /></label>
+      <div className={styles.actions}><button disabled={Boolean(state.lockedAt) || !packetInput.trim()} onClick={importPacket}>JSON에서 질문·자료·정답표 채우기</button></div>
+      <p>가상 국가 예제는 준비된 목록을 바로 불러올 수 있습니다. 다른 주제는 제작 요청서를 이용해 자료를 만든 뒤 근거를 직접 검증하세요. AI가 만든 자료를 검증 없이 확정하지 않습니다.</p>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 03</span><h2>세 AI에 같은 문제 던지기</h2><p>같은 자료와 같은 질문을 사용합니다. 모델이 답한 원문은 요약하지 말고 그대로 보관하세요.</p></div><strong>{completed}/3 답변</strong></div>
-      <label className={styles.field}><span>공통 테스트 프롬프트</span><textarea value={state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
+      <div className={styles.panelHead}><div><span>STEP 03</span><h2>Ground Truth 검증·잠금</h2><p>자료·정답·출처를 확인하고 잠근 뒤 AI 테스트를 시작합니다. 잠금을 풀면 기존 답변과 점수가 초기화됩니다.</p></div><em className={truthReady ? styles.good : styles.wait}>{truthReady ? "✓ 정답 잠금" : "근거 확인·잠금 필요"}</em></div>
+      <div className={styles.grid2}>
+        <label><span>영문 제목</span><input disabled={Boolean(state.lockedAt)} value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
+        <label><span>카테고리</span><input disabled={Boolean(state.lockedAt)} value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
+        <label><span>검색 문구</span><input disabled={Boolean(state.lockedAt)} value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
+        <label><span>후킹 포인트</span><input disabled={Boolean(state.lockedAt)} value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
+      </div>
+      <label className={styles.field}><span>AI에게 물을 질문</span><textarea disabled={Boolean(state.lockedAt)} value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder="예: Which one of these ten countries is not real? Explain briefly." /></label>
+      <label className={styles.field}><span>AI에게 보여줄 자료</span><textarea disabled={Boolean(state.lockedAt)} value={state.material} onChange={e=>patch("material",e.target.value)} placeholder="표, 목록, 데이터, 설명문 등 실제 테스트 재료를 붙여넣기. 이미지/파일을 쓸 경우 여기에는 구성과 출처를 기록." /></label>
+      <label className={styles.field}><span>숨겨둔 트릭</span><textarea disabled={Boolean(state.lockedAt)} value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
+      <div className={styles.truthGrid}>
+        <label><span>🔒 Ground Truth · 정답</span><textarea disabled={Boolean(state.lockedAt)} value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="AI 답변을 보기 전에 정답과 판정 기준을 확정." /></label>
+        <label><span>🔗 Ground Truth 출처</span><textarea disabled={Boolean(state.lockedAt)} value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="공식/공공/신뢰 가능한 출처 URL과 확인 메모. 한 줄에 하나씩." /></label>
+      </div>
+      <label className={styles.field}><span>근거 상태: {state.sourceStatus === "verified" ? "사전 확인된 예제" : "검증 필요"}</span><span><input type="checkbox" disabled={Boolean(state.lockedAt)} checked={state.sourceVerified} onChange={e => patch("sourceVerified", e.target.checked)} /> 출처·정답을 직접 확인했으며 테스트 자료에 정답이 노출되지 않았습니다.</span></label>
       <div className={styles.actions}>
-        <button onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        {state.lockedAt ? <button onClick={unlockExperiment}>잠금 해제 (AI 답변·점수 초기화)</button> : <button className={styles.primary} disabled={!lockReady} onClick={lockExperiment}>🔒 자료와 정답표 잠그기 → 테스트 시작</button>}
+      </div>
+      {!state.lockedAt && <p>자료·질문·정답·근거를 채우고 출처 확인에 체크하면 잠글 수 있습니다. 이미 AI 답변을 받았다면 수정 전에 백업하세요.</p>}
+    </section>
+
+    <section className={styles.panel}>
+      <div className={styles.panelHead}><div><span>STEP 04</span><h2>세 AI에 같은 문제 던지기</h2><p>같은 자료와 같은 질문을 사용합니다. 모델이 답한 원문은 요약하지 말고 그대로 보관하세요.</p></div><strong>{completed}/3 답변</strong></div>
+      <label className={styles.field}><span>공통 테스트 프롬프트 · {state.lockedAt ? "잠금 완료 · 수정 불가" : "잠그기 전 수정 가능"}</span><textarea disabled={Boolean(state.lockedAt)} value={state.lockedAt ? commonPrompt : state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
+      <div className={styles.actions}>
+        <button disabled={!truthReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        {!truthReady && <small>테스트 자료와 정답을 먼저 검증·잠그세요. 빈 자료로 AI에 질문하지 않습니다.</small>}
       </div>
       <div className={styles.providerTabs}>
         {PROVIDERS.map(p => <button key={p.id} className={activeProvider===p.id?styles.providerActive:""} onClick={()=>setActiveProvider(p.id)}>
@@ -489,36 +507,37 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
-        <label><span>표시된 모델명</span><input value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: GPT-5.6 / Claude Sonnet / Gemini Pro" /></label>
-        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
+        <label><span>표시된 모델명</span><input disabled={!truthReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: GPT-5.6 / Claude Sonnet / Gemini Pro" /></label>
+        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!truthReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 04</span><h2>정답 대조 · 점수 기록</h2><p>전체 모델의 우열을 선언하는 점수가 아니라, 이번 한 번의 실험 결과입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 채점 완료":"채점 필요"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>정답 대조 · 점수 기록</h2><p>전체 모델의 우열을 선언하는 점수가 아니라, 이번 한 번의 실험 결과입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 채점 완료":"채점 필요"}</em></div>
       <div className={styles.scoreCards}>
         {PROVIDERS.map(p => {
           const r=state.runs[p.id];
           return <article key={p.id}>
             <h3>{p.label}</h3>
             <div className={styles.scoreGrid}>
-              <label><span>정확도 /10</span><input type="number" min="0" max="10" value={r.accuracy} onChange={e=>patchRun(p.id,{accuracy:Number(e.target.value)})}/></label>
-              <label><span>지시 준수 /10</span><input type="number" min="0" max="10" value={r.instruction} onChange={e=>patchRun(p.id,{instruction:Number(e.target.value)})}/></label>
-              <label><span>환각 개수</span><input type="number" min="0" value={r.hallucinations} onChange={e=>patchRun(p.id,{hallucinations:Number(e.target.value)})}/></label>
+              <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+              <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+              <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
             </div>
             <label><span>Weirdest Mistake</span><textarea value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="가장 엉뚱하거나 자신 있게 틀린 부분" /></label>
-            <label><span>채점 메모</span><textarea value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value})} placeholder="부분정답, 누락, 애매한 판정 등" /></label>
+            <label><span>채점 메모</span><textarea value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value,reviewed:false})} placeholder="부분정답, 누락, 애매한 판정 등" /></label>
+            <label className={styles.field}><span><input type="checkbox" disabled={!r.response.trim() || r.accuracy === null || r.instruction === null || r.hallucinations === null} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> 원문과 정답표를 대조해 이 점수를 직접 확정했습니다. (0점도 유효)</span></label>
           </article>;
         })}
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>영어 글 제작 → 발행 큐</h2><p>The Challenge → AI Answers → Reveal → Scoreboard → Weirdest Mistake → Verdict 흐름으로 자동 요청서를 만듭니다.</p></div></div>
+      <div className={styles.panelHead}><div><span>STEP 06</span><h2>영어 글 제작 → 발행 큐</h2><p>The Challenge → AI Answers → Reveal → Scoreboard → Weirdest Mistake → Verdict 흐름으로 자동 요청서를 만듭니다.</p></div></div>
       <div className={styles.actions}>
-        <button onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
-        <button onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
-        <button className={styles.primary} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
+        <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
+        <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
+        <button className={styles.primary} disabled={!allScored} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
         <button className={styles.queue} disabled={!truthReady||!allScored} onClick={sendToQueue}>검증된 실험을 발행 큐로 등록 →</button>
       </div>
       <details className={styles.preview}><summary>검증 리포트 미리보기</summary><pre>{report}</pre></details>
