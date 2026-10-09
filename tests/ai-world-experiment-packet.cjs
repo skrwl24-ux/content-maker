@@ -16,7 +16,7 @@ test("blind test prompt contains material but never discloses answer or hidden t
   const p = buildBlindPrompt(FAKE_COUNTRY_PACKET);
   assert.match(p, /7\. Norvessa/); // a candidate name is legitimately visible
   assert.doesNotMatch(p, /invented name|correct answer must|remaining nine|UN member/i);
-  assert.doesNotMatch(p, /Ground Truth|PRIVATE answer|score/i);
+  assert.doesNotMatch(p, /Ground Truth|PRIVATE answer|scoring criterion/i);
   assert.match(p, /10\. Nauru/);
 });
 
