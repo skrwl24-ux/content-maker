@@ -9,6 +9,7 @@ import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mj
 import { BASELINE_PROFILE, getProviderBaselineHint, baselineStatus } from "@/lib/ai-world-experiment-baseline.mjs";
 import { TOPIC_BANK_VERSION, initialTopics, mergeTopics, parseBulkTopics, countTopics } from "@/lib/ai-world-experiment-topics.mjs";
 import { buildChatGptArticlePrompt, buildChatGptTopicPrompt, parseChatGptDraft } from "@/lib/ai-world-experiment-chatgpt-handoff.mjs";
+import { buildExperimentScheduleReport, buildExperimentSchedulePrompt } from "@/lib/ai-world-experiment-schedule.mjs";
 import type { Topic, TopicStatus } from "@/lib/ai-world-experiment-topics.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
@@ -999,6 +1000,45 @@ export default function AiWorldExperimentStudio() {
     setPacketInput("");
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
+  function sendEvidenceToSchedule(){
+    if(!comparisonReady) {
+      setDraftFeedback({kind:"error",message:state.mode==="recommend"
+        ?"공통 질문과 ChatGPT·Claude·Gemini 원문 답변 3개를 먼저 붙여넣어 주세요."
+        :"같은 문제의 PDF·Work 정답 근거·AI 3사 실제 답변을 확인해 주세요."});
+      return;
+    }
+    if(state.mode==="quiz" && state.fixtureMode==="pdf" && !pdfAvailable){
+      setDraftFeedback({kind:"error",message:"등록한 PDF 원본이 이 브라우저에 없습니다. STEP 1에서 다시 등록해 주세요."});return;
+    }
+    const fullReport=buildExperimentScheduleReport(state);
+    const articleRequest=buildExperimentSchedulePrompt(state);
+    const pending={
+      id:state.scheduleId||("world-exp-"+Date.now()),
+      kind:"experiment",
+      date:state.scheduleDate||today(),
+      title:state.title,
+      body:"",
+      keyword:state.keyword||"AI three model comparison",
+      slug:slugify(state.title),
+      note:state.mode==="recommend"
+        ?"같은 질문에 대한 세 AI의 주관적 추천 선택과 이유를 비교합니다. 정답률 채점 금지."
+        :"비공개 원래 정답·실제 PDF와 AI 3사 답변을 대조합니다. 정답 불일치 시 확인 필요.",
+      labVersion:state.mode==="recommend"?"WORLD-COMPARISON-V2":"WORLD-LAB-V2",
+      labReport:fullReport,labPrompt:articleRequest,
+      experimentCategory:state.category,experimentHook:state.hook
+    };
+    try{
+      localStorage.setItem(QUEUE_TRANSFER_KEY,JSON.stringify(pending));
+      if(state.topicId){
+        const updated=topics.map(t=>t.id===state.topicId && t.status==="pending"?{...t,status:"active" as TopicStatus}:t);
+        setTopics(updated);
+        localStorage.setItem(TOPICS_KEY,JSON.stringify({version:TOPIC_BANK_VERSION,topics:updated}));
+      }
+      window.location.href="/google-blog-schedule?fromLab=1";
+    }catch{
+      setDraftFeedback({kind:"error",message:"발행 스케줄에 자료를 저장하지 못했습니다. 브라우저 저장공간을 확인해 주세요."});
+    }
+  }
   function sendToQueue() {
     if (state.mode==="recommend" ? (!currentDraft || !draftApproved || !currentDraft.ready) :
       (!allScored || (!advancedMode && (!currentDraft || !draftApproved)))) {
@@ -1222,6 +1262,21 @@ export default function AiWorldExperimentStudio() {
       </section>
 
       <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>Google Blog 발행 스케줄로 자료 보내기</h2>
+          <p>AI 3사 답변과 비교자료를 저장한 뒤 기존 Google Blog 제작실에서 <strong>본문 작성 → 이미지 6장 → Blogger 미리보기 → 발행</strong> 순서로 진행합니다.</p></div></div>
+        <div className={styles.quickFinal}>
+          <p className={styles.muted}>{state.mode==="recommend"?
+            "주관적 추천 비교 · 공통 질문 "+(state.testQuestion.trim()?"✓":"미완료")+" · 실제 AI 답변 "+completed+"/3":
+            "정답 맞히기 · 원본/정답/근거 "+(comparisonReady?"✓":"미완료")+" · AI 답변 "+completed+"/3"}</p>
+          <button className={styles.quickGenerate} disabled={!comparisonReady} onClick={sendEvidenceToSchedule}>
+            실험 자료 저장 · Google Blog 제작실로 이동 →
+          </button>
+          <p className={styles.quickHint}>추가 API 연결 없이 자료를 전달합니다. 본문은 Google Blog 스케줄의 기존 GPT 요청서 버튼으로 작성하세요. AI 답변이나 정답키가 없는 상태에서 결과를 만들어내지 않습니다.</p>
+          {draftFeedback?.kind==="error"&&<div role="alert" className={styles.draftError}>{draftFeedback.message}</div>}
+        </div>
+        <details className={styles.advanced}>
+          <summary>이전 방식: 실험실에서 별도로 글 작성·가져오기 (선택)</summary>
+      <section className={styles.panel}>
         <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>ChatGPT에서 글 작성하고 사이트로 가져오기</h2>
           <p>ChatGPT 웹에서 비교 분석과 영문 글을 작성합니다. 사이트는 요청서를 정리하고 결과를 보관하며 발행리스트로 전달합니다. 유료 API 호출은 하지 않습니다.</p></div></div>
         <div className={styles.quickFinal}>
@@ -1283,6 +1338,7 @@ export default function AiWorldExperimentStudio() {
             {state.mode==="quiz"&&<button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>}
           </div>
         </div>}
+        </details>
         <div className={styles.resetRow}><button onClick={reset}>새 실험 초기화</button><small>입력값과 생성 글은 브라우저에 저장됩니다. 발행은 최종 확인 후 진행하세요.</small></div>
       </section>
     </>}
