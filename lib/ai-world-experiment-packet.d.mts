@@ -19,3 +19,19 @@ export function buildWorkPdfRequest(topic?: {title?: string; category?: string; 
 
 export function suggestedExperimentQuestion(title?: string): string;
 export function mismatchedExperimentQuestion(title?: string, question?: string): boolean;
+
+export type ExperimentWorkflowRun = { response?: string; reviewed?: boolean; verdict?: string; highlight?: string; usedSamePdf?: boolean };
+export type ExperimentWorkflowInput = {
+  title?: string; testQuestion?: string; commonPrompt?: string; fixtureMode?: "pdf" | "text";
+  pdfSha256?: string; pdfName?: string; pdfAvailable?: boolean; material?: string;
+  groundTruth?: string; hiddenTwist?: string; sources?: string;
+  runs?: Partial<Record<"chatgpt" | "claude" | "gemini", ExperimentWorkflowRun>>;
+};
+export function getExperimentWorkflowStatus(input?: ExperimentWorkflowInput): {
+  mismatchedQuestion: boolean;
+  noKeyLeak: boolean;
+  fixtureReady: boolean;
+  allAnswersCollected: boolean;
+  keyReady: boolean;
+  allScored: boolean;
+};
