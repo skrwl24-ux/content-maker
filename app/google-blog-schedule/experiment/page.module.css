@@ -22,3 +22,5 @@
 .summaryRow>div small{color:#5b6577;overflow-wrap:anywhere}
 .muted{font-size:13px;color:#657184}
 @media(max-width:700px){.fixtureChoice{flex-direction:column}.summaryRow{grid-template-columns:1fr}}
+
+.questionWarning{margin-top:10px;padding:12px 14px;border-radius:10px;border:1px solid #efbfb1;background:#fff5f1;color:#8f2c1f;font-size:13px;line-height:1.6;font-weight:750}
