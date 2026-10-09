@@ -129,7 +129,38 @@ test("studio has no mandatory answer-lock button or lock handlers", () => {
   const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
   assert.match(src,/STEP 03/);
   assert.match(src,/공통 질문 설정/);
-  assert.match(src,/정답 입력 · 세 AI 결과 비교/);
+  assert.match(src,/정답 입력 · 사람과 AI 결과 비교/);
   assert.doesNotMatch(src,/function lockExperiment\(|function unlockExperiment\(|정답표 잠그기/);
   assert.match(src,/onChange=\{e=>updateGroundTruth\(e\.target\.value\)\}/);
+});
+
+test("human experiment workflow captures real notes, time, original photos, and optional fourth participant", () => {
+  const fs=require("node:fs"), path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  assert.match(src,/나도 직접 문제 풀어보기/);
+  assert.match(src,/function startHumanTimer\(/);
+  assert.match(src,/function stopHumanTimer\(/);
+  assert.match(src,/storeHumanPhoto\(/);
+  assert.match(src,/getHumanPhoto\(/);
+  assert.match(src,/deleteHumanPhoto\(/);
+  assert.match(src,/human\.attemptedBeforeAI/);
+  assert.match(src,/human\.notes/);
+  assert.match(src,/human\.photos/);
+  assert.match(src,/human\.verdict/);
+  assert.match(src,/ZIP으로 백업/);
+  assert.match(src,/NEVER fabricate hesitations/);
+  assert.match(src,/If no human answer was recorded, omit/);
+  assert.doesNotMatch(src,/function lockExperiment\(/);
+});
+test("photo file recognizer rejects spoofed types and accepts JPG, PNG and WebP magic bytes", async () => {
+  const {humanPhotoMimeType}=await import("../lib/ai-world-experiment-files.mjs");
+  const png=new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0]);
+  const jpg=new Uint8Array([255,216,255,224,0,1,2,3,4,5,6,7]);
+  const webp=new Uint8Array([82,73,70,70,0,0,0,0,87,69,66,80]);
+  assert.equal(humanPhotoMimeType("photo.png",png),"image/png");
+  assert.equal(humanPhotoMimeType("photo.JPG",jpg),"image/jpeg");
+  assert.equal(humanPhotoMimeType("photo.webp",webp),"image/webp");
+  assert.equal(humanPhotoMimeType("fake.pdf",png),"");
+  assert.equal(humanPhotoMimeType("fake.png",jpg),"");
+  assert.equal(humanPhotoMimeType("fake.jpg",new Uint8Array(12)),"");
 });
