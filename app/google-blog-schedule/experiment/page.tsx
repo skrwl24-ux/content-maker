@@ -617,6 +617,7 @@ export default function AiWorldExperimentStudio() {
       <label className={styles.field}><span>공통 테스트 프롬프트 · {state.lockedAt ? "잠금 완료 · 수정 불가" : "잠그기 전 수정 가능"}</span><textarea disabled={Boolean(state.lockedAt)} value={state.lockedAt ? commonPrompt : state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
         <button disabled={!truthReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        {state.fixtureMode==="pdf" && <button disabled={!truthReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>
         {!truthReady && <small>테스트 자료와 정답을 먼저 검증·잠그세요. 빈 자료로 AI에 질문하지 않습니다.</small>}
       </div>
       <div className={styles.providerTabs}>
@@ -626,38 +627,50 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
-        <label><span>표시된 모델명</span><input disabled={!truthReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: GPT-5.6 / Claude Sonnet / Gemini Pro" /></label>
+        <label><span>표시된 모델명</span><input disabled={!truthReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="서비스 화면에 표시된 실제 모델명" /></label>
+        <label className={styles.field}><span>실험 날짜</span><input disabled={!truthReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
+        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!truthReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
         <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!truthReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>정답 대조 · 점수 기록</h2><p>전체 모델의 우열을 선언하는 점수가 아니라, 이번 한 번의 실험 결과입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 채점 완료":"채점 필요"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>세 AI의 답변 분석 · 판정</h2><p>우선 각 AI가 고른 답과 정답 여부만 기록하세요. 인상적인 표현은 원문에서 그대로 복사하면 되고, 숫자 점수는 선택 사항입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 3개 답변 검토 완료":"답변·판정 필요"}</em></div>
       <div className={styles.scoreCards}>
         {PROVIDERS.map(p => {
           const r=state.runs[p.id];
           return <article key={p.id}>
             <h3>{p.label}</h3>
-            <div className={styles.scoreGrid}>
-              <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
-              <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
-              <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
-            </div>
-            <label><span>Weirdest Mistake</span><textarea value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="가장 엉뚱하거나 자신 있게 틀린 부분" /></label>
-            <label><span>채점 메모</span><textarea value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value,reviewed:false})} placeholder="부분정답, 누락, 애매한 판정 등" /></label>
-            <label className={styles.field}><span><input type="checkbox" disabled={!r.response.trim() || !validRunScores(r)} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> 원문과 정답표를 대조해 이 점수를 직접 확정했습니다. (0점도 유효)</span></label>
+            <label><span>AI가 고른 답 (선택)</span><input disabled={!r.response.trim()} value={r.finalAnswer} onChange={e=>patchRun(p.id,{finalAnswer:e.target.value})} placeholder="예: 7. Norvessa" /></label>
+            <label><span>정답 판정 (필수)</span><select disabled={!r.response.trim()} value={r.verdict} onChange={e=>patchRun(p.id,{verdict:e.target.value as ProviderRun["verdict"]})}>
+              <option value="">판정을 선택하세요</option><option value="correct">정답</option><option value="incorrect">오답</option><option value="partial">부분 정답</option><option value="uncertain">판정 보류</option>
+            </select></label>
+            <label><span>독자에게 보여줄 흥미로운 원문 인용 (선택)</span><textarea disabled={!r.response.trim()} value={r.highlight} onChange={e=>patchRun(p.id,{highlight:e.target.value})} placeholder="실제 AI 답변에서 문장을 그대로 복사하세요. 새로운 해석이나 추측으로 바꾸지 마세요." /></label>
+            {r.highlight && r.response && !r.response.includes(r.highlight.trim()) && <small className={styles.quoteWarn}>선택한 인용 문구가 답변 원문에 정확히 일치하지 않습니다. 확인해 주세요.</small>}
+            <label><span>결과 메모 (선택)</span><textarea disabled={!r.response.trim()} value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value,reviewed:false})} placeholder="이 AI가 어떤 단서로 판단했는지 / 다른 AI와 어떤 점이 달랐는지 원문에 근거하여 기록" /></label>
+            <details className={styles.advanced}><summary>추가 세부 평가 (선택)</summary>
+              <div className={styles.scoreGrid}>
+                <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+                <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+                <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+              </div>
+              <label><span>실제로 관찰한 특이한 오류</span><textarea disabled={!r.response.trim()} value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value,reviewed:false})} placeholder="없으면 공란으로 둡니다." /></label>
+            </details>
+            <label className={styles.checkLine}><input type="checkbox" disabled={!r.response.trim() || !r.verdict || (state.fixtureMode==="pdf"&&!r.usedSamePdf) || Boolean(r.highlight.trim() && !r.response.includes(r.highlight.trim()))} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> <span>정답표와 실제 답변을 비교해 위 판정을 확인했습니다.</span></label>
           </article>;
         })}
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 06</span><h2>영어 글 제작 → 발행 큐</h2><p>The Challenge → AI Answers → Reveal → Scoreboard → Weirdest Mistake → Verdict 흐름으로 자동 요청서를 만듭니다.</p></div></div>
+      <div className={styles.panelHead}><div><span>STEP 06</span><h2>세 AI의 실제 답변으로 영문 글 만들기</h2><p>독자에게 먼저 문제를 보여주고 → 세 AI의 선택과 원문 이유를 비교하고 → 마지막에 정답과 뜻밖의 반응을 공개하는 글 요청서를 만듭니다.</p></div></div>
+      <div className={styles.summaryRow}>{PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed ? ({correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] || "미판정") : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
         <button className={styles.primary} disabled={!allScored} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
-        <button className={styles.queue} disabled={!truthReady||!allScored} onClick={sendToQueue}>검증된 실험을 발행 큐로 등록 →</button>
+        <button className={styles.queue} disabled={!truthReady||!allScored} onClick={sendToQueue}>최종 글 제작을 발행리스트로 보내기 →</button>
+        <button disabled={!state.lockedAt || archiving || (state.fixtureMode==="pdf" && !pdfAvailable)} onClick={()=>void exportEvidenceZip()}>비공개 원본·PDF·답변 ZIP 백업 ↓</button>
       </div>
       <details className={styles.preview}><summary>검증 리포트 미리보기</summary><pre>{report}</pre></details>
       <details className={styles.preview}><summary>최종 글 요청서 미리보기</summary><textarea readOnly value={articlePrompt}/></details>
