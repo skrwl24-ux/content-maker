@@ -33,10 +33,24 @@ const STORAGE_KEY = "ai-world-experiment-studio-v1";
 const SEED_TRANSFER_KEY = "ai-world-experiment-seed-v1";
 const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
-const PROVIDERS: Array<{id: ProviderId; label: string; url: string}> = [
-  { id: "chatgpt", label: "ChatGPT", url: "https://chatgpt.com/" },
-  { id: "claude", label: "Claude", url: "https://claude.ai/" },
-  { id: "gemini", label: "Gemini", url: "https://gemini.google.com/" },
+const BASIC_PROTOCOL = {
+  id: "BASIC-V1",
+  label: "기본 버전 · Basic V1",
+  summary: "각 서비스의 일반 채팅 화면에서 기본/자동 선택을 우선하고, 보통 검색·브라우징만 허용합니다.",
+  rules: [
+    "일반 채팅 / 기본·자동 모드 우선",
+    "필요하면 서비스에 기본으로 붙어 있는 일반 검색·브라우징 사용 가능",
+    "Deep Research · Agent · Work · Projects · Gems · Custom GPT/봇 같은 확장 모드 사용 금지",
+    "고급 추론·연구 모드를 일부러 켜지 않음",
+    "테스트에 파일/이미지가 필요하면 일반 채팅 첨부 기능만 사용",
+    "실제 화면에 표시된 모델명은 결과와 함께 기록",
+  ],
+} as const;
+
+const PROVIDERS: Array<{id: ProviderId; label: string; url: string; basic: string}> = [
+  { id: "chatgpt", label: "ChatGPT", url: "https://chatgpt.com/", basic: "일반 채팅 · 기본/자동 선택 · Work/Deep Research/고급 추론을 따로 켜지 않음" },
+  { id: "claude", label: "Claude", url: "https://claude.ai/", basic: "일반 채팅 · 기본/자동 선택 · Research/확장 모드를 따로 켜지 않음" },
+  { id: "gemini", label: "Gemini", url: "https://gemini.google.com/", basic: "일반 채팅 · 기본/자동 선택 · Deep Research/확장 모드를 따로 켜지 않음" },
 ];
 
 const STARTERS = [
@@ -133,8 +147,14 @@ ${s.testQuestion || s.title}
 Material:
 ${s.material || "(The test material will be pasted or attached separately.)"}
 
+Protocol: ${BASIC_PROTOCOL.id} — standard/default chat only.
+
 Instructions:
-- Answer only from the provided material and your general reasoning unless the task explicitly asks for web research.
+- Use the service's normal/default chat experience.
+- You may use ordinary built-in web search or browsing when it is naturally needed for this task.
+- Do not turn on Deep Research, Agent, Work, Projects, Gems, custom bots/GPTs, or any other extended research workflow.
+- Do not deliberately switch to an enhanced reasoning/research mode for this test.
+- If the task includes an attached file or image, use only the normal chat attachment capability.
 - Do not invent missing facts.
 - If something cannot be determined, say so.
 - Give your final answer first, then briefly explain your reasoning.
@@ -162,6 +182,7 @@ function reportText(s: ExperimentState) {
     "Title: " + s.title,
     "Category: " + s.category,
     "Hook: " + s.hook,
+    "Test protocol: " + BASIC_PROTOCOL.id + " · standard/default chat · ordinary built-in search allowed · extended research modes off",
     "",
     "TEST QUESTION",
     s.testQuestion || s.title,
@@ -404,7 +425,7 @@ export default function AiWorldExperimentStudio() {
       <span>GLOBAL AI EXPERIMENT STUDIO</span>
       <h1>전 세계가 궁금해할<br/>엉뚱한 AI 실험을 만듭니다.</h1>
       <p>나라·지도·음식·언어·동물·날씨·가격·통계처럼 누구나 이해할 수 있는 자료로 AI를 시험하고, Ground Truth와 실제 답변을 근거로 영어 글을 만듭니다.</p>
-      <div className={styles.heroBadges}><b>Ground Truth first</b><b>Same prompt</b><b>3 AI answers</b><b>Global curiosity</b></div>
+      <div className={styles.heroBadges}><b>Ground Truth first</b><b>Same prompt</b><b>3 AI answers</b><b>{BASIC_PROTOCOL.id}</b></div>
     </section>
 
     {notice && <div className={styles.notice}>{notice}<button onClick={() => setNotice("")}>×</button></div>}
