@@ -389,6 +389,10 @@ export default function AiWorldExperimentStudio() {
     if (next !== state.commonPrompt && hasResponses() && !window.confirm("AI에 전달할 공통 프롬프트를 변경하면 기존 답변과 비교할 수 없습니다. 이전 답변을 초기화할까요?")) return;
     setState(prev => ({ ...prev, commonPrompt:next, runs: next !== prev.commonPrompt && hasResponses() ? {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} : prev.runs }));
   }
+  function updateMaterial(next: string) {
+    if (next !== state.material && hasResponses() && !window.confirm("AI에게 제공할 텍스트 자료를 바꾸면 답변 기록이 초기화됩니다. 계속할까요?")) return;
+    setState(prev=>({...prev,material:next,runs:next!==prev.material && hasResponses()?{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}:prev.runs}));
+  }
   function changeFixtureMode(next: ExperimentState["fixtureMode"]) {
     if (state.fixtureMode === next) return;
     if (hasResponses() && !window.confirm("테스트 자료 방식을 변경하면 수집한 AI 답변이 초기화됩니다. 계속할까요?")) return;
