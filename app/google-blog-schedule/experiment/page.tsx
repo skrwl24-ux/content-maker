@@ -528,22 +528,37 @@ export default function AiWorldExperimentStudio() {
     }catch(e){setNotice(e instanceof Error?e.message:"사진 다운로드 실패");}
   }
   function hasResponses() { return PROVIDERS.some(p => state.runs[p.id].response.trim()); }
+  function hasHumanRecord() {
+    const h=state.human;
+    return Boolean(h.choice.trim() || h.durationText.trim() || h.notes.trim() || h.photos.length || h.attemptedBeforeAI);
+  }
+  function hasAnyResults() { return hasResponses() || hasHumanRecord(); }
   function updateQuestion(next: string) {
-    if (next !== state.testQuestion && hasResponses() && !window.confirm("공통 질문을 바꾸면 이전 실험과 조건이 달라집니다. 이미 저장된 AI 답변·판정을 초기화할까요?")) return;
-    setState(prev => ({ ...prev, testQuestion: next, commonPrompt:"", runs: next !== prev.testQuestion && hasResponses() ? {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} : prev.runs }));
+    if (next === state.testQuestion) return;
+    if (hasAnyResults() && !window.confirm("질문이 바뀌면 기존 사람 풀이 기록·사진·AI 답변을 다른 실험에 사용할 수 없습니다. 초기화할까요? 필요하면 먼저 ZIP으로 백업하세요.")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({ ...prev, testQuestion: next, commonPrompt:"",
+      human:emptyHuman(), runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
   }
   function updateCommonPrompt(next: string) {
-    if (next !== state.commonPrompt && hasResponses() && !window.confirm("AI에 전달할 공통 프롬프트를 변경하면 기존 답변과 비교할 수 없습니다. 이전 답변을 초기화할까요?")) return;
-    setState(prev => ({ ...prev, commonPrompt:next, runs: next !== prev.commonPrompt && hasResponses() ? {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} : prev.runs }));
+    if (next === state.commonPrompt) return;
+    if (hasAnyResults() && !window.confirm("공통 프롬프트를 바꾸면 사람 도전과 AI 답변 기록이 무효가 됩니다. 모두 초기화할까요? 먼저 ZIP으로 백업하세요.")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({...prev, commonPrompt:next,human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
   }
   function updateMaterial(next: string) {
-    if (next !== state.material && hasResponses() && !window.confirm("AI에게 제공할 텍스트 자료를 바꾸면 답변 기록이 초기화됩니다. 계속할까요?")) return;
-    setState(prev=>({...prev,material:next,runs:next!==prev.material && hasResponses()?{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}:prev.runs}));
+    if (next === state.material) return;
+    if (hasAnyResults() && !window.confirm("텍스트 문제를 수정하면 사람 도전과 AI 답변 기록을 초기화해야 합니다. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev=>({...prev,material:next,human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
   }
   function changeFixtureMode(next: ExperimentState["fixtureMode"]) {
     if (state.fixtureMode === next) return;
-    if (hasResponses() && !window.confirm("테스트 자료 방식을 변경하면 수집한 AI 답변이 초기화됩니다. 계속할까요?")) return;
-    setState(prev => ({...prev,fixtureMode:next,sourceVerified:false,
+    if (hasAnyResults() && !window.confirm("테스트 자료 방식을 바꾸면 기존 사람 도전·사진·AI 답변이 초기화됩니다. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({...prev,fixtureMode:next,sourceVerified:false,human:emptyHuman(),
       runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
   }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
@@ -555,13 +570,14 @@ export default function AiWorldExperimentStudio() {
     }
     const promptChanged = preset || packet.testQuestion !== state.testQuestion ||
       (state.fixtureMode === "text" && packet.material !== state.material);
-    if (hasResponses() && promptChanged && !window.confirm("Work의 JSON에 기존 테스트와 다른 질문·자료가 있습니다. 지금 가져오면 기존 AI 답변이 초기화됩니다. 계속할까요?")) return;
+    if (hasAnyResults() && promptChanged && !window.confirm("Work JSON의 문제·질문이 기존 실험과 다릅니다. 사람 도전 사진·후기와 세 AI의 답변이 초기화됩니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
+    if(promptChanged){setTimerStartedAt(null);setTimerNow(0);}
     setState(prev => ({ ...prev, title: packet.title || prev.title,
       testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
       groundTruth: packet.groundTruth, sources: packet.sources,
       sourceStatus: packet.sourceStatus, sourceVerified: false, lockedAt: "", commonPrompt: promptChanged ? "" : prev.commonPrompt,
       fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
-      human: packet.groundTruth!==prev.groundTruth?{...prev.human,verdict:""}:prev.human,
+      human: promptChanged?emptyHuman():(packet.groundTruth!==prev.groundTruth?{...prev.human,verdict:""}:prev.human),
       runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : (packet.groundTruth !== prev.groundTruth ? Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"" as const,reviewed:false}])) as ExperimentState["runs"] : prev.runs) }));
     setNotice(preset ? "텍스트 예제 입력 완료. PDF 실험과는 별개입니다." :
       (hasResponses() && !promptChanged ? "기존 세 AI 답변은 유지하고 비공개 정답·출처만 가져왔습니다." : "Work 질문·비공개 정답·출처를 가져왔습니다. PDF와 질문이 맞는지 확인하세요."));
@@ -577,13 +593,14 @@ export default function AiWorldExperimentStudio() {
     try {
       const meta = await storeExperimentPdf(file);
       const isIdentical = meta.sha256 === state.pdf?.sha256 && state.fixtureMode === "pdf";
-      if (!isIdentical && hasResponses() && !window.confirm("기존 PDF와 다른 파일입니다. PDF가 바뀌면 세 AI의 답변과 판정도 초기화해야 합니다. 계속할까요?")) {
+      if (!isIdentical && hasAnyResults() && !window.confirm("기존 PDF와 다른 파일입니다. 사람 풀이 기록·사진과 세 AI의 답변을 초기화해야 합니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) {
         setNotice("PDF 변경을 취소했습니다. 기존 AI 답변은 그대로 보관됩니다."); return;
       }
       setPdfAvailable(true);
+      if(!isIdentical){setTimerStartedAt(null);setTimerNow(0);}
       setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta,
         sourceVerified: isIdentical ? prev.sourceVerified : false,
-        lockedAt: "",
+        lockedAt: "", human: isIdentical ? prev.human : emptyHuman(),
         runs: isIdentical ? prev.runs : {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
       setNotice(isIdentical ? "동일 PDF 재등록 완료. 기존 AI 답변은 유지됩니다." :
         "PDF 등록 완료. 공통 질문을 확인하고 세 AI 답변을 받아오세요. 정답 입력은 나중에 해도 됩니다.");
@@ -671,7 +688,8 @@ export default function AiWorldExperimentStudio() {
     }
   }
   function loadStarter(index: number) {
-    if ((state.pdf || state.material.trim() || hasResponses()) && !window.confirm("다른 실험으로 변경하면 현재 화면의 자료·답변이 초기화됩니다. 필요하면 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
+    if ((state.pdf || state.material.trim() || hasAnyResults()) && !window.confirm("다른 실험으로 변경하면 기존 PDF, 사람 도전·사진과 AI 답변 기록이 초기화됩니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
     const item = STARTERS[index];
     setState(prev => ({
       ...prev,
