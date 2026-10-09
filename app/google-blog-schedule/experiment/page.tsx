@@ -485,7 +485,8 @@ export default function AiWorldExperimentStudio() {
     setNotice("무료/기본 일반 채팅 비교를 적용했습니다. PDF를 세 AI에 동일하게 첨부하고 실제 모델명과 사용 설정을 기록하세요.");
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
-    if (!fixtureReady && !state.runs[id].response.trim()) return;
+    // Collect original AI responses and experimental settings even before the PDF metadata is restored.
+    // Final grading and article export still require the original fixture and ground truth.
     setState(prev => {
       const old = prev.runs[id];
       const resetVerdict = "response" in value || "finalAnswer" in value;
@@ -626,17 +627,27 @@ export default function AiWorldExperimentStudio() {
     try {
       const meta = await storeExperimentPdf(file);
       const isIdentical = meta.sha256 === state.pdf?.sha256 && state.fixtureMode === "pdf";
-      if (!isIdentical && hasAnyResults() && !window.confirm("기존 PDF와 다른 파일입니다. 사람 풀이 기록·사진과 세 AI의 답변을 초기화해야 합니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) {
-        setNotice("PDF 변경을 취소했습니다. 기존 AI 답변은 그대로 보관됩니다."); return;
+      const linkingFirstPdf = !state.pdf && state.fixtureMode === "pdf";
+      let preserveResults = isIdentical;
+      if (!isIdentical && hasAnyResults()) {
+        if (linkingFirstPdf) {
+          if (!window.confirm("이미 입력한 AI 답변·사람 기록에 실제 사용한 동일 PDF가 맞나요? 확인을 누르면 기존 기록을 지우지 않고 이 PDF를 연결합니다. 서로 다른 PDF라면 취소하고 먼저 백업·검토하세요.")) {
+            setNotice("PDF 연결을 취소했습니다. 기존 답변과 사람 기록은 그대로 남아 있습니다.");return;
+          }
+          preserveResults = true;
+        } else if (!window.confirm("기존 PDF와 다른 파일입니다. 사람 풀이 기록·사진과 세 AI의 답변을 초기화해야 합니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) {
+          setNotice("PDF 교체를 취소했습니다. 기존 기록은 유지됩니다.");return;
+        }
       }
       setPdfAvailable(true);
-      if(!isIdentical){setTimerStartedAt(null);setTimerNow(0);}
+      if (!preserveResults) {setTimerStartedAt(null);setTimerNow(0);}
       setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta,
-        sourceVerified: isIdentical ? prev.sourceVerified : false,
-        lockedAt: "", human: isIdentical ? prev.human : emptyHuman(),
-        runs: isIdentical ? prev.runs : {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+        sourceVerified: preserveResults ? prev.sourceVerified : false,
+        lockedAt: "", human: preserveResults ? prev.human : emptyHuman(),
+        runs: preserveResults ? prev.runs : {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
       setNotice(isIdentical ? "동일 PDF 재등록 완료. 기존 AI 답변은 유지됩니다." :
-        "PDF 등록 완료. 공통 질문을 확인하고 세 AI 답변을 받아오세요. 정답 입력은 나중에 해도 됩니다.");
+        (preserveResults ? "PDF 연결 완료. 먼저 저장한 AI 답변과 사람 기록이 유지됩니다. 같은 원본을 사용했는지 확인해 주세요." :
+        "PDF 등록 완료. 공통 질문을 확인하고 세 AI 답변을 받아오세요. 정답 입력은 나중에 해도 됩니다."));
     } catch (e) { setNotice(e instanceof Error ? e.message : "PDF 등록 실패"); }
     finally { setPdfBusy(false); }
   }
@@ -945,6 +956,10 @@ export default function AiWorldExperimentStudio() {
         {state.fixtureMode==="pdf" && <button disabled={!fixtureReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
         {!fixtureReady && <small>PDF 또는 텍스트 자료와 공통 질문을 확인하면 바로 테스트할 수 있습니다.</small>}
       </div>
+      {!fixtureReady && <div className={styles.questionWarning} role="status">
+        <strong>답변 원문은 지금 붙여넣어 저장할 수 있습니다.</strong>
+        <p>{state.fixtureMode==="pdf" ? (!state.pdf ? "STEP 02에서 원본 PDF 등록이 아직 완료되지 않았습니다." : (!pdfAvailable ? "등록된 PDF의 원본 파일을 이 미리보기 주소에서 찾지 못했습니다. STEP 02에서 동일 PDF를 재등록하세요." : "PDF는 등록됐지만 질문·실험 설정을 확인해야 합니다.")) : (!state.material.trim() ? "AI에게 보여줄 텍스트 자료를 먼저 등록해야 합니다." : "질문·실험 설정을 확인해야 합니다.")} {!state.testQuestion.trim()?"STEP 03의 영어 질문도 비어 있습니다.":""} 답변은 보관되지만 PDF·질문·비공개 정답 및 실제 판정이 검증될 때까지 최종 글 제작은 잠깁니다.</p>
+      </div>}
       <div className={styles.providerTabs}>
         {PROVIDERS.map(p => <button key={p.id} className={activeProvider===p.id?styles.providerActive:""} onClick={()=>setActiveProvider(p.id)}>
           <strong>{p.label}</strong><small>{state.runs[p.id].response.trim() ? "답변 저장됨" : "대기"}</small>
@@ -952,46 +967,47 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
+        <p className={styles.muted}>모델명·설정·원문 답변은 PDF 준비 상태와 관계없이 미리 기록할 수 있습니다. 원문을 붙여넣은 뒤에도 PDF 원본과 공통 질문이 정확히 일치하는지 꼭 확인하세요.</p>
         <div className={styles.baselineChecklist}>
           <strong>무료/기본 채팅 설정 확인</strong>
           <small>기본 모드 설정은 AI 서비스 화면에서 직접 선택해야 합니다.</small>
           <div className={styles.baselineSteps}>
             {(getProviderBaselineHint(activeProvider)?.steps||[]).map((instruction,i)=><div key={i}>{instruction}</div>)}
           </div>
-          <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.newChat}
+          <label className={styles.checkLine}><input type="checkbox" checked={run.newChat}
             onChange={e=>patchRun(activeProvider,{newChat:e.target.checked})}/>
             <span>기존 문제 제작 채팅과 완전히 분리된 새 채팅에서 테스트함</span>
           </label>
           <div className={styles.baselineSettingGrid}>
             <label><span>실제 이용한 계정 등급</span>
-              <select disabled={!fixtureReady} value={run.accountPlan} onChange={e=>patchRun(activeProvider,{accountPlan:e.target.value as ProviderRun["accountPlan"]})}>
+              <select value={run.accountPlan} onChange={e=>patchRun(activeProvider,{accountPlan:e.target.value as ProviderRun["accountPlan"]})}>
                 <option value="">기록 필요</option><option value="free">무료 (Free)</option><option value="guest">로그아웃 / 게스트</option>
                 <option value="paid">유료 (Plus/Pro 등)</option><option value="unknown">확인 불가</option>
               </select>
             </label>
             <label><span>실제 응답 모드</span>
-              <select disabled={!fixtureReady} value={run.chatMode} onChange={e=>patchRun(activeProvider,{chatMode:e.target.value as ProviderRun["chatMode"]})}>
+              <select value={run.chatMode} onChange={e=>patchRun(activeProvider,{chatMode:e.target.value as ProviderRun["chatMode"]})}>
                 <option value="">기록 필요</option><option value="standard">기본 / 일반 채팅</option>
                 <option value="advanced">추가 추론 / Research / 심층</option><option value="unknown">확인 불가</option>
               </select>
             </label>
             <label><span>웹검색 · 외부 사이트 검색 실제 사용</span>
-              <select disabled={!fixtureReady} value={run.webUsed} onChange={e=>patchRun(activeProvider,{webUsed:e.target.value as ProviderRun["webUsed"]})}>
+              <select value={run.webUsed} onChange={e=>patchRun(activeProvider,{webUsed:e.target.value as ProviderRun["webUsed"]})}>
                 <option value="unknown">확인 전</option><option value="no">미사용 확인</option><option value="yes">사용됨</option>
               </select>
             </label>
             <label><span>심층 리서치 · 외부 앱 등 추가 기능 사용</span>
-              <select disabled={!fixtureReady} value={run.extraToolsUsed} onChange={e=>patchRun(activeProvider,{extraToolsUsed:e.target.value as ProviderRun["extraToolsUsed"]})}>
+              <select value={run.extraToolsUsed} onChange={e=>patchRun(activeProvider,{extraToolsUsed:e.target.value as ProviderRun["extraToolsUsed"]})}>
                 <option value="unknown">확인 전</option><option value="no">미사용 확인</option><option value="yes">사용됨</option>
               </select>
             </label>
           </div>
           <small>기본 무료 모드 판정: {baselineStatus(run).label}. 유료·검색·추가 기능 사용이나 미확인은 최종 글에 그대로 기록합니다. PDF를 읽는 일반 파일 첨부는 추가 리서치 도구로 간주하지 않습니다.</small>
         </div>
-        <label><span>실제 표시된 모델명 (필수 기록 권장)</span><input disabled={!fixtureReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: 서비스 화면에 표시된 모델명 그대로" /></label>
-        <label className={styles.field}><span>실험 날짜</span><input disabled={!fixtureReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
-        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
-        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!fixtureReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
+        <label><span>실제 표시된 모델명 (필수 기록 권장)</span><input value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: 서비스 화면에 표시된 모델명 그대로" /></label>
+        <label className={styles.field}><span>실험 날짜</span><input type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
+        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
+        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
       </div>
     </section>
 
