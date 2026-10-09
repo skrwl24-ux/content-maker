@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       webUsed: clean(state.runs?.[name]?.webUsed, 40),
       extraToolsUsed: clean(state.runs?.[name]?.extraToolsUsed, 40),
       testedAt: clean(state.runs?.[name]?.testedAt, 40),
-    }])) as Record<Provider, {response: string}>;
+    }])) as unknown as Record<Provider, {response: string}>;
     if (NAMES.some(name => !runs[name].response)) {
       return NextResponse.json({ error: "ChatGPT, Claude, Gemini의 실제 답변 원문 3개를 붙여넣으세요." }, { status: 400 });
     }
