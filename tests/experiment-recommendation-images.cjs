@@ -103,7 +103,7 @@ test("04 isolates tradeoffs; 05 isolates personal uncertainty and checklist", as
   assert.match(takeaway, /Moving there is not equally easy for everyone/);
   assert.match(takeaway, /Best depends on career goals and values/);
   assert.doesNotMatch(takeaway, /Extremely high cost of living/);
-  assert.match(takeaway, /NO three-country cards/);
+  assert.match(takeaway, /NO repeated three-pick cards/);
 });
 
 test("no fabricated answer for missing providers or malformed evidence", async () => {
