@@ -1,17 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import JSZip from "jszip";
 import styles from "./page.module.css";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion, getExperimentWorkflowStatus } from "@/lib/ai-world-experiment-packet.mjs";
+import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, deleteHumanPhoto } from "@/lib/ai-world-experiment-files.mjs";
+import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
   model: string;
+  testedAt: string;
+  usedSamePdf: boolean;
   response: string;
-  accuracy: number;
-  instruction: number;
-  hallucinations: number;
+  finalAnswer: string;
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  highlight: string;
+  accuracy: number | null;
+  instruction: number | null;
+  hallucinations: number | null;
+  reviewed: boolean;
   weirdestMistake: string;
   notes: string;
+};
+type HumanChallenge = {
+  choice: string;
+  durationText: string;
+  durationSource: "" | "timer" | "manual";
+  difficulty: "" | "easy" | "medium" | "hard";
+  notes: string;
+  attemptedBeforeAI: boolean;
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  photos: HumanPhotoMeta[];
 };
 type ExperimentState = {
   scheduleId: string;
@@ -22,10 +42,16 @@ type ExperimentState = {
   keyword: string;
   testQuestion: string;
   material: string;
+  fixtureMode: "pdf" | "text";
+  pdf: PdfMeta | null;
   hiddenTwist: string;
   groundTruth: string;
   sources: string;
+  sourceVerified: boolean;
+  sourceStatus: string;
+  lockedAt: string;
   commonPrompt: string;
+  human: HumanChallenge;
   runs: Record<ProviderId, ProviderRun>;
 };
 
@@ -55,7 +81,20 @@ const STARTERS = [
 ];
 
 function emptyRun(): ProviderRun {
-  return { model: "", response: "", accuracy: 0, instruction: 0, hallucinations: 0, weirdestMistake: "", notes: "" };
+  return { model: "", testedAt:"", usedSamePdf:false, response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
+}
+function emptyHuman(): HumanChallenge {
+  return { choice:"", durationText:"", durationSource:"", difficulty:"", notes:"",
+    attemptedBeforeAI:false, verdict:"", photos:[] };
+}
+function formatChallengeDuration(seconds: number) {
+  const total=Math.max(0,Math.round(seconds));
+  return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+function validateChallengeDuration(value: string) {
+  if (!value.trim()) return true;
+  const m=/^(\d{1,4}):([0-5]\d)$/.exec(value.trim());
+  return Boolean(m && Number(m[1])<=9999);
 }
 function emptyState(): ExperimentState {
   return {
@@ -65,12 +104,18 @@ function emptyState(): ExperimentState {
     category: STARTERS[0].category,
     hook: STARTERS[0].hook,
     keyword: STARTERS[0].keyword,
-    testQuestion: "",
+    testQuestion: suggestedExperimentQuestion(STARTERS[0].title),
     material: "",
+    fixtureMode: "pdf",
+    pdf: null,
     hiddenTwist: "",
     groundTruth: "",
     sources: "",
+    sourceVerified: false,
+    sourceStatus: "needs_verification",
+    lockedAt: "",
     commonPrompt: "",
+    human:emptyHuman(),
     runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
   };
 }
@@ -83,6 +128,11 @@ function slugify(value: string) {
 }
 function safeScore(value: number) {
   return Math.max(0, Math.min(10, Number.isFinite(value) ? value : 0));
+}
+function validRunScores(run: ProviderRun) {
+  return typeof run.accuracy === "number" && Number.isFinite(run.accuracy) && run.accuracy >= 0 && run.accuracy <= 10 &&
+    typeof run.instruction === "number" && Number.isFinite(run.instruction) && run.instruction >= 0 && run.instruction <= 10 &&
+    typeof run.hallucinations === "number" && Number.isSafeInteger(run.hallucinations) && run.hallucinations >= 0;
 }
 function buildIdeaPrompt() {
   return `Find 10 unusual AI experiments for an English-language global website.
@@ -125,40 +175,52 @@ Return a compact table with:
 Then choose the best 3 ideas for global curiosity and explain why.`;
 }
 function defaultCommonPrompt(s: ExperimentState) {
-  return `You are taking part in a blind AI experiment.
-
-Task:
-${s.testQuestion || s.title}
-
-Material:
-${s.material || "(The test material will be pasted or attached separately.)"}
-
-Instructions:
-- Answer only from the provided material and your general reasoning unless the task explicitly asks for web research.
-- Do not invent missing facts.
-- If something cannot be determined, say so.
-- Give your final answer first, then briefly explain your reasoning.
-- Do not assume there is a trick.
-- Do not ask to see the answer key.
-
-Return a clear final answer that can be scored against a pre-recorded ground truth.`;
+  return buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the attached PDF exactly as provided. Use only details that are actually visible in this document. If the attachment is missing or unreadable, say so." : s.material});
 }
+
 function reportText(s: ExperimentState) {
+  const human=s.human||emptyHuman();
+  const humanParticipated=Boolean(human.choice.trim());
+  const humanRecord=[
+    "HUMAN PARTICIPANT — operator-provided testimony only",
+    "Participation: "+(humanParticipated?"yes":"no confirmed attempt"),
+    "Own answer: "+(human.choice||"not recorded"),
+    "Time: "+(validateChallengeDuration(human.durationText)&&human.durationText.trim()?human.durationText+" (mm:ss; "+(human.durationSource==="timer"?"on-page timer":"operator entered")+")":"not recorded"),
+    "Difficulty as self-reported: "+(human.difficulty ? {easy:"easy",medium:"medium",hard:"hard"}[human.difficulty] : "not recorded"),
+    "Answered before seeing the AI outputs? "+(human.attemptedBeforeAI?"operator reports yes":"not confirmed"),
+    "Human verdict: "+(human.verdict||"not assessed"),
+    "Human's actual first-person note: "+(human.notes||"not recorded"),
+    "Actual photos saved locally (NOT automatically passed to ChatGPT or Blogger): "+
+      (human.photos.length?human.photos.map((p,i)=>"human_photo_"+String(i+1).padStart(2,"0")+" [original "+p.name+"; SHA-256 "+p.sha256+"]").join("; "):"none"),
+    "Never invent human experiences, visual content of photos, or timing results.",
+  ].join("\n");
   const rows = PROVIDERS.map(p => {
     const r = s.runs[p.id];
     return [
       p.label + (r.model ? " ("+r.model+")" : ""),
-      "Accuracy: " + safeScore(r.accuracy) + "/10",
-      "Instruction following: " + safeScore(r.instruction) + "/10",
-      "Hallucinations: " + Math.max(0, Math.floor(r.hallucinations || 0)),
+      "Review status: " + (r.reviewed ? "Operator reviewed" : "NOT REVIEWED"),
+      "Test date: " + (r.testedAt || "not recorded"),
+      "Same fixture PDF explicitly confirmed: " + (r.usedSamePdf ? "yes" : "not confirmed"),
+      "Answer selected: " + (r.finalAnswer || "not independently transcribed"),
+      "Correctness verdict (operator): " + (r.reviewed ? (r.verdict || "not assessed") : "UNREVIEWED"),
+      "Interesting verbatim passage (operator-selected): " + (r.highlight || "not selected"),
+      "Accuracy: " + (r.reviewed && r.accuracy !== null ? safeScore(r.accuracy) + "/10" : "NOT SCORED"),
+      "Instruction following: " + (r.reviewed && r.instruction !== null ? safeScore(r.instruction) + "/10" : "NOT SCORED"),
+      "Hallucinations: " + (r.reviewed && r.hallucinations !== null ? Math.max(0, Math.floor(r.hallucinations)) : "NOT SCORED"),
       "Weirdest mistake: " + (r.weirdestMistake || "Not recorded"),
       "Notes: " + (r.notes || "None"),
       "Original answer:\n" + (r.response || "Not collected"),
     ].join("\n");
   }).join("\n\n---\n\n");
   return [
-    "AI WORLD EXPERIMENT — VERIFIED REPORT",
+    "AI WORLD EXPERIMENT — ORIGINAL RESULTS REPORT",
     "Date: " + today(),
+    "Precommitted answer stored by Work before testing: operator responsibility (no site lock required)",
+    "Fixture mode: " + s.fixtureMode,
+    "Attached PDF: " + (s.pdf ? s.pdf.name + " | sha256=" + s.pdf.sha256 + " | bytes=" + s.pdf.bytes : "none"),
+    "PDF must be attached separately when testing and uploaded separately if publishing. This report does not include the PDF bytes.",
+    "Evidence review: " + (s.sourceVerified ? "operator checked" : "not independently checked"),
+    "Experiment status: " + (s.groundTruth.trim() && s.sources.trim() && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed && s.runs[p.id].verdict && (s.fixtureMode !== "pdf" || s.runs[p.id].usedSamePdf)) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
     "Title: " + s.title,
     "Category: " + s.category,
     "Hook: " + s.hook,
@@ -167,22 +229,25 @@ function reportText(s: ExperimentState) {
     s.testQuestion || s.title,
     "",
     "WHAT THE AI SAW",
-    s.material || "Not recorded",
+    s.fixtureMode === "pdf" ? ("The PDF listed above (content must be inspected directly). " + (s.material || "")) : (s.material || "Not recorded"),
     "",
     "HIDDEN TWIST",
     s.hiddenTwist || "None",
     "",
-    "GROUND TRUTH — established before judging model answers",
+    "GROUND TRUTH — imported from precommitted Work answer key or entered by operator after collecting responses",
     s.groundTruth || "NOT RECORDED",
     "",
     "GROUND-TRUTH SOURCES",
     s.sources || "Not recorded",
     "",
-    "MODEL RESULTS",
+    "HUMAN CHALLENGE",
+    humanRecord,
+    "",
+    "THREE AI MODEL RESULTS",
     rows,
     "",
     "IMPORTANT LIMIT",
-    "Scores are the operator's recorded evaluation for this single experiment. Do not generalize them into an overall model ranking.",
+    "The studio does not independently prove when an answer key was created. The operator should retain the original Work answer key and verify source material. Do not generalize one experiment into an overall model ranking.",
   ].join("\n");
 }
 function bloggerPrompt(s: ExperimentState) {
@@ -198,15 +263,28 @@ ${s.title}
 [PRIMARY SEARCH PHRASE]
 ${s.keyword || "AI experiment"}
 
-[VERIFIED EXPERIMENT RECORD]
+[EXPERIMENT RECORD — ORIGINAL RESPONSES AND OPERATOR-ENTERED ANSWER]
 ${report}
 
 [CORE RULE]
 This is a real experiment write-up, not a generic AI article.
-Use only the recorded experiment setup, ground truth and model results above.
+Use only the recorded experiment setup, precommitted ground truth, real human attempt if recorded, and actual model results above.
 Do not invent scores, model versions, answers, sources or observations.
+Use the actual original answers to describe what ChatGPT, Claude and Gemini EACH selected, what their reasoning literally says, and how their approaches differ.
+Present the three provider answers with individually attributed short VERBATIM excerpts, not invented quotes or an AI-written imitation.
+If a human answer is present, weave a short engaging first-person "I Tried It Myself" section from the operator's REAL notes, actual choice, difficulty and recorded time (if supplied).
+Translate and polish any Korean notes into natural English, but NEVER fabricate hesitations, reactions, discoveries, dialogue, sensory details or actions.
+Include the human entry as a fourth row in the result comparison ONLY when an actual human choice is provided. If the human verdict is unassessed, say "not scored" and never infer correctness.
+Say the human attempt occurred before reading AI responses ONLY when the explicit operator checkbox confirms this. Otherwise keep the order and claimed independence neutral.
+Human time is an operator-entered or locally measured elapsed time. Never compare it to AI response times unless those times were actually measured and recorded.
+If real human photos are listed, tell the operator to attach the actual photo files to the blog writing request or upload them separately to Blogger. Never infer a photo's visual contents from the filename; only describe what is verifiably visible if the photo is actually attached and inspected.
+If no human answer was recorded, omit the human-attempt story. Do not invent one.
+If an excerpt was manually selected, confirm it occurs exactly in that providers original response; otherwise select a brief exact excerpt from its saved response.
+If there is no noteworthy error, do not invent a weirdest mistake. Use human-confirmed verdicts for the scoreboard; numeric metrics are optional and never inferred from blank fields.
+Make the reader guess before showing the private answer, but do not delay disclosure so long that the result becomes unclear.
+The PDF is a local fixture, not an online link: do not fabricate a public PDF URL or claim it is embedded in Blogger HTML. PDF images and full original answer files need to be uploaded separately by the operator if they want to show those assets.
 Do not change the operator's recorded scoring.
-If one field is missing, omit it or clearly label it as not recorded.
+If one field is missing, omit it or clearly label it as not recorded. The answer key is supplied from Work by the operator after testing and was not independently timestamped or cryptographically locked by the studio. Do not claim otherwise.
 
 [ARTICLE STYLE]
 - English only.
@@ -219,29 +297,29 @@ If one field is missing, omit it or clearly label it as not recorded.
 
 [ARTICLE STRUCTURE]
 Use this as the default flow, adapting naturally:
-1. Short opening hook
-2. The Challenge
-3. What I Gave the AI
-4. The Hidden Twist
-5. The Ground Truth
-6. How ChatGPT Answered
-7. How Claude Answered
-8. How Gemini Answered
-9. Scoreboard
-10. Weirdest Mistake
-11. What This Test Actually Tells Us
-12. Final Verdict
+1. Short reader-facing hook and challenge (invite readers to try themselves)
+2. The identical PDF and question given to all three (include the recorded file checksum only if useful)
+3. I Tried It Myself (ONLY if the human actually submitted an answer; first-person real experience with photo placeholder)
+4. What ChatGPT Actually Said (its choice, reasoning, accurate excerpt)
+5. What Claude Actually Said (its choice, reasoning, accurate excerpt)
+6. What Gemini Actually Said (its choice, reasoning, accurate excerpt)
+7. Where Their Reasoning Diverged (verified comparison, no invented thoughts)
+8. The Big Reveal: Correct Answer and Source
+9. Who Got It Right? Human + three AIs if human participated; otherwise three AIs
+10. Most Surprising Real Response (only if one was actually observed)
+11. What This One Experiment Does and Does Not Show
+12. Final Verdict and invitation to reader
 
-Include a compact comparison table when all three models have scores.
-Mention the ground-truth source methodology without dumping long URLs into the prose.
+Include a compact comparison table for the three AI models. Include Human ONLY if their answer was recorded; never invent an answer or verdict.
+Mention the ground-truth source methodology with clickable primary links where verified.
 The "Weirdest Mistake" section should use only the recorded mistakes.
 
 [IMAGE PLACEHOLDERS — exact lines]
 [IMAGE 00 — Experiment hook]
-[IMAGE 01 — Test setup]
+[IMAGE 01 — Real human challenge photo if actually provided, otherwise test setup]
 [IMAGE 02 — AI answers]
 [IMAGE 03 — The reveal]
-[IMAGE 04 — Scoreboard]
+[IMAGE 04 — Human vs AI results when applicable, otherwise three-AI scoreboard]
 [IMAGE 05 — Weirdest mistake]
 
 [BLOGGER HTML]
@@ -276,6 +354,14 @@ export default function AiWorldExperimentStudio() {
   const [activeProvider, setActiveProvider] = useState<ProviderId>("chatgpt");
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [packetInput, setPacketInput] = useState("");
+  const [pdfAvailable, setPdfAvailable] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [humanPhotoUrls, setHumanPhotoUrls] = useState<Record<string,string>>({});
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
+  const [timerNow, setTimerNow] = useState(0);
 
   useEffect(() => {
     try {
@@ -284,7 +370,10 @@ export default function AiWorldExperimentStudio() {
       const seedRaw = localStorage.getItem(SEED_TRANSFER_KEY);
       if (seedRaw) {
         const seed = JSON.parse(seedRaw);
-        next = {
+        const caseKey = "ai-world-experiment-case:" + String(seed.scheduleId || slugify(String(seed.title || "")));
+        const remembered = localStorage.getItem(caseKey);
+        const recovered = remembered ? JSON.parse(remembered) as ExperimentState : null;
+        next = recovered && recovered.title === seed.title ? { ...emptyState(), ...recovered } : {
           ...emptyState(),
           scheduleId: typeof seed.scheduleId === "string" ? seed.scheduleId : "",
           scheduleDate: typeof seed.date === "string" ? seed.date : "",
@@ -294,8 +383,11 @@ export default function AiWorldExperimentStudio() {
           hook: typeof seed.hook === "string" ? seed.hook : "",
         };
         localStorage.removeItem(SEED_TRANSFER_KEY);
-        setNotice("발행리스트의 실험 주제를 불러왔습니다. Ground Truth부터 확정하세요.");
+        setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
+      if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
+      next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
+      next.human = { ...emptyHuman(), ...(next.human || {}), photos:Array.isArray(next.human?.photos)?next.human.photos.slice(0,3):[] };
       setState(next);
     } catch {
       setState(emptyState());
@@ -305,23 +397,281 @@ export default function AiWorldExperimentStudio() {
   useEffect(() => {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        const caseId = state.scheduleId || slugify(state.title);
+        if (caseId) localStorage.setItem("ai-world-experiment-case:" + caseId, JSON.stringify(state));
+      } catch {}
     }, 350);
     return () => window.clearTimeout(timer);
   }, [state, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated || !state.pdf?.sha256) { setPdfAvailable(false); return; }
+    let alive=true;
+    getExperimentPdf(state.pdf.sha256).then(blob=>{if(alive)setPdfAvailable(Boolean(blob));}).catch(()=>{if(alive)setPdfAvailable(false);});
+    return ()=>{alive=false;};
+  }, [hydrated, state.pdf?.sha256]);
+  const humanPhotoSignature=(state.human?.photos||[]).map(p=>p.sha256).join("|");
+  useEffect(() => {
+    let alive=true;
+    let urls:Record<string,string>={};
+    const metas=state.human?.photos||[];
+    if (!hydrated || !metas.length){setHumanPhotoUrls({});return;}
+    Promise.all(metas.map(async meta=>{
+      try {
+        const blob=await getHumanPhoto(meta.sha256);
+        return blob ? {sha256:meta.sha256,url:URL.createObjectURL(blob)} : null;
+      } catch {return null;}
+    })).then(items=>{
+      for(const item of items) if(item) urls[item.sha256]=item.url;
+      if (alive) setHumanPhotoUrls(urls);
+      else Object.values(urls).forEach(url=>URL.revokeObjectURL(url));
+    });
+    return ()=>{alive=false;Object.values(urls).forEach(url=>URL.revokeObjectURL(url));};
+  },[hydrated,humanPhotoSignature]);
+  useEffect(()=>{
+    if(timerStartedAt===null)return;
+    const id=window.setInterval(()=>setTimerNow(Date.now()),250);
+    return ()=>window.clearInterval(id);
+  },[timerStartedAt]);
   const commonPrompt = state.commonPrompt.trim() || defaultCommonPrompt(state);
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
-  const truthReady = state.groundTruth.trim().length >= 10 && state.sources.trim().length >= 5;
-  const allScored = PROVIDERS.every(p => state.runs[p.id].response.trim() && state.runs[p.id].accuracy > 0);
+  const suggestedQuestion = suggestedExperimentQuestion(state.title);
+  const {mismatchedQuestion, noKeyLeak, fixtureReady, allAnswersCollected, keyReady, allScored} = getExperimentWorkflowStatus({
+    title:state.title, testQuestion:state.testQuestion, commonPrompt,
+    fixtureMode:state.fixtureMode, pdfSha256:state.pdf?.sha256 || "",
+    pdfName:state.pdf?.name || "", pdfAvailable, material:state.material,
+    groundTruth:state.groundTruth, hiddenTwist:state.hiddenTwist, sources:state.sources,
+    runs:state.runs
+  });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
-    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value } } }));
+    if (!fixtureReady && !state.runs[id].response.trim()) return;
+    setState(prev => {
+      const old = prev.runs[id];
+      const resetVerdict = "response" in value || "finalAnswer" in value;
+      const nextVerdict = "verdict" in value ? (value.verdict || "") : (resetVerdict ? "" : old.verdict);
+      return {...prev, runs:{...prev.runs,[id]:{...old,...value,
+        ...("response" in value ? {finalAnswer:"",highlight:""} : {}),
+        verdict: nextVerdict, reviewed: Boolean(nextVerdict)
+      }}};
+    });
+  }
+  function updateGroundTruth(next: string) {
+    setState(prev=>({...prev,groundTruth:next,human: next!==prev.groundTruth ? {...prev.human,verdict:""} : prev.human,
+      runs:next!==prev.groundTruth?Object.fromEntries(PROVIDERS.map(p=>[p.id,{
+        ...prev.runs[p.id], verdict:"", reviewed:false
+      }])) as ExperimentState["runs"]:prev.runs}));
+  }
+
+  function patchHuman(value: Partial<HumanChallenge>) {
+    setState(prev=>{
+      const old=prev.human||emptyHuman();
+      return {...prev,human:{...old,...value,
+        ...("choice" in value && value.choice!==old.choice ? {verdict:"" as const}: {})}};
+    });
+  }
+  function startHumanTimer(){
+    if(!fixtureReady){setNotice("사람 도전도 PDF 또는 텍스트 문제와 공통 질문이 준비된 뒤 시작하세요.");return;}
+    const now=Date.now();
+    setTimerStartedAt(now);setTimerNow(now);
+    setNotice("사람 도전 타이머가 시작됐습니다. 직접 답을 고른 순간 종료하세요.");
+  }
+  function stopHumanTimer(){
+    if(timerStartedAt===null)return;
+    const seconds=Math.max(1,Math.round((Date.now()-timerStartedAt)/1000));
+    patchHuman({durationText:formatChallengeDuration(seconds),durationSource:"timer"});
+    setTimerStartedAt(null);setTimerNow(0);
+    setNotice("실제 경과 시간을 기록했습니다. 기록된 시간은 AI 처리 속도와 자동 비교하지 않습니다.");
+  }
+  async function uploadHumanPhotos(files:File[]){
+    if(!files.length || photoBusy)return;
+    const remaining=3-(state.human?.photos?.length||0);
+    if(remaining<=0){setNotice("사람 도전 사진은 최대 3장입니다.");return;}
+    if(files.length>remaining){setNotice("사진은 최대 3장까지 저장합니다. 먼저 선택한 "+remaining+"장만 등록합니다.");}
+    setPhotoBusy(true);
+    try{
+      const seen=new Set((state.human?.photos||[]).map(p=>p.sha256));
+      const additions:HumanPhotoMeta[]=[];
+      for(const file of files.slice(0,remaining)){
+        const meta=await storeHumanPhoto(file);
+        if(!seen.has(meta.sha256)){additions.push(meta);seen.add(meta.sha256);}
+      }
+      if(additions.length){
+        setState(prev=>({...prev,human:{...prev.human,photos:[...prev.human.photos,...additions].slice(0,3)}}));
+        setNotice("실제 사진 "+additions.length+"장 등록 완료. 이 사진은 서버에 업로드되지 않고 현재 브라우저에만 저장됩니다.");
+      }else setNotice("선택한 사진은 이미 등록되어 있습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"사진 등록 실패");}
+    finally{setPhotoBusy(false);}
+  }
+  async function removeHumanPhoto(sha256:string){
+    if(!window.confirm("이 사진을 현재 브라우저 저장소에서도 삭제할까요?"))return;
+    try{
+      await deleteHumanPhoto(sha256);
+      setState(prev=>({...prev,human:{...prev.human,photos:prev.human.photos.filter(p=>p.sha256!==sha256)}}));
+      setNotice("사진을 삭제했습니다. 다른 실험에서도 같은 파일을 사용했다면 다시 등록해야 합니다.");
+    }catch{setNotice("사진을 삭제하지 못했습니다.");}
+  }
+  async function downloadHumanPhoto(photo:HumanPhotoMeta){
+    try{
+      const blob=await getHumanPhoto(photo.sha256);
+      if(!blob)throw new Error("사진 원본을 현재 브라우저 저장소에서 찾지 못했습니다.");
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download=photo.name;a.click();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(e){setNotice(e instanceof Error?e.message:"사진 다운로드 실패");}
+  }
+  function hasResponses() { return PROVIDERS.some(p => state.runs[p.id].response.trim()); }
+  function hasHumanRecord() {
+    const h=state.human;
+    return Boolean(h.choice.trim() || h.durationText.trim() || h.notes.trim() || h.photos.length || h.attemptedBeforeAI);
+  }
+  function hasAnyResults() { return hasResponses() || hasHumanRecord(); }
+  function updateQuestion(next: string) {
+    if (next === state.testQuestion) return;
+    if (hasAnyResults() && !window.confirm("질문이 바뀌면 기존 사람 풀이 기록·사진·AI 답변을 다른 실험에 사용할 수 없습니다. 초기화할까요? 필요하면 먼저 ZIP으로 백업하세요.")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({ ...prev, testQuestion: next, commonPrompt:"",
+      human:emptyHuman(), runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+  }
+  function updateCommonPrompt(next: string) {
+    if (next === state.commonPrompt) return;
+    if (hasAnyResults() && !window.confirm("공통 프롬프트를 바꾸면 사람 도전과 AI 답변 기록이 무효가 됩니다. 모두 초기화할까요? 먼저 ZIP으로 백업하세요.")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({...prev, commonPrompt:next,human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+  }
+  function updateMaterial(next: string) {
+    if (next === state.material) return;
+    if (hasAnyResults() && !window.confirm("텍스트 문제를 수정하면 사람 도전과 AI 답변 기록을 초기화해야 합니다. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev=>({...prev,material:next,human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
+  }
+  function changeFixtureMode(next: ExperimentState["fixtureMode"]) {
+    if (state.fixtureMode === next) return;
+    if (hasAnyResults() && !window.confirm("테스트 자료 방식을 바꾸면 기존 사람 도전·사진·AI 답변이 초기화됩니다. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev => ({...prev,fixtureMode:next,sourceVerified:false,human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
+  }
+  function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
+    if (!preset && packet.title && packet.title.trim().toLowerCase() !== state.title.trim().toLowerCase()) {
+      setNotice("Work의 JSON 제목이 현재 실험과 다릅니다. 같은 PDF에서 나온 비공개 정답표인지 확인해 주세요."); return;
+    }
+    if (!preset && mismatchedExperimentQuestion(state.title, packet.testQuestion)) {
+      setNotice("가져온 질문이 현재 실험 주제와 맞지 않습니다."); return;
+    }
+    const promptChanged = preset || packet.testQuestion !== state.testQuestion ||
+      (state.fixtureMode === "text" && packet.material !== state.material);
+    if (hasAnyResults() && promptChanged && !window.confirm("Work JSON의 문제·질문이 기존 실험과 다릅니다. 사람 도전 사진·후기와 세 AI의 답변이 초기화됩니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
+    if(promptChanged){setTimerStartedAt(null);setTimerNow(0);}
+    setState(prev => ({ ...prev, title: packet.title || prev.title,
+      testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
+      groundTruth: packet.groundTruth, sources: packet.sources,
+      sourceStatus: packet.sourceStatus, sourceVerified: false, lockedAt: "", commonPrompt: promptChanged ? "" : prev.commonPrompt,
+      fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
+      human: promptChanged?emptyHuman():(packet.groundTruth!==prev.groundTruth?{...prev.human,verdict:""}:prev.human),
+      runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : (packet.groundTruth !== prev.groundTruth ? Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"" as const,reviewed:false}])) as ExperimentState["runs"] : prev.runs) }));
+    setNotice(preset ? "텍스트 예제 입력 완료. PDF 실험과는 별개입니다." :
+      (hasResponses() && !promptChanged ? "기존 세 AI 답변은 유지하고 비공개 정답·출처만 가져왔습니다." : "Work 질문·비공개 정답·출처를 가져왔습니다. PDF와 질문이 맞는지 확인하세요."));
+  }
+  function importPacket() {
+    const parsed = parseExperimentPacket(packetInput);
+    if (!parsed.packet) { setNotice(parsed.error); return; }
+    applyPacket(parsed.packet);
+  }
+  async function uploadPdf(file: File | null) {
+    if (!file || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const meta = await storeExperimentPdf(file);
+      const isIdentical = meta.sha256 === state.pdf?.sha256 && state.fixtureMode === "pdf";
+      if (!isIdentical && hasAnyResults() && !window.confirm("기존 PDF와 다른 파일입니다. 사람 풀이 기록·사진과 세 AI의 답변을 초기화해야 합니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) {
+        setNotice("PDF 변경을 취소했습니다. 기존 AI 답변은 그대로 보관됩니다."); return;
+      }
+      setPdfAvailable(true);
+      if(!isIdentical){setTimerStartedAt(null);setTimerNow(0);}
+      setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta,
+        sourceVerified: isIdentical ? prev.sourceVerified : false,
+        lockedAt: "", human: isIdentical ? prev.human : emptyHuman(),
+        runs: isIdentical ? prev.runs : {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+      setNotice(isIdentical ? "동일 PDF 재등록 완료. 기존 AI 답변은 유지됩니다." :
+        "PDF 등록 완료. 공통 질문을 확인하고 세 AI 답변을 받아오세요. 정답 입력은 나중에 해도 됩니다.");
+    } catch (e) { setNotice(e instanceof Error ? e.message : "PDF 등록 실패"); }
+    finally { setPdfBusy(false); }
+  }
+  async function accessPdf(download: boolean) {
+    if (!state.pdf) return;
+    try {
+      const blob = await getExperimentPdf(state.pdf.sha256);
+      if (!blob) { setPdfAvailable(false); setNotice("저장된 PDF 원본을 찾을 수 없습니다. 같은 PDF를 다시 등록하세요."); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      if (download) { a.download = state.pdf.name; } else {a.target = "_blank"; a.rel="noopener noreferrer";}
+      document.body.appendChild(a); a.click();a.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    } catch { setNotice("PDF 원본을 열지 못했습니다. 이 브라우저의 IndexedDB 저장소를 확인하세요."); }
+  }
+  async function exportEvidenceZip() {
+    if (!fixtureReady || archiving) return;
+    setArchiving(true);
+    try {
+      const zip = new JSZip();
+      if (state.fixtureMode === "pdf") {
+        const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
+        if (!blob || !state.pdf) throw new Error("PDF 원본을 찾을 수 없습니다.");
+        zip.file("01_BLIND_TEST/" + state.pdf.name, blob);
+      } else zip.file("01_BLIND_TEST/material.txt", state.material);
+      zip.file("02_EXACT_TEST_QUESTION.txt", commonPrompt);
+      zip.file("03_PRIVATE_ANSWER_KEY_DO_NOT_UPLOAD.txt", ["Title: "+state.title,
+        "Ground Truth: "+state.groundTruth,"Hidden twist: "+state.hiddenTwist,
+        "Sources and derivation: "+state.sources,"Answer key came from original Work fixture; no site lock required."].join("\n\n"));
+      PROVIDERS.forEach(p=>{const r=state.runs[p.id];zip.file("04_ORIGINAL_AI_ANSWERS/"+p.id+".txt",
+        "Model: "+(r.model||"not recorded")+"\nDate: "+(r.testedAt||"not recorded")+
+        "\nSame PDF verified by operator: "+(r.usedSamePdf?"yes":"not verified")+"\n\n"+(r.response||"NO ANSWER COLLECTED"));});
+      const human=state.human||emptyHuman();
+      if(human.photos.length){
+        const assets=[];
+        for(let i=0;i<human.photos.length;i++){
+          const meta=human.photos[i];
+          const photo=await getHumanPhoto(meta.sha256);
+          if(!photo)throw new Error("사람 도전 사진 원본이 없습니다: "+meta.name);
+          const ext=meta.mimeType==="image/png"?"png":meta.mimeType==="image/webp"?"webp":"jpg";
+          const filename="human_photo_"+String(i+1).padStart(2,"0")+"."+ext;
+          zip.file("05_HUMAN_CHALLENGE/"+filename,photo);
+          assets.push({filename,originalName:meta.name,sha256:meta.sha256,bytes:meta.bytes});
+        }
+        zip.file("05_HUMAN_CHALLENGE/photo_manifest.json",JSON.stringify(assets,null,2));
+      }
+      zip.file("05_HUMAN_CHALLENGE/human_notes.txt",[
+        "Human participant was optional; do not invent missing experiences.",
+        "Human actual answer: "+(human.choice||"not recorded"),
+        "Time (mm:ss): "+(validateChallengeDuration(human.durationText)?human.durationText:"invalid / not recorded"),
+        "Duration recorded by: "+(human.durationSource||"not recorded"),
+        "Difficulty: "+(human.difficulty||"not recorded"),
+        "Human notes: "+(human.notes||"not recorded"),
+        "Before viewing AI replies (operator confirmation): "+(human.attemptedBeforeAI?"yes":"not confirmed"),
+        "Human verdict: "+(human.verdict||"not assessed"),
+      ].join("\n"));
+      zip.file("05_OPERATOR_RESULTS/report.txt",report);
+      zip.file("05_OPERATOR_RESULTS/records.json",JSON.stringify(state,null,2));
+      zip.file("06_BLOGGER/article_request.txt",articlePrompt);
+      zip.file("README.txt","PRIVATE EVIDENCE ARCHIVE. Never give the whole ZIP or the PRIVATE answer key to test models. Send only the identical blind PDF and exact question. Human challenge photos are ORIGINAL user-provided image bytes; they can include EXIF/GPS/private content. Review them before publishing. Photos are never automatically attached to ChatGPT or Blogger. Attach chosen human photo(s) to the article-writing chat manually and upload them separately to Blogger. Human first-person details must come from the actual notes, not invented moments.");
+      const archive=await zip.generateAsync({type:"blob"});
+      const url=URL.createObjectURL(archive),a=document.createElement("a");
+      a.href=url;a.download=(slugify(state.title)||"ai-world-experiment")+"-evidence.zip";a.click();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setNotice("PDF·AI 답변·사람 도전 사진과 후기·비공개 정답·블로그 요청서를 ZIP으로 백업했습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"ZIP 백업 실패");}
+    finally{setArchiving(false);}
   }
   async function copy(text: string, label: string) {
     try { await navigator.clipboard.writeText(text); setNotice(label + " 복사 완료"); }
@@ -338,6 +688,8 @@ export default function AiWorldExperimentStudio() {
     }
   }
   function loadStarter(index: number) {
+    if ((state.pdf || state.material.trim() || hasAnyResults()) && !window.confirm("다른 실험으로 변경하면 기존 PDF, 사람 도전·사진과 AI 답변 기록이 초기화됩니다. 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
+    setTimerStartedAt(null);setTimerNow(0);
     const item = STARTERS[index];
     setState(prev => ({
       ...prev,
@@ -347,19 +699,26 @@ export default function AiWorldExperimentStudio() {
       category: item.category,
       hook: item.hook,
       keyword: item.keyword,
-      testQuestion: "",
+      testQuestion: suggestedExperimentQuestion(item.title),
       material: "",
+      fixtureMode: "pdf",
+      pdf: null,
       hiddenTwist: "",
       groundTruth: "",
       sources: "",
+      sourceVerified: false,
+      sourceStatus: "needs_verification",
+      lockedAt: "",
       commonPrompt: "",
+      human:emptyHuman(),
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
     }));
-    setNotice("실험 아이디어를 불러왔습니다. 정답과 출처를 먼저 확정하세요.");
+    setPacketInput("");
+    setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!truthReady || !allScored) {
-      setNotice("Ground Truth·출처와 세 AI의 답변/점수를 먼저 기록하세요.");
+    if (!allScored) {
+      setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
       return;
     }
     const pending = {
@@ -369,7 +728,7 @@ export default function AiWorldExperimentStudio() {
       title: state.title,
       keyword: state.keyword || "AI experiment",
       slug: slugify(state.title),
-      note: "Global curiosity experiment · Ground Truth locked before scoring · ChatGPT/Claude/Gemini compared",
+      note: "Global curiosity experiment · Work-precommitted ground truth entered for final comparison · ChatGPT/Claude/Gemini tested with common fixture",
       labVersion: "WORLD-LAB-V1",
       labReport: report,
       labPrompt: articlePrompt,
@@ -387,6 +746,7 @@ export default function AiWorldExperimentStudio() {
     if (!window.confirm("현재 실험 설계와 AI 답변을 모두 초기화할까요?")) return;
     setState(emptyState());
     setActiveProvider("chatgpt");
+    setTimerStartedAt(null);setTimerNow(0);
   }
 
   const run = state.runs[activeProvider];
@@ -404,7 +764,7 @@ export default function AiWorldExperimentStudio() {
       <span>GLOBAL AI EXPERIMENT STUDIO</span>
       <h1>전 세계가 궁금해할<br/>엉뚱한 AI 실험을 만듭니다.</h1>
       <p>나라·지도·음식·언어·동물·날씨·가격·통계처럼 누구나 이해할 수 있는 자료로 AI를 시험하고, Ground Truth와 실제 답변을 근거로 영어 글을 만듭니다.</p>
-      <div className={styles.heroBadges}><b>Ground Truth first</b><b>Same prompt</b><b>3 AI answers</b><b>Global curiosity</b></div>
+      <div className={styles.heroBadges}><b>정답은 마지막에 입력</b><b>Same prompt</b><b>3 AI answers</b><b>Global curiosity</b></div>
     </section>
 
     {notice && <div className={styles.notice}>{notice}<button onClick={() => setNotice("")}>×</button></div>}
@@ -425,27 +785,117 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Ground Truth부터 잠그기</h2><p>AI 답변을 보기 전에 정답과 출처를 먼저 저장해야 결과를 끼워 맞추지 않습니다.</p></div><em className={truthReady ? styles.good : styles.wait}>{truthReady ? "✓ 정답 준비" : "정답·출처 필요"}</em></div>
-      <div className={styles.grid2}>
-        <label><span>영문 제목</span><input value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
-        <label><span>카테고리</span><input value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
-        <label><span>검색 문구</span><input value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
-        <label><span>후킹 포인트</span><input value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
+      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Work에서 만든 PDF 한 장 등록</h2><p>Work에서 내려받을 파일은 블라인드 PDF 1개면 됩니다. 비공개 정답·출처·공통 질문은 Work 답변의 JSON 텍스트를 복사해 보관합니다.</p></div><em className={state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?styles.good:styles.wait):(state.material.trim()?styles.good:styles.wait)}>{state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?"PDF 원본 등록됨":"PDF 원본 필요"):(state.material.trim()?"텍스트 자료 준비됨":"텍스트 자료 필요")}</em></div>
+      <div className={styles.actions}>
+        <button className={styles.primary} onClick={() => void copy(buildWorkPdfRequest(state), "Work용 PDF 제작 요청서")}>① Work용 PDF 제작 요청서 복사</button>
+        <button onClick={() => void copy(buildPacketRequest(state), "텍스트 실험 자료 제작 요청서")}>텍스트만 쓰는 경우 요청서 복사</button>
       </div>
-      <label className={styles.field}><span>AI에게 물을 질문</span><textarea value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder="예: Which one of these ten countries is not real? Explain briefly." /></label>
-      <label className={styles.field}><span>AI에게 보여줄 자료</span><textarea value={state.material} onChange={e=>patch("material",e.target.value)} placeholder="표, 목록, 데이터, 설명문 등 실제 테스트 재료를 붙여넣기. 이미지/파일을 쓸 경우 여기에는 구성과 출처를 기록." /></label>
-      <label className={styles.field}><span>숨겨둔 트릭</span><textarea value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
-      <div className={styles.truthGrid}>
-        <label><span>🔒 Ground Truth · 정답</span><textarea value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="AI 답변을 보기 전에 정답과 판정 기준을 확정." /></label>
-        <label><span>🔗 Ground Truth 출처</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="공식/공공/신뢰 가능한 출처 URL과 확인 메모. 한 줄에 하나씩." /></label>
+      <p>ChatGPT <strong>Work 모드</strong>에서 <strong>blind_test.pdf 한 개만</strong> 내려받으세요. Work가 채팅에 표시한 비공개 JSON은 아래 칸에 복사합니다. 세 AI에는 PDF와 공통 질문만 전달하고 JSON은 보여주지 않습니다.</p>
+      <div className={styles.fixtureChoice}>
+        <label><input type="radio" name="fixtureMode" checked={state.fixtureMode==="pdf"} onChange={()=>setState(prev=>({...prev,fixtureMode:"pdf",sourceVerified:false}))} /> PDF 실험 (권장)</label>
+        <label><input type="radio" name="fixtureMode" checked={state.fixtureMode==="text"} onChange={()=>setState(prev=>({...prev,fixtureMode:"text",sourceVerified:false}))} /> 텍스트 실험</label>
+      </div>
+      {state.fixtureMode==="pdf" ? <div className={styles.pdfPanel}>
+        <label><strong>② Work에서 받은 원본 PDF 업로드</strong>
+          <input type="file" accept=".pdf,application/pdf" disabled={pdfBusy} onChange={e=>{void uploadPdf(e.target.files?.[0] || null);e.currentTarget.value="";}} />
+        </label>
+        {state.pdf ? <div className={styles.pdfMeta}><strong>{state.pdf.name}</strong><span>{state.pdf.bytes.toLocaleString()} bytes · SHA-256: <code>{state.pdf.sha256}</code></span>
+          <div className={styles.actions}><button disabled={!pdfAvailable} onClick={()=>void accessPdf(false)}>PDF 열어보기</button><button disabled={!pdfAvailable} onClick={()=>void accessPdf(true)}>동일 PDF 다운로드 ↓</button></div>
+          {!pdfAvailable && <small>이 브라우저에서 원본 파일이 확인되지 않습니다. PDF를 다시 업로드하세요.</small>}
+        </div> : <p>PDF를 업로드하면 브라우저에 파일을 저장하고 SHA-256 지문을 기록합니다. 서버로 전송하지 않습니다.</p>}
+      </div> : <div className={styles.actions}>
+        {(state.title===FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button onClick={()=>applyPacket(FAKE_COUNTRY_PACKET,true)}>텍스트 국가 10개 예제 채우기</button>}
+      </div>}
+      <details className={styles.advanced}>
+        <summary>선택 기능 · Work 비공개 JSON 가져오기</summary>
+        <p className={styles.muted}>필수 단계가 아닙니다. Work 답변에서 JSON을 복사하면 질문·정답·출처가 자동으로 채워집니다. 정답만 나중에 입력해도 됩니다.</p>
+        <label className={styles.field}><span>Work의 비공개 [EXPERIMENT_PACKET_JSON] 블록</span><textarea value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON]" /></label>
+        <div className={styles.actions}><button disabled={!packetInput.trim()} onClick={importPacket}>질문·정답·출처 자동 입력</button></div>
+      </details>
+      <p>Work에서 정답은 PDF 제작 시 확정해 보관하세요. 사이트에는 세 AI의 답변을 모은 후 입력해도 됩니다. AI에 정답표를 보여주지 마세요.</p>
+    </section>
+
+    <section className={styles.panel}>
+      <div className={styles.panelHead}><div><span>STEP 03</span><h2>공통 질문 설정</h2><p>PDF에 맞는 질문을 확인하세요. 정답을 입력하거나 잠그지 않아도 실험할 수 있습니다.</p></div><em className={fixtureReady?styles.good:styles.wait}>{fixtureReady?"✓ 실험 준비됨":"PDF·질문 확인 필요"}</em></div>
+      <details className={styles.advanced}><summary>제목 · 카테고리 · 키워드 · 후킹 포인트 수정 (선택)</summary>
+        <div className={styles.grid2}>
+          <label><span>영문 제목</span><input value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
+          <label><span>카테고리</span><input value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
+          <label><span>검색 문구</span><input value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
+          <label><span>후킹 포인트</span><input value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
+        </div>
+      </details>
+      <label className={styles.field}><span>AI에게 물을 영어 질문</span><textarea value={state.testQuestion} onChange={e=>updateQuestion(e.target.value)} placeholder={suggestedQuestion || "이 PDF에 맞는 영어 질문을 입력하세요."} /></label>
+      {suggestedQuestion && <div className={styles.actions}><button onClick={()=>updateQuestion(suggestedQuestion)}>현재 주제의 추천 질문 사용</button></div>}
+      {mismatchedQuestion && <p className={styles.questionWarning} role="alert">실험 주제와 질문이 다릅니다. 영수증 PDF로 가짜 국가 찾기 질문을 내면 올바른 실험이 아닙니다.</p>}
+      {!noKeyLeak && <p className={styles.questionWarning} role="alert">질문이나 PDF 파일명에서 비공개 정답이 노출될 위험이 있습니다. 확인해 주세요.</p>}
+      {state.fixtureMode==="text" && <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea value={state.material} onChange={e=>updateMaterial(e.target.value)} placeholder="실제 테스트에 전달할 텍스트 자료" /></label>}
+      <p className={styles.muted}>PDF 실험에서는 별도의 텍스트 자료를 복사할 필요가 없습니다. 정답은 STEP 06에서 입력합니다.</p>
+    </section>
+
+    <section className={styles.panel}>
+      <div className={styles.panelHead}><div><span>STEP 04 · HUMAN CHALLENGE</span><h2>나도 직접 문제 풀어보기</h2>
+        <p>선택 참여 · 내가 고른 답, 실제 걸린 시간, 느낀 점과 사진을 남기면 최종 글에 1인칭 체험담으로 반영됩니다.</p></div>
+        <em className={state.human.choice.trim()?styles.good:styles.wait}>{state.human.choice.trim()?"✓ 사람의 답 기록됨":"선택 참여"}</em>
+      </div>
+      <p className={styles.muted}>가능하면 AI 답변을 보기 전에 문제를 풀고, 실제로 있었던 일만 적으세요. 사진과 풀이 시간이 없어도 됩니다.</p>
+      <div className={styles.humanTimer}>
+        <div>
+          <span>문제 풀이 타이머</span>
+          <strong>{timerStartedAt===null ? (state.human.durationText||"00:00") : formatChallengeDuration(Math.floor(((timerNow||Date.now())-timerStartedAt)/1000))}</strong>
+          <small>시작과 종료 사이 실제 경과 시간 · 직접 입력도 가능</small>
+        </div>
+        <div className={styles.actions}>
+          <button disabled={!fixtureReady || timerStartedAt!==null} onClick={startHumanTimer}>시작</button>
+          <button className={styles.primary} disabled={timerStartedAt===null} onClick={stopHumanTimer}>종료 · 기록</button>
+        </div>
+      </div>
+      <div className={styles.grid2}>
+        <label><span>내가 선택한 답</span><input value={state.human.choice} onChange={e=>patchHuman({choice:e.target.value})} placeholder="예: Singapore / 7번 국가명" /></label>
+        <label><span>걸린 시간 (분:초)</span><input value={state.human.durationText} onChange={e=>patchHuman({durationText:e.target.value,durationSource:"manual"})} placeholder="예: 01:24" inputMode="numeric" /></label>
+      </div>
+      {!validateChallengeDuration(state.human.durationText) && <p className={styles.questionWarning} role="alert">시간을 MM:SS 형식으로 입력하세요. 예: 01:24</p>}
+      <div className={styles.field}>
+        <span>느낀 난이도 (선택)</span>
+        <div className={styles.fixtureChoice}>
+          {([{value:"easy",label:"쉬움"},{value:"medium",label:"보통"},{value:"hard",label:"어려움"}] as const).map(item=>
+            <label key={item.value}><input type="radio" name="humanDifficulty" checked={state.human.difficulty===item.value} onChange={()=>patchHuman({difficulty:item.value})}/>{item.label}</label>)}
+        </div>
+      </div>
+      <label className={styles.field}><span>문제를 풀면서 어땠나요? · 간단히 적어도 됩니다</span>
+        <textarea value={state.human.notes} onChange={e=>patchHuman({notes:e.target.value})} placeholder="예: 처음에는 통화를 보고 헷갈렸다. GST라는 단서를 보고 한 나라로 좁혔지만 확신은 없었다. 실제로 경험한 것만 적어주세요." rows={3}/>
+      </label>
+      <label className={styles.checkLine}><input type="checkbox" checked={state.human.attemptedBeforeAI}
+        onChange={e=>patchHuman({attemptedBeforeAI:e.target.checked})} />
+        <span>AI 세 곳의 답변을 보기 전에 제가 먼저 풀었습니다. (실제로 그랬을 때만 체크)</span>
+      </label>
+      <div className={styles.humanPhotoPanel}>
+        <strong>실제 문제 푸는 사진 등록 · 최대 3장 (선택)</strong>
+        <p className={styles.muted}>JPG·PNG·WebP · 한 장당 최대 10MB · 사진 미리보기와 개별 다운로드 가능. 사진은 현재 브라우저에만 저장되며 GPT·Blogger에는 자동 전송되지 않습니다.</p>
+        <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple
+          disabled={photoBusy || state.human.photos.length>=3}
+          onChange={e=>{void uploadHumanPhotos(Array.from(e.currentTarget.files||[]));e.currentTarget.value="";}} />
+        {state.human.photos.length>0 && <div className={styles.humanPhotos}>
+          {state.human.photos.map((photo,i)=><div className={styles.humanPhotoCard} key={photo.sha256}>
+            {humanPhotoUrls[photo.sha256] ?
+              <img src={humanPhotoUrls[photo.sha256]} alt={"직접 등록한 사람 도전 사진 "+(i+1)} loading="lazy" /> :
+              <div className={styles.humanPhotoUnavailable}>사진 원본 확인 중이거나 현재 브라우저에서 찾을 수 없습니다.</div>}
+            <small>{photo.name}</small>
+            <div className={styles.actions}><button onClick={()=>void downloadHumanPhoto(photo)}>다운로드</button>
+              <button onClick={()=>void removeHumanPhoto(photo.sha256)}>삭제</button></div>
+          </div>)}
+        </div>}
+        <small>블로그 공개 전에 사진 속 얼굴·화면·개인정보와 원본 사진의 GPS/EXIF 정보를 확인하세요.</small>
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 03</span><h2>세 AI에 같은 문제 던지기</h2><p>같은 자료와 같은 질문을 사용합니다. 모델이 답한 원문은 요약하지 말고 그대로 보관하세요.</p></div><strong>{completed}/3 답변</strong></div>
-      <label className={styles.field}><span>공통 테스트 프롬프트</span><textarea value={state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>ChatGPT · Claude · Gemini 답변 모으기</h2><p>PDF와 질문을 똑같이 제공하고 실제 원문을 붙여넣으세요. 정답은 아직 필요 없습니다.</p></div><strong>{completed}/3 답변</strong></div>
+      <label className={styles.field}><span>공통 테스트 프롬프트 · 비어 있으면 아래 예시가 자동 적용됩니다</span><textarea value={state.commonPrompt} onChange={e=>updateCommonPrompt(e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
-        <button onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        <button disabled={!fixtureReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        {state.fixtureMode==="pdf" && <button disabled={!fixtureReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
+        {!fixtureReady && <small>PDF 또는 텍스트 자료와 공통 질문을 확인하면 바로 테스트할 수 있습니다.</small>}
       </div>
       <div className={styles.providerTabs}>
         {PROVIDERS.map(p => <button key={p.id} className={activeProvider===p.id?styles.providerActive:""} onClick={()=>setActiveProvider(p.id)}>
@@ -454,38 +904,73 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
-        <label><span>표시된 모델명</span><input value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: GPT-5.6 / Claude Sonnet / Gemini Pro" /></label>
-        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
+        <label><span>표시된 모델명</span><input disabled={!fixtureReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="서비스 화면에 표시된 실제 모델명" /></label>
+        <label className={styles.field}><span>실험 날짜</span><input disabled={!fixtureReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
+        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
+        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!fixtureReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 04</span><h2>정답 대조 · 점수 기록</h2><p>전체 모델의 우열을 선언하는 점수가 아니라, 이번 한 번의 실험 결과입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 채점 완료":"채점 필요"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 06</span><h2>정답 입력 · 사람과 AI 결과 비교</h2><p>사람과 세 AI의 실제 답변을 모은 뒤 Work에서 PDF 제작 때 미리 정한 정답을 입력하세요. 사이트에서 따로 잠글 필요는 없습니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 결과 비교 완료":"정답·결과 확인"}</em></div>
+      <div className={styles.truthGrid}>
+        <label><span>정답 (Work에서 PDF 제작할 때 확정한 원래 답)</span><textarea value={state.groundTruth} onChange={e=>updateGroundTruth(e.target.value)} placeholder="예: 국기 문제라면 가상 국가의 번호·이름. 영수증 문제라면 사전 결정된 국가·근거." /></label>
+        <label><span>정답 출처·근거</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="Work 원본 답안의 공식 출처 URL, 제작 근거, 판정 기준과 검증이 필요한 점을 입력하세요." /></label>
+      </div>
+      <details className={styles.advanced}><summary>실험의 숨은 설정 메모 (선택)</summary>
+        <label className={styles.field}><span>비공개 트릭 · 테스트 AI에게 전달하지 않음</span><textarea value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="필요할 때만 기록" /></label>
+      </details>
+      {!keyReady && <p className={styles.muted}>답변 수집에는 필요하지 않습니다. 최종 글을 만들 때 Work의 원래 정답과 근거를 입력하세요.</p>}
+      {state.human.choice.trim() && <div className={styles.humanVerdict}>
+        <strong>Human · 내가 직접 고른 답</strong>
+        <span>{state.human.choice}</span>
+        <label><span>내 정답 여부 (선택)</span><select disabled={!keyReady} value={state.human.verdict}
+            onChange={e=>patchHuman({verdict:e.target.value as HumanChallenge["verdict"]})}>
+          <option value="">정답표와 비교해 선택하세요</option>
+          <option value="correct">정답</option><option value="incorrect">오답</option>
+          <option value="partial">부분 정답</option><option value="uncertain">판정 보류</option>
+        </select></label>
+        <small>미판정이어도 AI 3사 글 제작은 가능합니다. 최종 글에서는 '사람 미채점'이라고 표시합니다.</small>
+      </div>}
       <div className={styles.scoreCards}>
         {PROVIDERS.map(p => {
           const r=state.runs[p.id];
           return <article key={p.id}>
             <h3>{p.label}</h3>
-            <div className={styles.scoreGrid}>
-              <label><span>정확도 /10</span><input type="number" min="0" max="10" value={r.accuracy} onChange={e=>patchRun(p.id,{accuracy:Number(e.target.value)})}/></label>
-              <label><span>지시 준수 /10</span><input type="number" min="0" max="10" value={r.instruction} onChange={e=>patchRun(p.id,{instruction:Number(e.target.value)})}/></label>
-              <label><span>환각 개수</span><input type="number" min="0" value={r.hallucinations} onChange={e=>patchRun(p.id,{hallucinations:Number(e.target.value)})}/></label>
-            </div>
-            <label><span>Weirdest Mistake</span><textarea value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="가장 엉뚱하거나 자신 있게 틀린 부분" /></label>
-            <label><span>채점 메모</span><textarea value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value})} placeholder="부분정답, 누락, 애매한 판정 등" /></label>
+            <label><span>AI가 고른 답 (선택)</span><input disabled={!r.response.trim()} value={r.finalAnswer} onChange={e=>patchRun(p.id,{finalAnswer:e.target.value})} placeholder="예: 7. Norvessa" /></label>
+            <label><span>실제 원문과 정답을 비교한 판정 (필수)</span><select disabled={!keyReady || !r.response.trim()} value={r.verdict} onChange={e=>patchRun(p.id,{verdict:e.target.value as ProviderRun["verdict"]})}>
+              <option value="">판정을 선택하세요</option><option value="correct">정답</option><option value="incorrect">오답</option><option value="partial">부분 정답</option><option value="uncertain">판정 보류</option>
+            </select></label>
+            <label><span>독자에게 보여줄 흥미로운 원문 인용 (선택)</span><textarea disabled={!r.response.trim()} value={r.highlight} onChange={e=>patchRun(p.id,{highlight:e.target.value})} placeholder="실제 AI 답변에서 문장을 그대로 복사하세요. 새로운 해석이나 추측으로 바꾸지 마세요." /></label>
+            {r.highlight && r.response && !r.response.includes(r.highlight.trim()) && <small className={styles.quoteWarn}>선택한 인용 문구가 답변 원문에 정확히 일치하지 않습니다. 확인해 주세요.</small>}
+            <label><span>결과 메모 (선택)</span><textarea disabled={!r.response.trim()} value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value})} placeholder="이 AI가 어떤 단서로 판단했는지 / 다른 AI와 어떤 점이 달랐는지 원문에 근거하여 기록" /></label>
+            <details className={styles.advanced}><summary>추가 세부 평가 (선택)</summary>
+              <div className={styles.scoreGrid}>
+                <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value)})}/></label>
+                <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value)})}/></label>
+                <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value)})}/></label>
+              </div>
+              <label><span>실제로 관찰한 특이한 오류</span><textarea disabled={!r.response.trim()} value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="없으면 공란으로 둡니다." /></label>
+            </details>
+            <small className={styles.muted}>원래 정답과 원문을 비교해 판정을 선택하면 자동으로 저장됩니다. 추가 확인 체크는 필요 없습니다.</small>
           </article>;
         })}
       </div>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>영어 글 제작 → 발행 큐</h2><p>The Challenge → AI Answers → Reveal → Scoreboard → Weirdest Mistake → Verdict 흐름으로 자동 요청서를 만듭니다.</p></div></div>
+      <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>문제를 공개하고 → 실제 사람의 경험(선택 참여) → 세 AI의 원문 판단 → 네 참가자의 결과 비교 → 정답 공개 순서로 작성합니다.</p></div></div>
+      <div className={styles.summaryRow}>
+        {state.human.choice.trim() && <div><strong>Human</strong><span>{state.human.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[state.human.verdict]:"정답 미판정"}</span><small>{state.human.choice} {state.human.durationText ? " · "+state.human.durationText : ""}</small></div>}
+        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
-        <button onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
-        <button onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
-        <button className={styles.primary} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
-        <button className={styles.queue} disabled={!truthReady||!allScored} onClick={sendToQueue}>검증된 실험을 발행 큐로 등록 →</button>
+        <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
+        <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
+        <button className={styles.primary} disabled={!allScored} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
+        <button className={styles.queue} disabled={!allScored} onClick={sendToQueue}>최종 글 제작을 발행리스트로 보내기 →</button>
+        <button disabled={!fixtureReady || archiving || (state.fixtureMode==="pdf" && !pdfAvailable)} onClick={()=>void exportEvidenceZip()}>비공개 원본·PDF·답변 ZIP 백업 ↓</button>
       </div>
+      {state.human.photos.length>0 && <p className={styles.muted}>중요: 등록한 실제 사진은 GPT로 자동 전송되지 않습니다. ZIP으로 백업하거나 사진별 다운로드 후 글 작성 대화에 직접 첨부하세요. Blogger에도 별도 업로드해야 합니다.</p>}
       <details className={styles.preview}><summary>검증 리포트 미리보기</summary><pre>{report}</pre></details>
       <details className={styles.preview}><summary>최종 글 요청서 미리보기</summary><textarea readOnly value={articlePrompt}/></details>
       <div className={styles.resetRow}><button onClick={reset}>현재 실험 초기화</button><small>실험 설계와 답변은 이 브라우저에 자동 저장됩니다.</small></div>
