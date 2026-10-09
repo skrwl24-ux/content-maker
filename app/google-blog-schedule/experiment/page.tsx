@@ -664,7 +664,7 @@ export default function AiWorldExperimentStudio() {
 
     <section className={styles.panel}>
       <div className={styles.panelHead}><div><span>STEP 06</span><h2>세 AI의 실제 답변으로 영문 글 만들기</h2><p>독자에게 먼저 문제를 보여주고 → 세 AI의 선택과 원문 이유를 비교하고 → 마지막에 정답과 뜻밖의 반응을 공개하는 글 요청서를 만듭니다.</p></div></div>
-      <div className={styles.summaryRow}>{PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed ? ({correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] || "미판정") : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
+      <div className={styles.summaryRow}>{PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
