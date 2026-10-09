@@ -1532,7 +1532,7 @@ export default function AiWorldExperimentStudio() {
       <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>문제를 공개하고 → 실제 사람의 경험(선택 참여) → 세 AI의 원문 판단 → 네 참가자의 결과 비교 → 정답 공개 순서로 작성합니다.</p></div></div>
       <div className={styles.summaryRow}>
         {state.human.choice.trim() && <div><strong>Human</strong><span>{state.human.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[state.human.verdict]:"정답 미판정"}</span><small>{state.human.choice} {state.human.durationText ? " · "+state.human.durationText : ""}</small></div>}
-        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
+        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류",recommendation:"추천"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
