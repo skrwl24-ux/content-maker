@@ -53,5 +53,5 @@ test("Work PDF request demands actual blind fixture, private key and source rend
   assert.match(request, /EXPERIMENT_PACKET_JSON\.txt/);
   assert.match(request, /blind_test_preview\.png/);
   assert.match(request, /not just a description/);
-  assert.match(request, /Do NOT run ChatGPT, Claude, or Gemini/);
+  assert.match(request, /do NOT run ChatGPT, Claude, or Gemini/i);
 });
