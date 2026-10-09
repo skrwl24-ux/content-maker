@@ -457,7 +457,10 @@ export default function AiWorldExperimentStudio() {
     const id=window.setInterval(()=>setTimerNow(Date.now()),250);
     return ()=>window.clearInterval(id);
   },[timerStartedAt]);
-  const commonPrompt = state.commonPrompt.trim() || defaultCommonPrompt(state);
+  const draftPrompt=state.commonPrompt.trim();
+  const commonPrompt=state.protocol==="basic" && draftPrompt
+    ? (draftPrompt.startsWith(BASELINE_PROFILE.commonInstruction) ? draftPrompt : BASELINE_PROFILE.commonInstruction+"\n\n"+draftPrompt)
+    : (draftPrompt || defaultCommonPrompt(state));
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
@@ -937,6 +940,7 @@ export default function AiWorldExperimentStudio() {
       </div>
       <label className={styles.field}><span>공통 테스트 프롬프트 · 비어 있으면 아래 예시가 자동 적용됩니다</span><textarea value={state.commonPrompt} onChange={e=>updateCommonPrompt(e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
+        {state.protocol==="basic" && <small>기본 비교 공통 안내(웹검색·Deep Research·외부 앱 사용 금지)가 복사되는 질문 앞에 자동으로 추가됩니다. 실제 사용 여부는 아래에서 확인해 기록하세요.</small>}
         <button disabled={!fixtureReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
         {state.fixtureMode==="pdf" && <button disabled={!fixtureReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
         {!fixtureReady && <small>PDF 또는 텍스트 자료와 공통 질문을 확인하면 바로 테스트할 수 있습니다.</small>}
