@@ -1,0 +1,10 @@
+export type TopicStatus = "pending"|"active"|"used";
+export type Topic = {id:string; title:string;category:string;question:string;status:TopicStatus;createdAt:string;usedAt:string};
+export const TOPIC_BANK_VERSION:string;
+export const TOPIC_SEEDS:readonly {category:string;title:string;question:string}[];
+export function topicKey(value:unknown):string;
+export function sanitizeTopic(value:unknown,index?:number):Topic|null;
+export function initialTopics():Topic[];
+export function mergeTopics(existing:unknown,incoming:unknown):Topic[];
+export function parseBulkTopics(raw:string):Partial<Topic>[];
+export function countTopics(topics:Topic[]):{total:number;pending:number;active:number;used:number};
