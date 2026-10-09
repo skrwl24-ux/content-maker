@@ -79,3 +79,57 @@ test("fake country topic rejects a receipt country-identification question", asy
   assert.equal(mismatchedExperimentQuestion(title, "Which country issued the supermarket receipt?"), true);
   assert.equal(mismatchedExperimentQuestion(title, suggested), false);
 });
+
+
+test("PDF + question unlocks model testing without providing ground truth", async () => {
+  const { getExperimentWorkflowStatus } = await load();
+  const state = {
+    title:"Can AI Guess the Country From a Supermarket Receipt?",
+    testQuestion:"Which country is this supermarket receipt from?",
+    commonPrompt:"Which country is this supermarket receipt from? Explain based on the attached PDF.",
+    fixtureMode:"pdf", pdfSha256:"a".repeat(64), pdfName:"blind_test.pdf",
+    pdfAvailable:true, groundTruth:"", sources:"",
+  };
+  const progress=getExperimentWorkflowStatus(state);
+  assert.equal(progress.fixtureReady,true);
+  assert.equal(progress.keyReady,false);
+  assert.equal(progress.allScored,false);
+  assert.equal(getExperimentWorkflowStatus({...state,pdfAvailable:false}).fixtureReady,false);
+  assert.equal(getExperimentWorkflowStatus({...state,testQuestion:"Which one of these ten countries is fake?"}).fixtureReady,false);
+});
+test("three original answers are preserved for comparison; Work key and sources are needed only for article", async () => {
+  const { getExperimentWorkflowStatus } = await load();
+  const inputs = {
+    title:"Can AI Guess the Country From a Supermarket Receipt?",
+    testQuestion:"Which country is this supermarket receipt from?",
+    commonPrompt:"Which country is this supermarket receipt from? Explain based on the attached PDF.",
+    fixtureMode:"pdf", pdfSha256:"b".repeat(64), pdfName:"blind_test.pdf",
+    pdfAvailable:true,
+    runs:Object.fromEntries(["chatgpt","claude","gemini"].map(p=>[p,{
+      response:"It could be Singapore from the GST line.",
+      verdict:"correct", reviewed:true, usedSamePdf:true,
+      highlight:"from the GST line",
+    }]))
+  };
+  let status=getExperimentWorkflowStatus(inputs);
+  assert.equal(status.fixtureReady,true);
+  assert.equal(status.allAnswersCollected,true);
+  assert.equal(status.allScored,false);
+  status=getExperimentWorkflowStatus({...inputs,groundTruth:"Singapore",sources:"Official tax rules"});
+  assert.equal(status.allScored,true);
+  assert.equal(getExperimentWorkflowStatus({...inputs,groundTruth:"Singapore",sources:"",runs:inputs.runs}).allScored,false);
+  const mismatch={...inputs,runs:{...inputs.runs,claude:{...inputs.runs.claude,usedSamePdf:false}}};
+  assert.equal(getExperimentWorkflowStatus({...mismatch,groundTruth:"Singapore",sources:"Official tax rules"}).allScored,false);
+  assert.equal(getExperimentWorkflowStatus({...inputs,groundTruth:"Singapore",sources:"Official tax rules",
+    runs:{...inputs.runs,gemini:{...inputs.runs.gemini,highlight:"a made-up quote"}}}).allScored,false);
+});
+test("studio has no mandatory answer-lock button or lock handlers", () => {
+  const fs=require("node:fs");
+  const path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  assert.match(src,/STEP 03/);
+  assert.match(src,/공통 질문 설정/);
+  assert.match(src,/정답 입력 · 세 AI 결과 비교/);
+  assert.doesNotMatch(src,/function lockExperiment\(|function unlockExperiment\(|정답표 잠그기/);
+  assert.match(src,/onChange=\{e=>updateGroundTruth\(e\.target\.value\)\}/);
+});
