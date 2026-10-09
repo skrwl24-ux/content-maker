@@ -164,3 +164,15 @@ test("photo file recognizer rejects spoofed types and accepts JPG, PNG and WebP 
   assert.equal(humanPhotoMimeType("fake.png",jpg),"");
   assert.equal(humanPhotoMimeType("fake.jpg",new Uint8Array(12)),"");
 });
+
+
+test("changing a PDF or challenge prompt safeguards the user's real photo and human answer records", () => {
+  const fs=require("node:fs"),path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  assert.match(src,/function hasHumanRecord\(/);
+  assert.match(src,/function hasAnyResults\(/);
+  assert.match(src,/human: isIdentical \? prev\.human : emptyHuman\(\)/);
+  assert.match(src,/human: promptChanged\?emptyHuman\(\)/);
+  assert.match(src,/human:emptyHuman\(\),\s*runs/);
+  assert.match(src,/hasAnyResults\(\) && !window\.confirm\("기존 PDF와 다른 파일/);
+});
