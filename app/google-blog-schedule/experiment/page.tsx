@@ -470,6 +470,63 @@ export default function AiWorldExperimentStudio() {
       }])) as ExperimentState["runs"]:prev.runs}));
   }
 
+  function patchHuman(value: Partial<HumanChallenge>) {
+    setState(prev=>{
+      const old=prev.human||emptyHuman();
+      return {...prev,human:{...old,...value,
+        ...("choice" in value && value.choice!==old.choice ? {verdict:"" as const}: {})}};
+    });
+  }
+  function startHumanTimer(){
+    if(!fixtureReady){setNotice("사람 도전도 PDF 또는 텍스트 문제와 공통 질문이 준비된 뒤 시작하세요.");return;}
+    const now=Date.now();
+    setTimerStartedAt(now);setTimerNow(now);
+    setNotice("사람 도전 타이머가 시작됐습니다. 직접 답을 고른 순간 종료하세요.");
+  }
+  function stopHumanTimer(){
+    if(timerStartedAt===null)return;
+    const seconds=Math.max(1,Math.round((Date.now()-timerStartedAt)/1000));
+    patchHuman({durationText:formatChallengeDuration(seconds),durationSource:"timer"});
+    setTimerStartedAt(null);setTimerNow(0);
+    setNotice("실제 경과 시간을 기록했습니다. 기록된 시간은 AI 처리 속도와 자동 비교하지 않습니다.");
+  }
+  async function uploadHumanPhotos(files:File[]){
+    if(!files.length || photoBusy)return;
+    const remaining=3-(state.human?.photos?.length||0);
+    if(remaining<=0){setNotice("사람 도전 사진은 최대 3장입니다.");return;}
+    if(files.length>remaining){setNotice("사진은 최대 3장까지 저장합니다. 먼저 선택한 "+remaining+"장만 등록합니다.");}
+    setPhotoBusy(true);
+    try{
+      const seen=new Set((state.human?.photos||[]).map(p=>p.sha256));
+      const additions:HumanPhotoMeta[]=[];
+      for(const file of files.slice(0,remaining)){
+        const meta=await storeHumanPhoto(file);
+        if(!seen.has(meta.sha256)){additions.push(meta);seen.add(meta.sha256);}
+      }
+      if(additions.length){
+        setState(prev=>({...prev,human:{...prev.human,photos:[...prev.human.photos,...additions].slice(0,3)}}));
+        setNotice("실제 사진 "+additions.length+"장 등록 완료. 이 사진은 서버에 업로드되지 않고 현재 브라우저에만 저장됩니다.");
+      }else setNotice("선택한 사진은 이미 등록되어 있습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"사진 등록 실패");}
+    finally{setPhotoBusy(false);}
+  }
+  async function removeHumanPhoto(sha256:string){
+    if(!window.confirm("이 사진을 현재 브라우저 저장소에서도 삭제할까요?"))return;
+    try{
+      await deleteHumanPhoto(sha256);
+      setState(prev=>({...prev,human:{...prev.human,photos:prev.human.photos.filter(p=>p.sha256!==sha256)}}));
+      setNotice("사진을 삭제했습니다. 다른 실험에서도 같은 파일을 사용했다면 다시 등록해야 합니다.");
+    }catch{setNotice("사진을 삭제하지 못했습니다.");}
+  }
+  async function downloadHumanPhoto(photo:HumanPhotoMeta){
+    try{
+      const blob=await getHumanPhoto(photo.sha256);
+      if(!blob)throw new Error("사진 원본을 현재 브라우저 저장소에서 찾지 못했습니다.");
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download=photo.name;a.click();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    }catch(e){setNotice(e instanceof Error?e.message:"사진 다운로드 실패");}
+  }
   function hasResponses() { return PROVIDERS.some(p => state.runs[p.id].response.trim()); }
   function updateQuestion(next: string) {
     if (next !== state.testQuestion && hasResponses() && !window.confirm("공통 질문을 바꾸면 이전 실험과 조건이 달라집니다. 이미 저장된 AI 답변·판정을 초기화할까요?")) return;
