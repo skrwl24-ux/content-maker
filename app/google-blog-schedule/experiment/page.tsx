@@ -29,6 +29,17 @@ type ProviderRun = {
   weirdestMistake: string;
   notes: string;
 };
+type AutoDraft = {
+  title: string;
+  metaDescription: string;
+  labels: string[];
+  html: string;
+  needsReview: string[];
+  ready: boolean;
+  humanVerdict: "correct" | "incorrect" | "partial" | "uncertain" | "not_recorded";
+  scores: Array<{provider: ProviderId; finalAnswer: string; verdict: ProviderRun["verdict"]; evidence: string; explanation: string}>;
+};
+type SavedDraft = { fingerprint: string; draft: AutoDraft };
 type HumanChallenge = {
   choice: string;
   durationText: string;
@@ -63,6 +74,7 @@ type ExperimentState = {
 };
 
 const STORAGE_KEY = "ai-world-experiment-studio-v1";
+const AUTO_DRAFT_KEY = "ai-world-experiment-auto-draft-v1";
 const SEED_TRANSFER_KEY = "ai-world-experiment-seed-v1";
 const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
@@ -375,6 +387,10 @@ export default function AiWorldExperimentStudio() {
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [packetInput, setPacketInput] = useState("");
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null);
+  const [draftApproved, setDraftApproved] = useState(false);
   const [pdfAvailable, setPdfAvailable] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -414,8 +430,13 @@ export default function AiWorldExperimentStudio() {
     } catch {
       setState(emptyState());
     }
+    try { const rawDraft = localStorage.getItem(AUTO_DRAFT_KEY); if (rawDraft) setSavedDraft(JSON.parse(rawDraft)); } catch {}
     setHydrated(true);
   }, []);
+  useEffect(() => {
+    if (!hydrated || !savedDraft) return;
+    try { localStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(savedDraft)); } catch {}
+  }, [savedDraft, hydrated]);
   useEffect(() => {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
@@ -464,6 +485,11 @@ export default function AiWorldExperimentStudio() {
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
+  // A draft is only valid for the exact PDF/key/original answers that produced it.
+  const draftFingerprint = JSON.stringify([state.title, state.testQuestion, state.material, state.pdf?.sha256,
+    state.groundTruth, state.sources, state.hiddenTwist, state.human.choice, state.human.durationText,
+    state.human.notes, state.human.photos.map(p => p.sha256), ...PROVIDERS.map(p => state.runs[p.id].response)]);
+  const currentDraft = savedDraft?.fingerprint === draftFingerprint ? savedDraft.draft : null;
   const suggestedQuestion = suggestedExperimentQuestion(state.title);
   const {mismatchedQuestion, noKeyLeak, fixtureReady, allAnswersCollected, keyReady, allScored} = getExperimentWorkflowStatus({
     title:state.title, testQuestion:state.testQuestion, commonPrompt,
@@ -621,6 +647,121 @@ export default function AiWorldExperimentStudio() {
     if (!parsed.packet) { setNotice(parsed.error); return; }
     applyPacket(parsed.packet);
   }
+  function importQuickWorkNotes() {
+    const raw = packetInput.trim();
+    // New packet shape: flat fields. Use the original parser with its identity safeguards.
+    const parsed = parseExperimentPacket(raw);
+    if (parsed.packet) {
+      const jsonSection = raw.match(/\[EXPERIMENT_PACKET_JSON\]([\s\S]*?)\[\/EXPERIMENT_PACKET_JSON\]/i)?.[1] || raw;
+      try {
+        const packet = JSON.parse(jsonSection.trim());
+        const declaredHash = typeof packet?.groundTruth?.blindPdfSha256 === "string" ? packet.groundTruth.blindPdfSha256 : "";
+        if (declaredHash && state.pdf?.sha256 && declaredHash.toLowerCase() !== state.pdf.sha256.toLowerCase()) {
+          setNotice("⚠ PDF 파일과 Work 정답키의 SHA-256 지문이 다릅니다. 다른 문제의 정답일 수 있으므로 가져오지 않았습니다.");return;
+        }
+      } catch {}
+      applyPacket(parsed.packet); return;
+    }
+    // Older Work packets can have groundTruth as an object and sources as an array.
+    const jsonSection = raw.match(/\[EXPERIMENT_PACKET_JSON\]([\s\S]*?)\[\/EXPERIMENT_PACKET_JSON\]/i)?.[1] ||
+      raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || raw;
+    try {
+      const data = JSON.parse(jsonSection.trim());
+      const gt = data?.groundTruth;
+      if (gt && typeof gt === "object" && !Array.isArray(gt) && typeof gt.exactAnswer === "string") {
+        const declaredHash = typeof gt.blindPdfSha256 === "string" ? gt.blindPdfSha256.toLowerCase() : "";
+        if (declaredHash && state.pdf?.sha256 && declaredHash !== state.pdf.sha256.toLowerCase()) {
+          setNotice("⚠ 등록된 PDF와 비공개 정답키의 지문(SHA-256)이 일치하지 않습니다. 정답을 연결하지 않았습니다.");return;
+        }
+        const sources = Array.isArray(data.sources) ? data.sources.map((v:Record<string,unknown>) =>
+          [v?.title,v?.url,v?.supports].filter(x=>typeof x==="string").join(" | ")).join("\n") :
+          typeof data.sources==="string" ? data.sources : "";
+        if(!sources.trim()) {setNotice("정답키는 인식했지만 근거와 출처를 찾지 못했습니다.");return;}
+        const answer = gt.exactAnswer.trim();
+        const fullKey = [
+          answer,
+          typeof gt.acceptedEquivalent === "string" ? "Accepted: "+gt.acceptedEquivalent : "",
+          typeof gt.derivation === "string" ? "Derivation: "+gt.derivation : "",
+          typeof gt.scoringCriterion === "string" ? "Scoring: "+gt.scoringCriterion : "",
+          typeof gt.construction === "string" ? "Provenance: "+gt.construction : "",
+        ].filter(Boolean).join("\n");
+        const changed=fullKey!==state.groundTruth;
+        setState(prev=>({...prev,groundTruth:fullKey,sources:sources.slice(0,18000),sourceStatus:data.sourceStatus==="verified"?"verified":"needs_verification",
+          human:changed?{...prev.human,verdict:""}:prev.human,
+          runs:changed?Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
+        setNotice("이전 형식의 Work JSON에서 정답·채점 기준·출처를 한 번에 가져왔습니다. PDF 내용과도 일치하는지 생성 시 확인합니다.");return;
+      }
+    } catch {}
+    // PRIVATE_answer_key.txt support (never send the key to a test provider).
+    const key = raw.match(/^EXACT ANSWER:\s*(.+)$/im)?.[1]?.trim() ||
+      raw.match(/^정답\s*[:：]\s*(.+)$/im)?.[1]?.trim();
+    if (!key || raw.length < 80) {
+      setNotice("Work의 [EXPERIMENT_PACKET_JSON] 전체 또는 PRIVATE_answer_key.txt 전문을 붙여넣으세요.");return;
+    }
+    const declaredHash = raw.match(/blind_test\.pdf:\s*([a-f\d]{64})/i)?.[1]?.toLowerCase() || "";
+    if (declaredHash && state.pdf?.sha256 && declaredHash!==state.pdf.sha256.toLowerCase()) {
+      setNotice("⚠ 비공개 정답표는 현재 등록한 PDF와 다른 파일입니다. PDF 지문이 일치하지 않아 가져오지 않았습니다.");return;
+    }
+    const urls = [...new Set(raw.match(/https?:\/\/[^\s)\]]+/g) || [])];
+    if (!urls.length) {setNotice("정답은 인식했지만 공식 출처 URL을 찾지 못했습니다.");return;}
+    const changed = raw !== state.groundTruth;
+    setState(prev=>({...prev,groundTruth:raw.slice(0,10000),sources:urls.join("\n").slice(0,18000),
+      sourceStatus:/SOURCE STATUS:\s*verified/i.test(raw)?"verified":"needs_verification",
+      human:changed?{...prev.human,verdict:""}:prev.human,
+      runs:changed?Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
+    setNotice("기존 비공개 TXT 정답표에서 전체 정답과 검증 근거를 가져왔습니다.");
+  }
+  async function generateQuickDraft() {
+    if (generatingDraft) return;
+    if (!fixtureReady || !keyReady || !allAnswersCollected) {
+      setNotice("원본 PDF와 질문, Work 정답·근거, 세 AI의 답변을 확인하세요. 동일 PDF 확인도 필요합니다.");return;
+    }
+    setGeneratingDraft(true);setDraftApproved(false);
+    try {
+      let pdfDataUrl = "";
+      if (state.fixtureMode === "pdf") {
+        const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
+        if (!blob) throw new Error("원본 PDF를 현재 브라우저에서 찾을 수 없습니다. STEP 1에서 다시 등록하세요.");
+        if (blob.size > 2_500_000) throw new Error("자동 생성 PDF는 최대 2.5MB입니다. Vercel 요청 제한을 고려해 용량을 줄이거나 더 간단한 PDF를 사용하세요.");
+        pdfDataUrl = await new Promise<string>((resolve,reject) => {
+          const reader=new FileReader();
+          reader.onload=()=>resolve(String(reader.result || ""));
+          reader.onerror=()=>reject(new Error("PDF 읽기에 실패했습니다."));
+          reader.readAsDataURL(blob);
+        });
+      }
+      const response=await fetch("/api/google-blog/experiment-draft",{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({experiment:state,pdfDataUrl})
+      });
+      const data=await response.json();
+      if (!response.ok || !data.draft) throw new Error(data.error || "자동 생성에 실패했습니다.");
+      setSavedDraft({fingerprint:draftFingerprint,draft:data.draft as AutoDraft});
+      setNotice((data.draft.needsReview?.length || 0) ?
+        "초안은 완성됐지만 정답/PDF/원문에서 확인할 부분이 있습니다. 아래 경고를 먼저 검토하세요." :
+        "AI 3사 비교와 영문 Blogger 초안을 자동으로 만들었습니다. 내용을 확인하고 확정하세요.");
+    } catch(e) {setNotice(e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.");}
+    finally {setGeneratingDraft(false);}
+  }
+  function approveQuickDraft() {
+    if (!currentDraft?.ready || currentDraft.needsReview.length) {
+      setNotice("확인 필요 항목이 남아 있습니다. 틀린 정답이나 원문을 먼저 수정하고 다시 생성하세요.");return;
+    }
+    const scores=currentDraft.scores;
+    if (scores.length!==3 || PROVIDERS.some(p => !scores.some(s => s.provider===p.id && s.verdict && s.verdict!=="uncertain"))) {
+      setNotice("세 AI의 판정이 모두 명확해야 확정할 수 있습니다.");return;
+    }
+    setState(prev=>({...prev,
+      human: {...prev.human, verdict: currentDraft.humanVerdict==="not_recorded"?"":currentDraft.humanVerdict},
+      runs: Object.fromEntries(PROVIDERS.map(p=>{
+        const s=scores.find(x=>x.provider===p.id)!;
+        return [p.id,{...prev.runs[p.id],finalAnswer:s.finalAnswer,verdict:s.verdict,
+          reviewed:true,highlight:s.evidence,notes:s.explanation}];
+      })) as ExperimentState["runs"]
+    }));
+    setDraftApproved(true);
+    setNotice("자동 판정 내용을 확인했습니다. 작성된 HTML 그대로 발행리스트에 전달할 수 있습니다.");
+  }
   async function uploadPdf(file: File | null) {
     if (!file || pdfBusy) return;
     setPdfBusy(true);
@@ -762,7 +903,7 @@ export default function AiWorldExperimentStudio() {
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!allScored) {
+    if (!allScored || (!advancedMode && (!currentDraft || !draftApproved))) {
       setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
       return;
     }
@@ -770,7 +911,8 @@ export default function AiWorldExperimentStudio() {
       id: state.scheduleId || ("world-exp-" + Date.now()),
       kind: "experiment",
       date: state.scheduleDate || today(),
-      title: state.title,
+      title: currentDraft?.title || state.title,
+      body: currentDraft && draftApproved ? currentDraft.html : "",
       keyword: state.keyword || "AI experiment",
       slug: slugify(state.title),
       note: "Global curiosity experiment · Work-precommitted ground truth entered for final comparison · ChatGPT/Claude/Gemini tested with common fixture",
@@ -814,6 +956,135 @@ export default function AiWorldExperimentStudio() {
 
     {notice && <div className={styles.notice}>{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
+    <section className={styles.quickBar}>
+      <div><strong>간편 제작 · 3단계</strong><p>자료만 넣으면 정답 대조와 영문 블로그 글을 사이트가 작성합니다. 기존 자료는 그대로 유지됩니다.</p></div>
+      <button onClick={()=>setAdvancedMode(v=>!v)}>{advancedMode?"← 간편 제작으로 돌아가기":"기존 세부 입력 화면 열기 ↗"}</button>
+    </section>
+    {!advancedMode && <>
+      <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>STEP 01 / 03</span><h2>PDF와 Work 정답 자료 넣기</h2>
+          <p>실험용 PDF 한 장과 Work의 비공개 JSON(또는 정답표 전체)을 입력하세요. 정답·출처·질문을 따로 나눠 적을 필요가 없습니다.</p></div>
+          <em className={fixtureReady&&keyReady?styles.good:styles.wait}>{fixtureReady&&keyReady?"✓ 자료 준비":"자료 필요"}</em>
+        </div>
+        <div className={styles.actions}>
+          <button onClick={()=>void copy(buildWorkPdfRequest(state),"Work 실험자료 요청서")}>Work에 줄 PDF 제작 요청서 복사</button>
+          <button onClick={()=>setAdvancedMode(true)}>주제 변경·텍스트 실험</button>
+        </div>
+        {state.fixtureMode==="pdf" ? <div className={styles.pdfPanel}>
+          <label><strong>① 같은 PDF 파일 등록</strong>
+            <input type="file" accept="application/pdf,.pdf" disabled={pdfBusy}
+              onChange={e=>{void uploadPdf(e.currentTarget.files?.[0]||null);e.currentTarget.value="";}}/>
+          </label>
+          {state.pdf && <div className={styles.pdfMeta}><strong>{state.pdf.name}</strong>
+            <span>{pdfAvailable?"✓ 원본 확인됨":"이 브라우저에서 원본 PDF 재등록 필요"} · {state.pdf.bytes.toLocaleString()} bytes</span>
+            <div className={styles.actions}><button disabled={!pdfAvailable} onClick={()=>void accessPdf(false)}>PDF 확인</button></div>
+          </div>}
+        </div> : <label className={styles.field}><span>실험용 원문 텍스트</span><textarea value={state.material} onChange={e=>updateMaterial(e.target.value)} /></label>}
+        <label className={styles.field}><span>② Work의 비공개 JSON 또는 정답키 전문 붙여넣기</span>
+          <textarea rows={6} value={packetInput} onChange={e=>setPacketInput(e.target.value)}
+            placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON] 또는 PRIVATE_answer_key.txt 전문을 붙여넣으세요."/>
+        </label>
+        <div className={styles.actions}><button className={styles.primary} disabled={!packetInput.trim()} onClick={importQuickWorkNotes}>정답·근거 자동 불러오기</button></div>
+        <p className={styles.quickHint}>{keyReady?"✓ 비공개 정답·근거 저장됨 (테스트 모델에 전송하지 않음)":"비공개 정답·근거를 가져오면 이 칸을 다시 작성할 필요가 없습니다."}</p>
+        <details className={styles.advanced}><summary>영어 질문 확인·수정 (선택)</summary>
+          <label className={styles.field}><span>세 AI에게 같은 질문을 입력합니다</span><textarea value={state.testQuestion} onChange={e=>updateQuestion(e.target.value)} /></label>
+          <div className={styles.actions}><button disabled={!fixtureReady} onClick={()=>void copy(commonPrompt,"공통 질문")}>테스트 질문 복사</button></div>
+        </details>
+        <div className={styles.actions}><button disabled={!fixtureReady} onClick={()=>void copy(commonPrompt,"공통 질문")}>세 AI에게 줄 공통 질문 복사</button>
+          {state.fixtureMode==="pdf"&&<button disabled={!pdfAvailable} onClick={()=>void accessPdf(true)}>동일 PDF 다운로드</button>}
+        </div>
+        {mismatchedQuestion&&<p className={styles.questionWarning}>제목과 공통 질문이 맞지 않습니다. 고급 화면에서 수정해 주세요.</p>}
+        {!noKeyLeak&&<p className={styles.questionWarning}>공통 질문 또는 파일명에서 정답이 노출될 가능성이 있습니다.</p>}
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>STEP 02 / 03</span><h2>AI 답변 3개 + 내 경험만 붙여넣기</h2>
+          <p>각 AI에서 나온 답변을 요약하지 말고 그대로 붙여넣으세요. 모델명과 사람 기록은 선택 입력입니다.</p></div><strong>{completed}/3 답변</strong></div>
+        <div className={styles.quickProviders}>
+          {PROVIDERS.map(p=><div className={styles.quickProvider} key={p.id}>
+            <div className={styles.providerHead}><h3>{p.label}</h3><a href={p.url} target="_blank" rel="noopener noreferrer">AI 사이트 ↗</a></div>
+            <input className={styles.quickModel} value={state.runs[p.id].model} onChange={e=>patchRun(p.id,{model:e.target.value})}
+              placeholder="표시된 모델명 (선택)"/>
+            <textarea className={styles.quickAnswer} value={state.runs[p.id].response}
+              onChange={e=>{patchRun(p.id,{response:e.target.value});setDraftApproved(false);}}
+              placeholder={p.label+"의 실제 답변 전체를 붙여넣으세요."}/>
+          </div>)}
+        </div>
+        {state.fixtureMode==="pdf"&&<label className={styles.checkLine}><input type="checkbox"
+          checked={PROVIDERS.every(p=>state.runs[p.id].usedSamePdf)}
+          onChange={e=>setState(prev=>({...prev,runs:Object.fromEntries(PROVIDERS.map(p=>
+            [p.id,{...prev.runs[p.id],usedSamePdf:e.target.checked}])) as ExperimentState["runs"]}))}/>
+          <span>세 AI의 새 채팅에 실제로 <strong>같은 원본 PDF와 같은 질문</strong>을 제공했습니다.</span>
+        </label>}
+        <details className={styles.advanced}>
+          <summary>내가 직접 푼 경험·사진 추가 (선택)</summary>
+          <div className={styles.grid2}>
+            <label><span>내가 선택한 답</span><input value={state.human.choice} onChange={e=>patchHuman({choice:e.target.value})} placeholder="내 답 (실제 기록)"/></label>
+            <label><span>걸린 시간 (MM:SS)</span><input value={state.human.durationText} onChange={e=>patchHuman({durationText:e.target.value,durationSource:"manual"})} placeholder="예: 01:24"/></label>
+          </div>
+          <label className={styles.field}><span>풀면서 느낀 점 (짧게 적어도 됩니다)</span><textarea value={state.human.notes} onChange={e=>patchHuman({notes:e.target.value})} placeholder="실제 고민한 단서, 재미있었던 점, 확신이 들었는지 등"/></label>
+          <label className={styles.checkLine}><input type="checkbox" checked={state.human.attemptedBeforeAI}
+            onChange={e=>patchHuman({attemptedBeforeAI:e.target.checked})}/><span>AI 답변 보기 전에 제가 먼저 풀었습니다 (그랬을 때만 체크).</span></label>
+          <label className={styles.field}><span>직접 풀면서 찍은 사진 (최대 3장 · 이미지 본문 배치는 발행 전에 확인)</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={photoBusy || state.human.photos.length>=3}
+              onChange={e=>{void uploadHumanPhotos(Array.from(e.currentTarget.files||[]));e.currentTarget.value="";}}/>
+          </label>
+          {state.human.photos.length>0&&<div className={styles.humanPhotos}>{state.human.photos.map(p=>
+            <div className={styles.humanPhotoCard} key={p.sha256}>
+              {humanPhotoUrls[p.sha256]&&<img src={humanPhotoUrls[p.sha256]} alt="사용자가 등록한 실제 풀이 사진" />}
+              <small>{p.name}</small>
+              <div className={styles.actions}><button onClick={()=>void downloadHumanPhoto(p)}>다운로드</button><button onClick={()=>void removeHumanPhoto(p.sha256)}>삭제</button></div>
+            </div>)}</div>}
+          {!validateChallengeDuration(state.human.durationText)&&<p className={styles.questionWarning}>시간은 MM:SS 형식으로 입력해 주세요.</p>}
+        </details>
+      </section>
+
+      <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>AI로 비교·영문 블로그 글 한 번에 제작</h2>
+          <p>원본 PDF와 세 답변을 AI가 대조해 결과표·제목·Blogger HTML 원고를 작성합니다. 오류나 불확실성은 경고로 표시합니다.</p></div></div>
+        <div className={styles.quickFinal}>
+          <p className={styles.muted}>준비 상태: PDF/질문 {fixtureReady?"✓":"미완료"} · Work 정답/근거 {keyReady?"✓":"미완료"} · AI 답변 {completed}/3
+            {state.fixtureMode==="pdf" ? " · 동일 PDF "+(allAnswersCollected?"확인됨":"확인 필요") : ""}
+          </p>
+          <button className={styles.quickGenerate} disabled={generatingDraft||!fixtureReady||!keyReady||!allAnswersCollected||!validateChallengeDuration(state.human.durationText)}
+            onClick={()=>void generateQuickDraft()}>{generatingDraft?"PDF·세 AI 답변 분석 중…":"✦ 블로그 글 자동 제작"}</button>
+          <p className={styles.quickHint}>버튼을 누를 때만 PDF와 입력한 답변·메모를 사이트의 OpenAI API로 전송해 분석합니다. 사진 원본은 전송하지 않습니다.</p>
+        </div>
+        {currentDraft&&<>
+          <h3 className={styles.quickResultHeading}>{currentDraft.title}</h3>
+          {currentDraft.needsReview.length>0&&<div className={styles.quickWarnings}><strong>확인 필요 — 발행 전 수정</strong>
+            <ul>{currentDraft.needsReview.map((v,i)=><li key={i}>{v}</li>)}</ul>
+            <p>PDF와 Work 원래 정답이 다르다면 정답을 임의로 바꾸지 말고 같은 실험 파일인지 먼저 확인하세요.</p></div>}
+          <div className={styles.quickVerdicts}>
+            {currentDraft.scores.map(s=><div key={s.provider}>
+              <strong>{PROVIDERS.find(p=>p.id===s.provider)?.label}</strong>
+              <b>{s.verdict==="correct"?"정답":s.verdict==="incorrect"?"오답":s.verdict==="partial"?"부분 정답":"판정 보류"}</b>
+              <span>{s.finalAnswer||"판독 불가"}</span>
+              <p>{s.explanation}</p>
+              {s.evidence&&<small>원문 근거: “{s.evidence}”</small>}
+            </div>)}
+          </div>
+          <div className={styles.quickDraftActions}>
+            <button onClick={()=>void copy(currentDraft.title,"최종 영문 제목")}>제목 복사</button>
+            <button onClick={()=>void copy(currentDraft.html,"Blogger HTML 원고")}>글 HTML 복사</button>
+            <button onClick={()=>void copy(currentDraft.metaDescription,"검색 설명")}>검색 설명 복사</button>
+            <button onClick={()=>void copy(currentDraft.labels.join(", "),"블로그 라벨")}>라벨 복사</button>
+          </div>
+          <label className={styles.field}><span>Blogger 영문 HTML 초안 (여기서 바로 수정할 수 있습니다)</span>
+            <textarea className={styles.quickDraftHtml} value={currentDraft.html}
+              onChange={e=>setSavedDraft(prev=>prev?{...prev,draft:{...prev.draft,html:e.target.value}}:prev)}/>
+          </label>
+          <div className={styles.quickDraftActions}>
+            <button className={styles.primary} disabled={!currentDraft.ready||Boolean(currentDraft.needsReview.length)||draftApproved}
+              onClick={approveQuickDraft}>{draftApproved?"✓ 검토 완료":"결과 확인 · 발행 준비"}</button>
+            <button className={styles.queue} disabled={!draftApproved||!allScored} onClick={sendToQueue}>작성된 글 그대로 발행리스트에 등록 →</button>
+            <button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>
+          </div>
+        </>}
+        <div className={styles.resetRow}><button onClick={reset}>새 실험 초기화</button><small>입력값과 생성 글은 브라우저에 저장됩니다. 발행은 최종 확인 후 진행하세요.</small></div>
+      </section>
+    </>}
+    {advancedMode&&<>
     <section className={styles.panel}>
       <div className={styles.panelHead}>
         <div><span>STEP 01</span><h2>실험 주제 고르기</h2><p>검색형 정보글보다 “이걸 AI가 맞힐까?”라는 호기심을 먼저 만듭니다.{state.scheduleId ? " · 발행리스트에서 선택한 주제를 작업 중입니다." : ""}</p></div>
@@ -1075,5 +1346,6 @@ export default function AiWorldExperimentStudio() {
       <details className={styles.preview}><summary>최종 글 요청서 미리보기</summary><textarea readOnly value={articlePrompt}/></details>
       <div className={styles.resetRow}><button onClick={reset}>현재 실험 초기화</button><small>실험 설계와 답변은 이 브라우저에 자동 저장됩니다.</small></div>
     </section>
+    </>}
   </main>;
 }

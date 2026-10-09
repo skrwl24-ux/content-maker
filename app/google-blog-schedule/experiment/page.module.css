@@ -70,3 +70,38 @@
 .baselineSettingGrid label>span{font-size:12px;font-weight:750;color:#40556d}
 .baselineSettingGrid select{width:100%;max-width:100%;box-sizing:border-box;padding:10px;border:1px solid #cdd8e7;border-radius:9px;background:#fff;color:#20364e;font:inherit;font-size:12px}
 @media(max-width:720px){.baselineServices,.baselineSettingGrid{grid-template-columns:1fr}}
+
+
+/* Fast-first workflow. Existing detailed controls stay behind a user-selected toggle. */
+.quickBar{max-width:1240px;margin:0 auto 16px;padding:15px 19px;border:1px solid #d5e1ee;border-radius:16px;background:#eaf1fa;display:flex;justify-content:space-between;align-items:center;gap:14px}
+.quickBar strong{font-size:17px;color:#1d365a}
+.quickBar p{font-size:13px;color:#5d708a;margin:5px 0 0;line-height:1.55}
+.quickBar button{background:#fff;border:1px solid #b4c5da;border-radius:10px;padding:10px 15px;font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.quickHint{font-size:12px;color:#61738a;line-height:1.6;margin:10px 0}
+.quickProviders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.quickProvider{border:1px solid #dbe4ef;border-radius:15px;padding:15px;background:#f9fbfe;min-width:0;display:flex;flex-direction:column;gap:10px}
+.quickProvider .providerHead{gap:6px}
+.quickProvider .providerHead h3{font-size:16px}
+.quickProvider .providerHead a{font-size:12px;padding:6px 9px;white-space:nowrap}
+.quickModel,.quickAnswer{width:100%;box-sizing:border-box;border:1px solid #d0dce9;background:white;border-radius:10px;padding:11px;font:inherit;font-size:13px}
+.quickAnswer{resize:vertical;min-height:220px;line-height:1.65;flex:1}
+.quickFinal{border:1px solid #d8e6f6;border-radius:14px;padding:18px;background:#f5f9ff;display:flex;flex-direction:column;align-items:flex-start;gap:9px}
+.quickGenerate{padding:14px 26px;border:0;border-radius:13px;background:#174d91;color:#fff;font:inherit;font-weight:900;cursor:pointer;min-width:250px}
+.quickGenerate:disabled{opacity:.5;cursor:not-allowed}
+.quickResultHeading{font-size:22px;margin:18px 0 14px}
+.quickWarnings{background:#fff4ee;border:1px solid #edbba6;color:#913e29;border-radius:12px;padding:15px;margin:16px 0;line-height:1.65;font-size:13px}
+.quickWarnings ul{padding-left:20px}
+.quickVerdicts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.quickVerdicts>div{padding:15px;border-radius:13px;border:1px solid #dae3ef;background:#f9fbfe;display:flex;flex-direction:column;gap:9px;min-width:0}
+.quickVerdicts strong{font-size:15px}
+.quickVerdicts b{color:#254e7e;font-size:14px}
+.quickVerdicts span{font-weight:800;overflow-wrap:anywhere}
+.quickVerdicts p,.quickVerdicts small{font-size:12px;line-height:1.6;color:#607088;margin:0;overflow-wrap:anywhere}
+.quickDraftActions{display:flex;flex-wrap:wrap;gap:9px;margin:13px 0}
+.quickDraftActions button{padding:10px 15px;border:1px solid #c9d6e5;border-radius:10px;background:white;color:#20354d;font:inherit;font-weight:850;font-size:12px;cursor:pointer}
+.quickDraftActions button:disabled{opacity:.45;cursor:not-allowed}
+.quickDraftActions .primary{background:#172033;color:white}
+.quickDraftActions .queue{background:#1263df;color:white}
+.quickDraftHtml{min-height:370px!important;font:12px/1.65 ui-monospace,Consolas,monospace!important}
+@media(max-width:900px){.quickProviders,.quickVerdicts{grid-template-columns:1fr}.quickAnswer{min-height:170px}}
+@media(max-width:700px){.quickBar{flex-direction:column;align-items:stretch}.quickBar button,.quickGenerate{width:100%}.quickDraftActions button{flex:1}}
