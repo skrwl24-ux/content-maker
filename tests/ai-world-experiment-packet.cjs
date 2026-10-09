@@ -212,3 +212,11 @@ test("studio defaults new tests to basic instructions and preserves legacy store
   assert.match(src,/baselineStatus\(run\)/);
   assert.match(src,/Actual departures from baseline/);
 });
+
+
+test("customized basic common questions still include the same no-web baseline instructions", () => {
+ const fs=require("node:fs"),path=require("node:path");
+ const source=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+ assert.match(source,/draftPrompt\.startsWith\(BASELINE_PROFILE\.commonInstruction\)/);
+ assert.match(source,/BASELINE_PROFILE\.commonInstruction\+"\\n\\n"\+draftPrompt/);
+});
