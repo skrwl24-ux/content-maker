@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import JSZip from "jszip";
 import styles from "./page.module.css";
-import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment } from "@/lib/ai-world-experiment-packet.mjs";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment, buildWorkPdfRequest } from "@/lib/ai-world-experiment-packet.mjs";
+import { storeExperimentPdf, getExperimentPdf } from "@/lib/ai-world-experiment-files.mjs";
+import type { PdfMeta } from "@/lib/ai-world-experiment-files.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
   model: string;
+  testedAt: string;
   response: string;
+  finalAnswer: string;
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  highlight: string;
   accuracy: number | null;
   instruction: number | null;
   hallucinations: number | null;
@@ -24,6 +31,8 @@ type ExperimentState = {
   keyword: string;
   testQuestion: string;
   material: string;
+  fixtureMode: "pdf" | "text";
+  pdf: PdfMeta | null;
   hiddenTwist: string;
   groundTruth: string;
   sources: string;
@@ -60,7 +69,7 @@ const STARTERS = [
 ];
 
 function emptyRun(): ProviderRun {
-  return { model: "", response: "", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
+  return { model: "", testedAt:"", response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
 }
 function emptyState(): ExperimentState {
   return {
@@ -72,6 +81,8 @@ function emptyState(): ExperimentState {
     keyword: STARTERS[0].keyword,
     testQuestion: "",
     material: "",
+    fixtureMode: "pdf",
+    pdf: null,
     hiddenTwist: "",
     groundTruth: "",
     sources: "",
@@ -138,7 +149,7 @@ Return a compact table with:
 Then choose the best 3 ideas for global curiosity and explain why.`;
 }
 function defaultCommonPrompt(s: ExperimentState) {
-  return buildBlindPrompt(s);
+  return buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the same attached PDF provided with this prompt. Use the numbered entries exactly as shown. If the attachment is missing or unreadable, say so." : s.material});
 }
 
 function reportText(s: ExperimentState) {
@@ -147,6 +158,10 @@ function reportText(s: ExperimentState) {
     return [
       p.label + (r.model ? " ("+r.model+")" : ""),
       "Review status: " + (r.reviewed ? "Operator reviewed" : "NOT REVIEWED"),
+      "Test date: " + (r.testedAt || "not recorded"),
+      "Answer selected: " + (r.finalAnswer || "not independently transcribed"),
+      "Correctness verdict (operator): " + (r.reviewed ? (r.verdict || "not assessed") : "UNREVIEWED"),
+      "Interesting verbatim passage (operator-selected): " + (r.highlight || "not selected"),
       "Accuracy: " + (r.reviewed && r.accuracy !== null ? safeScore(r.accuracy) + "/10" : "NOT SCORED"),
       "Instruction following: " + (r.reviewed && r.instruction !== null ? safeScore(r.instruction) + "/10" : "NOT SCORED"),
       "Hallucinations: " + (r.reviewed && r.hallucinations !== null ? Math.max(0, Math.floor(r.hallucinations)) : "NOT SCORED"),
@@ -159,8 +174,11 @@ function reportText(s: ExperimentState) {
     "AI WORLD EXPERIMENT — VERIFIED REPORT",
     "Date: " + today(),
     "Pre-answer fixture locked: " + (s.lockedAt || "NOT LOCKED"),
+    "Fixture mode: " + s.fixtureMode,
+    "Attached PDF: " + (s.pdf ? s.pdf.name + " | sha256=" + s.pdf.sha256 + " | bytes=" + s.pdf.bytes : "none"),
+    "PDF must be attached separately when testing and uploaded separately if publishing. This report does not include the PDF bytes.",
     "Evidence manually verified: " + (s.sourceVerified ? "yes" : "no"),
-    "Experiment status: " + (s.lockedAt && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
+    "Experiment status: " + (s.lockedAt && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed && s.runs[p.id].verdict) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
     "Title: " + s.title,
     "Category: " + s.category,
     "Hook: " + s.hook,
@@ -207,6 +225,12 @@ ${report}
 This is a real experiment write-up, not a generic AI article.
 Use only the recorded experiment setup, ground truth and model results above.
 Do not invent scores, model versions, answers, sources or observations.
+Use the actual original answers to describe what ChatGPT, Claude and Gemini EACH selected, what their reasoning literally says, and how their approaches differ.
+Present the three provider answers with individually attributed short VERBATIM excerpts, not invented quotes or an AI-written imitation.
+If an excerpt was manually selected, confirm it occurs exactly in that providers original response; otherwise select a brief exact excerpt from its saved response.
+If there is no noteworthy error, do not invent a weirdest mistake. Use human-confirmed verdicts for the scoreboard; numeric metrics are optional and never inferred from blank fields.
+Make the reader guess before showing the private answer, but do not delay disclosure so long that the result becomes unclear.
+The PDF is a local fixture, not an online link: do not fabricate a public PDF URL or claim it is embedded in Blogger HTML.
 Do not change the operator's recorded scoring.
 If one field is missing, omit it or clearly label it as not recorded.
 
@@ -221,21 +245,20 @@ If one field is missing, omit it or clearly label it as not recorded.
 
 [ARTICLE STRUCTURE]
 Use this as the default flow, adapting naturally:
-1. Short opening hook
-2. The Challenge
-3. What I Gave the AI
-4. The Hidden Twist
-5. The Ground Truth
-6. How ChatGPT Answered
-7. How Claude Answered
-8. How Gemini Answered
-9. Scoreboard
-10. Weirdest Mistake
-11. What This Test Actually Tells Us
-12. Final Verdict
+1. Short reader-facing hook and challenge (invite readers to try themselves)
+2. The identical PDF and question given to all three (include the recorded file checksum only if useful)
+3. What ChatGPT Actually Said (its choice, reasoning, accurate excerpt)
+4. What Claude Actually Said (its choice, reasoning, accurate excerpt)
+5. What Gemini Actually Said (its choice, reasoning, accurate excerpt)
+6. Where Their Reasoning Diverged (verified comparison, no invented thoughts)
+7. The Big Reveal: Correct Answer and Source
+8. Who Got It Right? Grounded three-row scoreboard
+9. Most Surprising Real Response (only if one was actually observed)
+10. What This One Experiment Does and Does Not Show
+11. Final Verdict and invitation to reader
 
-Include a compact comparison table when all three models have scores.
-Mention the ground-truth source methodology without dumping long URLs into the prose.
+Include a compact comparison table when all three models have reviewed correctness verdicts.
+Mention the ground-truth source methodology with clickable primary links where verified.
 The "Weirdest Mistake" section should use only the recorded mistakes.
 
 [IMAGE PLACEHOLDERS — exact lines]
@@ -279,6 +302,9 @@ export default function AiWorldExperimentStudio() {
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [packetInput, setPacketInput] = useState("");
+  const [pdfAvailable, setPdfAvailable] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     try {
@@ -287,7 +313,10 @@ export default function AiWorldExperimentStudio() {
       const seedRaw = localStorage.getItem(SEED_TRANSFER_KEY);
       if (seedRaw) {
         const seed = JSON.parse(seedRaw);
-        next = {
+        const caseKey = "ai-world-experiment-case:" + String(seed.scheduleId || slugify(String(seed.title || "")));
+        const remembered = localStorage.getItem(caseKey);
+        const recovered = remembered ? JSON.parse(remembered) as ExperimentState : null;
+        next = recovered && recovered.title === seed.title ? { ...emptyState(), ...recovered } : {
           ...emptyState(),
           scheduleId: typeof seed.scheduleId === "string" ? seed.scheduleId : "",
           scheduleDate: typeof seed.date === "string" ? seed.date : "",
@@ -297,7 +326,7 @@ export default function AiWorldExperimentStudio() {
           hook: typeof seed.hook === "string" ? seed.hook : "",
         };
         localStorage.removeItem(SEED_TRANSFER_KEY);
-        setNotice("발행리스트의 실험 주제를 불러왔습니다. STEP 02에서 자료부터 준비하세요.");
+        setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
       setState(next);
@@ -309,22 +338,32 @@ export default function AiWorldExperimentStudio() {
   useEffect(() => {
     if (!hydrated) return;
     const timer = window.setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        const caseId = state.scheduleId || slugify(state.title);
+        if (caseId) localStorage.setItem("ai-world-experiment-case:" + caseId, JSON.stringify(state));
+      } catch {}
     }, 350);
     return () => window.clearTimeout(timer);
   }, [state, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated || !state.pdf?.sha256) { setPdfAvailable(false); return; }
+    let alive=true;
+    getExperimentPdf(state.pdf.sha256).then(blob=>{if(alive)setPdfAvailable(Boolean(blob));}).catch(()=>{if(alive)setPdfAvailable(false);});
+    return ()=>{alive=false;};
+  }, [hydrated, state.pdf?.sha256]);
   const commonPrompt = state.commonPrompt.trim() || defaultCommonPrompt(state);
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
-  const sourceReady = canLockExperiment(state);
-  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim())));
+  const sourceReady = canLockExperiment({ ...state, material: state.fixtureMode === "pdf" ? (state.pdf?.sha256 || "") : state.material }) && (state.fixtureMode !== "pdf" || (Boolean(state.pdf) && pdfAvailable));
+  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim()))) && !(state.fixtureMode === "pdf" && /answer|solution|private|norvessa|fake/i.test(state.pdf?.name || ""));
   const lockReady = sourceReady && noKeyLeak;
   const truthReady = Boolean(state.lockedAt && lockReady);
   const allScored = truthReady && PROVIDERS.every(p => {
     const r = state.runs[p.id];
-    return Boolean(r.response.trim() && r.reviewed && validRunScores(r));
+    return Boolean(r.response.trim() && r.reviewed && r.verdict);
   });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
@@ -332,7 +371,7 @@ export default function AiWorldExperimentStudio() {
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
     if (!state.lockedAt) return;
-    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, reviewed: "response" in value ? false : ("reviewed" in value ? Boolean(value.reviewed) : prev.runs[id].reviewed) } } }));
+    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "response" in value ? false : ("reviewed" in value ? Boolean(value.reviewed) : prev.runs[id].reviewed) } } }));
   }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
     if (state.lockedAt) { setNotice("잠긴 실험의 자료는 수정할 수 없습니다. 먼저 잠금을 해제하세요."); return; }
@@ -340,7 +379,7 @@ export default function AiWorldExperimentStudio() {
     setState(prev => ({ ...prev, title: packet.title || prev.title,
       testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
       groundTruth: packet.groundTruth, sources: packet.sources,
-      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "",
+      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "", fixtureMode:"text", pdf:null,
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
     setNotice(preset ? "검증된 국가 목록·정답표·출처를 채웠습니다. 잠그면 실험을 시작할 수 있습니다." : "실험 패킷을 가져왔습니다. 근거를 직접 확인하고 체크한 뒤 잠그세요.");
   }
@@ -386,6 +425,8 @@ export default function AiWorldExperimentStudio() {
       keyword: item.keyword,
       testQuestion: "",
       material: "",
+      fixtureMode: "pdf",
+      pdf: null,
       hiddenTwist: "",
       groundTruth: "",
       sources: "",
