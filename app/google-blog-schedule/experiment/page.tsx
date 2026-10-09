@@ -380,21 +380,39 @@ export default function AiWorldExperimentStudio() {
     if (!fixtureReady && !state.runs[id].response.trim()) return;
     setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "reviewed" in value ? Boolean(value.reviewed) : (("response" in value || "verdict" in value || "finalAnswer" in value || "highlight" in value || "usedSamePdf" in value) ? false : prev.runs[id].reviewed) } } }));
   }
+  function hasResponses() { return PROVIDERS.some(p => state.runs[p.id].response.trim()); }
+  function updateQuestion(next: string) {
+    if (next !== state.testQuestion && hasResponses() && !window.confirm("공통 질문을 바꾸면 이전 실험과 조건이 달라집니다. 이미 저장된 AI 답변·판정을 초기화할까요?")) return;
+    setState(prev => ({ ...prev, testQuestion: next, commonPrompt:"", runs: next !== prev.testQuestion && hasResponses() ? {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} : prev.runs }));
+  }
+  function updateCommonPrompt(next: string) {
+    if (next !== state.commonPrompt && hasResponses() && !window.confirm("AI에 전달할 공통 프롬프트를 변경하면 기존 답변과 비교할 수 없습니다. 이전 답변을 초기화할까요?")) return;
+    setState(prev => ({ ...prev, commonPrompt:next, runs: next !== prev.commonPrompt && hasResponses() ? {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} : prev.runs }));
+  }
+  function changeFixtureMode(next: ExperimentState["fixtureMode"]) {
+    if (state.fixtureMode === next) return;
+    if (hasResponses() && !window.confirm("테스트 자료 방식을 변경하면 수집한 AI 답변이 초기화됩니다. 계속할까요?")) return;
+    setState(prev => ({...prev,fixtureMode:next,sourceVerified:false,
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
+  }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
-    if (state.lockedAt) { setNotice("잠긴 실험의 자료는 수정할 수 없습니다. 먼저 잠금을 해제하세요."); return; }
     if (!preset && packet.title && packet.title.trim().toLowerCase() !== state.title.trim().toLowerCase()) {
-      setNotice("Work JSON의 실험 제목이 현재 선택한 주제와 다릅니다. 다른 실험의 정답표가 섞이지 않도록 같은 주제인지 확인하세요."); return;
+      setNotice("Work의 JSON 제목이 현재 실험과 다릅니다. 같은 PDF에서 나온 비공개 정답표인지 확인해 주세요."); return;
     }
     if (!preset && mismatchedExperimentQuestion(state.title, packet.testQuestion)) {
-      setNotice("가져온 질문이 현재 실험 주제와 맞지 않습니다. Work 질문을 확인하세요."); return;
+      setNotice("가져온 질문이 현재 실험 주제와 맞지 않습니다."); return;
     }
-    if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 자료로 바꾸면 기존 AI 답변과 채점이 초기화됩니다. 계속할까요?")) return;
+    const promptChanged = preset || packet.testQuestion !== state.testQuestion ||
+      (state.fixtureMode === "text" && packet.material !== state.material);
+    if (hasResponses() && promptChanged && !window.confirm("Work의 JSON에 기존 테스트와 다른 질문·자료가 있습니다. 지금 가져오면 기존 AI 답변이 초기화됩니다. 계속할까요?")) return;
     setState(prev => ({ ...prev, title: packet.title || prev.title,
       testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
       groundTruth: packet.groundTruth, sources: packet.sources,
-      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "", fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
-      runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
-    setNotice(preset ? "텍스트 국가 예제 준비 완료. 이 예제는 국기 PDF와 다른 별도 테스트입니다." : "Work의 질문·정답·출처를 가져왔습니다. PDF 원본을 등록하고 확인 후 잠그세요.");
+      sourceStatus: packet.sourceStatus, sourceVerified: false, lockedAt: "", commonPrompt: promptChanged ? "" : prev.commonPrompt,
+      fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
+      runs: promptChanged ? { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } : prev.runs }));
+    setNotice(preset ? "텍스트 예제 입력 완료. PDF 실험과는 별개입니다." :
+      (hasResponses() && !promptChanged ? "기존 세 AI 답변은 유지하고 비공개 정답·출처만 가져왔습니다." : "Work 질문·비공개 정답·출처를 가져왔습니다. PDF와 질문이 맞는지 확인하세요."));
   }
   function importPacket() {
     const parsed = parseExperimentPacket(packetInput);
@@ -471,7 +489,7 @@ export default function AiWorldExperimentStudio() {
     }
   }
   function loadStarter(index: number) {
-    if ((state.lockedAt || state.material.trim() || PROVIDERS.some(p => state.runs[p.id].response.trim())) && !window.confirm("다른 실험을 선택하면 현재 자료·답변·채점이 초기화됩니다. 계속할까요?")) return;
+    if ((state.pdf || state.material.trim() || hasResponses()) && !window.confirm("다른 실험으로 변경하면 현재 화면의 자료·답변이 초기화됩니다. 필요하면 먼저 ZIP으로 백업하세요. 계속할까요?")) return;
     const item = STARTERS[index];
     setState(prev => ({
       ...prev,
