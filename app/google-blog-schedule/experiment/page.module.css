@@ -50,3 +50,23 @@
 .humanVerdict select{padding:10px;border-radius:9px;background:#fff;border:1px solid #ccd6e5;font:inherit}
 .humanVerdict small{font-size:11px;color:#667589}
 @media(max-width:700px){.humanTimer{align-items:flex-start}.humanPhotos{grid-template-columns:1fr}.humanPhotoCard img{max-height:300px}.humanTimer .actions{width:100%}}
+
+/* Three-vendor baseline/free general chat setup */
+.baselineGuide{margin:14px 0;border:1px solid #cfddea;border-radius:14px;background:#f6f9ff;padding:17px;display:flex;flex-direction:column;gap:9px}
+.baselineGuide>strong{font-size:15px;color:#223d62}
+.baselineGuide>p,.baselineGuide>small{font-size:12px;color:#4b5e76;line-height:1.65;margin:0}
+.baselineServices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:7px}
+.baselineServices>div{display:flex;flex-direction:column;gap:6px;padding:12px;background:#fff;border:1px solid #e0e8f3;border-radius:10px}
+.baselineServices b{font-size:13px}
+.baselineServices span{color:#596b7f;font-size:12px;line-height:1.55}
+.baselineChecklist{margin:14px 0;display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #e0e6ef;border-radius:12px;background:#fcfdff}
+.baselineChecklist>strong{font-size:14px}
+.baselineChecklist>small{font-size:11px;color:#63768e;line-height:1.65}
+.baselineSteps{display:grid;gap:6px;padding:12px;background:#f5f8fc;border-radius:10px}
+.baselineSteps>div{position:relative;padding-left:16px;font-size:12px;line-height:1.65;color:#42566b}
+.baselineSteps>div:before{content:"•";position:absolute;left:4px;color:#3b628b}
+.baselineSettingGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.baselineSettingGrid label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.baselineSettingGrid label>span{font-size:12px;font-weight:750;color:#40556d}
+.baselineSettingGrid select{width:100%;max-width:100%;box-sizing:border-box;padding:10px;border:1px solid #cdd8e7;border-radius:9px;background:#fff;color:#20364e;font:inherit;font-size:12px}
+@media(max-width:720px){.baselineServices,.baselineSettingGrid{grid-template-columns:1fr}}
