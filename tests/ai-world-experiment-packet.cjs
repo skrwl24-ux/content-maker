@@ -171,10 +171,10 @@ test("changing a PDF or challenge prompt safeguards the user's real photo and hu
   const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
   assert.match(src,/function hasHumanRecord\(/);
   assert.match(src,/function hasAnyResults\(/);
-  assert.match(src,/human: isIdentical \? prev\.human : emptyHuman\(\)/);
+  assert.match(src,/human: preserveResults \? prev\.human : emptyHuman\(\)/);
   assert.match(src,/human: promptChanged\?emptyHuman\(\)/);
   assert.match(src,/human:emptyHuman\(\),\s*runs/);
-  assert.match(src,/hasAnyResults\(\) && !window\.confirm\("기존 PDF와 다른 파일/);
+  assert.match(src,/else if \(!window\.confirm\("기존 PDF와 다른 파일/);
 });
 
 
