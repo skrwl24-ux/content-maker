@@ -381,9 +381,9 @@ export default function AiWorldExperimentStudio() {
     setState(prev => ({ ...prev, title: packet.title || prev.title,
       testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
       groundTruth: packet.groundTruth, sources: packet.sources,
-      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "", fixtureMode:"text", pdf:null,
+      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "", fixtureMode: preset ? "text" : prev.fixtureMode, pdf: preset ? null : prev.pdf,
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
-    setNotice(preset ? "검증된 국가 목록·정답표·출처를 채웠습니다. 잠그면 실험을 시작할 수 있습니다." : "실험 패킷을 가져왔습니다. 근거를 직접 확인하고 체크한 뒤 잠그세요.");
+    setNotice(preset ? "텍스트 국가 예제 준비 완료. 이 예제는 국기 PDF와 다른 별도 테스트입니다." : "Work의 질문·정답·출처를 가져왔습니다. PDF 원본을 등록하고 확인 후 잠그세요.");
   }
   function importPacket() {
     const parsed = parseExperimentPacket(packetInput);
@@ -564,15 +564,30 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 02</span><h2>질문에 맞는 실험 자료 만들기</h2><p>제목만으로는 실험할 수 없습니다. AI에게 보여줄 자료와 비공개 정답표를 별도로 준비합니다.</p></div><em className={state.material.trim() ? styles.good : styles.wait}>{state.material.trim() ? "자료 준비됨" : "자료 없음"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 02</span><h2>Work에서 만든 PDF 한 장 등록</h2><p>Work가 PDF·정답표·원클릭 가져오기 JSON을 만들고, 실험실은 동일 PDF를 세 AI에게 전달할 수 있게 보관합니다.</p></div><em className={state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?styles.good:styles.wait):(state.material.trim()?styles.good:styles.wait)}>{state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?"PDF 원본 등록됨":"PDF 원본 필요"):(state.material.trim()?"텍스트 자료 준비됨":"텍스트 자료 필요")}</em></div>
       <div className={styles.actions}>
-        {(state.title === FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button className={styles.primary} disabled={Boolean(state.lockedAt)} onClick={() => applyPacket(FAKE_COUNTRY_PACKET, true)}>국가 9개 + 가상국가 1개 · 예제 자료 즉시 채우기</button>}
-        <button disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildPacketRequest(state), "실험 자료 제작 요청서")}>자료·정답 제작 요청서 복사</button>
-        <button disabled={Boolean(state.lockedAt)} onClick={() => openPrompt(buildPacketRequest(state))}>GPT에서 실험 자료 만들기 ↗</button>
+        <button className={styles.primary} disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildWorkPdfRequest(state), "Work용 PDF 제작 요청서")}>① Work용 PDF 제작 요청서 복사</button>
+        <button disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildPacketRequest(state), "텍스트 실험 자료 제작 요청서")}>텍스트만 쓰는 경우 요청서 복사</button>
       </div>
-      <label className={styles.field}><span>생성된 EXPERIMENT_PACKET_JSON 가져오기 (선택)</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e => setPacketInput(e.target.value)} placeholder="GPT가 만든 [EXPERIMENT_PACKET_JSON] 블록 전체를 붙여넣으세요. 자동 생성 답변의 사실·출처는 운영자가 다시 확인해야 합니다." /></label>
-      <div className={styles.actions}><button disabled={Boolean(state.lockedAt) || !packetInput.trim()} onClick={importPacket}>JSON에서 질문·자료·정답표 채우기</button></div>
-      <p>가상 국가 예제는 준비된 목록을 바로 불러올 수 있습니다. 다른 주제는 제작 요청서를 이용해 자료를 만든 뒤 근거를 직접 검증하세요. AI가 만든 자료를 검증 없이 확정하지 않습니다.</p>
+      <p>ChatGPT의 <strong>Work 모드</strong>에 제작 요청서를 붙여넣고 실제 blind_test.pdf, PRIVATE_answer_key.txt, EXPERIMENT_PACKET_JSON.txt를 받으세요. 일반 채팅에서 문서가 생성되었다는 설명만 받았다면 파일이 준비된 것이 아닙니다.</p>
+      <div className={styles.fixtureChoice}>
+        <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="pdf"} onChange={()=>setState(prev=>({...prev,fixtureMode:"pdf",sourceVerified:false}))} /> PDF 실험 (권장)</label>
+        <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="text"} onChange={()=>setState(prev=>({...prev,fixtureMode:"text",sourceVerified:false}))} /> 텍스트 실험</label>
+      </div>
+      {state.fixtureMode==="pdf" ? <div className={styles.pdfPanel}>
+        <label><strong>② Work에서 받은 원본 PDF 업로드</strong>
+          <input type="file" accept=".pdf,application/pdf" disabled={Boolean(state.lockedAt)||pdfBusy} onChange={e=>{void uploadPdf(e.target.files?.[0] || null);e.currentTarget.value="";}} />
+        </label>
+        {state.pdf ? <div className={styles.pdfMeta}><strong>{state.pdf.name}</strong><span>{state.pdf.bytes.toLocaleString()} bytes · SHA-256: <code>{state.pdf.sha256}</code></span>
+          <div className={styles.actions}><button disabled={!pdfAvailable} onClick={()=>void accessPdf(false)}>PDF 열어보기</button><button disabled={!pdfAvailable} onClick={()=>void accessPdf(true)}>동일 PDF 다운로드 ↓</button></div>
+          {!pdfAvailable && <small>이 브라우저에서 원본 파일이 확인되지 않습니다. PDF를 다시 업로드하세요.</small>}
+        </div> : <p>PDF를 업로드하면 브라우저에 파일을 저장하고 SHA-256 지문을 기록합니다. 서버로 전송하지 않습니다.</p>}
+      </div> : <div className={styles.actions}>
+        {(state.title===FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button disabled={Boolean(state.lockedAt)} onClick={()=>applyPacket(FAKE_COUNTRY_PACKET,true)}>텍스트 국가 10개 예제 채우기</button>}
+      </div>}
+      <label className={styles.field}><span>③ Work가 준 EXPERIMENT_PACKET_JSON.txt 내용 붙여넣기</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON] 내용을 그대로 붙여넣으세요. 질문·비공개 정답·출처를 자동으로 채웁니다." /></label>
+      <div className={styles.actions}><button disabled={Boolean(state.lockedAt)||!packetInput.trim()} onClick={importPacket}>질문·정답·출처 자동 채우기</button></div>
+      <p>PDF와 가져오기 JSON은 반드시 <strong>같은 Work 결과물</strong>이어야 합니다. 출처·정답이 PDF와 맞는지는 잠그기 전에 직접 확인하세요.</p>
     </section>
 
     <section className={styles.panel}>
@@ -584,7 +599,7 @@ export default function AiWorldExperimentStudio() {
         <label><span>후킹 포인트</span><input disabled={Boolean(state.lockedAt)} value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
       </div>
       <label className={styles.field}><span>AI에게 물을 질문</span><textarea disabled={Boolean(state.lockedAt)} value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder="예: Which one of these ten countries is not real? Explain briefly." /></label>
-      <label className={styles.field}><span>AI에게 보여줄 자료</span><textarea disabled={Boolean(state.lockedAt)} value={state.material} onChange={e=>patch("material",e.target.value)} placeholder="표, 목록, 데이터, 설명문 등 실제 테스트 재료를 붙여넣기. 이미지/파일을 쓸 경우 여기에는 구성과 출처를 기록." /></label>
+      {state.fixtureMode==="text" ? <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea disabled={Boolean(state.lockedAt)} value={state.material} onChange={e=>patch("material",e.target.value)} /></label> : <p className={styles.muted}>블라인드 테스트 자료는 위에서 등록한 PDF 원본을 사용합니다. 국기·국가명 등 PDF 내용은 공통 질문에 복제하지 않습니다.</p>}
       <label className={styles.field}><span>숨겨둔 트릭</span><textarea disabled={Boolean(state.lockedAt)} value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
       <div className={styles.truthGrid}>
         <label><span>🔒 Ground Truth · 정답</span><textarea disabled={Boolean(state.lockedAt)} value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="AI 답변을 보기 전에 정답과 판정 기준을 확정." /></label>
