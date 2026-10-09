@@ -1344,6 +1344,7 @@ export default function AiWorldExperimentStudio() {
             {state.mode==="quiz"&&<button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>}
           </div>
         </div>}
+      </section>
         </details>
         <div className={styles.resetRow}><button onClick={reset}>새 실험 초기화</button><small>입력값과 생성 글은 브라우저에 저장됩니다. 발행은 최종 확인 후 진행하세요.</small></div>
       </section>
