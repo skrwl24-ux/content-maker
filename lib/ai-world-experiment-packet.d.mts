@@ -16,3 +16,6 @@ export function parseExperimentPacket(raw: string): {packet: ExperimentPacket | 
 export function buildBlindPrompt(input?: {testQuestion?: string; material?: string}): string;
 export function canLockExperiment(input?: {testQuestion?: string; material?: string; groundTruth?: string; sources?: string; sourceVerified?: boolean}): boolean;
 export function buildWorkPdfRequest(topic?: {title?: string; category?: string; hook?: string; keyword?: string}): string;
+
+export function suggestedExperimentQuestion(title?: string): string;
+export function mismatchedExperimentQuestion(title?: string, question?: string): boolean;
