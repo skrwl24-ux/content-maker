@@ -6,10 +6,16 @@ import styles from "./page.module.css";
 import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion, getExperimentWorkflowStatus } from "@/lib/ai-world-experiment-packet.mjs";
 import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, deleteHumanPhoto } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
+import { BASELINE_PROFILE, getProviderBaselineHint, baselineStatus } from "@/lib/ai-world-experiment-baseline.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
   model: string;
+  accountPlan: "" | "free" | "guest" | "paid" | "unknown";
+  chatMode: "" | "standard" | "advanced" | "unknown";
+  webUsed: "unknown" | "no" | "yes";
+  extraToolsUsed: "unknown" | "no" | "yes";
+  newChat: boolean;
   testedAt: string;
   usedSamePdf: boolean;
   response: string;
@@ -51,6 +57,7 @@ type ExperimentState = {
   sourceStatus: string;
   lockedAt: string;
   commonPrompt: string;
+  protocol: "basic" | "legacy";
   human: HumanChallenge;
   runs: Record<ProviderId, ProviderRun>;
 };
@@ -81,7 +88,7 @@ const STARTERS = [
 ];
 
 function emptyRun(): ProviderRun {
-  return { model: "", testedAt:"", usedSamePdf:false, response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
+  return { model: "",accountPlan:"",chatMode:"",webUsed:"unknown",extraToolsUsed:"unknown",newChat:false,testedAt:"", usedSamePdf:false, response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
 }
 function emptyHuman(): HumanChallenge {
   return { choice:"", durationText:"", durationSource:"", difficulty:"", notes:"",
@@ -115,6 +122,7 @@ function emptyState(): ExperimentState {
     sourceStatus: "needs_verification",
     lockedAt: "",
     commonPrompt: "",
+    protocol:"basic",
     human:emptyHuman(),
     runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
   };
@@ -175,7 +183,8 @@ Return a compact table with:
 Then choose the best 3 ideas for global curiosity and explain why.`;
 }
 function defaultCommonPrompt(s: ExperimentState) {
-  return buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the attached PDF exactly as provided. Use only details that are actually visible in this document. If the attachment is missing or unreadable, say so." : s.material});
+  const instructions=s.protocol==="basic" ? BASELINE_PROFILE.commonInstruction+"\n\n" : "";
+  return instructions+buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the attached PDF exactly as provided. Use only details that are actually visible in this document. If the attachment is missing or unreadable, say so." : s.material});
 }
 
 function reportText(s: ExperimentState) {
@@ -200,6 +209,13 @@ function reportText(s: ExperimentState) {
       p.label + (r.model ? " ("+r.model+")" : ""),
       "Review status: " + (r.reviewed ? "Operator reviewed" : "NOT REVIEWED"),
       "Test date: " + (r.testedAt || "not recorded"),
+      "Account plan as recorded: " + (r.accountPlan || "unknown"),
+      "Normal/default chat mode: " + (r.chatMode || "unknown"),
+      "Fresh independent chat confirmed: " + (r.newChat ? "yes":"not confirmed"),
+      "Web search/grounding used: " + (r.webUsed || "unknown"),
+      "Extra tools / Deep Research used: " + (r.extraToolsUsed || "unknown"),
+      "Free/basic protocol: " + baselineStatus(r).label,
+      "Actual departures from baseline: " + (baselineStatus(r).deviations.join(", ") || "none recorded"),
       "Same fixture PDF explicitly confirmed: " + (r.usedSamePdf ? "yes" : "not confirmed"),
       "Answer selected: " + (r.finalAnswer || "not independently transcribed"),
       "Correctness verdict (operator): " + (r.reviewed ? (r.verdict || "not assessed") : "UNREVIEWED"),
@@ -216,6 +232,7 @@ function reportText(s: ExperimentState) {
     "AI WORLD EXPERIMENT — ORIGINAL RESULTS REPORT",
     "Date: " + today(),
     "Precommitted answer stored by Work before testing: operator responsibility (no site lock required)",
+    "Comparison setup: " + (s.protocol==="basic" ? BASELINE_PROFILE.title : "legacy (prior test; basic protocol not verified)"),
     "Fixture mode: " + s.fixtureMode,
     "Attached PDF: " + (s.pdf ? s.pdf.name + " | sha256=" + s.pdf.sha256 + " | bytes=" + s.pdf.bytes : "none"),
     "PDF must be attached separately when testing and uploaded separately if publishing. This report does not include the PDF bytes.",
@@ -285,6 +302,9 @@ Make the reader guess before showing the private answer, but do not delay disclo
 The PDF is a local fixture, not an online link: do not fabricate a public PDF URL or claim it is embedded in Blogger HTML. PDF images and full original answer files need to be uploaded separately by the operator if they want to show those assets.
 Do not change the operator's recorded scoring.
 If one field is missing, omit it or clearly label it as not recorded. The answer key is supplied from Work by the operator after testing and was not independently timestamped or cryptographically locked by the studio. Do not claim otherwise.
+The baseline goal is each product's free/default ordinary chat, not paid deep-research or maximum-thinking modes. Report the ACTUAL model name, account plan and whether search or extra tools were used, distinguishing user-confirmed settings from unknowns.
+Do NOT claim all three were on free tiers unless each provider was confirmed as free/guest. If one provider used premium mode, search, deep research, or automatic grounding, state this exception truthfully. Default or paid labels are not equivalent across vendors.
+Legacy responses collected before activating this protocol must never be relabeled as baseline tests.
 
 [ARTICLE STYLE]
 - English only.
@@ -386,6 +406,8 @@ export default function AiWorldExperimentStudio() {
         setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
       if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
+      next.protocol=next.protocol==="basic"||next.protocol==="legacy" ? next.protocol :
+        PROVIDERS.some(p=>Boolean(next.runs?.[p.id]?.response?.trim())) ? "legacy" : "basic";
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
       next.human = { ...emptyHuman(), ...(next.human || {}), photos:Array.isArray(next.human?.photos)?next.human.photos.slice(0,3):[] };
       setState(next);
@@ -710,6 +732,7 @@ export default function AiWorldExperimentStudio() {
       sourceStatus: "needs_verification",
       lockedAt: "",
       commonPrompt: "",
+      protocol:"basic",
       human:emptyHuman(),
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
     }));
