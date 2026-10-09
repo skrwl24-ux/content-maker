@@ -11,6 +11,7 @@ type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
   model: string;
   testedAt: string;
+  usedSamePdf: boolean;
   response: string;
   finalAnswer: string;
   verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
@@ -69,7 +70,7 @@ const STARTERS = [
 ];
 
 function emptyRun(): ProviderRun {
-  return { model: "", testedAt:"", response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
+  return { model: "", testedAt:"", usedSamePdf:false, response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
 }
 function emptyState(): ExperimentState {
   return {
@@ -159,6 +160,7 @@ function reportText(s: ExperimentState) {
       p.label + (r.model ? " ("+r.model+")" : ""),
       "Review status: " + (r.reviewed ? "Operator reviewed" : "NOT REVIEWED"),
       "Test date: " + (r.testedAt || "not recorded"),
+      "Same fixture PDF explicitly confirmed: " + (r.usedSamePdf ? "yes" : "not confirmed"),
       "Answer selected: " + (r.finalAnswer || "not independently transcribed"),
       "Correctness verdict (operator): " + (r.reviewed ? (r.verdict || "not assessed") : "UNREVIEWED"),
       "Interesting verbatim passage (operator-selected): " + (r.highlight || "not selected"),
@@ -363,7 +365,7 @@ export default function AiWorldExperimentStudio() {
   const truthReady = Boolean(state.lockedAt && lockReady);
   const allScored = truthReady && PROVIDERS.every(p => {
     const r = state.runs[p.id];
-    return Boolean(r.response.trim() && r.reviewed && r.verdict);
+    return Boolean(r.response.trim() && r.reviewed && r.verdict && (state.fixtureMode !== "pdf" || r.usedSamePdf));
   });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
@@ -371,7 +373,7 @@ export default function AiWorldExperimentStudio() {
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
     if (!state.lockedAt) return;
-    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "response" in value ? false : ("reviewed" in value ? Boolean(value.reviewed) : prev.runs[id].reviewed) } } }));
+    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "reviewed" in value ? Boolean(value.reviewed) : (("response" in value || "verdict" in value || "finalAnswer" in value || "highlight" in value || "usedSamePdf" in value) ? false : prev.runs[id].reviewed) } } }));
   }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
     if (state.lockedAt) { setNotice("잠긴 실험의 자료는 수정할 수 없습니다. 먼저 잠금을 해제하세요."); return; }
@@ -397,6 +399,61 @@ export default function AiWorldExperimentStudio() {
     if (!window.confirm("잠금을 해제하면 이 실험의 AI 답변과 채점 기록을 초기화합니다. 먼저 별도로 백업했나요?")) return;
     setState(prev => ({ ...prev, lockedAt: "", runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
     setNotice("잠금을 해제했습니다. 자료를 수정하고 다시 잠그세요.");
+  }
+  async function uploadPdf(file: File | null) {
+    if (!file || state.lockedAt || pdfBusy) return;
+    if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 PDF를 등록하면 이 실험의 답변·채점 기록을 초기화합니다. 계속할까요?")) return;
+    setPdfBusy(true);
+    try {
+      const meta = await storeExperimentPdf(file);
+      setPdfAvailable(true);
+      setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta, sourceVerified: false, lockedAt: "",
+        runs: {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
+      setNotice("동일 실험용 PDF 저장 완료. SHA-256을 기록했습니다. 정답·근거 확인 후 잠그세요.");
+    } catch (e) { setNotice(e instanceof Error ? e.message : "PDF 등록 실패"); }
+    finally { setPdfBusy(false); }
+  }
+  async function accessPdf(download: boolean) {
+    if (!state.pdf) return;
+    try {
+      const blob = await getExperimentPdf(state.pdf.sha256);
+      if (!blob) { setPdfAvailable(false); setNotice("저장된 PDF 원본을 찾을 수 없습니다. 같은 PDF를 다시 등록하세요."); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      if (download) { a.download = state.pdf.name; } else {a.target = "_blank"; a.rel="noopener noreferrer";}
+      document.body.appendChild(a); a.click();a.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+    } catch { setNotice("PDF 원본을 열지 못했습니다. 이 브라우저의 IndexedDB 저장소를 확인하세요."); }
+  }
+  async function exportEvidenceZip() {
+    if (!state.lockedAt || archiving) return;
+    setArchiving(true);
+    try {
+      const zip = new JSZip();
+      if (state.fixtureMode === "pdf") {
+        const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
+        if (!blob || !state.pdf) throw new Error("PDF 원본을 찾을 수 없습니다.");
+        zip.file("01_BLIND_TEST/" + state.pdf.name, blob);
+      } else zip.file("01_BLIND_TEST/material.txt", state.material);
+      zip.file("02_EXACT_TEST_QUESTION.txt", commonPrompt);
+      zip.file("03_PRIVATE_ANSWER_KEY_DO_NOT_UPLOAD.txt", ["Title: "+state.title,
+        "Ground Truth: "+state.groundTruth,"Hidden twist: "+state.hiddenTwist,
+        "Sources and derivation: "+state.sources,"Locked at: "+state.lockedAt].join("\n\n"));
+      PROVIDERS.forEach(p=>{const r=state.runs[p.id];zip.file("04_ORIGINAL_AI_ANSWERS/"+p.id+".txt",
+        "Model: "+(r.model||"not recorded")+"\nDate: "+(r.testedAt||"not recorded")+
+        "\nSame PDF verified by operator: "+(r.usedSamePdf?"yes":"not verified")+"\n\n"+(r.response||"NO ANSWER COLLECTED"));});
+      zip.file("05_OPERATOR_RESULTS/report.txt",report);
+      zip.file("05_OPERATOR_RESULTS/records.json",JSON.stringify(state,null,2));
+      zip.file("06_BLOGGER/article_request.txt",articlePrompt);
+      zip.file("README.txt","PRIVATE EVIDENCE ARCHIVE. Never give the whole ZIP or the PRIVATE answer key to a test AI before collecting replies. Only submit the identical blind PDF and exact question. PDF file integrity is recorded by SHA-256; the operator must actually attach the same file to each model. Original responses are manually pasted, never fabricated.");
+      const archive=await zip.generateAsync({type:"blob"});
+      const url=URL.createObjectURL(archive),a=document.createElement("a");
+      a.href=url;a.download=(slugify(state.title)||"ai-world-experiment")+"-evidence.zip";a.click();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setNotice("PDF·비공개 정답·질문·원문 답변·블로그 요청서를 ZIP으로 보관했습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"ZIP 백업 실패");}
+    finally{setArchiving(false);}
   }
   async function copy(text: string, label: string) {
     try { await navigator.clipboard.writeText(text); setNotice(label + " 복사 완료"); }
