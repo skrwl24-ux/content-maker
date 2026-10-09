@@ -220,7 +220,7 @@ ${s.title}
 [PRIMARY SEARCH PHRASE]
 ${s.keyword || "AI experiment"}
 
-[VERIFIED EXPERIMENT RECORD]
+[EXPERIMENT RECORD — ORIGINAL RESPONSES AND OPERATOR-ENTERED ANSWER]
 ${report}
 
 [CORE RULE]
@@ -232,9 +232,9 @@ Present the three provider answers with individually attributed short VERBATIM e
 If an excerpt was manually selected, confirm it occurs exactly in that providers original response; otherwise select a brief exact excerpt from its saved response.
 If there is no noteworthy error, do not invent a weirdest mistake. Use human-confirmed verdicts for the scoreboard; numeric metrics are optional and never inferred from blank fields.
 Make the reader guess before showing the private answer, but do not delay disclosure so long that the result becomes unclear.
-The PDF is a local fixture, not an online link: do not fabricate a public PDF URL or claim it is embedded in Blogger HTML.
+The PDF is a local fixture, not an online link: do not fabricate a public PDF URL or claim it is embedded in Blogger HTML. PDF images and full original answer files need to be uploaded separately by the operator if they want to show those assets.
 Do not change the operator's recorded scoring.
-If one field is missing, omit it or clearly label it as not recorded.
+If one field is missing, omit it or clearly label it as not recorded. The answer key is supplied from Work by the operator after testing and was not independently timestamped or cryptographically locked by the studio. Do not claim otherwise.
 
 [ARTICLE STYLE]
 - English only.
@@ -658,7 +658,15 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>세 AI의 답변 분석 · 판정</h2><p>우선 각 AI가 고른 답과 정답 여부만 기록하세요. 인상적인 표현은 원문에서 그대로 복사하면 되고, 숫자 점수는 선택 사항입니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 3개 답변 검토 완료":"답변·판정 필요"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>정답 입력 · 세 AI 결과 비교</h2><p>세 AI의 실제 답변을 모은 뒤 Work에서 PDF 제작 때 미리 정한 정답을 입력하세요. 사이트에서 따로 잠글 필요는 없습니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 결과 비교 완료":"정답·결과 확인"}</em></div>
+      <div className={styles.truthGrid}>
+        <label><span>정답 (Work에서 PDF 제작할 때 확정한 원래 답)</span><textarea value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="예: 국기 문제라면 가상 국가의 번호·이름. 영수증 문제라면 사전 결정된 국가·근거." /></label>
+        <label><span>정답 출처·근거</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="Work 원본 답안의 공식 출처 URL, 제작 근거, 판정 기준과 검증이 필요한 점을 입력하세요." /></label>
+      </div>
+      <details className={styles.advanced}><summary>실험의 숨은 설정 메모 (선택)</summary>
+        <label className={styles.field}><span>비공개 트릭 · 테스트 AI에게 전달하지 않음</span><textarea value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="필요할 때만 기록" /></label>
+      </details>
+      {!keyReady && <p className={styles.muted}>답변 수집에는 필요하지 않습니다. 최종 글을 만들 때 Work의 원래 정답과 근거를 입력하세요.</p>}
       <div className={styles.scoreCards}>
         {PROVIDERS.map(p => {
           const r=state.runs[p.id];
@@ -679,7 +687,7 @@ export default function AiWorldExperimentStudio() {
               </div>
               <label><span>실제로 관찰한 특이한 오류</span><textarea disabled={!r.response.trim()} value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value,reviewed:false})} placeholder="없으면 공란으로 둡니다." /></label>
             </details>
-            <label className={styles.checkLine}><input type="checkbox" disabled={!r.response.trim() || !r.verdict || (state.fixtureMode==="pdf"&&!r.usedSamePdf) || Boolean(r.highlight.trim() && !r.response.includes(r.highlight.trim()))} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> <span>정답표와 실제 답변을 비교해 위 판정을 확인했습니다.</span></label>
+            <label className={styles.checkLine}><input type="checkbox" disabled={!keyReady || !r.response.trim() || !r.verdict || (state.fixtureMode==="pdf"&&!r.usedSamePdf) || Boolean(r.highlight.trim() && !r.response.includes(r.highlight.trim()))} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> <span>정답표와 실제 답변을 비교해 위 판정을 확인했습니다.</span></label>
           </article>;
         })}
       </div>
@@ -692,8 +700,8 @@ export default function AiWorldExperimentStudio() {
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>
         <button className={styles.primary} disabled={!allScored} onClick={()=>openPrompt(articlePrompt)}>GPT에서 최종 글 만들기</button>
-        <button className={styles.queue} disabled={!truthReady||!allScored} onClick={sendToQueue}>최종 글 제작을 발행리스트로 보내기 →</button>
-        <button disabled={!state.lockedAt || archiving || (state.fixtureMode==="pdf" && !pdfAvailable)} onClick={()=>void exportEvidenceZip()}>비공개 원본·PDF·답변 ZIP 백업 ↓</button>
+        <button className={styles.queue} disabled={!allScored} onClick={sendToQueue}>최종 글 제작을 발행리스트로 보내기 →</button>
+        <button disabled={!fixtureReady || archiving || (state.fixtureMode==="pdf" && !pdfAvailable)} onClick={()=>void exportEvidenceZip()}>비공개 원본·PDF·답변 ZIP 백업 ↓</button>
       </div>
       <details className={styles.preview}><summary>검증 리포트 미리보기</summary><pre>{report}</pre></details>
       <details className={styles.preview}><summary>최종 글 요청서 미리보기</summary><textarea readOnly value={articlePrompt}/></details>
