@@ -154,3 +154,11 @@
 .draftLoading p,.draftError p,.draftSuccess p{margin:6px 0}
 .draftError button{border-radius:8px;border:1px solid #d0b4a8;padding:8px 11px;background:#fff;color:#653c32;font:inherit;cursor:pointer}
 .draftResult{scroll-margin-top:22px;}
+
+
+/* Zero-API ChatGPT writing handoff: paste the actual completed response back. */
+.chatGptImportPanel{background:#f8fbff;border:1px solid #d9e4f1;border-radius:15px;padding:18px;margin:18px 0}
+.chatGptImportPanel h3{font-size:17px;margin:0 0 8px;color:#213857}
+.chatGptImportPanel p{font-size:12px;line-height:1.65;color:#64758b;margin:0 0 11px}
+.chatGptImportPanel textarea{display:block;box-sizing:border-box;width:100%;min-height:225px;resize:vertical;background:white;border:1px solid #cbd9e9;border-radius:11px;padding:13px;line-height:1.6;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#243950}
+.chatGptImportPanel .quickDraftActions button{min-height:43px}
