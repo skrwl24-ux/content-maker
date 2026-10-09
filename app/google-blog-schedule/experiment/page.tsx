@@ -532,6 +532,81 @@ export default function AiWorldExperimentStudio() {
     (Boolean(state.testQuestion.trim() && state.material.trim()) && completed===3) :
     (fixtureReady && keyReady && allAnswersCollected);
 
+  function patchTopicStatus(id:string,status:TopicStatus){
+    setTopics(prev=>prev.map(t=>t.id===id?{...t,status,usedAt:status==="used"?today():""}:t));
+  }
+  function useTopic(topic:Topic){
+    if(state.topicId===topic.id && state.mode==="recommend"){
+      setAdvancedMode(false);
+      setNotice("현재 작업 중인 비교 주제입니다. 아래에 AI 세 곳의 답변을 붙여넣으세요.");return;
+    }
+    if(hasAnyResults() && !window.confirm("현재 실험의 AI 답변과 사람 기록을 유지한 채 다른 주제로 이동합니다. 현재 작업을 저장하고 전환할까요?"))return;
+    try {
+      const oldKey=state.scheduleId||slugify(state.title);
+      if(oldKey)localStorage.setItem("ai-world-experiment-case:"+oldKey,JSON.stringify(state));
+    }catch{}
+    const caseId="topic-bank-"+topic.id;
+    let remembered:ExperimentState|null=null;
+    try {const raw=localStorage.getItem("ai-world-experiment-case:"+caseId);
+      if(raw){const old=JSON.parse(raw) as ExperimentState;if(old?.title===topic.title)remembered=old;}
+    }catch{}
+    const defaultQuestion="As of the date of this test, for the topic '"+topic.title+"', recommend ONE top choice. Explain specific criteria, strengths, weaknesses, assumptions and uncertainty. Distinguish opinion from verified facts. Answer in English.";
+    const next:ExperimentState=remembered?{...emptyState(),...remembered,mode:"recommend",topicId:topic.id}:
+      {...emptyState(),mode:"recommend",topicId:topic.id,scheduleId:caseId,scheduleDate:today(),title:topic.title,
+      category:topic.category,keyword:"AI comparison",hook:"ChatGPT vs Claude vs Gemini recommendation comparison",
+      testQuestion:topic.question||defaultQuestion,material:"Text-only recommendation question, no PDF, no single fixed correct answer.",
+      fixtureMode:"text",pdf:null,groundTruth:"",sources:"",hiddenTwist:"",sourceStatus:"not_applicable"};
+    setState(next);setTimerStartedAt(null);setTimerNow(0);setAdvancedMode(false);setPacketInput("");setDraftApproved(false);
+    if(topic.status==="pending")patchTopicStatus(topic.id,"active");
+    setNotice(remembered?"저장된 이 주제의 기존 답변과 메모를 다시 불러왔습니다.":"비교 주제를 시작했습니다. 정답키나 PDF 없이 세 AI에게 같은 영어 질문을 보내세요.");
+  }
+  function appendBulkTopics(){
+    const candidates=parseBulkTopics(bulkTopics);
+    if(!candidates.length){setNotice("주제 제목을 한 줄에 하나씩 입력하세요.");return;}
+    const next=mergeTopics(topics,candidates);
+    const added=next.length-topics.length;
+    setTopics(next);setBulkTopics("");
+    setNotice(added?"새 주제 "+added+"개를 보관함에 추가했습니다.":"중복된 주제입니다. 새로 추가할 제목이 없습니다.");
+  }
+  async function generateMoreTopics(){
+    if(topicGeneratorBusy)return;
+    setTopicGeneratorBusy(true);
+    try{
+      const response=await fetch("/api/google-blog/experiment-topics",{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({existingTitles:topics.map(t=>t.title)})
+      });
+      const data=await response.json();
+      if(!response.ok||!Array.isArray(data.topics))throw new Error(data.error||"주제를 생성하지 못했습니다.");
+      const next=mergeTopics(topics,data.topics);
+      const added=next.length-topics.length;
+      if(!added)throw new Error("기존 목록과 겹치는 주제만 생성됐습니다. 한 번 더 눌러주세요.");
+      setTopics(next);setTopicFilter("open");
+      setNotice("AI가 새 비교 주제 "+added+"개를 보관함에 추가했습니다. 이전 주제는 지우지 않았습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"새 주제 추천 실패");}
+    finally{setTopicGeneratorBusy(false);}
+  }
+  function downloadTopicBank(){
+    const blob=new Blob([JSON.stringify({version:TOPIC_BANK_VERSION,exportedAt:today(),topics},null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download="ai-experiment-topics-"+today()+".json";a.click();
+    window.setTimeout(()=>URL.revokeObjectURL(url),20000);
+    setNotice("사용 상태까지 포함해 주제 보관함을 JSON으로 백업했습니다.");
+  }
+  async function importTopicBank(file:File|null){
+    if(!file||topicImportBusy)return;
+    setTopicImportBusy(true);
+    try{
+      if(file.size>1_000_000)throw new Error("주제 백업은 1MB 이하만 가져올 수 있습니다.");
+      const data=JSON.parse(await file.text());
+      if(!Array.isArray(data?.topics))throw new Error("유효한 주제 보관함 백업 JSON이 아닙니다.");
+      const restored=mergeTopics(data.topics,topics);
+      const count=restored.length;
+      setTopics(restored);
+      setNotice("기존 상태를 최대한 유지하면서 주제 "+count+"개를 복원했습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"주제 목록 복원 실패");}
+    finally{setTopicImportBusy(false);}
+  }
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
