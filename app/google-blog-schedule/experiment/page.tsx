@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
-import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion } from "@/lib/ai-world-experiment-packet.mjs";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion } from "@/lib/ai-world-experiment-packet.mjs";
 import { storeExperimentPdf, getExperimentPdf } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta } from "@/lib/ai-world-experiment-files.mjs";
 
@@ -173,14 +173,14 @@ function reportText(s: ExperimentState) {
     ].join("\n");
   }).join("\n\n---\n\n");
   return [
-    "AI WORLD EXPERIMENT — VERIFIED REPORT",
+    "AI WORLD EXPERIMENT — ORIGINAL RESULTS REPORT",
     "Date: " + today(),
-    "Pre-answer fixture locked: " + (s.lockedAt || "NOT LOCKED"),
+    "Precommitted answer stored by Work before testing: operator responsibility (no site lock required)",
     "Fixture mode: " + s.fixtureMode,
     "Attached PDF: " + (s.pdf ? s.pdf.name + " | sha256=" + s.pdf.sha256 + " | bytes=" + s.pdf.bytes : "none"),
     "PDF must be attached separately when testing and uploaded separately if publishing. This report does not include the PDF bytes.",
-    "Evidence manually verified: " + (s.sourceVerified ? "yes" : "no"),
-    "Experiment status: " + (s.lockedAt && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed && s.runs[p.id].verdict) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
+    "Evidence review: " + (s.sourceVerified ? "operator checked" : "not independently checked"),
+    "Experiment status: " + (s.groundTruth.trim() && s.sources.trim() && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed && s.runs[p.id].verdict && (s.fixtureMode !== "pdf" || s.runs[p.id].usedSamePdf)) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
     "Title: " + s.title,
     "Category: " + s.category,
     "Hook: " + s.hook,
@@ -189,12 +189,12 @@ function reportText(s: ExperimentState) {
     s.testQuestion || s.title,
     "",
     "WHAT THE AI SAW",
-    s.material || "Not recorded",
+    s.fixtureMode === "pdf" ? ("The PDF listed above (content must be inspected directly). " + (s.material || "")) : (s.material || "Not recorded"),
     "",
     "HIDDEN TWIST",
     s.hiddenTwist || "None",
     "",
-    "GROUND TRUTH — established before judging model answers",
+    "GROUND TRUTH — imported from precommitted Work answer key or entered by operator after collecting responses",
     s.groundTruth || "NOT RECORDED",
     "",
     "GROUND-TRUTH SOURCES",
@@ -204,7 +204,7 @@ function reportText(s: ExperimentState) {
     rows,
     "",
     "IMPORTANT LIMIT",
-    "Scores are the operator's recorded evaluation for this single experiment. Do not generalize them into an overall model ranking.",
+    "The studio does not independently prove when an answer key was created. The operator should retain the original Work answer key and verify source material. Do not generalize one experiment into an overall model ranking.",
   ].join("\n");
 }
 function bloggerPrompt(s: ExperimentState) {
@@ -362,20 +362,22 @@ export default function AiWorldExperimentStudio() {
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
   const suggestedQuestion = suggestedExperimentQuestion(state.title);
   const mismatchedQuestion = mismatchedExperimentQuestion(state.title, state.testQuestion) || mismatchedExperimentQuestion(state.title, state.commonPrompt);
-  const sourceReady = canLockExperiment({ ...state, material: state.fixtureMode === "pdf" ? (state.pdf?.sha256 || "") : state.material }) && (state.fixtureMode !== "pdf" || (Boolean(state.pdf) && pdfAvailable));
-  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim()))) && !(state.fixtureMode === "pdf" && /answer|solution|private|norvessa|fake/i.test(state.pdf?.name || ""));
-  const lockReady = sourceReady && noKeyLeak && !mismatchedQuestion;
-  const truthReady = Boolean(state.lockedAt && lockReady);
-  const allScored = truthReady && PROVIDERS.every(p => {
+  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim()))) && !(state.fixtureMode === "pdf" && /answer|solution|private|norvessa/i.test(state.pdf?.name || ""));
+  const fixtureReady = Boolean(state.testQuestion.trim() && !mismatchedQuestion && noKeyLeak &&
+    (state.fixtureMode === "pdf" ? (state.pdf && pdfAvailable) : state.material.trim()));
+  const allAnswersCollected = PROVIDERS.every(p => Boolean(state.runs[p.id].response.trim()) &&
+    (state.fixtureMode !== "pdf" || state.runs[p.id].usedSamePdf));
+  const keyReady = Boolean(state.groundTruth.trim() && state.sources.trim());
+  const allScored = Boolean(fixtureReady && keyReady && allAnswersCollected && PROVIDERS.every(p => {
     const r = state.runs[p.id];
-    return Boolean(r.response.trim() && r.reviewed && r.verdict && (state.fixtureMode !== "pdf" || r.usedSamePdf));
-  });
+    return r.reviewed && r.verdict && (!r.highlight.trim() || r.response.includes(r.highlight.trim()));
+  }));
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
-    if (!state.lockedAt) return;
+    if (!fixtureReady && !state.runs[id].response.trim()) return;
     setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "reviewed" in value ? Boolean(value.reviewed) : (("response" in value || "verdict" in value || "finalAnswer" in value || "highlight" in value || "usedSamePdf" in value) ? false : prev.runs[id].reviewed) } } }));
   }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
@@ -399,19 +401,8 @@ export default function AiWorldExperimentStudio() {
     if (!parsed.packet) { setNotice(parsed.error); return; }
     applyPacket(parsed.packet);
   }
-  function lockExperiment() {
-    if (mismatchedQuestion) { setNotice("실험 주제와 질문이 서로 다릅니다. 영수증에 가짜 국가 찾기 질문을 사용하지 마세요."); return; }
-    if (!lockReady) { setNotice("테스트 자료·질문·정답·출처를 채우고 근거를 직접 확인하세요. 정답이 공통 질문에 노출되어도 안 됩니다."); return; }
-    setState(prev => ({ ...prev, lockedAt: new Date().toISOString(), runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
-    setNotice("실험 자료와 Ground Truth를 잠갔습니다. 이제 세 AI에 동일한 공통 질문을 전달하세요.");
-  }
-  function unlockExperiment() {
-    if (!window.confirm("잠금을 해제하면 이 실험의 AI 답변과 채점 기록을 초기화합니다. 먼저 별도로 백업했나요?")) return;
-    setState(prev => ({ ...prev, lockedAt: "", runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
-    setNotice("잠금을 해제했습니다. 자료를 수정하고 다시 잠그세요.");
-  }
   async function uploadPdf(file: File | null) {
-    if (!file || state.lockedAt || pdfBusy) return;
+    if (!file || pdfBusy) return;
     if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 PDF를 등록하면 이 실험의 답변·채점 기록을 초기화합니다. 계속할까요?")) return;
     setPdfBusy(true);
     try {
@@ -419,7 +410,7 @@ export default function AiWorldExperimentStudio() {
       setPdfAvailable(true);
       setState(prev => ({ ...prev, fixtureMode: "pdf", pdf: meta, sourceVerified: false, lockedAt: "",
         runs: {chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()} }));
-      setNotice("동일 실험용 PDF 저장 완료. SHA-256을 기록했습니다. 정답·근거 확인 후 잠그세요.");
+      setNotice("PDF 저장 완료. 질문을 확인한 뒤 세 AI에 동일하게 첨부하고 답변을 수집하세요.");
     } catch (e) { setNotice(e instanceof Error ? e.message : "PDF 등록 실패"); }
     finally { setPdfBusy(false); }
   }
@@ -437,7 +428,7 @@ export default function AiWorldExperimentStudio() {
     } catch { setNotice("PDF 원본을 열지 못했습니다. 이 브라우저의 IndexedDB 저장소를 확인하세요."); }
   }
   async function exportEvidenceZip() {
-    if (!state.lockedAt || archiving) return;
+    if (!fixtureReady || archiving) return;
     setArchiving(true);
     try {
       const zip = new JSZip();
@@ -449,7 +440,7 @@ export default function AiWorldExperimentStudio() {
       zip.file("02_EXACT_TEST_QUESTION.txt", commonPrompt);
       zip.file("03_PRIVATE_ANSWER_KEY_DO_NOT_UPLOAD.txt", ["Title: "+state.title,
         "Ground Truth: "+state.groundTruth,"Hidden twist: "+state.hiddenTwist,
-        "Sources and derivation: "+state.sources,"Locked at: "+state.lockedAt].join("\n\n"));
+        "Sources and derivation: "+state.sources,"Answer key came from original Work fixture; no site lock required."].join("\n\n"));
       PROVIDERS.forEach(p=>{const r=state.runs[p.id];zip.file("04_ORIGINAL_AI_ANSWERS/"+p.id+".txt",
         "Model: "+(r.model||"not recorded")+"\nDate: "+(r.testedAt||"not recorded")+
         "\nSame PDF verified by operator: "+(r.usedSamePdf?"yes":"not verified")+"\n\n"+(r.response||"NO ANSWER COLLECTED"));});
@@ -507,8 +498,8 @@ export default function AiWorldExperimentStudio() {
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!truthReady || !allScored) {
-      setNotice("검증된 Ground Truth 잠금과 실제 AI 답변·채점 확인까지 마쳐야 발행할 수 있습니다.");
+    if (!allScored) {
+      setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
       return;
     }
     const pending = {
@@ -518,7 +509,7 @@ export default function AiWorldExperimentStudio() {
       title: state.title,
       keyword: state.keyword || "AI experiment",
       slug: slugify(state.title),
-      note: "Global curiosity experiment · Ground Truth locked before scoring · ChatGPT/Claude/Gemini compared",
+      note: "Global curiosity experiment · Work-precommitted ground truth entered for final comparison · ChatGPT/Claude/Gemini tested with common fixture",
       labVersion: "WORLD-LAB-V1",
       labReport: report,
       labPrompt: articlePrompt,
