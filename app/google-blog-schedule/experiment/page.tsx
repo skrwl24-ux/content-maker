@@ -566,7 +566,7 @@ export default function AiWorldExperimentStudio() {
       <span>GLOBAL AI EXPERIMENT STUDIO</span>
       <h1>전 세계가 궁금해할<br/>엉뚱한 AI 실험을 만듭니다.</h1>
       <p>나라·지도·음식·언어·동물·날씨·가격·통계처럼 누구나 이해할 수 있는 자료로 AI를 시험하고, Ground Truth와 실제 답변을 근거로 영어 글을 만듭니다.</p>
-      <div className={styles.heroBadges}><b>Ground Truth first</b><b>Same prompt</b><b>3 AI answers</b><b>Global curiosity</b></div>
+      <div className={styles.heroBadges}><b>정답은 마지막에 입력</b><b>Same prompt</b><b>3 AI answers</b><b>Global curiosity</b></div>
     </section>
 
     {notice && <div className={styles.notice}>{notice}<button onClick={() => setNotice("")}>×</button></div>}
@@ -589,61 +589,59 @@ export default function AiWorldExperimentStudio() {
     <section className={styles.panel}>
       <div className={styles.panelHead}><div><span>STEP 02</span><h2>Work에서 만든 PDF 한 장 등록</h2><p>Work에서 내려받을 파일은 블라인드 PDF 1개면 됩니다. 비공개 정답·출처·공통 질문은 Work 답변의 JSON 텍스트를 복사해 보관합니다.</p></div><em className={state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?styles.good:styles.wait):(state.material.trim()?styles.good:styles.wait)}>{state.fixtureMode==="pdf"?(state.pdf&&pdfAvailable?"PDF 원본 등록됨":"PDF 원본 필요"):(state.material.trim()?"텍스트 자료 준비됨":"텍스트 자료 필요")}</em></div>
       <div className={styles.actions}>
-        <button className={styles.primary} disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildWorkPdfRequest(state), "Work용 PDF 제작 요청서")}>① Work용 PDF 제작 요청서 복사</button>
-        <button disabled={Boolean(state.lockedAt)} onClick={() => void copy(buildPacketRequest(state), "텍스트 실험 자료 제작 요청서")}>텍스트만 쓰는 경우 요청서 복사</button>
+        <button className={styles.primary} onClick={() => void copy(buildWorkPdfRequest(state), "Work용 PDF 제작 요청서")}>① Work용 PDF 제작 요청서 복사</button>
+        <button onClick={() => void copy(buildPacketRequest(state), "텍스트 실험 자료 제작 요청서")}>텍스트만 쓰는 경우 요청서 복사</button>
       </div>
       <p>ChatGPT <strong>Work 모드</strong>에서 <strong>blind_test.pdf 한 개만</strong> 내려받으세요. Work가 채팅에 표시한 비공개 JSON은 아래 칸에 복사합니다. 세 AI에는 PDF와 공통 질문만 전달하고 JSON은 보여주지 않습니다.</p>
       <div className={styles.fixtureChoice}>
-        <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="pdf"} onChange={()=>setState(prev=>({...prev,fixtureMode:"pdf",sourceVerified:false}))} /> PDF 실험 (권장)</label>
-        <label><input type="radio" name="fixtureMode" disabled={Boolean(state.lockedAt)} checked={state.fixtureMode==="text"} onChange={()=>setState(prev=>({...prev,fixtureMode:"text",sourceVerified:false}))} /> 텍스트 실험</label>
+        <label><input type="radio" name="fixtureMode" checked={state.fixtureMode==="pdf"} onChange={()=>setState(prev=>({...prev,fixtureMode:"pdf",sourceVerified:false}))} /> PDF 실험 (권장)</label>
+        <label><input type="radio" name="fixtureMode" checked={state.fixtureMode==="text"} onChange={()=>setState(prev=>({...prev,fixtureMode:"text",sourceVerified:false}))} /> 텍스트 실험</label>
       </div>
       {state.fixtureMode==="pdf" ? <div className={styles.pdfPanel}>
         <label><strong>② Work에서 받은 원본 PDF 업로드</strong>
-          <input type="file" accept=".pdf,application/pdf" disabled={Boolean(state.lockedAt)||pdfBusy} onChange={e=>{void uploadPdf(e.target.files?.[0] || null);e.currentTarget.value="";}} />
+          <input type="file" accept=".pdf,application/pdf" disabled={pdfBusy} onChange={e=>{void uploadPdf(e.target.files?.[0] || null);e.currentTarget.value="";}} />
         </label>
         {state.pdf ? <div className={styles.pdfMeta}><strong>{state.pdf.name}</strong><span>{state.pdf.bytes.toLocaleString()} bytes · SHA-256: <code>{state.pdf.sha256}</code></span>
           <div className={styles.actions}><button disabled={!pdfAvailable} onClick={()=>void accessPdf(false)}>PDF 열어보기</button><button disabled={!pdfAvailable} onClick={()=>void accessPdf(true)}>동일 PDF 다운로드 ↓</button></div>
           {!pdfAvailable && <small>이 브라우저에서 원본 파일이 확인되지 않습니다. PDF를 다시 업로드하세요.</small>}
         </div> : <p>PDF를 업로드하면 브라우저에 파일을 저장하고 SHA-256 지문을 기록합니다. 서버로 전송하지 않습니다.</p>}
       </div> : <div className={styles.actions}>
-        {(state.title===FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button disabled={Boolean(state.lockedAt)} onClick={()=>applyPacket(FAKE_COUNTRY_PACKET,true)}>텍스트 국가 10개 예제 채우기</button>}
+        {(state.title===FAKE_COUNTRY_TITLE || state.title.toLowerCase().includes("10 countries")) && <button onClick={()=>applyPacket(FAKE_COUNTRY_PACKET,true)}>텍스트 국가 10개 예제 채우기</button>}
       </div>}
-      <label className={styles.field}><span>③ Work 답변의 비공개 JSON 블록 붙여넣기 (별도 파일 필요 없음)</span><textarea disabled={Boolean(state.lockedAt)} value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON] 내용을 그대로 붙여넣으세요. 질문·비공개 정답·출처를 자동으로 채웁니다." /></label>
-      <div className={styles.actions}><button disabled={Boolean(state.lockedAt)||!packetInput.trim()} onClick={importPacket}>질문·정답·출처 자동 채우기</button></div>
-      <p>PDF와 비공개 JSON은 반드시 <strong>같은 Work 제작 결과</strong>여야 합니다. 정답·출처가 PDF와 맞는지 확인하고 잠그세요. 추가 PDF 미리보기 이미지는 나중에 필요할 때 만들면 됩니다.</p>
+      <details className={styles.advanced}>
+        <summary>선택 기능 · Work 비공개 JSON 가져오기</summary>
+        <p className={styles.muted}>필수 단계가 아닙니다. Work 답변에서 JSON을 복사하면 질문·정답·출처가 자동으로 채워집니다. 정답만 나중에 입력해도 됩니다.</p>
+        <label className={styles.field}><span>Work의 비공개 [EXPERIMENT_PACKET_JSON] 블록</span><textarea value={packetInput} onChange={e=>setPacketInput(e.target.value)} placeholder="[EXPERIMENT_PACKET_JSON] ... [/EXPERIMENT_PACKET_JSON]" /></label>
+        <div className={styles.actions}><button disabled={!packetInput.trim()} onClick={importPacket}>질문·정답·출처 자동 입력</button></div>
+      </details>
+      <p>Work에서 정답은 PDF 제작 시 확정해 보관하세요. 사이트에는 세 AI의 답변을 모은 후 입력해도 됩니다. AI에 정답표를 보여주지 마세요.</p>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 03</span><h2>Ground Truth 검증·잠금</h2><p>자료·정답·출처를 확인하고 잠근 뒤 AI 테스트를 시작합니다. 잠금을 풀면 기존 답변과 점수가 초기화됩니다.</p></div><em className={truthReady ? styles.good : styles.wait}>{truthReady ? "✓ 정답 잠금" : "근거 확인·잠금 필요"}</em></div>
-      <div className={styles.grid2}>
-        <label><span>영문 제목</span><input disabled={Boolean(state.lockedAt)} value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
-        <label><span>카테고리</span><input disabled={Boolean(state.lockedAt)} value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
-        <label><span>검색 문구</span><input disabled={Boolean(state.lockedAt)} value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
-        <label><span>후킹 포인트</span><input disabled={Boolean(state.lockedAt)} value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
-      </div>
-      <label className={styles.field}><span>AI에게 물을 질문 · 지금 선택한 주제에 맞는 질문이어야 합니다</span><textarea disabled={Boolean(state.lockedAt)} value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder={suggestedQuestion || "Work에서 받은 해당 PDF의 정확한 영어 질문을 입력하세요."} /></label>
-       {!state.lockedAt && suggestedQuestion && <div className={styles.actions}><button onClick={()=>setState(prev=>({...prev,testQuestion:suggestedQuestion,commonPrompt:""}))}>현재 주제에 맞는 질문 사용</button></div>}
-       {mismatchedQuestion && <p className={styles.questionWarning} role="alert">질문과 실험 주제가 다릅니다. 현재 PDF가 영수증인데 ‘10개 국가 중 가짜 찾기’ 질문이 입력되어 있으면 이 실험은 유효하지 않습니다. 질문을 바꾼 뒤 세 AI를 새로 시험하세요.</p>}
-      {state.fixtureMode==="text" ? <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea disabled={Boolean(state.lockedAt)} value={state.material} onChange={e=>patch("material",e.target.value)} /></label> : <p className={styles.muted}>블라인드 테스트 자료는 위에서 등록한 PDF 원본을 사용합니다. 국기·국가명 등 PDF 내용은 공통 질문에 복제하지 않습니다.</p>}
-      <label className={styles.field}><span>숨겨둔 트릭</span><textarea disabled={Boolean(state.lockedAt)} value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
-      <div className={styles.truthGrid}>
-        <label><span>🔒 Ground Truth · 정답</span><textarea disabled={Boolean(state.lockedAt)} value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="AI 답변을 보기 전에 정답과 판정 기준을 확정." /></label>
-        <label><span>🔗 Ground Truth 출처</span><textarea disabled={Boolean(state.lockedAt)} value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="공식/공공/신뢰 가능한 출처 URL과 확인 메모. 한 줄에 하나씩." /></label>
-      </div>
-      <label className={styles.field}><span>근거 상태: {state.sourceStatus === "verified" ? "사전 확인된 예제" : "검증 필요"}</span><span><input type="checkbox" disabled={Boolean(state.lockedAt)} checked={state.sourceVerified} onChange={e => patch("sourceVerified", e.target.checked)} /> 출처·정답을 직접 확인했으며 테스트 자료에 정답이 노출되지 않았습니다.</span></label>
-      <div className={styles.actions}>
-        {state.lockedAt ? <button onClick={unlockExperiment}>잠금 해제 (AI 답변·점수 초기화)</button> : <button className={styles.primary} disabled={!lockReady} onClick={lockExperiment}>🔒 자료와 정답표 잠그기 → 테스트 시작</button>}
-      </div>
-      {!state.lockedAt && <p>PDF 원본 등록, 질문, 비공개 정답과 판정 기준, 공식 출처, 출처 확인 체크가 모두 필요합니다. 질문이 주제와 어긋나면 잠금이 차단됩니다. 이미 AI 답변을 받았다면 수정 전에 백업하세요.</p>}
+      <div className={styles.panelHead}><div><span>STEP 03</span><h2>공통 질문 설정</h2><p>PDF에 맞는 질문을 확인하세요. 정답을 입력하거나 잠그지 않아도 실험할 수 있습니다.</p></div><em className={fixtureReady?styles.good:styles.wait}>{fixtureReady?"✓ 실험 준비됨":"PDF·질문 확인 필요"}</em></div>
+      <details className={styles.advanced}><summary>제목 · 카테고리 · 키워드 · 후킹 포인트 수정 (선택)</summary>
+        <div className={styles.grid2}>
+          <label><span>영문 제목</span><input value={state.title} onChange={e=>patch("title",e.target.value)} /></label>
+          <label><span>카테고리</span><input value={state.category} onChange={e=>patch("category",e.target.value)} /></label>
+          <label><span>검색 문구</span><input value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
+          <label><span>후킹 포인트</span><input value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
+        </div>
+      </details>
+      <label className={styles.field}><span>AI에게 물을 영어 질문</span><textarea value={state.testQuestion} onChange={e=>updateQuestion(e.target.value)} placeholder={suggestedQuestion || "이 PDF에 맞는 영어 질문을 입력하세요."} /></label>
+      {suggestedQuestion && <div className={styles.actions}><button onClick={()=>updateQuestion(suggestedQuestion)}>현재 주제의 추천 질문 사용</button></div>}
+      {mismatchedQuestion && <p className={styles.questionWarning} role="alert">실험 주제와 질문이 다릅니다. 영수증 PDF로 가짜 국가 찾기 질문을 내면 올바른 실험이 아닙니다.</p>}
+      {!noKeyLeak && <p className={styles.questionWarning} role="alert">질문이나 PDF 파일명에서 비공개 정답이 노출될 위험이 있습니다. 확인해 주세요.</p>}
+      {state.fixtureMode==="text" && <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea value={state.material} onChange={e=>updateMaterial(e.target.value)} placeholder="실제 테스트에 전달할 텍스트 자료" /></label>}
+      <p className={styles.muted}>PDF 실험에서는 별도의 텍스트 자료를 복사할 필요가 없습니다. 정답은 STEP 05에서 입력합니다.</p>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 04</span><h2>세 AI에 같은 문제 던지기</h2><p>같은 자료와 같은 질문을 사용합니다. 모델이 답한 원문은 요약하지 말고 그대로 보관하세요.</p></div><strong>{completed}/3 답변</strong></div>
-      <label className={styles.field}><span>공통 테스트 프롬프트 · {state.lockedAt ? "잠금 완료 · 수정 불가" : "잠그기 전 수정 가능"}</span><textarea disabled={Boolean(state.lockedAt)} value={state.lockedAt ? commonPrompt : state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
+      <div className={styles.panelHead}><div><span>STEP 04</span><h2>ChatGPT · Claude · Gemini 답변 모으기</h2><p>PDF와 질문을 똑같이 제공하고 실제 원문을 붙여넣으세요. 정답은 아직 필요 없습니다.</p></div><strong>{completed}/3 답변</strong></div>
+      <label className={styles.field}><span>공통 테스트 프롬프트 · 비어 있으면 아래 예시가 자동 적용됩니다</span><textarea value={state.commonPrompt} onChange={e=>updateCommonPrompt(e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
-        <button disabled={!truthReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
-        {state.fixtureMode==="pdf" && <button disabled={!truthReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
-        {!truthReady && <small>테스트 자료와 정답을 먼저 검증·잠그세요. 빈 자료로 AI에 질문하지 않습니다.</small>}
+        <button disabled={!fixtureReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
+        {state.fixtureMode==="pdf" && <button disabled={!fixtureReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
+        {!fixtureReady && <small>PDF 또는 텍스트 자료와 공통 질문을 확인하면 바로 테스트할 수 있습니다.</small>}
       </div>
       <div className={styles.providerTabs}>
         {PROVIDERS.map(p => <button key={p.id} className={activeProvider===p.id?styles.providerActive:""} onClick={()=>setActiveProvider(p.id)}>
@@ -652,10 +650,10 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
-        <label><span>표시된 모델명</span><input disabled={!truthReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="서비스 화면에 표시된 실제 모델명" /></label>
-        <label className={styles.field}><span>실험 날짜</span><input disabled={!truthReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
-        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!truthReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
-        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!truthReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
+        <label><span>표시된 모델명</span><input disabled={!fixtureReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="서비스 화면에 표시된 실제 모델명" /></label>
+        <label className={styles.field}><span>실험 날짜</span><input disabled={!fixtureReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
+        {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
+        <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!fixtureReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
       </div>
     </section>
 
