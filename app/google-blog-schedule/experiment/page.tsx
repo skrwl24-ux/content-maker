@@ -7,6 +7,8 @@ import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExper
 import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, deleteHumanPhoto } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
 import { BASELINE_PROFILE, getProviderBaselineHint, baselineStatus } from "@/lib/ai-world-experiment-baseline.mjs";
+import { TOPIC_BANK_VERSION, initialTopics, mergeTopics, parseBulkTopics, countTopics } from "@/lib/ai-world-experiment-topics.mjs";
+import type { Topic, TopicStatus } from "@/lib/ai-world-experiment-topics.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
@@ -20,7 +22,7 @@ type ProviderRun = {
   usedSamePdf: boolean;
   response: string;
   finalAnswer: string;
-  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain" | "recommendation";
   highlight: string;
   accuracy: number | null;
   instruction: number | null;
@@ -40,6 +42,7 @@ type AutoDraft = {
   scores: Array<{provider: ProviderId; finalAnswer: string; verdict: ProviderRun["verdict"]; evidence: string; explanation: string}>;
 };
 type SavedDraft = { fingerprint: string; draft: AutoDraft };
+type TopicFilter = "open"|"used"|"all";
 type HumanChallenge = {
   choice: string;
   durationText: string;
@@ -54,6 +57,8 @@ type ExperimentState = {
   scheduleId: string;
   scheduleDate: string;
   title: string;
+  mode: "recommend"|"quiz";
+  topicId: string;
   category: string;
   hook: string;
   keyword: string;
@@ -75,6 +80,7 @@ type ExperimentState = {
 
 const STORAGE_KEY = "ai-world-experiment-studio-v1";
 const AUTO_DRAFT_KEY = "ai-world-experiment-auto-draft-v1";
+const TOPICS_KEY = "ai-world-experiment-topic-bank-v1";
 const SEED_TRANSFER_KEY = "ai-world-experiment-seed-v1";
 const QUEUE_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
 
@@ -120,6 +126,8 @@ function emptyState(): ExperimentState {
     scheduleId: "",
     scheduleDate: "",
     title: STARTERS[0].title,
+    mode: "quiz",
+    topicId: "",
     category: STARTERS[0].category,
     hook: STARTERS[0].hook,
     keyword: STARTERS[0].keyword,
@@ -389,8 +397,15 @@ export default function AiWorldExperimentStudio() {
   const [packetInput, setPacketInput] = useState("");
   const [advancedMode, setAdvancedMode] = useState(false);
   const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [draftFeedback, setDraftFeedback] = useState<{kind:"loading"|"error"|"success"; message:string}|null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null);
   const [draftApproved, setDraftApproved] = useState(false);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicsLoaded, setTopicsLoaded] = useState(false);
+  const [topicFilter, setTopicFilter] = useState<TopicFilter>("open");
+  const [bulkTopics, setBulkTopics] = useState("");
+  const [topicGeneratorBusy, setTopicGeneratorBusy] = useState(false);
+  const [topicImportBusy, setTopicImportBusy] = useState(false);
   const [pdfAvailable, setPdfAvailable] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -422,6 +437,8 @@ export default function AiWorldExperimentStudio() {
         setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
       if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
+      next.mode=next.mode==="recommend"?"recommend":"quiz";
+      next.topicId=typeof next.topicId==="string"?next.topicId:"";
       next.protocol=next.protocol==="basic"||next.protocol==="legacy" ? next.protocol :
         PROVIDERS.some(p=>Boolean(next.runs?.[p.id]?.response?.trim())) ? "legacy" : "basic";
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
@@ -433,6 +450,18 @@ export default function AiWorldExperimentStudio() {
     try { const rawDraft = localStorage.getItem(AUTO_DRAFT_KEY); if (rawDraft) setSavedDraft(JSON.parse(rawDraft)); } catch {}
     setHydrated(true);
   }, []);
+  useEffect(() => {
+    try {
+      const saved=localStorage.getItem(TOPICS_KEY);
+      const parsed=saved?JSON.parse(saved):null;
+      setTopics(saved && Array.isArray(parsed?.topics) ? mergeTopics([],parsed.topics) : initialTopics());
+    } catch {setTopics(initialTopics());}
+    setTopicsLoaded(true);
+  }, []);
+  useEffect(()=>{
+    if(!topicsLoaded)return;
+    try{localStorage.setItem(TOPICS_KEY,JSON.stringify({version:TOPIC_BANK_VERSION,topics}));}catch{}
+  },[topics,topicsLoaded]);
   useEffect(() => {
     if (!hydrated || !savedDraft) return;
     try { localStorage.setItem(AUTO_DRAFT_KEY, JSON.stringify(savedDraft)); } catch {}
@@ -485,8 +514,10 @@ export default function AiWorldExperimentStudio() {
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
+  const topicCounts = countTopics(topics);
+  const visibleTopics = topics.filter(t=>topicFilter==="all"||(topicFilter==="used"?t.status==="used":t.status!=="used"));
   // A draft is only valid for the exact PDF/key/original answers that produced it.
-  const draftFingerprint = JSON.stringify([state.title, state.testQuestion, state.material, state.pdf?.sha256,
+  const draftFingerprint = JSON.stringify([state.title, state.mode, state.topicId, state.testQuestion, state.material, state.pdf?.sha256,
     state.groundTruth, state.sources, state.hiddenTwist, state.human.choice, state.human.durationText,
     state.human.notes, state.human.photos.map(p => p.sha256), ...PROVIDERS.map(p => state.runs[p.id].response)]);
   const currentDraft = savedDraft?.fingerprint === draftFingerprint ? savedDraft.draft : null;
@@ -498,7 +529,85 @@ export default function AiWorldExperimentStudio() {
     groundTruth:state.groundTruth, hiddenTwist:state.hiddenTwist, sources:state.sources,
     runs:state.runs
   });
+  const comparisonReady = state.mode==="recommend" ?
+    (Boolean(state.testQuestion.trim() && state.material.trim()) && completed===3) :
+    (fixtureReady && keyReady && allAnswersCollected);
 
+  function patchTopicStatus(id:string,status:TopicStatus){
+    setTopics(prev=>prev.map(t=>t.id===id?{...t,status,usedAt:status==="used"?today():""}:t));
+  }
+  function useTopic(topic:Topic){
+    if(state.topicId===topic.id && state.mode==="recommend"){
+      setAdvancedMode(false);
+      setNotice("현재 작업 중인 비교 주제입니다. 아래에 AI 세 곳의 답변을 붙여넣으세요.");return;
+    }
+    if(hasAnyResults() && !window.confirm("현재 실험의 AI 답변과 사람 기록을 유지한 채 다른 주제로 이동합니다. 현재 작업을 저장하고 전환할까요?"))return;
+    try {
+      const oldKey=state.scheduleId||slugify(state.title);
+      if(oldKey)localStorage.setItem("ai-world-experiment-case:"+oldKey,JSON.stringify(state));
+    }catch{}
+    const caseId="topic-bank-"+topic.id;
+    let remembered:ExperimentState|null=null;
+    try {const raw=localStorage.getItem("ai-world-experiment-case:"+caseId);
+      if(raw){const old=JSON.parse(raw) as ExperimentState;if(old?.title===topic.title)remembered=old;}
+    }catch{}
+    const defaultQuestion="As of the date of this test, for the topic '"+topic.title+"', recommend ONE top choice. Explain specific criteria, strengths, weaknesses, assumptions and uncertainty. Distinguish opinion from verified facts. Answer in English.";
+    const next:ExperimentState=remembered?{...emptyState(),...remembered,mode:"recommend",topicId:topic.id}:
+      {...emptyState(),mode:"recommend",topicId:topic.id,scheduleId:caseId,scheduleDate:today(),title:topic.title,
+      category:topic.category,keyword:"AI comparison",hook:"ChatGPT vs Claude vs Gemini recommendation comparison",
+      testQuestion:topic.question||defaultQuestion,material:"Text-only recommendation question, no PDF, no single fixed correct answer.",
+      fixtureMode:"text",pdf:null,groundTruth:"",sources:"",hiddenTwist:"",sourceStatus:"not_applicable"};
+    setState(next);setTimerStartedAt(null);setTimerNow(0);setAdvancedMode(false);setPacketInput("");setDraftApproved(false);
+    if(topic.status==="pending")patchTopicStatus(topic.id,"active");
+    setNotice(remembered?"저장된 이 주제의 기존 답변과 메모를 다시 불러왔습니다.":"비교 주제를 시작했습니다. 정답키나 PDF 없이 세 AI에게 같은 영어 질문을 보내세요.");
+  }
+  function appendBulkTopics(){
+    const candidates=parseBulkTopics(bulkTopics);
+    if(!candidates.length){setNotice("주제 제목을 한 줄에 하나씩 입력하세요.");return;}
+    const next=mergeTopics(topics,candidates);
+    const added=next.length-topics.length;
+    setTopics(next);setBulkTopics("");
+    setNotice(added?"새 주제 "+added+"개를 보관함에 추가했습니다.":"중복된 주제입니다. 새로 추가할 제목이 없습니다.");
+  }
+  async function generateMoreTopics(){
+    if(topicGeneratorBusy)return;
+    setTopicGeneratorBusy(true);
+    try{
+      const response=await fetch("/api/google-blog/experiment-topics",{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({existingTitles:topics.map(t=>t.title)})
+      });
+      const data=await response.json();
+      if(!response.ok||!Array.isArray(data.topics))throw new Error(data.error||"주제를 생성하지 못했습니다.");
+      const next=mergeTopics(topics,data.topics);
+      const added=next.length-topics.length;
+      if(!added)throw new Error("기존 목록과 겹치는 주제만 생성됐습니다. 한 번 더 눌러주세요.");
+      setTopics(next);setTopicFilter("open");
+      setNotice("AI가 새 비교 주제 "+added+"개를 보관함에 추가했습니다. 이전 주제는 지우지 않았습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"새 주제 추천 실패");}
+    finally{setTopicGeneratorBusy(false);}
+  }
+  function downloadTopicBank(){
+    const blob=new Blob([JSON.stringify({version:TOPIC_BANK_VERSION,exportedAt:today(),topics},null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download="ai-experiment-topics-"+today()+".json";a.click();
+    window.setTimeout(()=>URL.revokeObjectURL(url),20000);
+    setNotice("사용 상태까지 포함해 주제 보관함을 JSON으로 백업했습니다.");
+  }
+  async function importTopicBank(file:File|null){
+    if(!file||topicImportBusy)return;
+    setTopicImportBusy(true);
+    try{
+      if(file.size>1_000_000)throw new Error("주제 백업은 1MB 이하만 가져올 수 있습니다.");
+      const data=JSON.parse(await file.text());
+      if(!Array.isArray(data?.topics))throw new Error("유효한 주제 보관함 백업 JSON이 아닙니다.");
+      const restored=mergeTopics(data.topics,topics);
+      const count=restored.length;
+      setTopics(restored);
+      setNotice("기존 상태를 최대한 유지하면서 주제 "+count+"개를 복원했습니다.");
+    }catch(e){setNotice(e instanceof Error?e.message:"주제 목록 복원 실패");}
+    finally{setTopicImportBusy(false);}
+  }
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
@@ -713,13 +822,16 @@ export default function AiWorldExperimentStudio() {
   }
   async function generateQuickDraft() {
     if (generatingDraft) return;
-    if (!fixtureReady || !keyReady || !allAnswersCollected) {
-      setNotice("원본 PDF와 질문, Work 정답·근거, 세 AI의 답변을 확인하세요. 동일 PDF 확인도 필요합니다.");return;
+    if (!comparisonReady) {
+      const msg=state.mode==="recommend"?"공통 질문과 ChatGPT·Claude·Gemini의 원문 답변 3개가 필요합니다.":
+        "원본 PDF·정답키·같은 질문·세 AI의 답변을 모두 확인하세요.";
+      setDraftFeedback({kind:"error",message:msg});setNotice(msg);return;
     }
+    setDraftFeedback({kind:"loading",message:"AI에 글 작성 요청을 보냈습니다. 답변 비교와 Blogger 원고를 만드는 중입니다. 잠시 기다려 주세요."});
     setGeneratingDraft(true);setDraftApproved(false);
     try {
       let pdfDataUrl = "";
-      if (state.fixtureMode === "pdf") {
+      if (state.mode==="quiz" && state.fixtureMode === "pdf") {
         const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
         if (!blob) throw new Error("원본 PDF를 현재 브라우저에서 찾을 수 없습니다. STEP 1에서 다시 등록하세요.");
         if (blob.size > 2_500_000) throw new Error("자동 생성 PDF는 최대 2.5MB입니다. Vercel 요청 제한을 고려해 용량을 줄이거나 더 간단한 PDF를 사용하세요.");
@@ -734,14 +846,24 @@ export default function AiWorldExperimentStudio() {
         method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({experiment:state,pdfDataUrl})
       });
-      const data=await response.json();
-      if (!response.ok || !data.draft) throw new Error(data.error || "자동 생성에 실패했습니다.");
+      let data: {draft?:AutoDraft;error?:string}|null=null;
+      try {data=await response.json();} catch {
+        throw new Error("서버가 정상적인 응답을 주지 않았습니다 (HTTP "+response.status+"). 서버 제한이나 일시적 오류일 수 있습니다.");
+      }
+      if (!response.ok || !data?.draft) throw new Error((data?.error || "글 작성 서버 오류")+" (HTTP "+response.status+")");
       setSavedDraft({fingerprint:draftFingerprint,draft:data.draft as AutoDraft});
+      setDraftFeedback({kind:"success",message:"원고가 생성됐습니다. 바로 아래에 AI 3사 비교와 Blogger 영문 HTML 결과가 표시됩니다."});
+      window.setTimeout(()=>{
+        document.getElementById("auto-draft-result")?.scrollIntoView({behavior:"smooth",block:"start"});
+      },150);
       setNotice((data.draft.needsReview?.length || 0) ?
         "초안은 완성됐지만 정답/PDF/원문에서 확인할 부분이 있습니다. 아래 경고를 먼저 검토하세요." :
         "AI 3사 비교와 영문 Blogger 초안을 자동으로 만들었습니다. 내용을 확인하고 확정하세요.");
-    } catch(e) {setNotice(e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.");}
-    finally {setGeneratingDraft(false);}
+    } catch(e) {
+      const msg=e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.";
+      setDraftFeedback({kind:"error",message:"블로그 글 생성 실패: "+msg});
+      setNotice(msg);
+    } finally {setGeneratingDraft(false);}
   }
   function approveQuickDraft() {
     if (!currentDraft?.ready || currentDraft.needsReview.length) {
@@ -750,6 +872,11 @@ export default function AiWorldExperimentStudio() {
     const scores=currentDraft.scores;
     if (scores.length!==3 || PROVIDERS.some(p => !scores.some(s => s.provider===p.id && s.verdict && s.verdict!=="uncertain"))) {
       setNotice("세 AI의 판정이 모두 명확해야 확정할 수 있습니다.");return;
+    }
+    if(state.mode==="recommend") {
+      setDraftApproved(true);
+      setNotice("세 AI가 고른 추천 결과를 확인했습니다. 승자를 정하지 않고 비교 글로 발행리스트에 전달합니다.");
+      return;
     }
     setState(prev=>({...prev,
       human: {...prev.human, verdict: currentDraft.humanVerdict==="not_recorded"?"":currentDraft.humanVerdict},
@@ -881,6 +1008,7 @@ export default function AiWorldExperimentStudio() {
       scheduleId: "",
       scheduleDate: "",
       title: item.title,
+      mode: "quiz", topicId:"",
       category: item.category,
       hook: item.hook,
       keyword: item.keyword,
@@ -903,10 +1031,27 @@ export default function AiWorldExperimentStudio() {
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!allScored || (!advancedMode && (!currentDraft || !draftApproved))) {
-      setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
+    if (state.mode==="recommend" ? (!currentDraft || !draftApproved || !currentDraft.ready) :
+      (!allScored || (!advancedMode && (!currentDraft || !draftApproved)))) {
+      setNotice(state.mode==="recommend"?"세 AI 답변으로 비교 초안을 만들고 결과를 확인해야 발행리스트에 보낼 수 있습니다.":
+        "세 AI의 답변과 판정, Work 정답·근거를 확인한 뒤 발행할 수 있습니다.");
       return;
     }
+    const comparisonReport=state.mode==="recommend" ? [
+      "AI COMPARISON — NO SINGLE OBJECTIVE RIGHT ANSWER",
+      "Topic: "+state.title,"Exact identical question: "+state.testQuestion,
+      "Date: "+today(),"Human comments (only when recorded): "+(state.human.notes||"Not recorded"),
+      "Human choice: "+(state.human.choice||"Not recorded"),
+      ...PROVIDERS.map(p=>{
+        const r=state.runs[p.id],v=currentDraft?.scores.find(x=>x.provider===p.id);
+        return p.label+" ("+(r.model||"model not recorded")+")\nSelected: "+(v?.finalAnswer||"not identified")+
+          "\nSelection rationale: "+(v?.explanation||"not assessed")+"\nOriginal answer:\n"+r.response;
+      }),
+      "LIMIT: This is a subjective recommendation comparison from one question, not independently verified current product specifications or an overall model ranking."
+    ].join("\n\n") : report;
+    const finalPrompt=state.mode==="recommend"
+      ? "This comparison article is already drafted in the saved Blogger body. If revising it, use only the exact original model replies and the following report. Never invent winners, rankings or first-person observations.\n\n"+comparisonReport
+      : articlePrompt;
     const pending = {
       id: state.scheduleId || ("world-exp-" + Date.now()),
       kind: "experiment",
@@ -914,19 +1059,24 @@ export default function AiWorldExperimentStudio() {
       title: currentDraft?.title || state.title,
       body: currentDraft && draftApproved ? currentDraft.html : "",
       keyword: state.keyword || "AI experiment",
-      slug: slugify(state.title),
-      note: "Global curiosity experiment · Work-precommitted ground truth entered for final comparison · ChatGPT/Claude/Gemini tested with common fixture",
-      labVersion: "WORLD-LAB-V1",
-      labReport: report,
-      labPrompt: articlePrompt,
+      slug: slugify(currentDraft?.title||state.title) || "ai-comparison-"+today(),
+      note: state.mode==="recommend"?"AI 3사 추천 비교 · 정답 없는 주관적 판단 비교":"Global curiosity experiment · precommitted answer key and three actual responses",
+      labVersion: state.mode==="recommend"?"WORLD-COMPARISON-V1":"WORLD-LAB-V1",
+      labReport: comparisonReport,
+      labPrompt: finalPrompt,
       experimentCategory: state.category,
       experimentHook: state.hook,
     };
     try {
       localStorage.setItem(QUEUE_TRANSFER_KEY, JSON.stringify(pending));
+      if(state.mode==="recommend" && state.topicId) {
+        const updated=topics.map(t=>t.id===state.topicId?{...t,status:"used" as TopicStatus,usedAt:today()}:t);
+        localStorage.setItem(TOPICS_KEY,JSON.stringify({version:TOPIC_BANK_VERSION,topics:updated}));
+        setTopics(updated);
+      }
       window.location.href = "/google-blog-schedule?fromLab=1";
     } catch {
-      setNotice("발행 큐 전달 실패 · 브라우저 저장소를 확인하세요.");
+      setNotice("발행 큐 전달에 실패했습니다. 브라우저 저장소를 확인하세요.");
     }
   }
   function reset() {
@@ -956,12 +1106,75 @@ export default function AiWorldExperimentStudio() {
 
     {notice && <div className={styles.notice}>{notice}<button onClick={() => setNotice("")}>×</button></div>}
 
+    <section className={styles.topicBank}>
+      <div className={styles.topicBankHead}>
+        <div><span>AI COMPARISON TOPIC LIBRARY</span><h2>AI 3사 비교 주제 보관함</h2>
+          <p>주제를 골라 바로 실험하세요. 이미 사용한 주제는 남겨두고, 부족하면 새 목록을 쉽게 추가합니다.</p></div>
+        <div className={styles.topicBankStats}>
+          <strong>{topicCounts.pending}<small>대기</small></strong>
+          <strong>{topicCounts.active}<small>진행 중</small></strong>
+          <strong>{topicCounts.used}<small>사용 완료</small></strong>
+        </div>
+      </div>
+      <div className={styles.topicBankTools}>
+        <button className={styles.topicNewButton} disabled={topicGeneratorBusy}
+          onClick={()=>void generateMoreTopics()}>{topicGeneratorBusy?"주제 10개 생성 중…":"✦ 새 주제 10개 AI 추천"}</button>
+        <button onClick={()=>setTopicFilter("open")} aria-pressed={topicFilter==="open"}>미사용·진행 중</button>
+        <button onClick={()=>setTopicFilter("used")} aria-pressed={topicFilter==="used"}>사용 완료</button>
+        <button onClick={()=>setTopicFilter("all")} aria-pressed={topicFilter==="all"}>전체</button>
+      </div>
+      {topicCounts.pending===0 && topicCounts.active===0 && <p className={styles.topicBankEmpty}>모든 주제를 사용했습니다. 위의 '새 주제 10개 AI 추천'으로 계속 추가할 수 있습니다.</p>}
+      {visibleTopics.length>0 ? <div className={styles.topicList}>
+        {visibleTopics.map((topic,i)=><article key={topic.id} className={styles.topicItem}>
+          <div className={styles.topicMain}>
+            <small>{String(i+1).padStart(2,"0")} · {topic.category}</small>
+            <strong>{topic.title}</strong>
+            {topic.question&&<span>{topic.question}</span>}
+          </div>
+          <div className={styles.topicActions}>
+            <span className={topic.status==="used"?styles.topicUsed:topic.status==="active"?styles.topicActive:styles.topicPending}>
+              {topic.status==="used"?"사용 완료":topic.status==="active"?"진행 중":"대기"}
+            </span>
+            <button onClick={()=>useTopic(topic)}>{state.topicId===topic.id?"작업 중":"이 주제로 시작"}</button>
+            <select value={topic.status} aria-label={topic.title+" 사용 상태"} onChange={e=>patchTopicStatus(topic.id,e.target.value as TopicStatus)}>
+              <option value="pending">대기</option><option value="active">진행 중</option><option value="used">사용 완료</option>
+            </select>
+          </div>
+        </article>)}
+      </div> : <div className={styles.topicBankEmpty}>현재 선택한 상태의 주제가 없습니다.</div>}
+      <details className={styles.topicAdd}>
+        <summary>직접 여러 개 추가 · 목록 백업 및 복원</summary>
+        <label className={styles.field}><span>주제 제목을 한 줄에 하나씩 붙여넣기</span>
+          <textarea rows={5} value={bulkTopics} onChange={e=>setBulkTopics(e.target.value)}
+            placeholder={"AI 3사가 가장 살기 좋은 나라로 선택한 곳은?\nAI 3사가 고른 최고의 스마트폰은?"}/></label>
+        <div className={styles.actions}><button disabled={!bulkTopics.trim()} onClick={appendBulkTopics}>중복 제외하고 모두 추가</button>
+          <button onClick={downloadTopicBank}>현재 주제 목록 JSON 백업 ↓</button>
+          <label className={styles.topicImportLabel}>백업 JSON 가져오기
+            <input type="file" accept=".json,application/json" disabled={topicImportBusy} onChange={e=>{
+              const file=e.currentTarget.files?.[0]||null;e.currentTarget.value="";void importTopicBank(file);
+            }}/></label>
+        </div>
+        <small>이 목록은 현재 브라우저에 자동 저장됩니다. 다른 브라우저나 PC에서는 JSON 백업·복원을 이용하세요.</small>
+      </details>
+    </section>
+
     <section className={styles.quickBar}>
-      <div><strong>간편 제작 · 3단계</strong><p>자료만 넣으면 정답 대조와 영문 블로그 글을 사이트가 작성합니다. 기존 자료는 그대로 유지됩니다.</p></div>
+      <div><strong>간편 제작 · 3단계</strong><p>추천 비교는 질문과 세 AI의 답변만, 정답 맞히기는 PDF와 정답 자료까지 넣으면 됩니다. 기존 자료는 그대로 유지됩니다.</p></div>
       <button onClick={()=>setAdvancedMode(v=>!v)}>{advancedMode?"← 간편 제작으로 돌아가기":"기존 세부 입력 화면 열기 ↗"}</button>
     </section>
     {!advancedMode && <>
-      <section className={styles.panel}>
+      {state.mode==="recommend" ? <section className={styles.panel}>
+        <div className={styles.panelHead}><div><span>STEP 01 / 03</span><h2>세 AI에게 물어볼 같은 질문</h2>
+          <p>추천 비교는 PDF도 정답키도 필요하지 않습니다. 아래 질문을 동일하게 복사해 세 AI에게 전달하세요.</p></div>
+          <em className={state.testQuestion.trim()?styles.good:styles.wait}>{state.testQuestion.trim()?"질문 준비 완료":"질문 필요"}</em>
+        </div>
+        <p className={styles.topicActiveTitle}>선택한 주제: <strong>{state.title}</strong></p>
+        <label className={styles.field}><span>동일한 영어 질문 · 수정할 수 있습니다</span>
+          <textarea value={state.testQuestion} onChange={e=>updateQuestion(e.target.value)} rows={5}/></label>
+        <div className={styles.actions}><button className={styles.primary} disabled={!state.testQuestion.trim()}
+          onClick={()=>void copy(commonPrompt,"AI 3사 공통 질문")}>ChatGPT · Claude · Gemini 공통 질문 복사</button></div>
+        <p className={styles.quickHint}>누가 객관적으로 정답인지는 채점하지 않습니다. 각 AI가 고른 대상, 선정 기준, 장단점과 근거를 비교합니다.</p>
+      </section> : <section className={styles.panel}>
         <div className={styles.panelHead}><div><span>STEP 01 / 03</span><h2>PDF와 Work 정답 자료 넣기</h2>
           <p>실험용 PDF 한 장과 Work의 비공개 JSON(또는 정답표 전체)을 입력하세요. 정답·출처·질문을 따로 나눠 적을 필요가 없습니다.</p></div>
           <em className={fixtureReady&&keyReady?styles.good:styles.wait}>{fixtureReady&&keyReady?"✓ 자료 준비":"자료 필요"}</em>
@@ -995,7 +1208,7 @@ export default function AiWorldExperimentStudio() {
         </div>
         {mismatchedQuestion&&<p className={styles.questionWarning}>제목과 공통 질문이 맞지 않습니다. 고급 화면에서 수정해 주세요.</p>}
         {!noKeyLeak&&<p className={styles.questionWarning}>공통 질문 또는 파일명에서 정답이 노출될 가능성이 있습니다.</p>}
-      </section>
+      </section>}
 
       <section className={styles.panel}>
         <div className={styles.panelHead}><div><span>STEP 02 / 03</span><h2>AI 답변 3개 + 내 경험만 붙여넣기</h2>
@@ -1017,9 +1230,9 @@ export default function AiWorldExperimentStudio() {
           <span>세 AI의 새 채팅에 실제로 <strong>같은 원본 PDF와 같은 질문</strong>을 제공했습니다.</span>
         </label>}
         <details className={styles.advanced}>
-          <summary>내가 직접 푼 경험·사진 추가 (선택)</summary>
+          <summary>{state.mode==="recommend"?"내 의견·실제 체험·사진 추가 (선택)":"내가 직접 푼 경험·사진 추가 (선택)"}</summary>
           <div className={styles.grid2}>
-            <label><span>내가 선택한 답</span><input value={state.human.choice} onChange={e=>patchHuman({choice:e.target.value})} placeholder="내 답 (실제 기록)"/></label>
+            <label><span>{state.mode==="recommend"?"내가 추천하는 한 가지":"내가 선택한 답"}</span><input value={state.human.choice} onChange={e=>patchHuman({choice:e.target.value})} placeholder="내 답 (실제 기록)"/></label>
             <label><span>걸린 시간 (MM:SS)</span><input value={state.human.durationText} onChange={e=>patchHuman({durationText:e.target.value,durationSource:"manual"})} placeholder="예: 01:24"/></label>
           </div>
           <label className={styles.field}><span>풀면서 느낀 점 (짧게 적어도 됩니다)</span><textarea value={state.human.notes} onChange={e=>patchHuman({notes:e.target.value})} placeholder="실제 고민한 단서, 재미있었던 점, 확신이 들었는지 등"/></label>
@@ -1041,16 +1254,27 @@ export default function AiWorldExperimentStudio() {
 
       <section className={styles.panel}>
         <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>AI로 비교·영문 블로그 글 한 번에 제작</h2>
-          <p>원본 PDF와 세 답변을 AI가 대조해 결과표·제목·Blogger HTML 원고를 작성합니다. 오류나 불확실성은 경고로 표시합니다.</p></div></div>
+          <p>{state.mode==="recommend"?"세 AI의 추천 제품·국가·브랜드와 이유를 대조해 비교표·영문 블로그 글을 만듭니다. 주관적 추천에 가짜 정답률을 매기지 않습니다.":"원본 PDF와 세 답변을 AI가 대조해 결과표·제목·Blogger HTML 원고를 작성합니다."}</p></div></div>
         <div className={styles.quickFinal}>
-          <p className={styles.muted}>준비 상태: PDF/질문 {fixtureReady?"✓":"미완료"} · Work 정답/근거 {keyReady?"✓":"미완료"} · AI 답변 {completed}/3
-            {state.fixtureMode==="pdf" ? " · 동일 PDF "+(allAnswersCollected?"확인됨":"확인 필요") : ""}
+          <p className={styles.muted}>{state.mode==="recommend" ? "추천 비교 · 공통 질문 "+(state.testQuestion.trim()?"✓":"미완료")+" · AI 답변 "+completed+"/3" : "정답 실험 · PDF/질문 "+(fixtureReady?"✓":"미완료")+" · 정답/근거 "+(keyReady?"✓":"미완료")+" · AI 답변 "+completed+"/3"}
+            {state.mode==="quiz" && state.fixtureMode==="pdf" ? " · 동일 PDF "+(allAnswersCollected?"확인됨":"확인 필요") : ""}
           </p>
-          <button className={styles.quickGenerate} disabled={generatingDraft||!fixtureReady||!keyReady||!allAnswersCollected||!validateChallengeDuration(state.human.durationText)}
-            onClick={()=>void generateQuickDraft()}>{generatingDraft?"PDF·세 AI 답변 분석 중…":"✦ 블로그 글 자동 제작"}</button>
-          <p className={styles.quickHint}>버튼을 누를 때만 PDF와 입력한 답변·메모를 사이트의 OpenAI API로 전송해 분석합니다. 사진 원본은 전송하지 않습니다.</p>
+          <button className={styles.quickGenerate} disabled={generatingDraft||!comparisonReady||!validateChallengeDuration(state.human.durationText)}
+            onClick={()=>void generateQuickDraft()}>{generatingDraft?"세 AI 답변 분석 중…":"✦ 블로그 글 자동 제작"}</button>
+          <p className={styles.quickHint}>버튼을 누를 때만 입력한 답변·메모와, 정답형 실험이라면 PDF까지 OpenAI API로 전송해 분석합니다. 사진 원본은 전송하지 않습니다.</p>
+          {draftFeedback&&<div className={draftFeedback.kind==="error"?styles.draftError:
+             draftFeedback.kind==="success"?styles.draftSuccess:styles.draftLoading}
+             role={draftFeedback.kind==="error"?"alert":"status"} aria-live="polite">
+            <strong>{draftFeedback.kind==="error"?"생성에 문제가 생겼습니다":
+              draftFeedback.kind==="success"?"글 생성 완료":"글 생성 중"}</strong>
+            <p>{draftFeedback.message}</p>
+            {draftFeedback.kind==="error"&&<div className={styles.actions}>
+              <button type="button" onClick={()=>void copy(draftFeedback.message,"오류 내용")}>오류 내용 복사</button>
+              <button type="button" disabled={generatingDraft} onClick={()=>void generateQuickDraft()}>다시 시도</button>
+            </div>}
+          </div>}
         </div>
-        {currentDraft&&<>
+        {currentDraft&&<div id="auto-draft-result" className={styles.draftResult}>
           <h3 className={styles.quickResultHeading}>{currentDraft.title}</h3>
           {currentDraft.needsReview.length>0&&<div className={styles.quickWarnings}><strong>확인 필요 — 발행 전 수정</strong>
             <ul>{currentDraft.needsReview.map((v,i)=><li key={i}>{v}</li>)}</ul>
@@ -1058,7 +1282,7 @@ export default function AiWorldExperimentStudio() {
           <div className={styles.quickVerdicts}>
             {currentDraft.scores.map(s=><div key={s.provider}>
               <strong>{PROVIDERS.find(p=>p.id===s.provider)?.label}</strong>
-              <b>{s.verdict==="correct"?"정답":s.verdict==="incorrect"?"오답":s.verdict==="partial"?"부분 정답":"판정 보류"}</b>
+              <b>{s.verdict==="recommendation"?"추천":s.verdict==="correct"?"정답":s.verdict==="incorrect"?"오답":s.verdict==="partial"?"부분 정답":"판정 보류"}</b>
               <span>{s.finalAnswer||"판독 불가"}</span>
               <p>{s.explanation}</p>
               {s.evidence&&<small>원문 근거: “{s.evidence}”</small>}
@@ -1077,10 +1301,10 @@ export default function AiWorldExperimentStudio() {
           <div className={styles.quickDraftActions}>
             <button className={styles.primary} disabled={!currentDraft.ready||Boolean(currentDraft.needsReview.length)||draftApproved}
               onClick={approveQuickDraft}>{draftApproved?"✓ 검토 완료":"결과 확인 · 발행 준비"}</button>
-            <button className={styles.queue} disabled={!draftApproved||!allScored} onClick={sendToQueue}>작성된 글 그대로 발행리스트에 등록 →</button>
-            <button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>
+            <button className={styles.queue} disabled={!draftApproved||(state.mode==="quiz"&&!allScored)} onClick={sendToQueue}>작성된 글 그대로 발행리스트에 등록 →</button>
+            {state.mode==="quiz"&&<button disabled={!fixtureReady||archiving} onClick={()=>void exportEvidenceZip()}>실험 자료 ZIP 백업</button>}
           </div>
-        </>}
+        </div>}
         <div className={styles.resetRow}><button onClick={reset}>새 실험 초기화</button><small>입력값과 생성 글은 브라우저에 저장됩니다. 발행은 최종 확인 후 진행하세요.</small></div>
       </section>
     </>}
@@ -1333,7 +1557,7 @@ export default function AiWorldExperimentStudio() {
       <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>문제를 공개하고 → 실제 사람의 경험(선택 참여) → 세 AI의 원문 판단 → 네 참가자의 결과 비교 → 정답 공개 순서로 작성합니다.</p></div></div>
       <div className={styles.summaryRow}>
         {state.human.choice.trim() && <div><strong>Human</strong><span>{state.human.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[state.human.verdict]:"정답 미판정"}</span><small>{state.human.choice} {state.human.durationText ? " · "+state.human.durationText : ""}</small></div>}
-        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
+        {PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류",recommendation:"추천"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
         <button disabled={!allScored} onClick={()=>void copy(articlePrompt,"영문 Blogger 요청서")}>영문 글 요청서 복사</button>

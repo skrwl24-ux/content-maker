@@ -105,3 +105,52 @@
 .quickDraftHtml{min-height:370px!important;font:12px/1.65 ui-monospace,Consolas,monospace!important}
 @media(max-width:900px){.quickProviders,.quickVerdicts{grid-template-columns:1fr}.quickAnswer{min-height:170px}}
 @media(max-width:700px){.quickBar{flex-direction:column;align-items:stretch}.quickBar button,.quickGenerate{width:100%}.quickDraftActions button{flex:1}}
+
+
+/* Saved AI comparison ideas — operator-side topic bank */
+.topicBank{max-width:1240px;margin:0 auto 18px;padding:21px;background:#fff;border:1px solid #dbe4ef;border-radius:20px;box-shadow:0 8px 22px rgba(21,36,62,.05)}
+.topicBankHead{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.topicBankHead>div:first-child>span{font-size:11px;font-weight:900;color:#3463a5;letter-spacing:.1em}
+.topicBankHead h2{font-size:23px;margin:6px 0}
+.topicBankHead p{font-size:13px;line-height:1.65;color:#68788e;margin:0}
+.topicBankStats{display:flex;gap:6px;flex-shrink:0}
+.topicBankStats strong{display:flex;flex-direction:column;text-align:center;align-items:center;gap:4px;min-width:65px;background:#f2f6fb;border:1px solid #e5ebf3;padding:10px;border-radius:13px;font-size:21px}
+.topicBankStats small{font-size:11px;font-weight:750;color:#68788e}
+.topicBankTools{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 12px}
+.topicBankTools button,.topicActions button,.topicActions select,.topicAdd button,.topicImportLabel{cursor:pointer;font:inherit;font-size:12px;font-weight:800;border-radius:9px;padding:10px 12px;border:1px solid #d4dfeb;background:#fff;color:#28425f}
+.topicBankTools button[aria-pressed=true]{background:#e8f1ff;border-color:#a3bee2;color:#194f8c}
+.topicBankTools .topicNewButton{background:#174d91;color:white;border-color:#174d91;margin-right:12px}
+.topicBankTools button:disabled,.topicAdd button:disabled{opacity:.5;cursor:not-allowed}
+.topicList{max-height:565px;overflow-y:auto;border:1px solid #e1e8f0;border-radius:14px}
+.topicItem{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 15px;border-bottom:1px solid #edf1f6}
+.topicItem:last-child{border-bottom:0}
+.topicMain{display:flex;flex-direction:column;gap:6px;min-width:0}
+.topicMain small{color:#6a7890;font-size:11px}
+.topicMain strong{font-size:14px;line-height:1.55}
+.topicMain span{font-size:11px;color:#8793a4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:680px}
+.topicActions{display:flex;flex-shrink:0;align-items:center;gap:7px}
+.topicActions>span{padding:6px 9px;border-radius:99px;font-size:11px;font-weight:800;white-space:nowrap}
+.topicUsed{background:#e8edf3;color:#54677d}
+.topicActive{background:#ebf2fc;color:#1f619c}
+.topicPending{background:#f4f6f8;color:#6c7888}
+.topicActions button{background:#173c68;color:white;border-color:#173c68}
+.topicActions select{max-width:105px}
+.topicBankEmpty{padding:16px;background:#f6f9fe;border-radius:10px;color:#516983;font-size:13px;line-height:1.6}
+.topicAdd{margin-top:14px;border:1px solid #e0e7ef;border-radius:12px;padding:13px}
+.topicAdd summary{font-size:13px;font-weight:800;cursor:pointer}
+.topicAdd small{display:block;margin-top:12px;color:#6b7a8d;font-size:11px;line-height:1.6}
+.topicImportLabel{position:relative;overflow:hidden;display:inline-flex;align-items:center}
+.topicImportLabel input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.topicActiveTitle{font-size:13px;color:#526b8a;background:#f0f5fd;border-radius:9px;padding:12px;margin:12px 0}
+@media(max-width:780px){.topicBankHead,.topicItem{flex-direction:column;align-items:stretch}.topicBankStats{width:100%;justify-content:space-between}.topicBankStats strong{flex:1}.topicActions{flex-wrap:wrap}.topicMain span{white-space:normal}.topicList{max-height:640px}.topicBankTools .topicNewButton{width:100%;margin-right:0}}
+
+
+/* Generation feedback MUST stay visible beside the button, not only in top-page notice. */
+.draftLoading,.draftError,.draftSuccess{width:100%;box-sizing:border-box;border:1px solid #b9cde5;border-radius:12px;padding:14px 16px;margin-top:9px;font-size:13px;line-height:1.65}
+.draftLoading{background:#eaf1fb;color:#264f82}
+.draftError{background:#fff4ee;color:#8d3423;border-color:#e8b8a5}
+.draftSuccess{background:#eef8f0;color:#28593b;border-color:#b5dcc1}
+.draftLoading strong,.draftError strong,.draftSuccess strong{font-size:14px}
+.draftLoading p,.draftError p,.draftSuccess p{margin:6px 0}
+.draftError button{border-radius:8px;border:1px solid #d0b4a8;padding:8px 11px;background:#fff;color:#653c32;font:inherit;cursor:pointer}
+.draftResult{scroll-margin-top:22px;}
