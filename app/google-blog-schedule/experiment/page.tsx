@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
-import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment, buildWorkPdfRequest } from "@/lib/ai-world-experiment-packet.mjs";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion } from "@/lib/ai-world-experiment-packet.mjs";
 import { storeExperimentPdf, getExperimentPdf } from "@/lib/ai-world-experiment-files.mjs";
 import type { PdfMeta } from "@/lib/ai-world-experiment-files.mjs";
 
@@ -80,7 +80,7 @@ function emptyState(): ExperimentState {
     category: STARTERS[0].category,
     hook: STARTERS[0].hook,
     keyword: STARTERS[0].keyword,
-    testQuestion: "",
+    testQuestion: suggestedExperimentQuestion(STARTERS[0].title),
     material: "",
     fixtureMode: "pdf",
     pdf: null,
@@ -150,7 +150,7 @@ Return a compact table with:
 Then choose the best 3 ideas for global curiosity and explain why.`;
 }
 function defaultCommonPrompt(s: ExperimentState) {
-  return buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the same attached PDF provided with this prompt. Use the numbered entries exactly as shown. If the attachment is missing or unreadable, say so." : s.material});
+  return buildBlindPrompt({testQuestion:s.testQuestion, material:s.fixtureMode==="pdf" ? "Analyze the attached PDF exactly as provided. Use only details that are actually visible in this document. If the attachment is missing or unreadable, say so." : s.material});
 }
 
 function reportText(s: ExperimentState) {
@@ -330,6 +330,7 @@ export default function AiWorldExperimentStudio() {
         localStorage.removeItem(SEED_TRANSFER_KEY);
         setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
       }
+      if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
       setState(next);
     } catch {
@@ -359,9 +360,11 @@ export default function AiWorldExperimentStudio() {
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
+  const suggestedQuestion = suggestedExperimentQuestion(state.title);
+  const mismatchedQuestion = mismatchedExperimentQuestion(state.title, state.testQuestion) || mismatchedExperimentQuestion(state.title, state.commonPrompt);
   const sourceReady = canLockExperiment({ ...state, material: state.fixtureMode === "pdf" ? (state.pdf?.sha256 || "") : state.material }) && (state.fixtureMode !== "pdf" || (Boolean(state.pdf) && pdfAvailable));
   const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim()))) && !(state.fixtureMode === "pdf" && /answer|solution|private|norvessa|fake/i.test(state.pdf?.name || ""));
-  const lockReady = sourceReady && noKeyLeak;
+  const lockReady = sourceReady && noKeyLeak && !mismatchedQuestion;
   const truthReady = Boolean(state.lockedAt && lockReady);
   const allScored = truthReady && PROVIDERS.every(p => {
     const r = state.runs[p.id];
@@ -377,6 +380,12 @@ export default function AiWorldExperimentStudio() {
   }
   function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
     if (state.lockedAt) { setNotice("잠긴 실험의 자료는 수정할 수 없습니다. 먼저 잠금을 해제하세요."); return; }
+    if (!preset && packet.title && packet.title.trim().toLowerCase() !== state.title.trim().toLowerCase()) {
+      setNotice("Work JSON의 실험 제목이 현재 선택한 주제와 다릅니다. 다른 실험의 정답표가 섞이지 않도록 같은 주제인지 확인하세요."); return;
+    }
+    if (!preset && mismatchedExperimentQuestion(state.title, packet.testQuestion)) {
+      setNotice("가져온 질문이 현재 실험 주제와 맞지 않습니다. Work 질문을 확인하세요."); return;
+    }
     if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 자료로 바꾸면 기존 AI 답변과 채점이 초기화됩니다. 계속할까요?")) return;
     setState(prev => ({ ...prev, title: packet.title || prev.title,
       testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
@@ -391,6 +400,7 @@ export default function AiWorldExperimentStudio() {
     applyPacket(parsed.packet);
   }
   function lockExperiment() {
+    if (mismatchedQuestion) { setNotice("실험 주제와 질문이 서로 다릅니다. 영수증에 가짜 국가 찾기 질문을 사용하지 마세요."); return; }
     if (!lockReady) { setNotice("테스트 자료·질문·정답·출처를 채우고 근거를 직접 확인하세요. 정답이 공통 질문에 노출되어도 안 됩니다."); return; }
     setState(prev => ({ ...prev, lockedAt: new Date().toISOString(), runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
     setNotice("실험 자료와 Ground Truth를 잠갔습니다. 이제 세 AI에 동일한 공통 질문을 전달하세요.");
@@ -480,7 +490,7 @@ export default function AiWorldExperimentStudio() {
       category: item.category,
       hook: item.hook,
       keyword: item.keyword,
-      testQuestion: "",
+      testQuestion: suggestedExperimentQuestion(item.title),
       material: "",
       fixtureMode: "pdf",
       pdf: null,
@@ -598,7 +608,9 @@ export default function AiWorldExperimentStudio() {
         <label><span>검색 문구</span><input disabled={Boolean(state.lockedAt)} value={state.keyword} onChange={e=>patch("keyword",e.target.value)} /></label>
         <label><span>후킹 포인트</span><input disabled={Boolean(state.lockedAt)} value={state.hook} onChange={e=>patch("hook",e.target.value)} /></label>
       </div>
-      <label className={styles.field}><span>AI에게 물을 질문</span><textarea disabled={Boolean(state.lockedAt)} value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder="예: Which one of these ten countries is not real? Explain briefly." /></label>
+      <label className={styles.field}><span>AI에게 물을 질문 · 지금 선택한 주제에 맞는 질문이어야 합니다</span><textarea disabled={Boolean(state.lockedAt)} value={state.testQuestion} onChange={e=>patch("testQuestion",e.target.value)} placeholder={suggestedQuestion || "Work에서 받은 해당 PDF의 정확한 영어 질문을 입력하세요."} /></label>
+       {!state.lockedAt && suggestedQuestion && <div className={styles.actions}><button onClick={()=>setState(prev=>({...prev,testQuestion:suggestedQuestion,commonPrompt:""}))}>현재 주제에 맞는 질문 사용</button></div>}
+       {mismatchedQuestion && <p className={styles.questionWarning} role="alert">질문과 실험 주제가 다릅니다. 현재 PDF가 영수증인데 ‘10개 국가 중 가짜 찾기’ 질문이 입력되어 있으면 이 실험은 유효하지 않습니다. 질문을 바꾼 뒤 세 AI를 새로 시험하세요.</p>}
       {state.fixtureMode==="text" ? <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea disabled={Boolean(state.lockedAt)} value={state.material} onChange={e=>patch("material",e.target.value)} /></label> : <p className={styles.muted}>블라인드 테스트 자료는 위에서 등록한 PDF 원본을 사용합니다. 국기·국가명 등 PDF 내용은 공통 질문에 복제하지 않습니다.</p>}
       <label className={styles.field}><span>숨겨둔 트릭</span><textarea disabled={Boolean(state.lockedAt)} value={state.hiddenTwist} onChange={e=>patch("hiddenTwist",e.target.value)} placeholder="예: 10개 중 1개는 가짜 국가. 이름은 실제 국가처럼 보이도록 구성." /></label>
       <div className={styles.truthGrid}>
@@ -609,7 +621,7 @@ export default function AiWorldExperimentStudio() {
       <div className={styles.actions}>
         {state.lockedAt ? <button onClick={unlockExperiment}>잠금 해제 (AI 답변·점수 초기화)</button> : <button className={styles.primary} disabled={!lockReady} onClick={lockExperiment}>🔒 자료와 정답표 잠그기 → 테스트 시작</button>}
       </div>
-      {!state.lockedAt && <p>자료·질문·정답·근거를 채우고 출처 확인에 체크하면 잠글 수 있습니다. 이미 AI 답변을 받았다면 수정 전에 백업하세요.</p>}
+      {!state.lockedAt && <p>PDF 원본 등록, 질문, 비공개 정답과 판정 기준, 공식 출처, 출처 확인 체크가 모두 필요합니다. 질문이 주제와 어긋나면 잠금이 차단됩니다. 이미 AI 답변을 받았다면 수정 전에 백업하세요.</p>}
     </section>
 
     <section className={styles.panel}>
