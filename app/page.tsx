@@ -1401,11 +1401,11 @@ export default function Home() {
           <b>금융·재테크 글</b>
           <small>다음 구현</small>
         </button>
-        <button className="contentHubTab" type="button" disabled>
+        <a className="contentHubTab" href="/real-estate-tips">
           <span className="contentHubIcon">💡</span>
           <b>부동산 꿀팁</b>
-          <small>다음 구현</small>
-        </button>
+          <small>TOP3 조사 · 자동 순위 · 발견 메모</small>
+        </a>
       </div>
       <div className="contentHubFocus">
         <div>
