@@ -8,6 +8,7 @@ import { buildGoogleContentPlanPrompt, googleContentPlanBlock, googleImagePlanBl
 import type { GoogleContentPlan } from "@/lib/google-content-plan.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
+type BankTopic = {id:string;title:string;category:string;question:string;status:"pending"|"active"|"used";createdAt:string;usedAt:string};
 type VerificationValue = "pending" | "checked" | "na";
 type VerificationState = {
   officialPrice: VerificationValue;
@@ -814,6 +815,8 @@ export default function GoogleBlogSchedulePage() {
   const [rows, setRows] = useState<ScheduleRow[]>(DEFAULT_ROWS);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState(DEFAULT_ROWS[0].id);
+  const [bankTopics, setBankTopics] = useState<BankTopic[]>([]);
+  const [selectedBankTopic, setSelectedBankTopic] = useState("");
   const [notice, setNotice] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
@@ -850,6 +853,51 @@ export default function GoogleBlogSchedulePage() {
     setLoaded(true);
   }, []);
 
+  function reloadTopicBank(){
+    try{
+      const bank=JSON.parse(localStorage.getItem(TOPICS_KEY)||"{}");
+      const valid=Array.isArray(bank.topics)?bank.topics.filter((item:BankTopic)=>
+        item && typeof item.id==="string" && typeof item.title==="string"
+        && ["pending","active","used"].includes(item.status)):[];
+      setBankTopics(valid);
+    }catch{setBankTopics([]);}
+  }
+  useEffect(()=>{
+    reloadTopicBank();
+    window.addEventListener("focus",reloadTopicBank);
+    return ()=>window.removeEventListener("focus",reloadTopicBank);
+  },[]);
+  function markTopicBankStatus(id:string,status:BankTopic["status"]){
+    if(!id)return;
+    try{
+      const raw=JSON.parse(localStorage.getItem(TOPICS_KEY)||"{}");
+      if(!Array.isArray(raw.topics))return;
+      const updated=raw.topics.map((t:BankTopic)=>t.id===id?
+        {...t,status,usedAt:status==="used"?todayLocal():t.usedAt}:t);
+      localStorage.setItem(TOPICS_KEY,JSON.stringify({...raw,topics:updated}));
+      setBankTopics(updated);
+    }catch{}
+  }
+  function scheduleTopicFromBank(){
+    const topic=bankTopics.find(t=>t.id===selectedBankTopic);
+    if(!topic){setNotice("추가할 주제를 선택하세요.");return;}
+    if(topic.status==="used"){setNotice("이 주제는 사용 완료 상태입니다. 다른 주제를 선택하세요.");return;}
+    if(rows.some(r=>r.experimentTopicId===topic.id||normalizeGoogleTopic(r.title)===normalizeGoogleTopic(topic.title))){
+      setNotice("이미 발행 스케줄에 있는 주제입니다. 기존 행에서 진행하세요.");return;
+    }
+    const lastDate=rows.length?[...rows].sort((a,b)=>a.date.localeCompare(b.date)).at(-1)!.date:today;
+    const date=nextDate(lastDate),id="topic-bank-"+topic.id;
+    const row:ScheduleRow={
+      id,date,title:topic.title,keyword:"AI three model comparison",
+      status:"예정",url:"",slug:"",relatedIds:[],note:"AI 3사 추천 비교 실험 · 같은 질문과 실제 답변을 비교",
+      kind:"experiment",labVersion:"WORLD-COMPARISON-V2-PLANNED",
+      experimentMode:"recommend",experimentTopicId:topic.id,experimentQuestion:topic.question,
+      experimentCategory:topic.category,experimentHook:"AI 3사 추천의 선택 기준·장점·단점 비교"
+    };
+    setRows(prev=>[...prev,row]);
+    setSelectedId(id);markTopicBankStatus(topic.id,"active");setSelectedBankTopic("");
+    setNotice("주제 보관함에서 발행 스케줄에 추가했습니다. 선택된 행에서 '이 주제로 실험 설계 시작'을 누르면 같은 질문이 전달됩니다.");
+  }
   useEffect(() => {
     if (!loaded || (syncKey && !syncInitialized)) return;
     const raw = window.localStorage.getItem(LAB_TRANSFER_KEY);
@@ -1312,6 +1360,7 @@ export default function GoogleBlogSchedulePage() {
       return false;
     }
     updateRow(row.id, { status: "발행 완료" });
+    if(row.experimentTopicId)markTopicBankStatus(row.experimentTopicId,"used");
     void syncPublishHistory({ ...row, status: "발행 완료" }, true).then(ok => {
       if (ok) void loadPublishHistory();
     });
@@ -1567,6 +1616,7 @@ export default function GoogleBlogSchedulePage() {
         category: row.experimentCategory || "Global Curiosity",
         hook: row.experimentHook || row.note || "",
         mode: row.experimentMode || (row.labVersion==="WORLD-COMPARISON-V2"?"recommend":"quiz"),
+        topicId: row.experimentTopicId || "",
         testQuestion: row.experimentQuestion || "",
       }));
     } catch {}
@@ -1599,7 +1649,7 @@ export default function GoogleBlogSchedulePage() {
 
       <section className={styles.labSpotlight}>
         <div><span>NEW · GLOBAL CURIOSITY EXPERIMENTS</span><h2>나라·지도·음식·언어·동물까지, AI에게 엉뚱한 실험을 던져보세요.</h2>
-          <p>실험 주제 선택 → Ground Truth를 먼저 저장 → ChatGPT·Claude·Gemini에 같은 문제 → 실제 답변 채점 → 영어 Blogger 글과 이미지 6장 제작.</p>
+          <p>주제 보관함 → 발행 스케줄 → AI 3사 실제 답변 수집 → ChatGPT 영문 글 작성 → 이미지 6장 → Blogger 발행. 추천 비교는 정답키가 필요하지 않습니다.</p>
           <small>가격 글은 그대로 유지 · 실험 글은 Can AI...? / I gave AI... 형식의 해외 유입용 콘텐츠로 확장</small>
         </div>
         <a href="/google-blog-schedule/experiment">글로벌 AI 실험 시작 →</a>
@@ -1660,6 +1710,18 @@ export default function GoogleBlogSchedulePage() {
           </div>
         </div>
 
+        <div className={styles.bankToSchedule}>
+          <div>
+            <strong>주제 보관함에서 발행 스케줄에 바로 추가</strong>
+            <small>사용 가능한 주제 {bankTopics.filter(t=>t.status!=="used").length}개 · 주제가 소진되면 실험실에서 ChatGPT로 추가하세요.</small>
+          </div>
+          <select value={selectedBankTopic} onChange={e=>setSelectedBankTopic(e.target.value)} aria-label="발행할 AI 비교 주제">
+            <option value="">비교 주제 선택</option>
+            {bankTopics.filter(t=>t.status!=="used").map(t=><option value={t.id} key={t.id}>{t.title} · {t.status==="active"?"진행 중":"대기"}</option>)}
+          </select>
+          <button type="button" onClick={scheduleTopicFromBank} disabled={!selectedBankTopic}>발행리스트에 추가 →</button>
+          <a href="/google-blog-schedule/experiment">주제 보관함 열기 ↗</a>
+        </div>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
