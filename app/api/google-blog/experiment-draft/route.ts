@@ -1,3 +1,4 @@
+import { getExperimentAiAuth } from "@/lib/experiment-ai-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -70,8 +71,8 @@ export async function POST(req: NextRequest) {
     if (NAMES.some(name => !runs[name].response)) {
       return NextResponse.json({ error: "ChatGPT, Claude, Gemini의 실제 답변 원문 3개를 붙여넣으세요." }, { status: 400 });
     }
-    const apiKey = process.env.OPENAI_API_KEY?.trim();
-    if (!apiKey) return NextResponse.json({ error: "사이트의 AI 글 생성 키가 설정되지 않았습니다." }, { status: 503 });
+    const auth = await getExperimentAiAuth();
+    if (!auth) return NextResponse.json({ error: "AI 생성 연결을 사용할 수 없습니다. Vercel Gateway 또는 OpenAI API 설정을 확인하세요." }, { status: 503 });
 
     const human = {
       choice: clean(state.human?.choice, 500),
@@ -131,11 +132,11 @@ export async function POST(req: NextRequest) {
     const timeout = setTimeout(() => controller.abort(), 52_000);
     let response: Response;
     try {
-      response = await fetch("https://api.openai.com/v1/responses", {
+      response = await fetch(auth.endpoint, {
         method: "POST",
-        headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
+        headers: { Authorization: "Bearer " + auth.token, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: process.env.OPENAI_TEXT_MODEL?.trim() || "gpt-5.6",
+          model: auth.model,
           instructions,
           input: [{ role: "user", content: inputContent }],
           text: { format: { type: "json_schema", name: "world_experiment_draft", strict: true, schema: SCHEMA } },
@@ -147,8 +148,8 @@ export async function POST(req: NextRequest) {
     } finally { clearTimeout(timeout); }
     if (!response.ok) {
       const details = await response.text();
-      console.error("experiment draft generation failed", response.status, details.slice(0, 500));
-      return NextResponse.json({ error: "AI 생성 요청이 실패했습니다. 잠시 뒤 다시 시도해 주세요. (HTTP " + response.status + ")" }, { status: 502 });
+      console.error("experiment draft generation failed", auth.provider, response.status, details.slice(0, 350));
+      return NextResponse.json({ error: "AI 글 생성 서비스 연결에 실패했습니다. HTTP "+response.status+" / "+auth.provider+" — Vercel AI Gateway 활성화·사용량 또는 API 키를 확인해 주세요." }, { status: 502 });
     }
     const result = await response.json();
     const output = typeof result.output_text === "string" ? result.output_text :
