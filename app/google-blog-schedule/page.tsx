@@ -854,7 +854,7 @@ export default function GoogleBlogSchedulePage() {
         keyword: incoming.keyword || "AI experiment",
         slug: incoming.slug || "",
         note: incoming.note || "글로벌 AI 실험 제작실에서 검증한 실제 실험 글",
-        status: "작성 중", url: "", body: "", relatedIds: [],
+        status: "작성 중", url: "", body: typeof incoming.body === "string" ? incoming.body : "", relatedIds: [],
         experimentCategory: incoming.experimentCategory || "",
         experimentHook: incoming.experimentHook || "",
       };
