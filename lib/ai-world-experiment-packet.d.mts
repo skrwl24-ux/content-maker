@@ -15,3 +15,4 @@ export function buildPacketRequest(topic?: {title?: string; category?: string; h
 export function parseExperimentPacket(raw: string): {packet: ExperimentPacket | null; error: string};
 export function buildBlindPrompt(input?: {testQuestion?: string; material?: string}): string;
 export function canLockExperiment(input?: {testQuestion?: string; material?: string; groundTruth?: string; sources?: string; sourceVerified?: boolean}): boolean;
+export function buildWorkPdfRequest(topic?: {title?: string; category?: string; hook?: string; keyword?: string}): string;
