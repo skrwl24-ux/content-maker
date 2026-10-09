@@ -8,6 +8,7 @@ import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, d
 import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
 import { BASELINE_PROFILE, getProviderBaselineHint, baselineStatus } from "@/lib/ai-world-experiment-baseline.mjs";
 import { TOPIC_BANK_VERSION, initialTopics, mergeTopics, parseBulkTopics, countTopics } from "@/lib/ai-world-experiment-topics.mjs";
+import { buildChatGptArticlePrompt, buildChatGptTopicPrompt, parseChatGptDraft } from "@/lib/ai-world-experiment-chatgpt-handoff.mjs";
 import type { Topic, TopicStatus } from "@/lib/ai-world-experiment-topics.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
@@ -396,7 +397,7 @@ export default function AiWorldExperimentStudio() {
   const [hydrated, setHydrated] = useState(false);
   const [packetInput, setPacketInput] = useState("");
   const [advancedMode, setAdvancedMode] = useState(false);
-  const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [chatGptDraftInput, setChatGptDraftInput] = useState("");
   const [draftFeedback, setDraftFeedback] = useState<{kind:"loading"|"error"|"success"; message:string}|null>(null);
   const [savedDraft, setSavedDraft] = useState<SavedDraft | null>(null);
   const [draftApproved, setDraftApproved] = useState(false);
@@ -404,7 +405,7 @@ export default function AiWorldExperimentStudio() {
   const [topicsLoaded, setTopicsLoaded] = useState(false);
   const [topicFilter, setTopicFilter] = useState<TopicFilter>("open");
   const [bulkTopics, setBulkTopics] = useState("");
-  const [topicGeneratorBusy, setTopicGeneratorBusy] = useState(false);
+
   const [topicImportBusy, setTopicImportBusy] = useState(false);
   const [pdfAvailable, setPdfAvailable] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -569,23 +570,12 @@ export default function AiWorldExperimentStudio() {
     setTopics(next);setBulkTopics("");
     setNotice(added?"새 주제 "+added+"개를 보관함에 추가했습니다.":"중복된 주제입니다. 새로 추가할 제목이 없습니다.");
   }
-  async function generateMoreTopics(){
-    if(topicGeneratorBusy)return;
-    setTopicGeneratorBusy(true);
-    try{
-      const response=await fetch("/api/google-blog/experiment-topics",{
-        method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({existingTitles:topics.map(t=>t.title)})
-      });
-      const data=await response.json();
-      if(!response.ok||!Array.isArray(data.topics))throw new Error(data.error||"주제를 생성하지 못했습니다.");
-      const next=mergeTopics(topics,data.topics);
-      const added=next.length-topics.length;
-      if(!added)throw new Error("기존 목록과 겹치는 주제만 생성됐습니다. 한 번 더 눌러주세요.");
-      setTopics(next);setTopicFilter("open");
-      setNotice("AI가 새 비교 주제 "+added+"개를 보관함에 추가했습니다. 이전 주제는 지우지 않았습니다.");
-    }catch(e){setNotice(e instanceof Error?e.message:"새 주제 추천 실패");}
-    finally{setTopicGeneratorBusy(false);}
+  function requestMoreTopics(){
+    const prompt=buildChatGptTopicPrompt(topics.map(t=>t.title));
+    const details=document.getElementById("topic-bank-add");
+    if(details instanceof HTMLDetailsElement)details.open=true;
+    openPrompt(prompt);
+    setNotice("ChatGPT에서 새 주제 10줄을 받은 다음, 아래의 '주제 일괄 추가' 입력칸에 붙여넣고 저장하세요. 유료 API 호출은 하지 않습니다.");
   }
   function downloadTopicBank(){
     const blob=new Blob([JSON.stringify({version:TOPIC_BANK_VERSION,exportedAt:today(),topics},null,2)],{type:"application/json"});
@@ -820,50 +810,29 @@ export default function AiWorldExperimentStudio() {
       runs:changed?Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
     setNotice("기존 비공개 TXT 정답표에서 전체 정답과 검증 근거를 가져왔습니다.");
   }
-  async function generateQuickDraft() {
-    if (generatingDraft) return;
-    if (!comparisonReady) {
-      const msg=state.mode==="recommend"?"공통 질문과 ChatGPT·Claude·Gemini의 원문 답변 3개가 필요합니다.":
-        "원본 PDF·정답키·같은 질문·세 AI의 답변을 모두 확인하세요.";
-      setDraftFeedback({kind:"error",message:msg});setNotice(msg);return;
+  function openChatGptArticle(){
+    if(!comparisonReady){
+      const msg=state.mode==="recommend"?"공통 질문과 ChatGPT·Claude·Gemini 답변 3개를 입력해 주세요.":
+        "원본 PDF·비공개 정답키·세 AI 답변을 먼저 확인하세요.";
+      setDraftFeedback({kind:"error",message:msg});return;
     }
-    setDraftFeedback({kind:"loading",message:"AI에 글 작성 요청을 보냈습니다. 답변 비교와 Blogger 원고를 만드는 중입니다. 잠시 기다려 주세요."});
-    setGeneratingDraft(true);setDraftApproved(false);
-    try {
-      let pdfDataUrl = "";
-      if (state.mode==="quiz" && state.fixtureMode === "pdf") {
-        const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
-        if (!blob) throw new Error("원본 PDF를 현재 브라우저에서 찾을 수 없습니다. STEP 1에서 다시 등록하세요.");
-        if (blob.size > 2_500_000) throw new Error("자동 생성 PDF는 최대 2.5MB입니다. Vercel 요청 제한을 고려해 용량을 줄이거나 더 간단한 PDF를 사용하세요.");
-        pdfDataUrl = await new Promise<string>((resolve,reject) => {
-          const reader=new FileReader();
-          reader.onload=()=>resolve(String(reader.result || ""));
-          reader.onerror=()=>reject(new Error("PDF 읽기에 실패했습니다."));
-          reader.readAsDataURL(blob);
-        });
-      }
-      const response=await fetch("/api/google-blog/experiment-draft",{
-        method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({experiment:state,pdfDataUrl})
-      });
-      let data: {draft?:AutoDraft;error?:string}|null=null;
-      try {data=await response.json();} catch {
-        throw new Error("서버가 정상적인 응답을 주지 않았습니다 (HTTP "+response.status+"). 서버 제한이나 일시적 오류일 수 있습니다.");
-      }
-      if (!response.ok || !data?.draft) throw new Error((data?.error || "글 작성 서버 오류")+" (HTTP "+response.status+")");
-      setSavedDraft({fingerprint:draftFingerprint,draft:data.draft as AutoDraft});
-      setDraftFeedback({kind:"success",message:"원고가 생성됐습니다. 바로 아래에 AI 3사 비교와 Blogger 영문 HTML 결과가 표시됩니다."});
-      window.setTimeout(()=>{
-        document.getElementById("auto-draft-result")?.scrollIntoView({behavior:"smooth",block:"start"});
-      },150);
-      setNotice((data.draft.needsReview?.length || 0) ?
-        "초안은 완성됐지만 정답/PDF/원문에서 확인할 부분이 있습니다. 아래 경고를 먼저 검토하세요." :
-        "AI 3사 비교와 영문 Blogger 초안을 자동으로 만들었습니다. 내용을 확인하고 확정하세요.");
-    } catch(e) {
-      const msg=e instanceof Error?e.message:"AI 자동 제작에 실패했습니다.";
-      setDraftFeedback({kind:"error",message:"블로그 글 생성 실패: "+msg});
-      setNotice(msg);
-    } finally {setGeneratingDraft(false);}
+    if(state.mode==="quiz"&&state.fixtureMode==="pdf"&&!pdfAvailable){
+      setDraftFeedback({kind:"error",message:"원본 PDF가 이 브라우저에 없습니다. STEP 1에서 다시 등록해 주세요."});return;
+    }
+    openPrompt(buildChatGptArticlePrompt(state));
+    setDraftFeedback({kind:"loading",message:state.mode==="quiz"&&state.fixtureMode==="pdf"
+      ?"ChatGPT가 열렸습니다. 복사된 요청서를 붙여넣고 원본 PDF를 직접 첨부해 주세요. 완성된 결과를 아래에 다시 붙여넣으세요."
+      :"ChatGPT가 열렸습니다. 요청서를 붙여넣어 실행하고 완성된 결과 전체를 아래에 다시 붙여넣으세요."});
+  }
+  function importChatGptResult(){
+    const parsed=parseChatGptDraft(chatGptDraftInput,state.runs,state.mode);
+    if(!parsed.draft){setDraftFeedback({kind:"error",message:parsed.error});return;}
+    setSavedDraft({fingerprint:draftFingerprint,draft:parsed.draft as AutoDraft});
+    setDraftApproved(false);
+    setDraftFeedback({kind:parsed.draft.needsReview.length?"error":"success",
+      message:parsed.draft.needsReview.length
+       ?"글을 가져왔지만 확인 필요 항목이 있습니다. ChatGPT에서 원문 인용과 사실을 수정하고 다시 붙여넣어 주세요."
+       :"ChatGPT가 만든 영문 글과 AI 비교 결과를 저장했습니다. 내용을 확인한 뒤 발행리스트에 등록하세요."});
   }
   function approveQuickDraft() {
     if (!currentDraft?.ready || currentDraft.needsReview.length) {
@@ -1117,8 +1086,8 @@ export default function AiWorldExperimentStudio() {
         </div>
       </div>
       <div className={styles.topicBankTools}>
-        <button className={styles.topicNewButton} disabled={topicGeneratorBusy}
-          onClick={()=>void generateMoreTopics()}>{topicGeneratorBusy?"주제 10개 생성 중…":"✦ 새 주제 10개 AI 추천"}</button>
+        <button className={styles.topicNewButton}
+          onClick={requestMoreTopics}>✦ ChatGPT에서 주제 10개 받기</button>
         <button onClick={()=>setTopicFilter("open")} aria-pressed={topicFilter==="open"}>미사용·진행 중</button>
         <button onClick={()=>setTopicFilter("used")} aria-pressed={topicFilter==="used"}>사용 완료</button>
         <button onClick={()=>setTopicFilter("all")} aria-pressed={topicFilter==="all"}>전체</button>
@@ -1142,9 +1111,9 @@ export default function AiWorldExperimentStudio() {
           </div>
         </article>)}
       </div> : <div className={styles.topicBankEmpty}>현재 선택한 상태의 주제가 없습니다.</div>}
-      <details className={styles.topicAdd}>
-        <summary>직접 여러 개 추가 · 목록 백업 및 복원</summary>
-        <label className={styles.field}><span>주제 제목을 한 줄에 하나씩 붙여넣기</span>
+      <details id="topic-bank-add" className={styles.topicAdd}>
+        <summary>ChatGPT 주제 붙여넣기 · 목록 백업 및 복원</summary>
+        <label className={styles.field}><span>ChatGPT가 추천한 10개 제목을 한 줄에 하나씩 붙여넣기</span>
           <textarea rows={5} value={bulkTopics} onChange={e=>setBulkTopics(e.target.value)}
             placeholder={"AI 3사가 가장 살기 좋은 나라로 선택한 곳은?\nAI 3사가 고른 최고의 스마트폰은?"}/></label>
         <div className={styles.actions}><button disabled={!bulkTopics.trim()} onClick={appendBulkTopics}>중복 제외하고 모두 추가</button>
@@ -1154,7 +1123,7 @@ export default function AiWorldExperimentStudio() {
               const file=e.currentTarget.files?.[0]||null;e.currentTarget.value="";void importTopicBank(file);
             }}/></label>
         </div>
-        <small>이 목록은 현재 브라우저에 자동 저장됩니다. 다른 브라우저나 PC에서는 JSON 백업·복원을 이용하세요.</small>
+        <small>ChatGPT에서 받은 주제를 붙여넣고 [중복 제외하고 모두 추가]를 누르면 저장됩니다. 별도의 유료 API 호출은 없습니다. 다른 브라우저에서는 JSON 백업·복원을 이용하세요.</small>
       </details>
     </section>
 
@@ -1253,26 +1222,35 @@ export default function AiWorldExperimentStudio() {
       </section>
 
       <section className={styles.panel}>
-        <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>AI로 비교·영문 블로그 글 한 번에 제작</h2>
-          <p>{state.mode==="recommend"?"세 AI의 추천 제품·국가·브랜드와 이유를 대조해 비교표·영문 블로그 글을 만듭니다. 주관적 추천에 가짜 정답률을 매기지 않습니다.":"원본 PDF와 세 답변을 AI가 대조해 결과표·제목·Blogger HTML 원고를 작성합니다."}</p></div></div>
+        <div className={styles.panelHead}><div><span>STEP 03 / 03</span><h2>ChatGPT에서 글 작성하고 사이트로 가져오기</h2>
+          <p>ChatGPT 웹에서 비교 분석과 영문 글을 작성합니다. 사이트는 요청서를 정리하고 결과를 보관하며 발행리스트로 전달합니다. 유료 API 호출은 하지 않습니다.</p></div></div>
         <div className={styles.quickFinal}>
-          <p className={styles.muted}>{state.mode==="recommend" ? "추천 비교 · 공통 질문 "+(state.testQuestion.trim()?"✓":"미완료")+" · AI 답변 "+completed+"/3" : "정답 실험 · PDF/질문 "+(fixtureReady?"✓":"미완료")+" · 정답/근거 "+(keyReady?"✓":"미완료")+" · AI 답변 "+completed+"/3"}
-            {state.mode==="quiz" && state.fixtureMode==="pdf" ? " · 동일 PDF "+(allAnswersCollected?"확인됨":"확인 필요") : ""}
-          </p>
-          <button className={styles.quickGenerate} disabled={generatingDraft||!comparisonReady||!validateChallengeDuration(state.human.durationText)}
-            onClick={()=>void generateQuickDraft()}>{generatingDraft?"세 AI 답변 분석 중…":"✦ 블로그 글 자동 제작"}</button>
-          <p className={styles.quickHint}>버튼을 누를 때만 입력한 답변·메모와, 정답형 실험이라면 PDF까지 OpenAI API로 전송해 분석합니다. 사진 원본은 전송하지 않습니다.</p>
+          <p className={styles.muted}>{state.mode==="recommend"
+            ?"추천 비교 · 공통 질문 "+(state.testQuestion.trim()?"✓":"미완료")+" · AI 답변 "+completed+"/3"
+            :"정답 실험 · PDF/질문 "+(fixtureReady?"✓":"미완료")+" · Work 정답키 "+(keyReady?"✓":"미완료")+" · AI 답변 "+completed+"/3"}</p>
+          <button className={styles.quickGenerate} disabled={!comparisonReady||!validateChallengeDuration(state.human.durationText)}
+            onClick={openChatGptArticle}>① ChatGPT에서 영문 블로그 글 작성 ↗</button>
+          <p className={styles.quickHint}>요청서가 클립보드에 복사되고 ChatGPT가 새 탭으로 열립니다. <strong>Ctrl+V</strong>로 붙여넣어 보내세요. 정답형 PDF 실험은 원본 PDF도 같은 채팅에 직접 첨부해 주세요.</p>
+          <div className={styles.actions}>
+            <button onClick={()=>void copy(buildChatGptArticlePrompt(state),"ChatGPT 영문 글 요청서")}>요청서만 복사</button>
+            <button onClick={()=>window.open("https://chatgpt.com/","_blank","noopener,noreferrer")}>ChatGPT 열기 ↗</button>
+          </div>
           {draftFeedback&&<div className={draftFeedback.kind==="error"?styles.draftError:
-             draftFeedback.kind==="success"?styles.draftSuccess:styles.draftLoading}
-             role={draftFeedback.kind==="error"?"alert":"status"} aria-live="polite">
-            <strong>{draftFeedback.kind==="error"?"생성에 문제가 생겼습니다":
-              draftFeedback.kind==="success"?"글 생성 완료":"글 생성 중"}</strong>
+              draftFeedback.kind==="success"?styles.draftSuccess:styles.draftLoading}
+              role={draftFeedback.kind==="error"?"alert":"status"} aria-live="polite">
+            <strong>{draftFeedback.kind==="error"?"확인 필요":draftFeedback.kind==="success"?"원고 가져오기 완료":"ChatGPT에 요청서 보내기"}</strong>
             <p>{draftFeedback.message}</p>
-            {draftFeedback.kind==="error"&&<div className={styles.actions}>
-              <button type="button" onClick={()=>void copy(draftFeedback.message,"오류 내용")}>오류 내용 복사</button>
-              <button type="button" disabled={generatingDraft} onClick={()=>void generateQuickDraft()}>다시 시도</button>
-            </div>}
           </div>}
+        </div>
+        <div className={styles.chatGptImportPanel}>
+          <h3>② ChatGPT에서 작성한 글 전체 붙여넣기</h3>
+          <p>답변의 시작부터 끝까지 복사해 아래에 넣고 [글 결과 가져오기]를 눌러 주세요.</p>
+          <textarea rows={9} value={chatGptDraftInput} onChange={e=>setChatGptDraftInput(e.target.value)}
+            placeholder={"[WORLD_BLOG_DRAFT_JSON] ... [/WORLD_BLOG_DRAFT_JSON] 전체를 붙여넣으세요."}/>
+          <div className={styles.quickDraftActions}>
+            <button className={styles.primary} disabled={!chatGptDraftInput.trim()} onClick={importChatGptResult}>③ 글 결과 가져오기 · 비교 결과 표시</button>
+            <button onClick={()=>setChatGptDraftInput("")} disabled={!chatGptDraftInput}>입력칸 비우기</button>
+          </div>
         </div>
         {currentDraft&&<div id="auto-draft-result" className={styles.draftResult}>
           <h3 className={styles.quickResultHeading}>{currentDraft.title}</h3>
