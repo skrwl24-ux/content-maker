@@ -2,14 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
+import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, canLockExperiment } from "@/lib/ai-world-experiment-packet.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
   model: string;
   response: string;
-  accuracy: number;
-  instruction: number;
-  hallucinations: number;
+  accuracy: number | null;
+  instruction: number | null;
+  hallucinations: number | null;
+  reviewed: boolean;
   weirdestMistake: string;
   notes: string;
 };
@@ -25,6 +27,9 @@ type ExperimentState = {
   hiddenTwist: string;
   groundTruth: string;
   sources: string;
+  sourceVerified: boolean;
+  sourceStatus: string;
+  lockedAt: string;
   commonPrompt: string;
   runs: Record<ProviderId, ProviderRun>;
 };
@@ -55,7 +60,7 @@ const STARTERS = [
 ];
 
 function emptyRun(): ProviderRun {
-  return { model: "", response: "", accuracy: 0, instruction: 0, hallucinations: 0, weirdestMistake: "", notes: "" };
+  return { model: "", response: "", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
 }
 function emptyState(): ExperimentState {
   return {
@@ -70,6 +75,9 @@ function emptyState(): ExperimentState {
     hiddenTwist: "",
     groundTruth: "",
     sources: "",
+    sourceVerified: false,
+    sourceStatus: "needs_verification",
+    lockedAt: "",
     commonPrompt: "",
     runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
   };
@@ -125,32 +133,18 @@ Return a compact table with:
 Then choose the best 3 ideas for global curiosity and explain why.`;
 }
 function defaultCommonPrompt(s: ExperimentState) {
-  return `You are taking part in a blind AI experiment.
-
-Task:
-${s.testQuestion || s.title}
-
-Material:
-${s.material || "(The test material will be pasted or attached separately.)"}
-
-Instructions:
-- Answer only from the provided material and your general reasoning unless the task explicitly asks for web research.
-- Do not invent missing facts.
-- If something cannot be determined, say so.
-- Give your final answer first, then briefly explain your reasoning.
-- Do not assume there is a trick.
-- Do not ask to see the answer key.
-
-Return a clear final answer that can be scored against a pre-recorded ground truth.`;
+  return buildBlindPrompt(s);
 }
+
 function reportText(s: ExperimentState) {
   const rows = PROVIDERS.map(p => {
     const r = s.runs[p.id];
     return [
       p.label + (r.model ? " ("+r.model+")" : ""),
-      "Accuracy: " + safeScore(r.accuracy) + "/10",
-      "Instruction following: " + safeScore(r.instruction) + "/10",
-      "Hallucinations: " + Math.max(0, Math.floor(r.hallucinations || 0)),
+      "Review status: " + (r.reviewed ? "Operator reviewed" : "NOT REVIEWED"),
+      "Accuracy: " + (r.reviewed && r.accuracy !== null ? safeScore(r.accuracy) + "/10" : "NOT SCORED"),
+      "Instruction following: " + (r.reviewed && r.instruction !== null ? safeScore(r.instruction) + "/10" : "NOT SCORED"),
+      "Hallucinations: " + (r.reviewed && r.hallucinations !== null ? Math.max(0, Math.floor(r.hallucinations)) : "NOT SCORED"),
       "Weirdest mistake: " + (r.weirdestMistake || "Not recorded"),
       "Notes: " + (r.notes || "None"),
       "Original answer:\n" + (r.response || "Not collected"),
@@ -159,6 +153,9 @@ function reportText(s: ExperimentState) {
   return [
     "AI WORLD EXPERIMENT — VERIFIED REPORT",
     "Date: " + today(),
+    "Pre-answer fixture locked: " + (s.lockedAt || "NOT LOCKED"),
+    "Evidence manually verified: " + (s.sourceVerified ? "yes" : "no"),
+    "Experiment status: " + (s.lockedAt && PROVIDERS.every(p => s.runs[p.id].response.trim() && s.runs[p.id].reviewed) ? "COMPLETE" : "INCOMPLETE — DO NOT PUBLISH"),
     "Title: " + s.title,
     "Category: " + s.category,
     "Hook: " + s.hook,
@@ -276,6 +273,7 @@ export default function AiWorldExperimentStudio() {
   const [activeProvider, setActiveProvider] = useState<ProviderId>("chatgpt");
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [packetInput, setPacketInput] = useState("");
 
   useEffect(() => {
     try {
@@ -296,6 +294,7 @@ export default function AiWorldExperimentStudio() {
         localStorage.removeItem(SEED_TRANSFER_KEY);
         setNotice("발행리스트의 실험 주제를 불러왔습니다. Ground Truth부터 확정하세요.");
       }
+      next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
       setState(next);
     } catch {
       setState(emptyState());
@@ -314,14 +313,46 @@ export default function AiWorldExperimentStudio() {
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
   const completed = PROVIDERS.filter(p => state.runs[p.id].response.trim()).length;
-  const truthReady = state.groundTruth.trim().length >= 10 && state.sources.trim().length >= 5;
-  const allScored = PROVIDERS.every(p => state.runs[p.id].response.trim() && state.runs[p.id].accuracy > 0);
+  const sourceReady = canLockExperiment(state);
+  const noKeyLeak = !((state.groundTruth.trim() && commonPrompt.includes(state.groundTruth.trim())) || (state.hiddenTwist.trim() && commonPrompt.includes(state.hiddenTwist.trim())));
+  const lockReady = sourceReady && noKeyLeak;
+  const truthReady = Boolean(state.lockedAt && lockReady);
+  const allScored = truthReady && PROVIDERS.every(p => {
+    const r = state.runs[p.id];
+    return Boolean(r.response.trim() && r.reviewed && r.accuracy !== null && r.instruction !== null && r.hallucinations !== null);
+  });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
-    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value } } }));
+    if (!state.lockedAt) return;
+    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, reviewed: "response" in value ? false : ("reviewed" in value ? Boolean(value.reviewed) : prev.runs[id].reviewed) } } }));
+  }
+  function applyPacket(packet: typeof FAKE_COUNTRY_PACKET, preset = false) {
+    if (state.lockedAt) { setNotice("잠긴 실험의 자료는 수정할 수 없습니다. 먼저 잠금을 해제하세요."); return; }
+    if (PROVIDERS.some(p => state.runs[p.id].response.trim()) && !window.confirm("새 자료로 바꾸면 기존 AI 답변과 채점이 초기화됩니다. 계속할까요?")) return;
+    setState(prev => ({ ...prev, title: packet.title || prev.title,
+      testQuestion: packet.testQuestion, material: packet.material, hiddenTwist: packet.hiddenTwist,
+      groundTruth: packet.groundTruth, sources: packet.sources,
+      sourceStatus: packet.sourceStatus, sourceVerified: preset, lockedAt: "", commonPrompt: "",
+      runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
+    setNotice(preset ? "검증된 국가 목록·정답표·출처를 채웠습니다. 잠그면 실험을 시작할 수 있습니다." : "실험 패킷을 가져왔습니다. 근거를 직접 확인하고 체크한 뒤 잠그세요.");
+  }
+  function importPacket() {
+    const parsed = parseExperimentPacket(packetInput);
+    if (!parsed.packet) { setNotice(parsed.error); return; }
+    applyPacket(parsed.packet);
+  }
+  function lockExperiment() {
+    if (!lockReady) { setNotice("테스트 자료·질문·정답·출처를 채우고 근거를 직접 확인하세요. 정답이 공통 질문에 노출되어도 안 됩니다."); return; }
+    setState(prev => ({ ...prev, lockedAt: new Date().toISOString(), runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
+    setNotice("실험 자료와 Ground Truth를 잠갔습니다. 이제 세 AI에 동일한 공통 질문을 전달하세요.");
+  }
+  function unlockExperiment() {
+    if (!window.confirm("잠금을 해제하면 이 실험의 AI 답변과 채점 기록을 초기화합니다. 먼저 별도로 백업했나요?")) return;
+    setState(prev => ({ ...prev, lockedAt: "", runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() } }));
+    setNotice("잠금을 해제했습니다. 자료를 수정하고 다시 잠그세요.");
   }
   async function copy(text: string, label: string) {
     try { await navigator.clipboard.writeText(text); setNotice(label + " 복사 완료"); }
@@ -352,14 +383,18 @@ export default function AiWorldExperimentStudio() {
       hiddenTwist: "",
       groundTruth: "",
       sources: "",
+      sourceVerified: false,
+      sourceStatus: "needs_verification",
+      lockedAt: "",
       commonPrompt: "",
       runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
     }));
-    setNotice("실험 아이디어를 불러왔습니다. 정답과 출처를 먼저 확정하세요.");
+    setPacketInput("");
+    setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
     if (!truthReady || !allScored) {
-      setNotice("Ground Truth·출처와 세 AI의 답변/점수를 먼저 기록하세요.");
+      setNotice("검증된 Ground Truth 잠금과 실제 AI 답변·채점 확인까지 마쳐야 발행할 수 있습니다.");
       return;
     }
     const pending = {
