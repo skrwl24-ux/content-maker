@@ -434,6 +434,11 @@ export default function AiWorldExperimentStudio() {
           keyword: typeof seed.keyword === "string" ? seed.keyword : next.keyword,
           category: typeof seed.category === "string" ? seed.category : "Global Curiosity",
           hook: typeof seed.hook === "string" ? seed.hook : "",
+          mode:seed.mode==="recommend"?"recommend":"quiz",
+          testQuestion:typeof seed.testQuestion==="string"&&seed.testQuestion.trim()?seed.testQuestion:next.testQuestion,
+          fixtureMode:seed.mode==="recommend"?"text":"pdf",
+          material:seed.mode==="recommend"?"Text-only recommendation question, no PDF or single fixed correct answer.":"",
+          topicId:typeof seed.topicId==="string"?seed.topicId:"",
         };
         localStorage.removeItem(SEED_TRANSFER_KEY);
         setNotice(remembered ? "이전 실험 작업을 복원했습니다. PDF와 답변 기록을 확인하세요." : "새 실험 주제를 불러왔습니다. Work에서 PDF부터 준비하세요.");
@@ -1025,7 +1030,8 @@ export default function AiWorldExperimentStudio() {
         :"비공개 원래 정답·실제 PDF와 AI 3사 답변을 대조합니다. 정답 불일치 시 확인 필요.",
       labVersion:state.mode==="recommend"?"WORLD-COMPARISON-V2":"WORLD-LAB-V2",
       labReport:fullReport,labPrompt:articleRequest,
-      experimentCategory:state.category,experimentHook:state.hook
+      experimentCategory:state.category,experimentHook:state.hook,
+      experimentTopicId:state.topicId,experimentMode:state.mode,experimentQuestion:state.testQuestion
     };
     try{
       localStorage.setItem(QUEUE_TRANSFER_KEY,JSON.stringify(pending));
