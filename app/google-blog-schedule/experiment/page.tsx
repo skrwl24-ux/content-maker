@@ -648,23 +648,68 @@ export default function AiWorldExperimentStudio() {
     applyPacket(parsed.packet);
   }
   function importQuickWorkNotes() {
-    const parsed = parseExperimentPacket(packetInput);
-    if (parsed.packet) { applyPacket(parsed.packet); return; }
-    // Work may have returned an older PRIVATE_answer_key.txt instead of the new packet JSON.
     const raw = packetInput.trim();
+    // New packet shape: flat fields. Use the original parser with its identity safeguards.
+    const parsed = parseExperimentPacket(raw);
+    if (parsed.packet) {
+      const jsonSection = raw.match(/\[EXPERIMENT_PACKET_JSON\]([\s\S]*?)\[\/EXPERIMENT_PACKET_JSON\]/i)?.[1] || raw;
+      try {
+        const packet = JSON.parse(jsonSection.trim());
+        const declaredHash = typeof packet?.groundTruth?.blindPdfSha256 === "string" ? packet.groundTruth.blindPdfSha256 : "";
+        if (declaredHash && state.pdf?.sha256 && declaredHash.toLowerCase() !== state.pdf.sha256.toLowerCase()) {
+          setNotice("⚠ PDF 파일과 Work 정답키의 SHA-256 지문이 다릅니다. 다른 문제의 정답일 수 있으므로 가져오지 않았습니다.");return;
+        }
+      } catch {}
+      applyPacket(parsed.packet); return;
+    }
+    // Older Work packets can have groundTruth as an object and sources as an array.
+    const jsonSection = raw.match(/\[EXPERIMENT_PACKET_JSON\]([\s\S]*?)\[\/EXPERIMENT_PACKET_JSON\]/i)?.[1] ||
+      raw.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || raw;
+    try {
+      const data = JSON.parse(jsonSection.trim());
+      const gt = data?.groundTruth;
+      if (gt && typeof gt === "object" && !Array.isArray(gt) && typeof gt.exactAnswer === "string") {
+        const declaredHash = typeof gt.blindPdfSha256 === "string" ? gt.blindPdfSha256.toLowerCase() : "";
+        if (declaredHash && state.pdf?.sha256 && declaredHash !== state.pdf.sha256.toLowerCase()) {
+          setNotice("⚠ 등록된 PDF와 비공개 정답키의 지문(SHA-256)이 일치하지 않습니다. 정답을 연결하지 않았습니다.");return;
+        }
+        const sources = Array.isArray(data.sources) ? data.sources.map((v:Record<string,unknown>) =>
+          [v?.title,v?.url,v?.supports].filter(x=>typeof x==="string").join(" | ")).join("\n") :
+          typeof data.sources==="string" ? data.sources : "";
+        if(!sources.trim()) {setNotice("정답키는 인식했지만 근거와 출처를 찾지 못했습니다.");return;}
+        const answer = gt.exactAnswer.trim();
+        const fullKey = [
+          answer,
+          typeof gt.acceptedEquivalent === "string" ? "Accepted: "+gt.acceptedEquivalent : "",
+          typeof gt.derivation === "string" ? "Derivation: "+gt.derivation : "",
+          typeof gt.scoringCriterion === "string" ? "Scoring: "+gt.scoringCriterion : "",
+          typeof gt.construction === "string" ? "Provenance: "+gt.construction : "",
+        ].filter(Boolean).join("\n");
+        const changed=fullKey!==state.groundTruth;
+        setState(prev=>({...prev,groundTruth:fullKey,sources:sources.slice(0,18000),sourceStatus:data.sourceStatus==="verified"?"verified":"needs_verification",
+          human:changed?{...prev.human,verdict:""}:prev.human,
+          runs:changed?Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
+        setNotice("이전 형식의 Work JSON에서 정답·채점 기준·출처를 한 번에 가져왔습니다. PDF 내용과도 일치하는지 생성 시 확인합니다.");return;
+      }
+    } catch {}
+    // PRIVATE_answer_key.txt support (never send the key to a test provider).
     const key = raw.match(/^EXACT ANSWER:\s*(.+)$/im)?.[1]?.trim() ||
       raw.match(/^정답\s*[:：]\s*(.+)$/im)?.[1]?.trim();
     if (!key || raw.length < 80) {
-      setNotice("Work의 [EXPERIMENT_PACKET_JSON] 전체 또는 PRIVATE_answer_key.txt 내용을 붙여넣으세요. 정답·근거가 인식되지 않았습니다."); return;
+      setNotice("Work의 [EXPERIMENT_PACKET_JSON] 전체 또는 PRIVATE_answer_key.txt 전문을 붙여넣으세요.");return;
+    }
+    const declaredHash = raw.match(/blind_test\.pdf:\s*([a-f\d]{64})/i)?.[1]?.toLowerCase() || "";
+    if (declaredHash && state.pdf?.sha256 && declaredHash!==state.pdf.sha256.toLowerCase()) {
+      setNotice("⚠ 비공개 정답표는 현재 등록한 PDF와 다른 파일입니다. PDF 지문이 일치하지 않아 가져오지 않았습니다.");return;
     }
     const urls = [...new Set(raw.match(/https?:\/\/[^\s)\]]+/g) || [])];
-    if (!urls.length) {setNotice("정답은 인식했지만 공식 출처 URL이 없습니다. Work 정답표의 근거까지 함께 붙여넣으세요.");return;}
-    const changed = key !== state.groundTruth;
-    setState(prev => ({...prev,groundTruth:key,sources:raw.slice(0,18000),
-      sourceStatus:/SOURCE STATUS:\s*verified/i.test(raw) ? "verified" : "needs_verification",
+    if (!urls.length) {setNotice("정답은 인식했지만 공식 출처 URL을 찾지 못했습니다.");return;}
+    const changed = raw !== state.groundTruth;
+    setState(prev=>({...prev,groundTruth:raw.slice(0,10000),sources:urls.join("\n").slice(0,18000),
+      sourceStatus:/SOURCE STATUS:\s*verified/i.test(raw)?"verified":"needs_verification",
       human:changed?{...prev.human,verdict:""}:prev.human,
-      runs: changed?Object.fromEntries(PROVIDERS.map(p => [p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
-    setNotice("Work 비공개 정답표에서 정답과 근거를 가져왔습니다. PDF의 내용과 일치하는지는 글 생성 때 다시 확인합니다.");
+      runs:changed?Object.fromEntries(PROVIDERS.map(p=>[p.id,{...prev.runs[p.id],verdict:"",reviewed:false}])) as ExperimentState["runs"]:prev.runs}));
+    setNotice("기존 비공개 TXT 정답표에서 전체 정답과 검증 근거를 가져왔습니다.");
   }
   async function generateQuickDraft() {
     if (generatingDraft) return;
