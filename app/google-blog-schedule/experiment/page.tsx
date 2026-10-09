@@ -473,6 +473,14 @@ export default function AiWorldExperimentStudio() {
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
     setState(prev => ({ ...prev, [key]: value }));
   }
+  function switchToBasicProtocol() {
+    if (state.protocol==="basic") return;
+    if (hasAnyResults() && !window.confirm("기존 실험은 기본 모드 사용 여부를 확인하지 않았습니다. 기본 모드로 새로 시험하려면 사람 도전·AI 답변을 초기화해야 합니다. 진행할까요?"))return;
+    setTimerStartedAt(null);setTimerNow(0);
+    setState(prev=>({...prev,protocol:"basic",commonPrompt:"",human:emptyHuman(),
+      runs:{chatgpt:emptyRun(),claude:emptyRun(),gemini:emptyRun()}}));
+    setNotice("무료/기본 일반 채팅 비교를 적용했습니다. PDF를 세 AI에 동일하게 첨부하고 실제 모델명과 사용 설정을 기록하세요.");
+  }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
     if (!fixtureReady && !state.runs[id].response.trim()) return;
     setState(prev => {
@@ -913,7 +921,20 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>ChatGPT · Claude · Gemini 답변 모으기</h2><p>PDF와 질문을 똑같이 제공하고 실제 원문을 붙여넣으세요. 정답은 아직 필요 없습니다.</p></div><strong>{completed}/3 답변</strong></div>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>기본 버전 · ChatGPT · Claude · Gemini</h2>
+        <p>세 곳 모두 무료/기본 일반 채팅을 우선 사용합니다. Pro/심층 리서치·추가 추론·웹검색·외부 연결 앱은 사용하지 않는 것을 기본 조건으로 합니다.</p></div><strong>{completed}/3 답변</strong></div>
+      <div className={styles.baselineGuide}>
+        <strong>{state.protocol==="basic" ? "기본 비교 실험 · 활성" : "이전 실험 설정 · 기본 비교 미적용"}</strong>
+        <p>별도 앱의 모델·요금제 설정을 사이트에서 직접 변경하지는 못합니다. 각 AI 사이트에서 설정하고 실제 사용 상태를 아래에 기록해 주세요. 웹검색이 자동으로 실행됐다면 '사용'으로 표시합니다.</p>
+        {state.protocol==="legacy" && <button className={styles.primary} onClick={switchToBasicProtocol}>이 실험을 기본 채팅 기준으로 다시 시작</button>}
+        <div className={styles.baselineServices}>
+          {PROVIDERS.map(p=><div key={p.id}>
+            <b>{p.label}</b>
+            <span>{p.id==="chatgpt"?"무료/게스트 가능하면 이용 · 새 채팅 · Instant/일반 응답":p.id==="claude"?"무료 일반 채팅 · Research/확장 사고 OFF": "무료 기본 모델 · 표준 사고 · Deep Research/Deep Think OFF"}</span>
+          </div>)}
+        </div>
+        <small>모델명은 서비스 업데이트에 따라 달라지므로 임의로 고정하지 않고 실제 화면에 표시된 이름을 기록합니다.</small>
+      </div>
       <label className={styles.field}><span>공통 테스트 프롬프트 · 비어 있으면 아래 예시가 자동 적용됩니다</span><textarea value={state.commonPrompt} onChange={e=>updateCommonPrompt(e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
         <button disabled={!fixtureReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
@@ -927,7 +948,43 @@ export default function AiWorldExperimentStudio() {
       </div>
       <div className={styles.providerBox}>
         <div className={styles.providerHead}><h3>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</h3><a href={PROVIDERS.find(p=>p.id===activeProvider)?.url} target="_blank" rel="noopener noreferrer">AI 사이트 열기 ↗</a></div>
-        <label><span>표시된 모델명</span><input disabled={!fixtureReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="서비스 화면에 표시된 실제 모델명" /></label>
+        <div className={styles.baselineChecklist}>
+          <strong>무료/기본 채팅 설정 확인</strong>
+          <small>기본 모드 설정은 AI 서비스 화면에서 직접 선택해야 합니다.</small>
+          <div className={styles.baselineSteps}>
+            {(getProviderBaselineHint(activeProvider)?.steps||[]).map((instruction,i)=><div key={i}>{instruction}</div>)}
+          </div>
+          <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.newChat}
+            onChange={e=>patchRun(activeProvider,{newChat:e.target.checked})}/>
+            <span>기존 문제 제작 채팅과 완전히 분리된 새 채팅에서 테스트함</span>
+          </label>
+          <div className={styles.baselineSettingGrid}>
+            <label><span>실제 이용한 계정 등급</span>
+              <select disabled={!fixtureReady} value={run.accountPlan} onChange={e=>patchRun(activeProvider,{accountPlan:e.target.value as ProviderRun["accountPlan"]})}>
+                <option value="">기록 필요</option><option value="free">무료 (Free)</option><option value="guest">로그아웃 / 게스트</option>
+                <option value="paid">유료 (Plus/Pro 등)</option><option value="unknown">확인 불가</option>
+              </select>
+            </label>
+            <label><span>실제 응답 모드</span>
+              <select disabled={!fixtureReady} value={run.chatMode} onChange={e=>patchRun(activeProvider,{chatMode:e.target.value as ProviderRun["chatMode"]})}>
+                <option value="">기록 필요</option><option value="standard">기본 / 일반 채팅</option>
+                <option value="advanced">추가 추론 / Research / 심층</option><option value="unknown">확인 불가</option>
+              </select>
+            </label>
+            <label><span>웹검색 · 외부 사이트 검색 실제 사용</span>
+              <select disabled={!fixtureReady} value={run.webUsed} onChange={e=>patchRun(activeProvider,{webUsed:e.target.value as ProviderRun["webUsed"]})}>
+                <option value="unknown">확인 전</option><option value="no">미사용 확인</option><option value="yes">사용됨</option>
+              </select>
+            </label>
+            <label><span>심층 리서치 · 외부 앱 등 추가 기능 사용</span>
+              <select disabled={!fixtureReady} value={run.extraToolsUsed} onChange={e=>patchRun(activeProvider,{extraToolsUsed:e.target.value as ProviderRun["extraToolsUsed"]})}>
+                <option value="unknown">확인 전</option><option value="no">미사용 확인</option><option value="yes">사용됨</option>
+              </select>
+            </label>
+          </div>
+          <small>기본 무료 모드 판정: {baselineStatus(run).label}. 유료·검색·추가 기능 사용이나 미확인은 최종 글에 그대로 기록합니다. PDF를 읽는 일반 파일 첨부는 추가 리서치 도구로 간주하지 않습니다.</small>
+        </div>
+        <label><span>실제 표시된 모델명 (필수 기록 권장)</span><input disabled={!fixtureReady} value={run.model} onChange={e=>patchRun(activeProvider,{model:e.target.value})} placeholder="예: 서비스 화면에 표시된 모델명 그대로" /></label>
         <label className={styles.field}><span>실험 날짜</span><input disabled={!fixtureReady} type="date" value={run.testedAt} onChange={e=>patchRun(activeProvider,{testedAt:e.target.value})} /></label>
         {state.fixtureMode==="pdf" && <label className={styles.checkLine}><input type="checkbox" disabled={!fixtureReady} checked={run.usedSamePdf} onChange={e=>patchRun(activeProvider,{usedSamePdf:e.target.checked})}/><span>위 사이트의 <strong>{PROVIDERS.find(p=>p.id===activeProvider)?.label}</strong> 새 채팅에, 위의 동일 PDF를 첨부하고 공통 질문을 입력했습니다.</span></label>}
         <label className={styles.field}><span>AI 실제 답변 전체</span><textarea disabled={!fixtureReady} className={styles.answer} value={run.response} onChange={e=>patchRun(activeProvider,{response:e.target.value})} placeholder="받은 답변을 그대로 붙여넣기" /></label>
