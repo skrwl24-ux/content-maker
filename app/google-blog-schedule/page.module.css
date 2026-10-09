@@ -228,3 +228,16 @@
 .planMeta span{padding:5px 7px;border-radius:8px;background:#eef2f6;color:#667487;font-size:9px;font-weight:850}
 @media(max-width:900px){.planSummaryGrid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.contentPlanHead{flex-direction:column}.planSummaryGrid{grid-template-columns:1fr}.contentPlanActions{flex-direction:column}.contentPlanActions a,.contentPlanActions button{width:100%}}
+
+
+/* Share saved comparison topic bank with the Google Blog publishing schedule. */
+.bankToSchedule{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:14px 0;padding:15px;background:#f3f7fe;border:1px solid #d8e4f3;border-radius:12px}
+.bankToSchedule>div{display:flex;flex-direction:column;gap:4px;flex:1;min-width:210px}
+.bankToSchedule strong{font-size:14px;color:#183a60}
+.bankToSchedule small{font-size:12px;color:#5b708c}
+.bankToSchedule select{min-width:190px;max-width:420px;flex:2;padding:11px;border:1px solid #c7d6e8;border-radius:9px;background:#fff;color:#20364f;font-size:13px}
+.bankToSchedule button,.bankToSchedule a{font-size:12px;font-weight:800;cursor:pointer;padding:11px 14px;border-radius:9px;text-decoration:none;white-space:nowrap}
+.bankToSchedule button{border:1px solid #205496;color:#fff;background:#205496}
+.bankToSchedule button:disabled{opacity:.45;cursor:not-allowed}
+.bankToSchedule a{border:1px solid #bdcfe5;color:#205496;background:#fff}
+@media(max-width:800px){.bankToSchedule>div,.bankToSchedule select{flex-basis:100%;max-width:none}.bankToSchedule button,.bankToSchedule a{flex:1;text-align:center}}
