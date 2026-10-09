@@ -1,3 +1,4 @@
+import { getExperimentAiAuth } from "@/lib/experiment-ai-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -14,17 +15,17 @@ export async function POST(req:NextRequest){
   try{
     const body=await req.json();
     const old=Array.isArray(body?.existingTitles)?body.existingTitles.filter((v:unknown)=>typeof v==="string").slice(0,120).map((v:string)=>v.slice(0,180)):[];
-    const apiKey=process.env.OPENAI_API_KEY?.trim();
-    if(!apiKey)return NextResponse.json({error:"주제 자동 추천을 위한 AI 키가 설정되지 않았습니다. 직접 주제 붙여넣기는 사용할 수 있습니다."},{status:503});
+    const auth=await getExperimentAiAuth();
+    if(!auth)return NextResponse.json({error:"AI 연결을 사용할 수 없습니다. Vercel Gateway 또는 OpenAI API 설정을 확인하세요. 직접 주제 붙여넣기는 사용할 수 있습니다."},{status:503});
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),35000);
     let response:Response;
     try{
-      response=await fetch("https://api.openai.com/v1/responses",{
+      response=await fetch(auth.endpoint,{
         method:"POST",
-        headers:{"Authorization":"Bearer "+apiKey,"Content-Type":"application/json"},
+        headers:{"Authorization":"Bearer "+auth.token,"Content-Type":"application/json"},
         body:JSON.stringify({
-          model:process.env.OPENAI_TEXT_MODEL?.trim()||"gpt-5.6",
+          model:auth.model,
           instructions:[
             "Generate EXACTLY TEN distinct, practical ideas for a global curiosity blog comparing ChatGPT, Claude and Gemini.",
             "Titles should be natural catchy KOREAN that site owner can understand. Questions must be clear fair ENGLISH and identical across all three models.",
@@ -41,7 +42,7 @@ export async function POST(req:NextRequest){
         }),signal:controller.signal,
       });
     }finally{clearTimeout(timeout);}
-    if(!response.ok)return NextResponse.json({error:"AI 주제 추천 요청이 실패했습니다. 잠시 뒤 다시 시도하거나 직접 목록을 붙여넣으세요."},{status:502});
+    if(!response.ok){const details=await response.text();console.error("experiment topics generation failed",auth.provider,response.status,details.slice(0,350));return NextResponse.json({error:"AI 주제 생성 서버 연결 실패: HTTP "+response.status+" / "+auth.provider+". Gateway 활성화 또는 API 키를 확인해 주세요."},{status:502});}
     const result=await response.json();
     const output=typeof result.output_text==="string"?result.output_text:
       Array.isArray(result.output)?result.output.flatMap((v:{content?:Array<{text?:string}>})=>(v.content||[]).map(c=>c.text||"")).join(""):"";
