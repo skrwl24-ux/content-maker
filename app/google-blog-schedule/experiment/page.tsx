@@ -785,11 +785,67 @@ export default function AiWorldExperimentStudio() {
       {mismatchedQuestion && <p className={styles.questionWarning} role="alert">실험 주제와 질문이 다릅니다. 영수증 PDF로 가짜 국가 찾기 질문을 내면 올바른 실험이 아닙니다.</p>}
       {!noKeyLeak && <p className={styles.questionWarning} role="alert">질문이나 PDF 파일명에서 비공개 정답이 노출될 위험이 있습니다. 확인해 주세요.</p>}
       {state.fixtureMode==="text" && <label className={styles.field}><span>AI에게 보여줄 텍스트 자료</span><textarea value={state.material} onChange={e=>updateMaterial(e.target.value)} placeholder="실제 테스트에 전달할 텍스트 자료" /></label>}
-      <p className={styles.muted}>PDF 실험에서는 별도의 텍스트 자료를 복사할 필요가 없습니다. 정답은 STEP 05에서 입력합니다.</p>
+      <p className={styles.muted}>PDF 실험에서는 별도의 텍스트 자료를 복사할 필요가 없습니다. 정답은 STEP 06에서 입력합니다.</p>
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 04</span><h2>ChatGPT · Claude · Gemini 답변 모으기</h2><p>PDF와 질문을 똑같이 제공하고 실제 원문을 붙여넣으세요. 정답은 아직 필요 없습니다.</p></div><strong>{completed}/3 답변</strong></div>
+      <div className={styles.panelHead}><div><span>STEP 04 · HUMAN CHALLENGE</span><h2>나도 직접 문제 풀어보기</h2>
+        <p>선택 참여 · 내가 고른 답, 실제 걸린 시간, 느낀 점과 사진을 남기면 최종 글에 1인칭 체험담으로 반영됩니다.</p></div>
+        <em className={state.human.choice.trim()?styles.good:styles.wait}>{state.human.choice.trim()?"✓ 사람의 답 기록됨":"선택 참여"}</em>
+      </div>
+      <p className={styles.muted}>가능하면 AI 답변을 보기 전에 문제를 풀고, 실제로 있었던 일만 적으세요. 사진과 풀이 시간이 없어도 됩니다.</p>
+      <div className={styles.humanTimer}>
+        <div>
+          <span>문제 풀이 타이머</span>
+          <strong>{timerStartedAt===null ? (state.human.durationText||"00:00") : formatChallengeDuration(Math.floor(((timerNow||Date.now())-timerStartedAt)/1000))}</strong>
+          <small>시작과 종료 사이 실제 경과 시간 · 직접 입력도 가능</small>
+        </div>
+        <div className={styles.actions}>
+          <button disabled={!fixtureReady || timerStartedAt!==null} onClick={startHumanTimer}>시작</button>
+          <button className={styles.primary} disabled={timerStartedAt===null} onClick={stopHumanTimer}>종료 · 기록</button>
+        </div>
+      </div>
+      <div className={styles.grid2}>
+        <label><span>내가 선택한 답</span><input value={state.human.choice} onChange={e=>patchHuman({choice:e.target.value})} placeholder="예: Singapore / 7번 국가명" /></label>
+        <label><span>걸린 시간 (분:초)</span><input value={state.human.durationText} onChange={e=>patchHuman({durationText:e.target.value,durationSource:"manual"})} placeholder="예: 01:24" inputMode="numeric" /></label>
+      </div>
+      {!validateChallengeDuration(state.human.durationText) && <p className={styles.questionWarning} role="alert">시간을 MM:SS 형식으로 입력하세요. 예: 01:24</p>}
+      <div className={styles.field}>
+        <span>느낀 난이도 (선택)</span>
+        <div className={styles.fixtureChoice}>
+          {([{value:"easy",label:"쉬움"},{value:"medium",label:"보통"},{value:"hard",label:"어려움"}] as const).map(item=>
+            <label key={item.value}><input type="radio" name="humanDifficulty" checked={state.human.difficulty===item.value} onChange={()=>patchHuman({difficulty:item.value})}/>{item.label}</label>)}
+        </div>
+      </div>
+      <label className={styles.field}><span>문제를 풀면서 어땠나요? · 간단히 적어도 됩니다</span>
+        <textarea value={state.human.notes} onChange={e=>patchHuman({notes:e.target.value})} placeholder="예: 처음에는 통화를 보고 헷갈렸다. GST라는 단서를 보고 한 나라로 좁혔지만 확신은 없었다. 실제로 경험한 것만 적어주세요." rows={3}/>
+      </label>
+      <label className={styles.checkLine}><input type="checkbox" checked={state.human.attemptedBeforeAI}
+        onChange={e=>patchHuman({attemptedBeforeAI:e.target.checked})} />
+        <span>AI 세 곳의 답변을 보기 전에 제가 먼저 풀었습니다. (실제로 그랬을 때만 체크)</span>
+      </label>
+      <div className={styles.humanPhotoPanel}>
+        <strong>실제 문제 푸는 사진 등록 · 최대 3장 (선택)</strong>
+        <p className={styles.muted}>JPG·PNG·WebP · 한 장당 최대 10MB · 사진 미리보기와 개별 다운로드 가능. 사진은 현재 브라우저에만 저장되며 GPT·Blogger에는 자동 전송되지 않습니다.</p>
+        <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple
+          disabled={photoBusy || state.human.photos.length>=3}
+          onChange={e=>{void uploadHumanPhotos(Array.from(e.currentTarget.files||[]));e.currentTarget.value="";}} />
+        {state.human.photos.length>0 && <div className={styles.humanPhotos}>
+          {state.human.photos.map((photo,i)=><div className={styles.humanPhotoCard} key={photo.sha256}>
+            {humanPhotoUrls[photo.sha256] ?
+              <img src={humanPhotoUrls[photo.sha256]} alt={"직접 등록한 사람 도전 사진 "+(i+1)} loading="lazy" /> :
+              <div className={styles.humanPhotoUnavailable}>사진 원본 확인 중이거나 현재 브라우저에서 찾을 수 없습니다.</div>}
+            <small>{photo.name}</small>
+            <div className={styles.actions}><button onClick={()=>void downloadHumanPhoto(photo)}>다운로드</button>
+              <button onClick={()=>void removeHumanPhoto(photo.sha256)}>삭제</button></div>
+          </div>)}
+        </div>}
+        <small>블로그 공개 전에 사진 속 얼굴·화면·개인정보와 원본 사진의 GPS/EXIF 정보를 확인하세요.</small>
+      </div>
+    </section>
+
+    <section className={styles.panel}>
+      <div className={styles.panelHead}><div><span>STEP 05</span><h2>ChatGPT · Claude · Gemini 답변 모으기</h2><p>PDF와 질문을 똑같이 제공하고 실제 원문을 붙여넣으세요. 정답은 아직 필요 없습니다.</p></div><strong>{completed}/3 답변</strong></div>
       <label className={styles.field}><span>공통 테스트 프롬프트 · 비어 있으면 아래 예시가 자동 적용됩니다</span><textarea value={state.commonPrompt} onChange={e=>updateCommonPrompt(e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
         <button disabled={!fixtureReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
@@ -811,7 +867,7 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 05</span><h2>정답 입력 · 세 AI 결과 비교</h2><p>세 AI의 실제 답변을 모은 뒤 Work에서 PDF 제작 때 미리 정한 정답을 입력하세요. 사이트에서 따로 잠글 필요는 없습니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 결과 비교 완료":"정답·결과 확인"}</em></div>
+      <div className={styles.panelHead}><div><span>STEP 06</span><h2>정답 입력 · 사람과 AI 결과 비교</h2><p>사람과 세 AI의 실제 답변을 모은 뒤 Work에서 PDF 제작 때 미리 정한 정답을 입력하세요. 사이트에서 따로 잠글 필요는 없습니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 결과 비교 완료":"정답·결과 확인"}</em></div>
       <div className={styles.truthGrid}>
         <label><span>정답 (Work에서 PDF 제작할 때 확정한 원래 답)</span><textarea value={state.groundTruth} onChange={e=>updateGroundTruth(e.target.value)} placeholder="예: 국기 문제라면 가상 국가의 번호·이름. 영수증 문제라면 사전 결정된 국가·근거." /></label>
         <label><span>정답 출처·근거</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="Work 원본 답안의 공식 출처 URL, 제작 근거, 판정 기준과 검증이 필요한 점을 입력하세요." /></label>
@@ -847,7 +903,7 @@ export default function AiWorldExperimentStudio() {
     </section>
 
     <section className={styles.panel}>
-      <div className={styles.panelHead}><div><span>STEP 06</span><h2>세 AI의 실제 답변으로 영문 글 만들기</h2><p>독자에게 먼저 문제를 보여주고 → 세 AI의 선택과 원문 이유를 비교하고 → 마지막에 정답과 뜻밖의 반응을 공개하는 글 요청서를 만듭니다.</p></div></div>
+      <div className={styles.panelHead}><div><span>STEP 07</span><h2>사람과 AI의 실제 이야기로 영문 글 만들기</h2><p>독자에게 먼저 문제를 보여주고 → 세 AI의 선택과 원문 이유를 비교하고 → 마지막에 정답과 뜻밖의 반응을 공개하는 글 요청서를 만듭니다.</p></div></div>
       <div className={styles.summaryRow}>{PROVIDERS.map(p=>{const r=state.runs[p.id];return <div key={p.id}><strong>{p.label}</strong><span>{r.reviewed && r.verdict ? {correct:"정답",incorrect:"오답",partial:"부분 정답",uncertain:"판정 보류"}[r.verdict] : "답변 또는 검토 필요"}</span><small>{r.finalAnswer || "선택한 답 미기록"}</small></div>})}</div>
       <div className={styles.actions}>
         <button disabled={!allScored} onClick={()=>void copy(report,"실험 검증 리포트")}>검증 리포트 복사</button>
