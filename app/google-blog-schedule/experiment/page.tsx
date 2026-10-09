@@ -92,6 +92,11 @@ function slugify(value: string) {
 function safeScore(value: number) {
   return Math.max(0, Math.min(10, Number.isFinite(value) ? value : 0));
 }
+function validRunScores(run: ProviderRun) {
+  return typeof run.accuracy === "number" && Number.isFinite(run.accuracy) && run.accuracy >= 0 && run.accuracy <= 10 &&
+    typeof run.instruction === "number" && Number.isFinite(run.instruction) && run.instruction >= 0 && run.instruction <= 10 &&
+    typeof run.hallucinations === "number" && Number.isSafeInteger(run.hallucinations) && run.hallucinations >= 0;
+}
 function buildIdeaPrompt() {
   return `Find 10 unusual AI experiments for an English-language global website.
 
@@ -292,7 +297,7 @@ export default function AiWorldExperimentStudio() {
           hook: typeof seed.hook === "string" ? seed.hook : "",
         };
         localStorage.removeItem(SEED_TRANSFER_KEY);
-        setNotice("발행리스트의 실험 주제를 불러왔습니다. Ground Truth부터 확정하세요.");
+        setNotice("발행리스트의 실험 주제를 불러왔습니다. STEP 02에서 자료부터 준비하세요.");
       }
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
       setState(next);
@@ -319,7 +324,7 @@ export default function AiWorldExperimentStudio() {
   const truthReady = Boolean(state.lockedAt && lockReady);
   const allScored = truthReady && PROVIDERS.every(p => {
     const r = state.runs[p.id];
-    return Boolean(r.response.trim() && r.reviewed && r.accuracy !== null && r.instruction !== null && r.hallucinations !== null);
+    return Boolean(r.response.trim() && r.reviewed && validRunScores(r));
   });
 
   function patch<K extends keyof ExperimentState>(key: K, value: ExperimentState[K]) {
@@ -369,6 +374,7 @@ export default function AiWorldExperimentStudio() {
     }
   }
   function loadStarter(index: number) {
+    if ((state.lockedAt || state.material.trim() || PROVIDERS.some(p => state.runs[p.id].response.trim())) && !window.confirm("다른 실험을 선택하면 현재 자료·답변·채점이 초기화됩니다. 계속할까요?")) return;
     const item = STARTERS[index];
     setState(prev => ({
       ...prev,
@@ -526,7 +532,7 @@ export default function AiWorldExperimentStudio() {
             </div>
             <label><span>Weirdest Mistake</span><textarea value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="가장 엉뚱하거나 자신 있게 틀린 부분" /></label>
             <label><span>채점 메모</span><textarea value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value,reviewed:false})} placeholder="부분정답, 누락, 애매한 판정 등" /></label>
-            <label className={styles.field}><span><input type="checkbox" disabled={!r.response.trim() || r.accuracy === null || r.instruction === null || r.hallucinations === null} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> 원문과 정답표를 대조해 이 점수를 직접 확정했습니다. (0점도 유효)</span></label>
+            <label className={styles.field}><span><input type="checkbox" disabled={!r.response.trim() || !validRunScores(r)} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> 원문과 정답표를 대조해 이 점수를 직접 확정했습니다. (0점도 유효)</span></label>
           </article>;
         })}
       </div>
