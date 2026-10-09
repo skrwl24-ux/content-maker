@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import { FAKE_COUNTRY_PACKET, FAKE_COUNTRY_TITLE, buildPacketRequest, parseExperimentPacket, buildBlindPrompt, buildWorkPdfRequest, suggestedExperimentQuestion, mismatchedExperimentQuestion, getExperimentWorkflowStatus } from "@/lib/ai-world-experiment-packet.mjs";
-import { storeExperimentPdf, getExperimentPdf } from "@/lib/ai-world-experiment-files.mjs";
-import type { PdfMeta } from "@/lib/ai-world-experiment-files.mjs";
+import { storeExperimentPdf, getExperimentPdf, storeHumanPhoto, getHumanPhoto, deleteHumanPhoto } from "@/lib/ai-world-experiment-files.mjs";
+import type { PdfMeta, HumanPhotoMeta } from "@/lib/ai-world-experiment-files.mjs";
 
 type ProviderId = "chatgpt" | "claude" | "gemini";
 type ProviderRun = {
@@ -22,6 +22,16 @@ type ProviderRun = {
   reviewed: boolean;
   weirdestMistake: string;
   notes: string;
+};
+type HumanChallenge = {
+  choice: string;
+  durationText: string;
+  durationSource: "" | "timer" | "manual";
+  difficulty: "" | "easy" | "medium" | "hard";
+  notes: string;
+  attemptedBeforeAI: boolean;
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  photos: HumanPhotoMeta[];
 };
 type ExperimentState = {
   scheduleId: string;
@@ -41,6 +51,7 @@ type ExperimentState = {
   sourceStatus: string;
   lockedAt: string;
   commonPrompt: string;
+  human: HumanChallenge;
   runs: Record<ProviderId, ProviderRun>;
 };
 
@@ -72,6 +83,19 @@ const STARTERS = [
 function emptyRun(): ProviderRun {
   return { model: "", testedAt:"", usedSamePdf:false, response: "", finalAnswer:"", verdict:"", highlight:"", accuracy: null, instruction: null, hallucinations: null, reviewed: false, weirdestMistake: "", notes: "" };
 }
+function emptyHuman(): HumanChallenge {
+  return { choice:"", durationText:"", durationSource:"", difficulty:"", notes:"",
+    attemptedBeforeAI:false, verdict:"", photos:[] };
+}
+function formatChallengeDuration(seconds: number) {
+  const total=Math.max(0,Math.round(seconds));
+  return String(Math.floor(total/60)).padStart(2,"0")+":"+String(total%60).padStart(2,"0");
+}
+function validateChallengeDuration(value: string) {
+  if (!value.trim()) return true;
+  const m=/^(\d{1,4}):([0-5]\d)$/.exec(value.trim());
+  return Boolean(m && Number(m[1])<=9999);
+}
 function emptyState(): ExperimentState {
   return {
     scheduleId: "",
@@ -91,6 +115,7 @@ function emptyState(): ExperimentState {
     sourceStatus: "needs_verification",
     lockedAt: "",
     commonPrompt: "",
+    human:emptyHuman(),
     runs: { chatgpt: emptyRun(), claude: emptyRun(), gemini: emptyRun() },
   };
 }
@@ -307,6 +332,10 @@ export default function AiWorldExperimentStudio() {
   const [pdfAvailable, setPdfAvailable] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [humanPhotoUrls, setHumanPhotoUrls] = useState<Record<string,string>>({});
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
+  const [timerNow, setTimerNow] = useState(0);
 
   useEffect(() => {
     try {
@@ -332,6 +361,7 @@ export default function AiWorldExperimentStudio() {
       }
       if (!next.lockedAt && !String(next.testQuestion || "").trim() && suggestedExperimentQuestion(next.title)) next.testQuestion = suggestedExperimentQuestion(next.title);
       next.runs = Object.fromEntries(PROVIDERS.map(p => [p.id, { ...emptyRun(), ...(next.runs?.[p.id] || {}) }])) as ExperimentState["runs"];
+      next.human = { ...emptyHuman(), ...(next.human || {}), photos:Array.isArray(next.human?.photos)?next.human.photos.slice(0,3):[] };
       setState(next);
     } catch {
       setState(emptyState());
@@ -356,6 +386,29 @@ export default function AiWorldExperimentStudio() {
     getExperimentPdf(state.pdf.sha256).then(blob=>{if(alive)setPdfAvailable(Boolean(blob));}).catch(()=>{if(alive)setPdfAvailable(false);});
     return ()=>{alive=false;};
   }, [hydrated, state.pdf?.sha256]);
+  const humanPhotoSignature=(state.human?.photos||[]).map(p=>p.sha256).join("|");
+  useEffect(() => {
+    let alive=true;
+    let urls:Record<string,string>={};
+    const metas=state.human?.photos||[];
+    if (!hydrated || !metas.length){setHumanPhotoUrls({});return;}
+    Promise.all(metas.map(async meta=>{
+      try {
+        const blob=await getHumanPhoto(meta.sha256);
+        return blob ? {sha256:meta.sha256,url:URL.createObjectURL(blob)} : null;
+      } catch {return null;}
+    })).then(items=>{
+      for(const item of items) if(item) urls[item.sha256]=item.url;
+      if (alive) setHumanPhotoUrls(urls);
+      else Object.values(urls).forEach(url=>URL.revokeObjectURL(url));
+    });
+    return ()=>{alive=false;Object.values(urls).forEach(url=>URL.revokeObjectURL(url));};
+  },[hydrated,humanPhotoSignature]);
+  useEffect(()=>{
+    if(timerStartedAt===null)return;
+    const id=window.setInterval(()=>setTimerNow(Date.now()),250);
+    return ()=>window.clearInterval(id);
+  },[timerStartedAt]);
   const commonPrompt = state.commonPrompt.trim() || defaultCommonPrompt(state);
   const report = useMemo(() => reportText(state), [state]);
   const articlePrompt = useMemo(() => bloggerPrompt(state), [state]);
