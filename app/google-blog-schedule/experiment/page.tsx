@@ -378,8 +378,23 @@ export default function AiWorldExperimentStudio() {
   }
   function patchRun(id: ProviderId, value: Partial<ProviderRun>) {
     if (!fixtureReady && !state.runs[id].response.trim()) return;
-    setState(prev => ({ ...prev, runs: { ...prev.runs, [id]: { ...prev.runs[id], ...value, ...("response" in value ? {verdict:"" as const,finalAnswer:"",highlight:""} : {}), reviewed: "reviewed" in value ? Boolean(value.reviewed) : (("response" in value || "verdict" in value || "finalAnswer" in value || "highlight" in value || "usedSamePdf" in value) ? false : prev.runs[id].reviewed) } } }));
+    setState(prev => {
+      const old = prev.runs[id];
+      const resetVerdict = "response" in value || "finalAnswer" in value;
+      const nextVerdict = "verdict" in value ? (value.verdict || "") : (resetVerdict ? "" : old.verdict);
+      return {...prev, runs:{...prev.runs,[id]:{...old,...value,
+        ...("response" in value ? {finalAnswer:"",highlight:""} : {}),
+        verdict: nextVerdict, reviewed: Boolean(nextVerdict)
+      }}};
+    });
   }
+  function updateGroundTruth(next: string) {
+    setState(prev=>({...prev,groundTruth:next,
+      runs:next!==prev.groundTruth?Object.fromEntries(PROVIDERS.map(p=>[p.id,{
+        ...prev.runs[p.id], verdict:"", reviewed:false
+      }])) as ExperimentState["runs"]:prev.runs}));
+  }
+
   function hasResponses() { return PROVIDERS.some(p => state.runs[p.id].response.trim()); }
   function updateQuestion(next: string) {
     if (next !== state.testQuestion && hasResponses() && !window.confirm("공통 질문을 바꾸면 이전 실험과 조건이 달라집니다. 이미 저장된 AI 답변·판정을 초기화할까요?")) return;
@@ -660,7 +675,7 @@ export default function AiWorldExperimentStudio() {
     <section className={styles.panel}>
       <div className={styles.panelHead}><div><span>STEP 05</span><h2>정답 입력 · 세 AI 결과 비교</h2><p>세 AI의 실제 답변을 모은 뒤 Work에서 PDF 제작 때 미리 정한 정답을 입력하세요. 사이트에서 따로 잠글 필요는 없습니다.</p></div><em className={allScored?styles.good:styles.wait}>{allScored?"✓ 결과 비교 완료":"정답·결과 확인"}</em></div>
       <div className={styles.truthGrid}>
-        <label><span>정답 (Work에서 PDF 제작할 때 확정한 원래 답)</span><textarea value={state.groundTruth} onChange={e=>patch("groundTruth",e.target.value)} placeholder="예: 국기 문제라면 가상 국가의 번호·이름. 영수증 문제라면 사전 결정된 국가·근거." /></label>
+        <label><span>정답 (Work에서 PDF 제작할 때 확정한 원래 답)</span><textarea value={state.groundTruth} onChange={e=>updateGroundTruth(e.target.value)} placeholder="예: 국기 문제라면 가상 국가의 번호·이름. 영수증 문제라면 사전 결정된 국가·근거." /></label>
         <label><span>정답 출처·근거</span><textarea value={state.sources} onChange={e=>patch("sources",e.target.value)} placeholder="Work 원본 답안의 공식 출처 URL, 제작 근거, 판정 기준과 검증이 필요한 점을 입력하세요." /></label>
       </div>
       <details className={styles.advanced}><summary>실험의 숨은 설정 메모 (선택)</summary>
@@ -673,21 +688,21 @@ export default function AiWorldExperimentStudio() {
           return <article key={p.id}>
             <h3>{p.label}</h3>
             <label><span>AI가 고른 답 (선택)</span><input disabled={!r.response.trim()} value={r.finalAnswer} onChange={e=>patchRun(p.id,{finalAnswer:e.target.value})} placeholder="예: 7. Norvessa" /></label>
-            <label><span>정답 판정 (필수)</span><select disabled={!r.response.trim()} value={r.verdict} onChange={e=>patchRun(p.id,{verdict:e.target.value as ProviderRun["verdict"]})}>
+            <label><span>실제 원문과 정답을 비교한 판정 (필수)</span><select disabled={!keyReady || !r.response.trim()} value={r.verdict} onChange={e=>patchRun(p.id,{verdict:e.target.value as ProviderRun["verdict"]})}>
               <option value="">판정을 선택하세요</option><option value="correct">정답</option><option value="incorrect">오답</option><option value="partial">부분 정답</option><option value="uncertain">판정 보류</option>
             </select></label>
             <label><span>독자에게 보여줄 흥미로운 원문 인용 (선택)</span><textarea disabled={!r.response.trim()} value={r.highlight} onChange={e=>patchRun(p.id,{highlight:e.target.value})} placeholder="실제 AI 답변에서 문장을 그대로 복사하세요. 새로운 해석이나 추측으로 바꾸지 마세요." /></label>
             {r.highlight && r.response && !r.response.includes(r.highlight.trim()) && <small className={styles.quoteWarn}>선택한 인용 문구가 답변 원문에 정확히 일치하지 않습니다. 확인해 주세요.</small>}
-            <label><span>결과 메모 (선택)</span><textarea disabled={!r.response.trim()} value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value,reviewed:false})} placeholder="이 AI가 어떤 단서로 판단했는지 / 다른 AI와 어떤 점이 달랐는지 원문에 근거하여 기록" /></label>
+            <label><span>결과 메모 (선택)</span><textarea disabled={!r.response.trim()} value={r.notes} onChange={e=>patchRun(p.id,{notes:e.target.value})} placeholder="이 AI가 어떤 단서로 판단했는지 / 다른 AI와 어떤 점이 달랐는지 원문에 근거하여 기록" /></label>
             <details className={styles.advanced}><summary>추가 세부 평가 (선택)</summary>
               <div className={styles.scoreGrid}>
-                <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
-                <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
-                <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value), reviewed:false})}/></label>
+                <label><span>정확도 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.accuracy ?? ""} onChange={e=>patchRun(p.id,{accuracy:e.target.value === "" ? null : Number(e.target.value)})}/></label>
+                <label><span>지시 준수 /10</span><input disabled={!r.response.trim()} type="number" min="0" max="10" value={r.instruction ?? ""} onChange={e=>patchRun(p.id,{instruction:e.target.value === "" ? null : Number(e.target.value)})}/></label>
+                <label><span>환각 개수</span><input disabled={!r.response.trim()} type="number" min="0" value={r.hallucinations ?? ""} onChange={e=>patchRun(p.id,{hallucinations:e.target.value === "" ? null : Number(e.target.value)})}/></label>
               </div>
-              <label><span>실제로 관찰한 특이한 오류</span><textarea disabled={!r.response.trim()} value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value,reviewed:false})} placeholder="없으면 공란으로 둡니다." /></label>
+              <label><span>실제로 관찰한 특이한 오류</span><textarea disabled={!r.response.trim()} value={r.weirdestMistake} onChange={e=>patchRun(p.id,{weirdestMistake:e.target.value})} placeholder="없으면 공란으로 둡니다." /></label>
             </details>
-            <label className={styles.checkLine}><input type="checkbox" disabled={!keyReady || !r.response.trim() || !r.verdict || (state.fixtureMode==="pdf"&&!r.usedSamePdf) || Boolean(r.highlight.trim() && !r.response.includes(r.highlight.trim()))} checked={r.reviewed} onChange={e=>patchRun(p.id,{reviewed:e.target.checked})} /> <span>정답표와 실제 답변을 비교해 위 판정을 확인했습니다.</span></label>
+            <small className={styles.muted}>원래 정답과 원문을 비교해 판정을 선택하면 자동으로 저장됩니다. 추가 확인 체크는 필요 없습니다.</small>
           </article>;
         })}
       </div>
