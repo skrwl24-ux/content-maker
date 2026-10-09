@@ -22,7 +22,7 @@ type ProviderRun = {
   usedSamePdf: boolean;
   response: string;
   finalAnswer: string;
-  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain";
+  verdict: "" | "correct" | "incorrect" | "partial" | "uncertain" | "recommendation";
   highlight: string;
   accuracy: number | null;
   instruction: number | null;
@@ -821,13 +821,13 @@ export default function AiWorldExperimentStudio() {
   }
   async function generateQuickDraft() {
     if (generatingDraft) return;
-    if (!fixtureReady || !keyReady || !allAnswersCollected) {
+    if (!comparisonReady) {
       setNotice("원본 PDF와 질문, Work 정답·근거, 세 AI의 답변을 확인하세요. 동일 PDF 확인도 필요합니다.");return;
     }
     setGeneratingDraft(true);setDraftApproved(false);
     try {
       let pdfDataUrl = "";
-      if (state.fixtureMode === "pdf") {
+      if (state.mode==="quiz" && state.fixtureMode === "pdf") {
         const blob = state.pdf ? await getExperimentPdf(state.pdf.sha256) : null;
         if (!blob) throw new Error("원본 PDF를 현재 브라우저에서 찾을 수 없습니다. STEP 1에서 다시 등록하세요.");
         if (blob.size > 2_500_000) throw new Error("자동 생성 PDF는 최대 2.5MB입니다. Vercel 요청 제한을 고려해 용량을 줄이거나 더 간단한 PDF를 사용하세요.");
@@ -858,6 +858,11 @@ export default function AiWorldExperimentStudio() {
     const scores=currentDraft.scores;
     if (scores.length!==3 || PROVIDERS.some(p => !scores.some(s => s.provider===p.id && s.verdict && s.verdict!=="uncertain"))) {
       setNotice("세 AI의 판정이 모두 명확해야 확정할 수 있습니다.");return;
+    }
+    if(state.mode==="recommend") {
+      setDraftApproved(true);
+      setNotice("세 AI가 고른 추천 결과를 확인했습니다. 승자를 정하지 않고 비교 글로 발행리스트에 전달합니다.");
+      return;
     }
     setState(prev=>({...prev,
       human: {...prev.human, verdict: currentDraft.humanVerdict==="not_recorded"?"":currentDraft.humanVerdict},
@@ -1012,10 +1017,27 @@ export default function AiWorldExperimentStudio() {
     setNotice("실험 아이디어를 불러왔습니다. STEP 02에서 실험 자료부터 준비하세요.");
   }
   function sendToQueue() {
-    if (!allScored || (!advancedMode && (!currentDraft || !draftApproved))) {
-      setNotice("세 AI의 답변과 판정, Work에서 정한 비공개 정답 및 출처를 입력한 뒤 글을 제작할 수 있습니다.");
+    if (state.mode==="recommend" ? (!currentDraft || !draftApproved || !currentDraft.ready) :
+      (!allScored || (!advancedMode && (!currentDraft || !draftApproved)))) {
+      setNotice(state.mode==="recommend"?"세 AI 답변으로 비교 초안을 만들고 결과를 확인해야 발행리스트에 보낼 수 있습니다.":
+        "세 AI의 답변과 판정, Work 정답·근거를 확인한 뒤 발행할 수 있습니다.");
       return;
     }
+    const comparisonReport=state.mode==="recommend" ? [
+      "AI COMPARISON — NO SINGLE OBJECTIVE RIGHT ANSWER",
+      "Topic: "+state.title,"Exact identical question: "+state.testQuestion,
+      "Date: "+today(),"Human comments (only when recorded): "+(state.human.notes||"Not recorded"),
+      "Human choice: "+(state.human.choice||"Not recorded"),
+      ...PROVIDERS.map(p=>{
+        const r=state.runs[p.id],v=currentDraft?.scores.find(x=>x.provider===p.id);
+        return p.label+" ("+(r.model||"model not recorded")+")\nSelected: "+(v?.finalAnswer||"not identified")+
+          "\nSelection rationale: "+(v?.explanation||"not assessed")+"\nOriginal answer:\n"+r.response;
+      }),
+      "LIMIT: This is a subjective recommendation comparison from one question, not independently verified current product specifications or an overall model ranking."
+    ].join("\n\n") : report;
+    const finalPrompt=state.mode==="recommend"
+      ? "This comparison article is already drafted in the saved Blogger body. If revising it, use only the exact original model replies and the following report. Never invent winners, rankings or first-person observations.\n\n"+comparisonReport
+      : articlePrompt;
     const pending = {
       id: state.scheduleId || ("world-exp-" + Date.now()),
       kind: "experiment",
@@ -1023,19 +1045,24 @@ export default function AiWorldExperimentStudio() {
       title: currentDraft?.title || state.title,
       body: currentDraft && draftApproved ? currentDraft.html : "",
       keyword: state.keyword || "AI experiment",
-      slug: slugify(state.title),
-      note: "Global curiosity experiment · Work-precommitted ground truth entered for final comparison · ChatGPT/Claude/Gemini tested with common fixture",
-      labVersion: "WORLD-LAB-V1",
-      labReport: report,
-      labPrompt: articlePrompt,
+      slug: slugify(currentDraft?.title||state.title) || "ai-comparison-"+today(),
+      note: state.mode==="recommend"?"AI 3사 추천 비교 · 정답 없는 주관적 판단 비교":"Global curiosity experiment · precommitted answer key and three actual responses",
+      labVersion: state.mode==="recommend"?"WORLD-COMPARISON-V1":"WORLD-LAB-V1",
+      labReport: comparisonReport,
+      labPrompt: finalPrompt,
       experimentCategory: state.category,
       experimentHook: state.hook,
     };
     try {
       localStorage.setItem(QUEUE_TRANSFER_KEY, JSON.stringify(pending));
+      if(state.mode==="recommend" && state.topicId) {
+        const updated=topics.map(t=>t.id===state.topicId?{...t,status:"used" as TopicStatus,usedAt:today()}:t);
+        localStorage.setItem(TOPICS_KEY,JSON.stringify({version:TOPIC_BANK_VERSION,topics:updated}));
+        setTopics(updated);
+      }
       window.location.href = "/google-blog-schedule?fromLab=1";
     } catch {
-      setNotice("발행 큐 전달 실패 · 브라우저 저장소를 확인하세요.");
+      setNotice("발행 큐 전달에 실패했습니다. 브라우저 저장소를 확인하세요.");
     }
   }
   function reset() {
