@@ -617,7 +617,7 @@ export default function AiWorldExperimentStudio() {
       <label className={styles.field}><span>공통 테스트 프롬프트 · {state.lockedAt ? "잠금 완료 · 수정 불가" : "잠그기 전 수정 가능"}</span><textarea disabled={Boolean(state.lockedAt)} value={state.lockedAt ? commonPrompt : state.commonPrompt} onChange={e=>patch("commonPrompt",e.target.value)} placeholder={defaultCommonPrompt(state)} /></label>
       <div className={styles.actions}>
         <button disabled={!truthReady} onClick={() => void copy(commonPrompt, "공통 테스트 프롬프트")}>공통 질문 복사</button>
-        {state.fixtureMode==="pdf" && <button disabled={!truthReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>
+        {state.fixtureMode==="pdf" && <button disabled={!truthReady || !pdfAvailable} onClick={()=>void accessPdf(true)}>세 AI에게 줄 동일 PDF 다운로드</button>}
         {!truthReady && <small>테스트 자료와 정답을 먼저 검증·잠그세요. 빈 자료로 AI에 질문하지 않습니다.</small>}
       </div>
       <div className={styles.providerTabs}>
