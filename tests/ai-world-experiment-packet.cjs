@@ -44,3 +44,14 @@ test("no material or unreviewed sources means experiment cannot be locked", asyn
   assert.equal(canLockExperiment({ ...FAKE_COUNTRY_PACKET, sourceVerified: false }), false);
   assert.equal(canLockExperiment({ ...FAKE_COUNTRY_PACKET, material: "", sourceVerified: true }), false);
 });
+
+test("Work PDF request demands actual blind fixture, private key and source render", async () => {
+  const { buildWorkPdfRequest } = await load();
+  const request = buildWorkPdfRequest({ title: "I Gave AI 10 Countries — One Was Fake. Would It Notice?" });
+  assert.match(request, /blind_test\.pdf/);
+  assert.match(request, /PRIVATE_answer_key\.txt/);
+  assert.match(request, /EXPERIMENT_PACKET_JSON\.txt/);
+  assert.match(request, /blind_test_preview\.png/);
+  assert.match(request, /not just a description/);
+  assert.match(request, /Do NOT run ChatGPT, Claude, or Gemini/);
+});
