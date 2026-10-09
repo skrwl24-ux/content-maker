@@ -81,9 +81,9 @@ test("00 is a square hook, 01 holds only the common prompt", async () => {
 test("02 names only recorded recommendations, 03 only criteria and strengths", async () => {
   const { buildRecommendationImagePrompt: build } = await load();
   const choices = generate(build, "02");
-  assert.match(choices, /Final answer: Denmark/);
-  assert.match(choices, /Final answer: Norway/i);
-  assert.match(choices, /Final Answer:\*\* Switzerland/);
+  assert.match(choices, /ChatGPT — 실제 기록된 선택:\s*Denmark/);
+  assert.match(choices, /Claude — 실제 기록된 선택:\s*Norway/);
+  assert.match(choices, /Gemini — 실제 기록된 선택:\s*Switzerland/);
   assert.doesNotMatch(choices, /High taxes and living costs/);
   const reasons = generate(build, "03");
   assert.match(reasons, /Strong social safety net/);
@@ -114,4 +114,49 @@ test("no fabricated answer for missing providers or malformed evidence", async (
   assert.match(result, /Gemini: NOT RECORDED/);
   assert.equal(build({ labReport: "{}" }, { id: "03" }), null);
   assert.equal(build({ labReport: JSON.stringify(report) }, { id: "99" }), null);
+});
+
+
+test("legacy text schedule transfers are normalized into evidence-scoped slots", async () => {
+  const { buildRecommendationImagePrompt: build, parseRecommendationReport: parse } = await load();
+  const legacy = [
+    "AI COMPARISON — NO SINGLE OBJECTIVE RIGHT ANSWER",
+    "Topic: Best country to live",
+    "Exact identical question: Choose ONE country and explain the strengths and tradeoffs.",
+    "Date: 2026-10-10",
+    "Human comments (only when recorded): Not recorded",
+    "Human choice: Not recorded",
+    "ChatGPT (model not recorded)\nSelected: Denmark\nSelection rationale: social security\nOriginal answer:\nFinal answer: Denmark.\nThree strengths\n1. Safety net\nTwo tradeoffs\n1. High taxes\nUncertainty\nChoice depends on personal priorities.",
+    "Claude (model not recorded)\nSelected: Norway\nSelection rationale: stability\nOriginal answer:\nFinal answer: Norway.\nThree strengths\n1. High wages\nTwo tradeoffs\n1. High living costs\nUncertainty\nMoving is hard.",
+    "Gemini (model not recorded)\nSelected: Switzerland\nSelection rationale: prosperity\nOriginal answer:\nFinal Answer: Switzerland\nThree strengths\n1. Economic opportunity\nTwo tradeoffs\n1. High costs\nUncertainty\nPersonal fit matters.",
+    "LIMIT: One experiment does not prove an overall model ranking."
+  ].join("\n\n");
+  const parsed = parse(legacy);
+  assert.equal(parsed?.mode, "subjective_recommendation_comparison");
+  assert.equal(parsed?.independentReplies?.[1]?.recordedChoice, "Norway");
+  const get = id => build({ title: "Best country to live", labReport: legacy }, { id });
+  assert.match(get("01"), /Choose ONE country/);
+  assert.doesNotMatch(get("01"), /Selected: Denmark/);
+  assert.match(get("02"), /Switzerland/);
+  assert.doesNotMatch(get("02"), /High taxes/);
+  assert.match(get("04"), /High living costs/);
+  assert.doesNotMatch(get("04"), /Safety net/);
+  assert.match(get("05"), /Personal fit matters/);
+  assert.doesNotMatch(get("05"), /High living costs/);
+});
+
+test("non-travel comparison does not tell image generator to draw country scenery", async () => {
+  const { buildRecommendationImagePrompt: build } = await load();
+  const reportForPhones = {
+    ...report, title: "Which smartphone is best?",
+    commonQuestion: "As of October 2026 pick the best smartphone",
+    independentReplies: [
+      { provider: "ChatGPT", verbatimResponse: "Final answer: Phone A" },
+      { provider: "Claude", verbatimResponse: "Final answer: Phone B" },
+      { provider: "Gemini", verbatimResponse: "Final answer: Phone C" }
+    ],
+  };
+  const prompt = build({ labReport: JSON.stringify(reportForPhones) }, { id: "00" });
+  assert.doesNotMatch(prompt, /travel-magazine cover/i);
+  assert.match(prompt, /정사각형/);
 });
