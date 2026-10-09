@@ -220,3 +220,26 @@ test("customized basic common questions still include the same no-web baseline i
  assert.match(source,/draftPrompt\.startsWith\(BASELINE_PROFILE\.commonInstruction\)/);
  assert.match(source,/BASELINE_PROFILE\.commonInstruction\+"\\n\\n"\+draftPrompt/);
 });
+
+
+test("AI reply fields remain editable before PDF is restored; publication remains gated", () => {
+  const fs=require("node:fs"),path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  const patchRun=src.split("function patchRun(id: ProviderId, value: Partial<ProviderRun>) {")[1].split("\n  function updateGroundTruth")[0];
+  assert.doesNotMatch(patchRun,/if\s*\(!fixtureReady/);
+  const providerSection=src.split('className={styles.providerBox}')[1].split('\n    </section>')[0];
+  assert.match(providerSection,/className=\{styles\.answer\}/);
+  assert.doesNotMatch(providerSection,/disabled=\{!fixtureReady\}/);
+  assert.match(src,/답변 원문은 지금 붙여넣어 저장할 수 있습니다/);
+  assert.match(src,/disabled=\{!allScored\} onClick=\{\(\)=>void copy\(articlePrompt/);
+});
+test("linking original PDF after pasting replies can preserve them; replacing a different fixture needs confirmation",()=>{
+  const fs=require("node:fs"),path=require("node:path");
+  const src=fs.readFileSync(path.join(__dirname,"../app/google-blog-schedule/experiment/page.tsx"),"utf8");
+  const upload=src.split("async function uploadPdf(file: File | null) {")[1].split("\n  async function accessPdf")[0];
+  assert.match(upload,/const linkingFirstPdf = !state\.pdf && state\.fixtureMode === "pdf"/);
+  assert.match(upload,/preserveResults = true/);
+  assert.match(upload,/human: preserveResults \? prev\.human : emptyHuman\(\)/);
+  assert.match(upload,/runs: preserveResults \? prev\.runs :/);
+  assert.match(upload,/window\.confirm\("기존 PDF와 다른 파일입니다/);
+});
