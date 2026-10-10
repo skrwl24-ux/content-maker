@@ -7,7 +7,7 @@ export interface AtlasProject {
  analysisSignature?:string; articleSignature?:string; imageSourceSigs?:Partial<Record<ImageSlot,string>>;
 }
 export interface ParsedArticle {
- valid:boolean; errors:string[]; title:string; description:string; slug:string; labels:string; html:string;
+ valid:boolean; errors:string[]; title:string; description:string; slug:string; labels:string; html:string; navigationGenerated:boolean;
 }
 export const STORAGE_KEY:string;
 export const BLOG_BASE:string;
@@ -27,6 +27,7 @@ export function responsesReady(project:AtlasProject):boolean;
 export function buildIdeasPrompt(projects:AtlasProject[]):string;
 export function buildAnalysisPrompt(project:AtlasProject):string;
 export function buildArticlePrompt(project:AtlasProject):string;
+export function buildArticleRepairPrompt(project:AtlasProject):string;
 export function buildHeroPrompt(project:AtlasProject):string;
 export function buildInsightPrompt(project:AtlasProject):string;
 export function validPublishedUrl(s:string):boolean;
