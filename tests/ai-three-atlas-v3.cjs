@@ -23,6 +23,9 @@ function project(m,topic="Best country to live?") {
  p.analysis="My synthesis is that the models prioritized different things.";
  p.articleRaw=article();
  p.images={hero:"https://media.test/hero.png",chatgpt:"https://media.test/gpt.png",claude:"https://media.test/claude.png",gemini:"https://media.test/gemini.png",insight:"https://media.test/insight.png"};
+ p.analysisSignature=m.evidenceSignature(p);
+ p.articleSignature=m.articleSignature(p);
+ p.imageSourceSigs=Object.fromEntries(m.IMAGE_SLOTS.map(slot=>[slot.id,m.imageSourceSignature(p,slot.id)]));
  return p;
 }
 test("V3 storage and categories are isolated from old schedules",async()=>{
@@ -77,4 +80,38 @@ test("published URLs require exact original Blogger host and real post .html",as
  assert.equal(m.validPublishedUrl("https://evil.blogspot.com/2026/10/a.html"),false);
  assert.equal(m.validPublishedUrl("http://aipriceatlas.blogspot.com/2026/10/a.html"),false);
  assert.equal(m.validPublishedUrl("https://aipriceatlas.blogspot.com/search/label/test"),false);
+});
+
+test("editing an AI original after analysis blocks outdated synthesis, draft and image",async()=>{
+ const m=await mod,p=project(m);
+ assert.equal(m.analysisIsFresh(p),true);
+ p.responses.claude="Different country and reasoning.";
+ assert.equal(m.analysisIsFresh(p),false);
+ assert.equal(m.articleIsFresh(p),false);
+ assert.equal(m.imageIsFresh(p,"claude"),false);
+ assert.equal(m.imageIsFresh(p,"insight"),false);
+ assert.throws(()=>m.buildArticlePrompt(p),/다시 실행/);
+ const assembled=m.assembleArticle(p,[p]);
+ assert.ok(assembled.errors.some(x=>x.includes("분석 이후")));
+ assert.ok(assembled.errors.some(x=>x.includes("이미지 제작 이후")));
+});
+test("an updated analysis requires new article and new key image",async()=>{
+ const m=await mod,p=project(m);
+ p.analysis="A completely new analysis.";
+ p.analysisSignature=m.evidenceSignature(p);
+ assert.equal(m.analysisIsFresh(p),true);
+ assert.equal(m.articleIsFresh(p),false);
+ assert.equal(m.imageIsFresh(p,"insight"),false);
+ assert.equal(m.imageIsFresh(p,"hero"),true);
+ assert.equal(m.imageIsFresh(p,"claude"),true);
+ p.articleSignature=m.articleSignature(p);
+ p.imageSourceSigs.insight=m.imageSourceSignature(p,"insight");
+ assert.equal(m.articleIsFresh(p),true);
+ assert.equal(m.imageIsFresh(p,"insight"),true);
+});
+test("changing the common question invalidates all three original AI images",async()=>{
+ const m=await mod,p=project(m);
+ p.question+=" More details please.";
+ assert.ok(m.IMAGE_SLOTS.filter(slot=>!m.imageIsFresh(p,slot.id)).length>=4);
+ assert.equal(m.analysisIsFresh(p),false);
 });
