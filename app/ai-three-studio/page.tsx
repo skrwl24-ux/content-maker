@@ -20,6 +20,7 @@ const STAGES: Array<{id:Stage;name:string;desc:string}>=[
  {id:"publish",name:"04 · 글 조립·발행",desc:"목차·이미지·내부 링크"}
 ];
 const DISPLAY:Record<Provider,string>={chatgpt:"ChatGPT",claude:"Claude",gemini:"Gemini"};
+const AI_SITES:Record<Provider,string>={chatgpt:"https://chatgpt.com/",claude:"https://claude.ai/",gemini:"https://gemini.google.com/app"};
 function todayLocal() {
  const d=new Date();
  return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
@@ -294,7 +295,13 @@ export default function AiThreeComparisonStudioV3() {
       </label>
       <div className={styles.responseGrid}>
        {PROVIDERS.map(id=><div className={styles.responseCard} key={id}>
-        <div className={styles.responseHead}><b>{DISPLAY[id]}</b><span>{selected.responses[id]?.length||0}자</span></div>
+        <div className={styles.responseHead}>
+         <b>{DISPLAY[id]}</b>
+         <div className={styles.responseHeadActions}>
+          <span>{selected.responses[id]?.length||0}자</span>
+          <a href={AI_SITES[id]} target="_blank" rel="noopener noreferrer" aria-label={DISPLAY[id]+" 공식 사이트 새 탭에서 열기"}>사이트 열기 ↗</a>
+         </div>
+        </div>
         <textarea aria-label={DISPLAY[id]+" 원문"} rows={12} value={selected.responses[id]} placeholder={DISPLAY[id]+"의 실제 답변을 처음부터 끝까지 그대로 붙여넣으세요."}
          onChange={e=>setReply(id,e.target.value)}/>
         <div className={styles.imageMini}>
