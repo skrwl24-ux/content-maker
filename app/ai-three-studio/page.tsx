@@ -351,6 +351,17 @@ export default function AiThreeComparisonStudioV3() {
        <b>{parsed?.valid?"✓ 최종 HTML 형식·목차 검사 통과":"최종 글 검사"}</b>
        {parsed?.errors.length?parsed.errors.map((err,i)=><p key={i}>• {err}</p>):<p>원고 마커, 목차 이동 링크, 원문/이미지 표지, HTML 안전 규칙을 확인합니다.</p>}
       </div>
+      {parsed?.valid&&<div className={styles.metaGrid}>
+       {[
+        {label:"최종 제목",value:parsed.title},
+        {label:"검색 설명",value:parsed.description},
+        {label:"맞춤 퍼머링크",value:parsed.slug},
+        {label:"Blogger 라벨",value:parsed.labels}
+       ].map(field=><div key={field.label}>
+        <small>{field.label}</small><strong>{field.value}</strong>
+        <button type="button" onClick={()=>void copy(field.value,field.label)}>{field.label} 복사</button>
+       </div>)}
+      </div>}
       <h3 className={styles.subhead}>이미지 5장 연결 <span>{readyImages}/5</span></h3>
       <div className={styles.uploadGrid}>
        {IMAGE_SLOTS.map(slot=><div className={styles.uploadCard} key={slot.id}>
