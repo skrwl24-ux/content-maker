@@ -73,6 +73,7 @@ export default function AiThreeComparisonStudioV3() {
  const [importCategory,setImportCategory]=useState(CATEGORIES[0]);
  const [showPreview,setShowPreview]=useState(true);
  const importRef=useRef<HTMLInputElement>(null);
+ const storageSafe=useRef(true);
 
  useEffect(()=>{
   try{
@@ -82,11 +83,11 @@ export default function AiThreeComparisonStudioV3() {
     const items=normalizeProjects(state?.version===3?state.projects:[]);
     setProjects(items);if(items.length)setSelectedId(items[0].id);
    }
-  }catch{setMessage("저장 자료를 읽지 못했습니다. 원본은 덮어쓰지 않았으니 JSON 백업을 확인해주세요.");}
+  }catch{storageSafe.current=false;setMessage("저장 자료가 손상되어 자동 저장을 중단했습니다. JSON 백업을 병합해 복구하세요. 기존 저장값은 덮어쓰지 않습니다.");}
   setReady(true);
  },[]);
  useEffect(()=>{
-  if(!ready)return;
+  if(!ready||!storageSafe.current)return;
   try{localStorage.setItem(STORAGE_KEY,JSON.stringify({version:3,projects}));}
   catch{setMessage("브라우저 저장 용량이 부족합니다. JSON 백업을 내려받은 다음 오래된 초안을 정리하세요.");}
  },[projects,ready]);
@@ -150,11 +151,10 @@ export default function AiThreeComparisonStudioV3() {
    if(data?.version!==3||!Array.isArray(data.projects))throw Error("V3 형식의 백업만 가져올 수 있습니다.");
    const imported=normalizeProjects(data.projects);
    if(imported.length!==data.projects.length)throw Error("백업 항목이 유효하지 않습니다.");
-   let inserted=0;
+   storageSafe.current=true;
    setProjects(prev=>{
     const ids=new Set(prev.map(p=>p.id));
     const next=imported.filter(p=>!ids.has(p.id));
-    inserted=next.length;
     return [...next,...prev];
    });
    setMessage("백업을 확인했습니다. 기존 같은 ID는 보호하고 새 자료만 병합합니다.");
