@@ -58,8 +58,11 @@
 .current strong{font-size:14px}.current span{color:#69808c;font-size:11px}
 .responseGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
 .responseCard{padding:13px;border:1px solid #e0e8ee;border-radius:14px;min-width:0}
-.responseHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.responseHead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
 .responseHead b{font-size:15px}.responseHead span{font-size:11px;color:#8a9da8}
+.responseHeadActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.responseHeadActions a{display:inline-flex;align-items:center;justify-content:center;border:1px solid #bed7db;background:#edf7f7;color:#176b78;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;text-decoration:none;white-space:nowrap}
+.responseHeadActions a:hover,.responseHeadActions a:focus-visible{background:#dceff0;border-color:#59a2aa}
 .responseCard textarea{font-size:12px}
 .imageMini,.assetPreview{background:#edf1f5;border:1px dashed #cbd7e1;border-radius:10px;display:flex;justify-content:center;align-items:center;overflow:hidden;color:#8494a4;font-size:12px;margin-top:11px}
 .imageMini{height:120px}.imageMini img,.assetPreview img{width:100%;height:100%;object-fit:contain}

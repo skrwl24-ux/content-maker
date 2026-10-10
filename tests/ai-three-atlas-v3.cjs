@@ -115,3 +115,14 @@ test("changing the common question invalidates all three original AI images",asy
  assert.ok(m.IMAGE_SLOTS.filter(slot=>!m.imageIsFresh(p,slot.id)).length>=4);
  assert.equal(m.analysisIsFresh(p),false);
 });
+
+test("each AI reply card opens its real AI service in a new tab without leaving V3",()=>{
+ const fs=require("node:fs");
+ const path=require("node:path");
+ const page=fs.readFileSync(path.join(__dirname,"../app/ai-three-studio/page.tsx"),"utf8");
+ assert.match(page,/chatgpt:"https:\/\/chatgpt\.com\/"/);
+ assert.match(page,/claude:"https:\/\/claude\.ai\/"/);
+ assert.match(page,/gemini:"https:\/\/gemini\.google\.com\/app"/);
+ assert.match(page,/href=\{AI_SITES\[id\]\} target="_blank" rel="noopener noreferrer"/);
+ assert.match(page,/사이트 열기 ↗/);
+});
