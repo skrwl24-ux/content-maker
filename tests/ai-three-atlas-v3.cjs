@@ -226,3 +226,57 @@ test("incomplete draft recovery prompt includes original evidence and existing d
  assert.match(recovered,/Regenerate the whole article/);
  assert.match(recovered,/원문/);
 });
+
+
+test("article writer translates Korean topic for English readers and never claims translation was exact original",async()=>{
+ const m=await mod,p=project(m,"지금 아무런 경력 없이 다시 시작한다면 어떤 직업을 선택할까?");
+ const prompt=m.buildArticlePrompt(p);
+ assert.match(prompt,/영문 글로벌 블로그/);
+ assert.match(prompt,/한국어.*영어로 번역/);
+ assert.match(prompt,/번역\/의역/);
+ assert.match(prompt,/정확한 원문이라고 주장하지/);
+});
+test("English-only gate blocks Korean in authored Blogger text and enables repair",async()=>{
+ const m=await mod,p=project(m);
+ p.articleRaw=article(editorialDraft().replace("Which career really","어떤 직업이 좋을까? Which career really"));
+ const checked=m.parseArticle(p.articleRaw);
+ assert.equal(checked.valid,false);
+ assert.ok(checked.errors.some(x=>x.includes("한글이 있습니다")));
+ const repair=m.buildArticleRepairPrompt(p);
+ assert.match(repair,/Translate any Korean topic\/question/);
+});
+test("English-only gate also catches Korean title and description",async()=>{
+ const m=await mod;
+ assert.ok(m.parseArticle(article().replace("Three AIs on a surprisingly hard question","세 AI가 답한 직업 질문")).errors.some(x=>x.includes("한글이 있습니다")));
+ assert.ok(m.parseArticle(article().replace("A real three-AI comparison","실제 비교 A real three-AI comparison")).errors.some(x=>x.includes("한글이 있습니다")));
+});
+test("shared question translation prompt retains actual source as evidence without answering it",async()=>{
+ const m=await mod,p=project(m,"세상에서 가장 좋은 직업은 무엇일까?");
+ const prompt=m.buildEnglishQuestionTranslationPrompt(p);
+ assert.match(prompt,/Return ONLY the fully translated/);
+ assert.match(prompt,/without changing the meaning/);
+ assert.match(prompt,/Do not answer the topic or generate an image/);
+ assert.match(prompt,/세상에서 가장 좋은 직업/);
+ assert.equal(m.hasKorean(p.question),true);
+ assert.equal(m.hasKorean("Which job is best in the world?"),false);
+});
+test("published related links use an English article title and never insert Korean topic",async()=>{
+ const m=await mod,p=project(m,"세상에서 가장 좋은 직업은 무엇일까?");
+ const x=m.createExperiment("앞으로 10년 가장 가치 있는 직업은?","World & Lifestyle","2026-10-09");
+ x.status="published";x.publishedUrl="https://aipriceatlas.blogspot.com/2026/10/future-career.html";
+ x.publishedTitle="Which Career Will Matter Most in the Next Decade?";
+ const mid=m.relatedHtml(p,[p,x],"mid");
+ assert.match(mid,/Which Career Will Matter Most/);
+ assert.doesNotMatch(mid,/[가-힣]/);
+ x.publishedTitle="";
+ const fallback=m.relatedHtml(p,[p,x],"mid");
+ assert.match(fallback,/Related AI experiment/);
+ assert.doesNotMatch(fallback,/[가-힣]/);
+});
+test("assembled image alt text uses verified English article title rather than Korean source topic",async()=>{
+ const m=await mod,p=project(m,"세상에서 가장 좋은 직업은 무엇일까?");
+ const out=m.assembleArticle(p,[p]);
+ assert.deepEqual(out.errors,[]);
+ assert.match(out.html,/alt="Three AIs on a surprisingly hard question hero"/);
+ assert.doesNotMatch(out.html,/alt="세상에서/);
+});
