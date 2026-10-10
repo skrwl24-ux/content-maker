@@ -84,7 +84,9 @@ export default function AiThreeComparisonStudioV3() {
    const raw=localStorage.getItem(STORAGE_KEY);
    if(raw){
     const state=JSON.parse(raw);
-    const items=normalizeProjects(state?.version===3?state.projects:[]);
+    if(state?.version!==3||!Array.isArray(state?.projects))throw Error("Unknown V3 storage format");
+    const items=normalizeProjects(state.projects);
+    if(items.length!==state.projects.length)throw Error("Invalid V3 project data");
     setProjects(items);if(items.length)setSelectedId(items[0].id);
    }
   }catch{storageSafe.current=false;setMessage("저장 자료가 손상되어 자동 저장을 중단했습니다. JSON 백업을 병합해 복구하세요. 기존 저장값은 덮어쓰지 않습니다.");}
@@ -154,7 +156,7 @@ export default function AiThreeComparisonStudioV3() {
    const data=JSON.parse(await file.text());
    if(data?.version!==3||!Array.isArray(data.projects))throw Error("V3 형식의 백업만 가져올 수 있습니다.");
    const imported=normalizeProjects(data.projects);
-   if(imported.length!==data.projects.length)throw Error("백업 항목이 유효하지 않습니다.");
+   if(!imported.length||imported.length!==data.projects.length)throw Error("유효한 주제가 있는 V3 백업만 복원할 수 있습니다.");
    storageSafe.current=true;
    setProjects(prev=>{
     const ids=new Set(prev.map(p=>p.id));
