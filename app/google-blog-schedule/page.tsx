@@ -6,8 +6,10 @@ import styles from "./page.module.css";
 import { parseBloggerOutput } from "@/lib/google-blogger-parser.mjs";
 import { buildGoogleContentPlanPrompt, googleContentPlanBlock, googleImagePlanBlock, parseGoogleContentPlan } from "@/lib/google-content-plan.mjs";
 import type { GoogleContentPlan } from "@/lib/google-content-plan.mjs";
+import { buildRecommendationImagePrompt, parseRecommendationReport, recommendationImageSlot } from "@/lib/experiment-recommendation-images.mjs";
 
 type Status = "예정" | "작성 중" | "발행 완료";
+type BankTopic = {id:string;title:string;category:string;question:string;status:"pending"|"active"|"used";createdAt:string;usedAt:string};
 type VerificationValue = "pending" | "checked" | "na";
 type VerificationState = {
   officialPrice: VerificationValue;
@@ -53,6 +55,9 @@ type ScheduleRow = {
   labPrompt?: string;
   experimentCategory?: string;
   experimentHook?: string;
+  experimentTopicId?: string;
+  experimentMode?: "recommend"|"quiz";
+  experimentQuestion?: string;
 };
 
 type SeoTopicCandidate = {
@@ -102,6 +107,7 @@ const LOCAL_UPDATED_KEY = "content-maker-google-blog-local-updated-v1";
 const BLOG_BASE = "https://aipriceatlas.blogspot.com";
 const IMAGE_BUCKET = "content-maker-assets";
 const LAB_TRANSFER_KEY = "ai-price-atlas-lab-queue-transfer-v1";
+const TOPICS_KEY = "ai-world-experiment-topic-bank-v1";
 const LAB_IMAGE_ROLES: Record<string, { label: string; role: string }> = {
   "00": { label: "실험 대표", role: "이 실험의 질문과 궁금증을 한눈에 보여주는 영어 대표 이미지" },
   "01": { label: "테스트 설정", role: "AI에게 실제로 보여준 자료·조건·질문을 간결하게 보여주는 이미지" },
@@ -110,8 +116,20 @@ const LAB_IMAGE_ROLES: Record<string, { label: string; role: string }> = {
   "04": { label: "점수판", role: "이번 단일 실험의 정확도·지시 준수·환각 기록을 비교하는 이미지" },
   "05": { label: "엉뚱한 실수", role: "검증된 Weirdest Mistake와 이번 실험의 한계를 재미있게 정리" },
 };
+const COMPARE_IMAGE_ROLES: Record<string, {label:string;role:string}> = {
+  "00":{label:"비교 대표",role:"동일한 질문에 대한 AI 3사 비교 주제를 한눈에 보여주며 실제 결과를 왜곡하지 않기"},
+  "01":{label:"공통 질문",role:"세 AI가 받은 동일한 질문과 평가 기준을 보기 좋게 표시"},
+  "02":{label:"AI 추천 3곳",role:"ChatGPT·Claude·Gemini가 실제 선택한 국가·브랜드·제품을 같은 기준으로 비교"},
+  "03":{label:"선택 이유",role:"각 AI의 실제 선정 기준과 선택 이유가 어떻게 다른지 보여주는 정보 이미지"},
+  "04":{label:"장단점·한계",role:"AI 추천의 단점·조건·확인되지 않은 주장을 분리하는 정보 이미지"},
+  "05":{label:"핵심 비교 정리",role:"실제 답변에 근거한 공통점·차이점·독자가 고려할 점을 요약"},
+};
 function imageSlotFor(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number]) {
-  return row.kind === "experiment" ? { ...slot, ...LAB_IMAGE_ROLES[slot.id] } : slot;
+  if (row.kind !== "experiment") return slot;
+  const recommendation = recommendationImageSlot(parseRecommendationReport(row.labReport), slot.id);
+  if (recommendation) return { ...slot, ...recommendation };
+  const roles = row.labVersion === "WORLD-COMPARISON-V2" ? COMPARE_IMAGE_ROLES : LAB_IMAGE_ROLES;
+  return { ...slot, ...roles[slot.id] };
 }
 
 const KNOWN_PUBLISHED_POSTS: SeoTopicCandidate[] = [
@@ -614,6 +632,9 @@ Blogger에 바로 넣을 최종 HTML 본문
 
 function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], contentPlan?: GoogleContentPlan | null) {
   if (row.kind === "experiment") {
+    const recommendationPrompt = buildRecommendationImagePrompt(row, slot);
+    if (recommendationPrompt) return recommendationPrompt;
+    if (row.experimentMode === "recommend") return "추천 비교 이미지 요청서를 만들 수 없습니다. 실험 기록에 공통 질문 및 3사의 원문 답변이 있는지 확인하고 실험실에서 발행리스트로 다시 전달해 주세요. 근거 없이 이미지를 생성하지 않습니다.";
     const image = imageSlotFor(row, slot);
     return [
       "전 세계 독자를 위한 실제 AI 실험 글의 영문 정보 이미지 1장만 제작해줘.",
@@ -623,7 +644,7 @@ function buildImagePrompt(row: ScheduleRow, slot: typeof IMAGE_SLOTS[number], co
       "[검증된 실험 기록]",
       row.labReport || "근거 자료 미입력 · 결과 숫자나 정답을 새로 만들지 말 것.",
       "[스타일] 1600×900px / 16:9 / 영어 / 호기심을 자극하되 정보가 읽히는 편집형 디자인 / 과한 네온·3D·미래형 AI 클리셰 금지.",
-      "[필수] Ground Truth, AI 답변, 점수, Weirdest Mistake는 위 검증 기록에 있는 것만 사용. 없는 점수·순위·모델 버전은 만들지 말 것. 실제 AI 화면 스크린샷처럼 합성하지 말 것.",
+      row.experimentMode==="recommend" ? "[필수] 정답·승자·점수판을 만들지 말 것. 실제 AI 추천 3개와 선택 기준·장단점·불확실성을 중심으로 표현하고 실제 제품 사진·사양·순위를 임의로 만들지 말 것." : "[필수] 원래 정답키·AI 답변·점수는 검증 기록에 있는 것만 사용하고, 미확인 정보나 모델 버전을 만들지 말 것.",
       "[톤] 딱딱한 벤치마크 보고서보다 'Can AI really do this?' 실험 콘텐츠처럼 재미있게. 단, 이번 한 번의 실험으로 전체 모델 우열을 단정하지 말 것.",
       "6장 합본이 아니라 현재 요청한 슬롯 " + slot.id + " 1장만 제작.",
     ].join("\n");
@@ -790,7 +811,10 @@ function replaceImagePlaceholders(html: string, row: ScheduleRow) {
     const loading = slot.id === "00" ? "eager" : "lazy";
     const imageHtml = `<p><img src="${escapeHtmlAttr(src)}" alt="${alt}" loading="${loading}"></p>`;
     const placeholder = new RegExp(`\\[IMAGE ${slot.id} — [^\\]]+\\]`, "g");
-    output = output.replace(placeholder, imageHtml);
+    // Legacy experiment drafts included only 00~03; append missing 04/05 images
+    // after the article so they are not silently dropped.
+    if (placeholder.test(output)) output = output.replace(placeholder, imageHtml);
+    else if (row.kind === "experiment" && !output.includes(src)) output += "\n" + imageHtml;
   }
   return output;
 }
@@ -800,6 +824,8 @@ export default function GoogleBlogSchedulePage() {
   const [rows, setRows] = useState<ScheduleRow[]>(DEFAULT_ROWS);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState(DEFAULT_ROWS[0].id);
+  const [bankTopics, setBankTopics] = useState<BankTopic[]>([]);
+  const [selectedBankTopic, setSelectedBankTopic] = useState("");
   const [notice, setNotice] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [uploadingSlots, setUploadingSlots] = useState<Record<string, boolean>>({});
@@ -836,6 +862,51 @@ export default function GoogleBlogSchedulePage() {
     setLoaded(true);
   }, []);
 
+  function reloadTopicBank(){
+    try{
+      const bank=JSON.parse(localStorage.getItem(TOPICS_KEY)||"{}");
+      const valid=Array.isArray(bank.topics)?bank.topics.filter((item:BankTopic)=>
+        item && typeof item.id==="string" && typeof item.title==="string"
+        && ["pending","active","used"].includes(item.status)):[];
+      setBankTopics(valid);
+    }catch{setBankTopics([]);}
+  }
+  useEffect(()=>{
+    reloadTopicBank();
+    window.addEventListener("focus",reloadTopicBank);
+    return ()=>window.removeEventListener("focus",reloadTopicBank);
+  },[]);
+  function markTopicBankStatus(id:string,status:BankTopic["status"]){
+    if(!id)return;
+    try{
+      const raw=JSON.parse(localStorage.getItem(TOPICS_KEY)||"{}");
+      if(!Array.isArray(raw.topics))return;
+      const updated=raw.topics.map((t:BankTopic)=>t.id===id?
+        {...t,status,usedAt:status==="used"?todayLocal():t.usedAt}:t);
+      localStorage.setItem(TOPICS_KEY,JSON.stringify({...raw,topics:updated}));
+      setBankTopics(updated);
+    }catch{}
+  }
+  function scheduleTopicFromBank(){
+    const topic=bankTopics.find(t=>t.id===selectedBankTopic);
+    if(!topic){setNotice("추가할 주제를 선택하세요.");return;}
+    if(topic.status==="used"){setNotice("이 주제는 사용 완료 상태입니다. 다른 주제를 선택하세요.");return;}
+    if(rows.some(r=>r.experimentTopicId===topic.id||normalizeGoogleTopic(r.title)===normalizeGoogleTopic(topic.title))){
+      setNotice("이미 발행 스케줄에 있는 주제입니다. 기존 행에서 진행하세요.");return;
+    }
+    const lastDate=rows.length?[...rows].sort((a,b)=>a.date.localeCompare(b.date)).at(-1)!.date:today;
+    const date=nextDate(lastDate),id="topic-bank-"+topic.id;
+    const row:ScheduleRow={
+      id,date,title:topic.title,keyword:"AI three model comparison",
+      status:"예정",url:"",slug:"",relatedIds:[],note:"AI 3사 추천 비교 실험 · 같은 질문과 실제 답변을 비교",
+      kind:"experiment",labVersion:"WORLD-COMPARISON-V2-PLANNED",
+      experimentMode:"recommend",experimentTopicId:topic.id,experimentQuestion:topic.question,
+      experimentCategory:topic.category,experimentHook:"AI 3사 추천의 선택 기준·장점·단점 비교"
+    };
+    setRows(prev=>[...prev,row]);
+    setSelectedId(id);markTopicBankStatus(topic.id,"active");setSelectedBankTopic("");
+    setNotice("주제 보관함에서 발행 스케줄에 추가했습니다. 선택된 행에서 '이 주제로 실험 설계 시작'을 누르면 같은 질문이 전달됩니다.");
+  }
   useEffect(() => {
     if (!loaded || (syncKey && !syncInitialized)) return;
     const raw = window.localStorage.getItem(LAB_TRANSFER_KEY);
@@ -857,6 +928,9 @@ export default function GoogleBlogSchedulePage() {
         status: "작성 중", url: "", body: typeof incoming.body === "string" ? incoming.body : "", relatedIds: [],
         experimentCategory: incoming.experimentCategory || "",
         experimentHook: incoming.experimentHook || "",
+        experimentTopicId: incoming.experimentTopicId || "",
+        experimentMode: incoming.experimentMode === "recommend"?"recommend":"quiz",
+        experimentQuestion: incoming.experimentQuestion || "",
       };
       setRows(prev => prev.some(item => item.id === imported.id)
         ? prev.map(item => item.id === imported.id ? {
@@ -871,7 +945,7 @@ export default function GoogleBlogSchedulePage() {
           } : item)
         : [imported, ...prev]);
       setSelectedId(imported.id);
-      setNotice("글로벌 AI 실험 검증 결과를 발행리스트에 반영했습니다. 이제 본문·이미지 요청서를 만들 수 있습니다.");
+      setNotice("AI 3사 비교자료를 발행 스케줄에 저장했습니다. 아래에서 본문 요청서 → 이미지 6장 → 완성글 붙여넣기 순서로 진행하세요.");
     } catch {
       setNotice("실험 기록을 가져오지 못했습니다. 검증실에서 다시 등록해 주세요.");
     } finally {
@@ -948,6 +1022,8 @@ export default function GoogleBlogSchedulePage() {
   const selectedReverseLive = selectedReverse.filter(item => isValidPublishedUrl(item.url));
   const selectedBacklinkDone = selected?.backlinkDoneIds || [];
   const selectedExperimentReady = Boolean(selected?.kind === "experiment" && selected.labReport?.trim() && selected.labPrompt?.trim());
+  const selectedRecommendationImages = Boolean(selected?.kind === "experiment" && parseRecommendationReport(selected.labReport));
+  const imageEvidenceReady = Boolean(selected?.kind !== "experiment" || selected?.experimentMode !== "recommend" || selectedRecommendationImages);
   const selectedVerification = selected ? getVerification(selected) : emptyVerification();
   const selectedVerificationResolved = selected ? verificationResolvedCount(selected) : 0;
   const selectedVerificationChecked = selected ? verificationCheckedCount(selected) : 0;
@@ -1295,6 +1371,7 @@ export default function GoogleBlogSchedulePage() {
       return false;
     }
     updateRow(row.id, { status: "발행 완료" });
+    if(row.experimentTopicId)markTopicBankStatus(row.experimentTopicId,"used");
     void syncPublishHistory({ ...row, status: "발행 완료" }, true).then(ok => {
       if (ok) void loadPublishHistory();
     });
@@ -1549,6 +1626,9 @@ export default function GoogleBlogSchedulePage() {
         keyword: row.keyword,
         category: row.experimentCategory || "Global Curiosity",
         hook: row.experimentHook || row.note || "",
+        mode: row.experimentMode || (row.labVersion==="WORLD-COMPARISON-V2"?"recommend":"quiz"),
+        topicId: row.experimentTopicId || "",
+        testQuestion: row.experimentQuestion || "",
       }));
     } catch {}
     window.location.href = "/google-blog-schedule/experiment?fromSchedule=1";
@@ -1580,7 +1660,7 @@ export default function GoogleBlogSchedulePage() {
 
       <section className={styles.labSpotlight}>
         <div><span>NEW · GLOBAL CURIOSITY EXPERIMENTS</span><h2>나라·지도·음식·언어·동물까지, AI에게 엉뚱한 실험을 던져보세요.</h2>
-          <p>실험 주제 선택 → Ground Truth를 먼저 저장 → ChatGPT·Claude·Gemini에 같은 문제 → 실제 답변 채점 → 영어 Blogger 글과 이미지 6장 제작.</p>
+          <p>주제 보관함 → 발행 스케줄 → AI 3사 실제 답변 수집 → ChatGPT 영문 글 작성 → 이미지 6장 → Blogger 발행. 추천 비교는 정답키가 필요하지 않습니다.</p>
           <small>가격 글은 그대로 유지 · 실험 글은 Can AI...? / I gave AI... 형식의 해외 유입용 콘텐츠로 확장</small>
         </div>
         <a href="/google-blog-schedule/experiment">글로벌 AI 실험 시작 →</a>
@@ -1641,6 +1721,18 @@ export default function GoogleBlogSchedulePage() {
           </div>
         </div>
 
+        <div className={styles.bankToSchedule}>
+          <div>
+            <strong>주제 보관함에서 발행 스케줄에 바로 추가</strong>
+            <small>사용 가능한 주제 {bankTopics.filter(t=>t.status!=="used").length}개 · 주제가 소진되면 실험실에서 ChatGPT로 추가하세요.</small>
+          </div>
+          <select value={selectedBankTopic} onChange={e=>setSelectedBankTopic(e.target.value)} aria-label="발행할 AI 비교 주제">
+            <option value="">비교 주제 선택</option>
+            {bankTopics.filter(t=>t.status!=="used").map(t=><option value={t.id} key={t.id}>{t.title} · {t.status==="active"?"진행 중":"대기"}</option>)}
+          </select>
+          <button type="button" onClick={scheduleTopicFromBank} disabled={!selectedBankTopic}>발행리스트에 추가 →</button>
+          <a href="/google-blog-schedule/experiment">주제 보관함 열기 ↗</a>
+        </div>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -1717,7 +1809,7 @@ export default function GoogleBlogSchedulePage() {
             <span className={styles.workStatus}>{selected.status}</span>
             <div className={styles.workHealth}>
               {selected.kind === "experiment"
-                ? <span className={selectedExperimentReady ? styles.healthGood : styles.healthWait}>{selectedExperimentReady ? "실험 검증 완료" : "실험 설계 필요"}</span>
+                ? <span className={selectedExperimentReady ? styles.healthGood : styles.healthWait}>{selectedExperimentReady ? "실험 자료 준비" : "AI 답변 필요"}</span>
                 : <span className={styles.healthNeutral}>기존 가격 글</span>}
               {selected.kind !== "experiment" && <span className={selected.contentPlan ? styles.healthGood : styles.healthWait}>{selected.contentPlan ? "기획 완료" : "통합 기획 필요"}</span>}
               <span className={duplicateCount ? styles.healthDanger : styles.healthGood}>{duplicateCount ? `중복 ${duplicateCount}` : "SEO OK"}</span>
@@ -1728,8 +1820,8 @@ export default function GoogleBlogSchedulePage() {
 
           {selected.kind === "experiment" && <section className={styles.labEvidencePanel}>
             <div><span>GLOBAL EXPERIMENT · {selected.experimentCategory || selected.labVersion || "실험 예정"}</span>
-              <strong>{selectedExperimentReady ? "검증 완료: Ground Truth + 실제 AI 답변 + 기록된 채점" : "이 주제는 먼저 글로벌 AI 실험 제작실에서 설계·검증하세요."}</strong>
-              <p>{selectedExperimentReady ? "저장한 정답·출처·모델 답변·점수만 본문과 이미지 요청서에 반영합니다." : (selected.experimentHook || selected.note || "해외 독자가 궁금해할 한 가지 질문을 실제 자료로 시험합니다.")}</p>
+              <strong>{selectedExperimentReady ? (selected.experimentMode==="recommend"?"AI 3사 추천 비교자료 준비 완료":"정답형 실험 자료 준비 완료") : "이 주제는 먼저 글로벌 AI 실험 제작실에서 답변을 수집하세요."}</strong>
+              <p>{selectedExperimentReady ? "저장된 AI 3사 원문 답변과 공통 질문을 바탕으로 ChatGPT에서 글을 작성합니다. 추천 비교에는 객관적 정답률을 매기지 않습니다." : (selected.experimentHook || selected.note || "해외 독자가 궁금해할 한 가지 질문을 실제 자료로 시험합니다.")}</p>
             </div>
             <div className={styles.labEvidenceActions}>
               {!selectedExperimentReady && <button type="button" onClick={() => startExperimentDesign(selected)}>🧪 이 주제로 실험 설계 시작 →</button>}
@@ -2092,7 +2184,7 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>01</span>
               <h3>본문 요청서</h3>
-              <p>{selected.kind === "experiment" ? "실전 검증실에서 가져온 원문 답변과 수동 판정 근거로 영문 Blogger 글을 작성합니다. 가격·세금 글 템플릿은 적용하지 않습니다." : selected.contentPlan ? "통합 기획에서 확정한 검색 의도·차별화 가치·첫 답을 반영해 SEO 메타와 Blogger HTML까지 한 번에 만듭니다." : "통합 기획 없이도 작성할 수 있지만, 검색 의도와 차별화 가치를 먼저 확정하면 글 품질이 더 안정적입니다."}</p>
+              <p>{selected.kind === "experiment" ? "실험실에서 수집한 실제 AI 3사 답변과 공통 질문을 활용해 ChatGPT에서 영문 글을 작성합니다. 정답형과 추천형을 구분하며 가격·결제 글 템플릿은 적용하지 않습니다." : selected.contentPlan ? "통합 기획에서 확정한 검색 의도·차별화 가치·첫 답을 반영해 SEO 메타와 Blogger HTML까지 한 번에 만듭니다." : "통합 기획 없이도 작성할 수 있지만, 검색 의도와 차별화 가치를 먼저 확정하면 글 품질이 더 안정적입니다."}</p>
               <div className={styles.requestActions}>
                 {selected.kind === "experiment" && !selectedExperimentReady ? (
                   <button className={styles.primaryAction} type="button" onClick={() => startExperimentDesign(selected)}>🧪 먼저 실험 설계·검증하기</button>
@@ -2123,7 +2215,8 @@ export default function GoogleBlogSchedulePage() {
             <section className={styles.requestCard}>
               <span className={styles.stepNo}>02</span>
               <h3>이미지 요청서 6장</h3>
-              <p>{selected.kind === "experiment" ? "실험 대표·테스트 설정·AI 답변·정답 공개·점수판·엉뚱한 실수 6장. Ground Truth와 실제 채점에 없는 내용은 넣지 않습니다." : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              <p>{selected.kind === "experiment" ? (selectedRecommendationImages ? "6장 중복 방지 적용: 00 관심·01 공통 질문·02 선택 결과·03 선정 이유·04 단점·05 독자 체크리스트. 각각 다른 근거와 디자인으로 제작합니다." : selected.experimentMode === "recommend" ? "대표·공통 질문·3사 추천·선정 이유·장단점·요약 6장. 존재하지 않는 정답이나 승자는 넣지 않습니다." : "실험 대표·테스트 설정·실제 AI 답변·정답 공개·근거 검증·발견 6장. 없는 사실은 넣지 않습니다.") : "대표 이미지부터 가격·결제·비교·요약까지 슬롯별로 ChatGPT 새 창에 바로 전달합니다."}</p>
+              {!imageEvidenceReady && <p>⚠️ 현재 저장된 실험 자료에서 공통 질문과 실제 답변을 읽을 수 없습니다. 실험실에서 같은 발행리스트 항목으로 다시 전달하면 이미지를 제작할 수 있습니다.</p>}
               <div className={styles.imagePromptGrid}>
                 {IMAGE_SLOTS.map(slot => {
                   const prompt = buildImagePrompt(selected, slot, selected.contentPlan);
@@ -2132,7 +2225,7 @@ export default function GoogleBlogSchedulePage() {
                     <div key={slot.id} className={styles.imagePromptItem}>
                       <div><b>{slot.id} · {imageSlotFor(selected, slot).label}</b><small>{imageSlotFor(selected, slot).role}</small></div>
                       <div>
-                        <a
+                        {imageEvidenceReady ? <a
                           href={chatUrl}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -2140,9 +2233,13 @@ export default function GoogleBlogSchedulePage() {
                             startWork();
                             void copyText(prompt, `${slot.id} 이미지 요청서를 열고 복사했습니다.`);
                           }}
-                        >GPT 열기</a>
-                        <button onClick={() => void copyText(prompt, `${slot.id} 이미지 요청서를 복사했습니다.`)}>복사</button>
+                        >GPT 열기</a> : <span>실험 원문 확인 필요</span>}
+                        <button disabled={!imageEvidenceReady} onClick={() => void copyText(prompt, `${slot.id} 이미지 요청서를 복사했습니다.`)}>복사</button>
                       </div>
+                      <details className={styles.promptDetails}>
+                        <summary>요청서 내용 확인</summary>
+                        <textarea readOnly value={prompt} />
+                      </details>
                     </div>
                   );
                 })}
