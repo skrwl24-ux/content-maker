@@ -4,7 +4,7 @@ export type ImageSlot = "hero" | Provider | "insight";
 export interface AtlasProject {
  id:string; topic:string; category:string; date:string; updatedAt:string; status:Status; question:string; notes:string;
  responses:Record<Provider,string>; images:Record<ImageSlot,string>; analysis:string; articleRaw:string; publishedUrl:string;
- analysisSignature?:string; articleSignature?:string; imageSourceSigs?:Partial<Record<ImageSlot,string>>;
+ analysisSignature?:string; articleSignature?:string; imageSourceSigs?:Partial<Record<ImageSlot,string>>; publishedTitle?:string;
 }
 export interface ParsedArticle {
  valid:boolean; errors:string[]; title:string; description:string; slug:string; labels:string; html:string; navigationGenerated:boolean;
@@ -12,6 +12,8 @@ export interface ParsedArticle {
 export const STORAGE_KEY:string;
 export const BLOG_BASE:string;
 export const PROVIDERS:Provider[];
+export function hasKorean(value:unknown):boolean;
+export function buildEnglishQuestionTranslationPrompt(project:AtlasProject):string;
 export const IMAGE_SLOTS:Array<{id:ImageSlot;label:string;note:string}>;
 export const CATEGORIES:string[];
 export const STATUS:Status[];
