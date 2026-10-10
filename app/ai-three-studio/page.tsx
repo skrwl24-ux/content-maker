@@ -5,7 +5,7 @@ import {ensureAnonymousSession} from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 import {
  STORAGE_KEY,CATEGORIES,STATUS,STATUS_LABEL,PROVIDERS,IMAGE_SLOTS,
- createExperiment,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
+ createExperiment,buildCommonQuestion,isLegacyCommonQuestion,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
  buildArticlePrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
  assembleArticle,validPublishedUrl,relatedProjects,
  evidenceSignature,articleSignature,analysisIsFresh,articleIsFresh,imageSourceSignature,imageIsFresh
@@ -114,6 +114,17 @@ export default function AiThreeComparisonStudioV3() {
  const readyImages=selected?IMAGE_SLOTS.filter(s=>imageIsFresh(selected,s.id)).length:0;
  const readyToCopy=!!selected&&!!parsed?.valid&&analysisIsFresh(selected)&&articleIsFresh(selected)&&readyImages===IMAGE_SLOTS.length&&liveResult?.errors.length===0;
  const related=selected?relatedProjects(selected,projects):[];
+ function updateCommonQuestion() {
+  if(!selected)return;
+  if(selected.status==="published"){setMessage("이미 발행한 실험의 공통 질문은 변경할 수 없습니다.");return;}
+  const next=buildCommonQuestion(selected.topic,selected.date);
+  if(selected.question===next){setMessage("이미 글과 이미지 분리 규칙이 적용된 질문입니다.");return;}
+  const hasEvidence=PROVIDERS.some(id=>!!selected.responses[id]?.trim()||!!selected.images[id]) ||
+   !!selected.analysis.trim()||!!selected.articleRaw.trim()||!!selected.images.hero||!!selected.images.insight;
+  if(hasEvidence&&!window.confirm("이미 수집한 원문·이미지가 있습니다. 질문을 변경하면 기존 자료와 다른 실험이 되므로 세 AI에게 동일한 새 질문으로 다시 실험해야 합니다. 저장된 답변은 삭제하지 않지만 이전 분석·이미지·최종 글은 재검증 전 발행할 수 없습니다. 변경할까요?"))return;
+  patchProject(selected.id,{question:next});
+  setMessage("새 공통 질문 규칙 적용 완료. 이미지와 글을 분리하되 같은 질문을 3사에 한 번씩 입력하세요.");
+ }
  function patchProject(id:string,patch:Partial<AtlasProject>) {
   setProjects(prev=>prev.map(p=>p.id===id?{...p,...patch,updatedAt:todayLocal()}:p));
  }
@@ -285,10 +296,13 @@ export default function AiThreeComparisonStudioV3() {
       <div className={styles.sectionTitle}><span>STEP 02</span><h2>공통 질문과 AI 3사 답변</h2><p>같은 질문을 세 AI에 각각 붙여넣고 답변과 원본 이미지를 저장하세요. 내용은 줄이거나 재작성하지 않습니다.</p></div>
       <ProjectTitle selected={selected}/>
       <label>공통 질문 (영어)
-       <textarea rows={5} value={selected.question} onChange={e=>patchProject(selected.id,{question:e.target.value})}/>
+       <textarea rows={9} value={selected.question} onChange={e=>patchProject(selected.id,{question:e.target.value})}/>
       </label>
+      <p className={styles.muted}>공통 질문 하나에 ‘일반 글 답변 + 글자 없는 이미지 1장’을 동시에 요청합니다. 세 AI 모두 정확히 같은 문구를 사용하세요.</p>
+      {isLegacyCommonQuestion(selected.question,selected.topic,selected.date)&&<p className={styles.warning}>이 주제는 예전 질문 형식입니다. 아래 버튼으로 이미지·글 분리 규칙을 적용할 수 있습니다. 기존 답변은 자동 변경하지 않습니다.</p>}
       <div className={styles.actions}>
        <button type="button" className={styles.primary} disabled={!selected.question.trim()} onClick={()=>void copy(selected.question,"공통 질문")}>세 AI 공통 질문 복사</button>
+       <button type="button" disabled={selected.status==="published"||selected.question===buildCommonQuestion(selected.topic,selected.date)} onClick={updateCommonQuestion}>이미지·글 분리 규칙 적용</button>
       </div>
       <label>실제 운영자 메모 (선택)
        <textarea rows={3} placeholder="실제로 궁금했던 이유나 개인적인 관찰이 있다면 적어주세요. 없는 경험을 생성하지 않습니다." value={selected.notes} onChange={e=>patchProject(selected.id,{notes:e.target.value})}/>

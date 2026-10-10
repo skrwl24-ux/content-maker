@@ -17,6 +17,8 @@ export const CATEGORIES:string[];
 export const STATUS:Status[];
 export const STATUS_LABEL:Record<Status,string>;
 export function makeId():string;
+export function buildCommonQuestion(topic:string,date:string):string;
+export function isLegacyCommonQuestion(question:string,topic:string,date:string):boolean;
 export function createExperiment(topic:string,category?:string,date?:string):AtlasProject;
 export function normalizeTopic(text:string):string;
 export function isDuplicateTopic(topic:string,existing:Array<string|Pick<AtlasProject,"topic">>):boolean;

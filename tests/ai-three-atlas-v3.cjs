@@ -126,3 +126,40 @@ test("each AI reply card opens its real AI service in a new tab without leaving 
  assert.match(page,/href=\{AI_SITES\[id\]\} target="_blank" rel="noopener noreferrer"/);
  assert.match(page,/사이트 열기 ↗/);
 });
+
+test("new experiments request normal chat text and one independent text-free image with a single common prompt",async()=>{
+ const m=await mod;
+ const topic="세상에서 가장 좋은 직업은 무엇일까?";
+ const p=m.createExperiment(topic,"Money & Career","2026-10-10");
+ assert.equal(p.question,m.buildCommonQuestion(topic,"2026-10-10"));
+ assert.match(p.question,/세상에서 가장 좋은 직업은 무엇일까/);
+ assert.match(p.question,/three strengths, two realistic trade-offs, and uncertainty/i);
+ assert.match(p.question,/written answer as normal chat text OUTSIDE the image/);
+ assert.match(p.question,/exactly ONE original image/);
+ assert.match(p.question,/NO text, words, letters, titles, captions, labels, numbers, charts, tables/i);
+ assert.match(p.question,/two separate outputs/);
+ assert.doesNotMatch(p.question,/Create ONE original image illustrating your choice\./);
+});
+test("older automatically generated questions are detected but not silently replaced",async()=>{
+ const m=await mod;const topic="세상에서 가장 좋은 직업은 무엇일까?",date="2026-10-10";
+ const old="As of "+date+", answer the following topic by choosing ONE clear option: "+topic+". Explain your criteria, three strengths, two realistic trade-offs and uncertainty. Do not present your opinion as universal fact. Answer in English. Create ONE original image illustrating your choice.";
+ assert.equal(m.isLegacyCommonQuestion(old,topic,date),true);
+ assert.equal(m.isLegacyCommonQuestion(m.buildCommonQuestion(topic,date),topic,date),false);
+ assert.equal(m.isLegacyCommonQuestion("I customized my question",topic,date),false);
+});
+test("app exposes explicit safe upgrade instead of rewriting stored experiment evidence",()=>{
+ const fs=require("node:fs"), path=require("node:path");
+ const screen=fs.readFileSync(path.join(__dirname,"../app/ai-three-studio/page.tsx"),"utf8");
+ assert.match(screen,/이미지·글 분리 규칙 적용/);
+ assert.match(screen,/isLegacyCommonQuestion\(selected.question,selected.topic,selected.date\)/);
+ assert.match(screen,/hasEvidence&&!window.confirm/);
+ assert.match(screen,/selected.status==="published"/);
+});
+test("changing to the new shared question invalidates prior analysis and source images",async()=>{
+ const m=await mod,p=project(m);
+ assert.equal(m.analysisIsFresh(p),true);
+ p.question=m.buildCommonQuestion(p.topic,p.date)+" extra";
+ assert.equal(m.analysisIsFresh(p),false);
+ assert.equal(m.imageIsFresh(p,"gemini"),false);
+ assert.equal(m.imageIsFresh(p,"chatgpt"),false);
+});
