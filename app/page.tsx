@@ -1367,6 +1367,7 @@ export default function Home() {
         <a className="presaleNavLink" href="/presale-v1">🏙️ 분양 제작실 V2</a>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule/lab"}>🔬 AI 실전 검증실</button>
         <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
+        <button className="secondary compact" onClick={() => window.location.href = "/ai-three-studio"}>🤖 AI 3사 비교 전용 V3</button>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
       </div>
     </header>
