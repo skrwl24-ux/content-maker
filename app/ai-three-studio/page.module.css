@@ -102,3 +102,10 @@
 @media(max-width:1050px){.grid{grid-template-columns:225px minmax(0,1fr)}.panel{padding:20px}.responseGrid{grid-template-columns:1fr}.uploadGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.shell{padding:12px 12px 40px}.header{padding:20px;flex-direction:column}.header h1{font-size:25px}.brand{flex-wrap:wrap}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.stats>div{padding:12px}.stepNav{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}.sidebar{position:static}.topicList{max-height:210px}.panel{padding:18px}.register{grid-template-columns:1fr}}
 @media(max-width:480px){.uploadGrid{grid-template-columns:1fr}.sectionTitle h2{font-size:20px}.stats b{font-size:21px}.stepNav strong{font-size:12px}.stepNav small{font-size:10px}}
+
+.metaGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 20px}
+.metaGrid>div{background:#f5f9fa;border:1px solid #dbe8ec;padding:12px;border-radius:12px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.metaGrid small{font-size:11px;color:#6f8591;font-weight:800}
+.metaGrid strong{font-size:12px;color:#1f4150;word-break:break-word;line-height:1.5}
+.metaGrid button{align-self:flex-start;background:white;border:1px solid #bfcfd7;padding:8px 10px;border-radius:8px;font-size:11px;font-weight:800;color:#376d7c;width:auto}
+@media(max-width:580px){.metaGrid{grid-template-columns:1fr}}
