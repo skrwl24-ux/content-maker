@@ -5,7 +5,7 @@ import {ensureAnonymousSession} from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 import {
  STORAGE_KEY,CATEGORIES,STATUS,STATUS_LABEL,PROVIDERS,IMAGE_SLOTS,
- createExperiment,buildCommonQuestion,isLegacyCommonQuestion,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
+ createExperiment,buildCommonQuestion,isLegacyCommonQuestion,hasKorean,buildEnglishQuestionTranslationPrompt,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
  buildArticlePrompt,buildArticleRepairPrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
  assembleArticle,validPublishedUrl,relatedProjects,
  evidenceSignature,articleSignature,analysisIsFresh,articleIsFresh,imageSourceSignature,imageIsFresh
@@ -45,6 +45,7 @@ function normalizeProjects(input:unknown):AtlasProject[] {
   articleSignature:typeof p.articleSignature==="string"?p.articleSignature:"",
   imageSourceSigs:p.imageSourceSigs&&typeof p.imageSourceSigs==="object"?p.imageSourceSigs:{},
   publishedUrl:typeof p.publishedUrl==="string"?p.publishedUrl:"",
+  publishedTitle:typeof p.publishedTitle==="string"?p.publishedTitle:"",
   date:typeof p.date==="string"?p.date:todayLocal(),
   updatedAt:typeof p.updatedAt==="string"?p.updatedAt:todayLocal(),
   responses:{chatgpt:String(p.responses?.chatgpt||""),claude:String(p.responses?.claude||""),gemini:String(p.responses?.gemini||"")},
@@ -150,7 +151,7 @@ export default function AiThreeComparisonStudioV3() {
   if(!selected)return;
   if(!readyToCopy){setMessage("완성 글 검증과 이미지 5장 연결을 마친 후 발행 완료로 표시하세요.");return;}
   if(!validPublishedUrl(selected.publishedUrl)){setMessage("실제 공개된 Blogger URL을 먼저 입력하세요. 예정 주소로 발행 처리하지 않습니다.");return;}
-  patchProject(selected.id,{status:"published"});
+  patchProject(selected.id,{status:"published",publishedTitle:parsed?.title||selected.publishedTitle||""});
   setMessage("발행 완료로 기록했습니다. 이후 새 글이 늘어나면 관련 글 목록이 갱신됩니다. 이미 발행한 글 본문은 자동 수정되지 않습니다.");
  }
  function registerPublished() {
@@ -158,7 +159,7 @@ export default function AiThreeComparisonStudioV3() {
   if(!title||!validPublishedUrl(url)){setMessage("기존 글 제목과 실제 AI Price Atlas Blogger 게시물 URL(.html)을 입력하세요.");return;}
   if(isDuplicateTopic(title,projects)){setMessage("이미 유사한 주제가 등록되어 있습니다.");return;}
   const row=createExperiment(title,importCategory,todayLocal());
-  setProjects(prev=>[{...row,status:"published",publishedUrl:url},...prev]);
+  setProjects(prev=>[{...row,status:"published",publishedUrl:url,publishedTitle:hasKorean(title)?"":title},...prev]);
   setSelectedId(row.id);setRegisterOpen(false);setImportTitle("");setImportUrl("");
   setMessage("기존 글을 내부 링크 후보로 등록했습니다. 원문이 없는 기존 글은 새 실험으로 재사용하지 마세요.");
  }
@@ -299,9 +300,11 @@ export default function AiThreeComparisonStudioV3() {
        <textarea rows={9} value={selected.question} onChange={e=>patchProject(selected.id,{question:e.target.value})}/>
       </label>
       <p className={styles.muted}>공통 질문 하나에 ‘일반 글 답변 + 글자 없는 이미지 1장’을 동시에 요청합니다. 세 AI 모두 정확히 같은 문구를 사용하세요.</p>
+      {hasKorean(selected.question)&&<p className={styles.warning}>영어 글로벌 블로그의 실험 질문에 한국어 주제가 들어 있습니다. 아직 답변을 수집하지 않았다면 ‘영문 질문 번역 요청서’로 번역을 받은 뒤 공통 질문 칸에 붙여넣고, 세 AI에 똑같은 영어 질문을 보내세요. 이미 수집한 답변은 기존 질문의 원문을 유지해야 합니다.</p>}
       {isLegacyCommonQuestion(selected.question,selected.topic,selected.date)&&<p className={styles.warning}>이 주제는 예전 질문 형식입니다. 아래 버튼으로 이미지·글 분리 규칙을 적용할 수 있습니다. 기존 답변은 자동 변경하지 않습니다.</p>}
       <div className={styles.actions}>
        <button type="button" className={styles.primary} disabled={!selected.question.trim()} onClick={()=>void copy(selected.question,"공통 질문")}>세 AI 공통 질문 복사</button>
+       {hasKorean(selected.question)&&<button type="button" onClick={()=>copyFactory(()=>buildEnglishQuestionTranslationPrompt(selected),"영문 질문 번역 요청서")}>영문 질문 번역 요청서 복사</button>}
        <button type="button" disabled={selected.status==="published"||selected.question===buildCommonQuestion(selected.topic,selected.date)} onClick={updateCommonQuestion}>이미지·글 분리 규칙 적용</button>
       </div>
       <label>실제 운영자 메모 (선택)
