@@ -4,6 +4,7 @@ export type ImageSlot = "hero" | Provider | "insight";
 export interface AtlasProject {
  id:string; topic:string; category:string; date:string; updatedAt:string; status:Status; question:string; notes:string;
  responses:Record<Provider,string>; images:Record<ImageSlot,string>; analysis:string; articleRaw:string; publishedUrl:string;
+ analysisSignature?:string; articleSignature?:string; imageSourceSigs?:Partial<Record<ImageSlot,string>>;
 }
 export interface ParsedArticle {
  valid:boolean; errors:string[]; title:string; description:string; slug:string; labels:string; html:string;
@@ -31,3 +32,10 @@ export function relatedProjects(project:AtlasProject,projects:AtlasProject[]):At
 export function relatedHtml(project:AtlasProject,projects:AtlasProject[],location:"mid"|"end"):string;
 export function parseArticle(raw:string):ParsedArticle;
 export function assembleArticle(project:AtlasProject,projects:AtlasProject[],allowMissingImages?:boolean):{html:string;errors:string[];parsed:ParsedArticle};
+
+export function evidenceSignature(project:AtlasProject):string;
+export function articleSignature(project:AtlasProject):string;
+export function analysisIsFresh(project:AtlasProject):boolean;
+export function articleIsFresh(project:AtlasProject):boolean;
+export function imageSourceSignature(project:AtlasProject,slot:ImageSlot):string;
+export function imageIsFresh(project:AtlasProject,slot:ImageSlot):boolean;
