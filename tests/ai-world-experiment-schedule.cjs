@@ -29,3 +29,22 @@ test("quiz version preserves original answer and warns against changing it",asyn
  assert.match(p,/Singapore/);assert.match(p,/receipt.pdf/);
  assert.match(p,/정답키와 PDF가 충돌/);assert.match(p,/\[IMAGE 03 — Answer revealed\]/);
 });
+
+test("the original replies remain byte-for-byte intact and are never silently clipped",async()=>{
+ const {buildExperimentScheduleReport}=await f;
+ const longOriginal="  FIRST LINE\\n" + "d".repeat(40000) + "\\nLAST LINE  ";
+ const record=JSON.parse(buildExperimentScheduleReport({
+   ...state,runs:{...responses,claude:{...responses.claude,response:longOriginal}}
+ }));
+ assert.equal(record.independentReplies.find(x=>x.provider==="Claude").verbatimResponse,longOriginal);
+});
+test("the schedule article prompt requires first-person inquiry grounded in real observations",async()=>{
+ const {buildExperimentSchedulePrompt}=await f;
+ const p=buildExperimentSchedulePrompt(state);
+ assert.match(p,/1인칭 탐구형 문체/);
+ assert.match(p,/궁금했던 질문/);
+ assert.match(p,/추가 조사·검증·체험·감정/);
+ assert.match(p,/분석 질문 3~5개/);
+ assert.match(p,/전체 원문/);
+ assert.match(p,/\\[IMAGE 05 — Final takeaway\\]/);
+});
