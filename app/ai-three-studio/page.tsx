@@ -7,7 +7,8 @@ import {
  STORAGE_KEY,CATEGORIES,STATUS,STATUS_LABEL,PROVIDERS,IMAGE_SLOTS,
  createExperiment,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
  buildArticlePrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
- assembleArticle,validPublishedUrl,relatedProjects
+ assembleArticle,validPublishedUrl,relatedProjects,
+ evidenceSignature,articleSignature,analysisIsFresh,articleIsFresh,imageSourceSignature,imageIsFresh
 } from "@/lib/ai-three-atlas-v3.mjs";
 import type {AtlasProject,Provider,ImageSlot,Status} from "@/lib/ai-three-atlas-v3.mjs";
 
@@ -39,6 +40,9 @@ function normalizeProjects(input:unknown):AtlasProject[] {
   notes:typeof p.notes==="string"?p.notes:"",
   analysis:typeof p.analysis==="string"?p.analysis:"",
   articleRaw:typeof p.articleRaw==="string"?p.articleRaw:"",
+  analysisSignature:typeof p.analysisSignature==="string"?p.analysisSignature:"",
+  articleSignature:typeof p.articleSignature==="string"?p.articleSignature:"",
+  imageSourceSigs:p.imageSourceSigs&&typeof p.imageSourceSigs==="object"?p.imageSourceSigs:{},
   publishedUrl:typeof p.publishedUrl==="string"?p.publishedUrl:"",
   date:typeof p.date==="string"?p.date:todayLocal(),
   updatedAt:typeof p.updatedAt==="string"?p.updatedAt:todayLocal(),
@@ -104,8 +108,8 @@ export default function AiThreeComparisonStudioV3() {
  const preview=selected?assembleArticle(selected,projects,true):null;
  const liveResult=selected?assembleArticle(selected,projects,false):null;
  const parsed=selected?parseArticle(selected.articleRaw):null;
- const readyImages=selected?IMAGE_SLOTS.filter(s=>/^https:\/\//i.test(selected.images?.[s.id]||"")).length:0;
- const readyToCopy=!!selected&&!!parsed?.valid&&readyImages===IMAGE_SLOTS.length&&liveResult?.errors.length===0;
+ const readyImages=selected?IMAGE_SLOTS.filter(s=>imageIsFresh(selected,s.id)).length:0;
+ const readyToCopy=!!selected&&!!parsed?.valid&&analysisIsFresh(selected)&&articleIsFresh(selected)&&readyImages===IMAGE_SLOTS.length&&liveResult?.errors.length===0;
  const related=selected?relatedProjects(selected,projects):[];
  function patchProject(id:string,patch:Partial<AtlasProject>) {
   setProjects(prev=>prev.map(p=>p.id===id?{...p,...patch,updatedAt:todayLocal()}:p));
@@ -175,14 +179,14 @@ export default function AiThreeComparisonStudioV3() {
    });
    if(error)throw error;
    const url=supabase.storage.from("content-maker-assets").getPublicUrl(path).data.publicUrl;
-   patchProject(selected.id,{images:{...selected.images,[slot]:url}});
+   patchProject(selected.id,{images:{...selected.images,[slot]:url},imageSourceSigs:{...selected.imageSourceSigs,[slot]:imageSourceSignature(selected,slot)}});
    setMessage("이미지 "+slot+" 저장 완료. 공개 URL을 본문에 연결합니다.");
   }catch(e){setMessage("업로드 실패: "+(e instanceof Error?e.message:"스토리지 또는 권한을 확인하세요."));}
   finally{setUploading(null);}
  }
  function changeImageUrl(slot:ImageSlot,url:string){
   if(!selected)return;
-  patchProject(selected.id,{images:{...selected.images,[slot]:url}});
+  patchProject(selected.id,{images:{...selected.images,[slot]:url},imageSourceSigs:{...selected.imageSourceSigs,[slot]:url?imageSourceSignature(selected,slot):""}});
  }
  function setReply(provider:Provider,value:string){
   if(!selected)return;
@@ -317,12 +321,12 @@ export default function AiThreeComparisonStudioV3() {
        <a className={styles.anchorButton} href="https://chatgpt.com/" target="_blank" rel="noreferrer">ChatGPT 열기 ↗</a>
       </div>
       <label>GPT가 작성한 종합 분석 결과 전체
-       <textarea rows={17} placeholder="ChatGPT에서 받은 종합 분석 결과를 이곳에 붙여넣어 저장하세요." value={selected.analysis} onChange={e=>patchProject(selected.id,{analysis:e.target.value,status:"analyzing"})}/>
+       <textarea rows={17} placeholder="ChatGPT에서 받은 종합 분석 결과를 이곳에 붙여넣어 저장하세요." value={selected.analysis} onChange={e=>patchProject(selected.id,{analysis:e.target.value,analysisSignature:e.target.value?evidenceSignature(selected):"",status:"analyzing"})}/>
       </label>
       <div className={styles.rule}><b>핵심 포인트 이미지도 여기서 시작합니다.</b><p>종합 분석에서 가장 중요한 발견 하나만 뽑아 1600×900 영문 이미지로 만듭니다. 이미지 요청서는 실제 원문과 분석을 함께 참조합니다.</p></div>
       <div className={styles.actions}>
-       <button type="button" disabled={!selected.analysis.trim()} onClick={()=>copyFactory(()=>buildInsightPrompt(selected),"핵심 포인트 이미지 요청서")}>핵심 이미지 요청서 복사</button>
-       <button type="button" className={styles.primary} disabled={!responsesReady(selected)||!selected.analysis.trim()} onClick={()=>{setStatus("drafting");setStage("publish");}}>블로그 최종 글 제작으로 →</button>
+       <button type="button" disabled={!analysisIsFresh(selected)} onClick={()=>copyFactory(()=>buildInsightPrompt(selected),"핵심 포인트 이미지 요청서")}>핵심 이미지 요청서 복사</button>
+       <button type="button" className={styles.primary} disabled={!responsesReady(selected)||!analysisIsFresh(selected)} onClick={()=>{setStatus("drafting");setStage("publish");}}>블로그 최종 글 제작으로 →</button>
       </div>
      </>}
     </section>}
@@ -338,13 +342,13 @@ export default function AiThreeComparisonStudioV3() {
        <p>1인칭 궁금증 → 클릭형 목차 → 각 AI 원문 + 생성 이미지 → GPT 분석과 운영자의 해석 → 핵심 카드 → 관련 AI 실험 링크</p>
       </div>
       <div className={styles.actions}>
-       <button type="button" disabled={!responsesReady(selected)||!selected.analysis.trim()} className={styles.primary}
+       <button type="button" disabled={!responsesReady(selected)||!analysisIsFresh(selected)} className={styles.primary}
         onClick={()=>copyFactory(()=>buildArticlePrompt(selected),"최종 Blogger 글 요청서")}>최종 글 요청서 복사</button>
        <a className={styles.anchorButton} href="https://chatgpt.com/" target="_blank" rel="noreferrer">ChatGPT 열기 ↗</a>
        <button type="button" onClick={()=>void copy(buildHeroPrompt(selected),"대표 썸네일 이미지 요청서")}>대표 썸네일 요청서</button>
       </div>
       <label>GPT에서 받은 최종 발행 글 전체 (마커 포함)
-       <textarea rows={11} value={selected.articleRaw} onChange={e=>patchProject(selected.id,{articleRaw:e.target.value,status:"drafting"})}
+       <textarea rows={11} value={selected.articleRaw} onChange={e=>patchProject(selected.id,{articleRaw:e.target.value,articleSignature:e.target.value?articleSignature(selected):"",status:"drafting"})}
         placeholder={"[FINAL_TITLE]\n...\n[META_DESCRIPTION]\n...\n[SLUG]\n...\n[LABELS]\n...\n[BLOGGER_HTML]\n<h2>...</h2>\n[/BLOGGER_HTML]"}/>
       </label>
       <div className={parsed?.valid?styles.validationGood:styles.validation}>
@@ -362,12 +366,15 @@ export default function AiThreeComparisonStudioV3() {
         <button type="button" onClick={()=>void copy(field.value,field.label)}>{field.label} 복사</button>
        </div>)}
       </div>}
-      <h3 className={styles.subhead}>이미지 5장 연결 <span>{readyImages}/5</span></h3>
+      {selected.analysis.trim()&&!analysisIsFresh(selected)&&<p className={styles.warning}>⚠️ 질문 또는 AI 원문이 GPT 분석 후 바뀌었습니다. 종합 분석을 다시 받아 저장해야 합니다.</p>}
+       {selected.articleRaw.trim()&&!articleIsFresh(selected)&&<p className={styles.warning}>⚠️ 글 생성 이후 근거가 바뀌었습니다. 최신 원문과 분석으로 최종 글을 다시 작성해야 합니다.</p>}
+       <h3 className={styles.subhead}>이미지 5장 연결 <span>{readyImages}/5</span></h3>
       <div className={styles.uploadGrid}>
        {IMAGE_SLOTS.map(slot=><div className={styles.uploadCard} key={slot.id}>
         <b>{slot.label}</b><small>{slot.note}</small>
         <div className={styles.assetPreview}>{/^https:\/\//.test(selected.images[slot.id])?<img src={selected.images[slot.id]} alt={slot.label}/>:<span>이미지 없음</span>}</div>
-        <label className={styles.fileLabel}>{uploading===slot.id?"업로드 중…":"파일 업로드"}
+        {!!selected.images[slot.id]&&!imageIsFresh(selected,slot.id)&&<small style={{color:"#9d5c2b"}}>원문/분석 변경됨 · 이미지 재확인 필요</small>}
+         <label className={styles.fileLabel}>{uploading===slot.id?"업로드 중…":"파일 업로드"}
          <input type="file" accept="image/png,image/jpeg,image/webp" disabled={uploading!==null} onChange={e=>{void uploadImage(slot.id,e.currentTarget.files?.[0]||null);e.currentTarget.value="";}}/>
         </label>
         <input aria-label={slot.label+" 이미지 URL"} placeholder="또는 HTTPS 이미지 URL" value={selected.images[slot.id]} onChange={e=>changeImageUrl(slot.id,e.target.value)} />
@@ -384,7 +391,7 @@ export default function AiThreeComparisonStudioV3() {
        <button type="button" onClick={()=>setShowPreview(v=>!v)}>{showPreview?"미리보기 접기":"미리보기 보기"}</button>
        <a className={styles.anchorButton} href="https://www.blogger.com/" target="_blank" rel="noreferrer">Blogger 열기 ↗</a>
       </div>
-      {!readyToCopy&&<p className={styles.warning}>최종 글 마커 검사와 이미지 5장 연결이 완료되면 HTML 전체 복사 버튼이 활성화됩니다.</p>}
+      {!readyToCopy&&<p className={styles.warning}>최종 글·분석의 근거 일치와 이미지 5장 최신 연결이 완료되면 HTML 전체 복사 버튼이 활성화됩니다. {liveResult?.errors.join(" / ")}</p>}
       {showPreview&&<div className={styles.preview}>
        <div><b>Blogger HTML 미리보기</b><span>이미지·AI 원문·내부링크 자동 삽입</span></div>
        {parsed?.valid?<iframe title="AI 비교글 Blogger 미리보기" sandbox="" srcDoc={'<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#213045;margin:24px auto;max-width:790px;padding:0 18px;line-height:1.7}h2{font-size:25px}h3{font-size:20px}img{max-width:100%;height:auto}blockquote{white-space:normal;background:#f5f7fa;padding:14px;border-left:3px solid #99adbd;overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccd7e2;padding:7px}a{color:#16619a}</style></head><body>'+(preview?.html||"")+'</body></html>'}/>:
