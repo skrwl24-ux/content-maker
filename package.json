@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs tests/paramma-money.cjs tests/apartment-search-plan.cjs tests/apartment-story.cjs tests/apartment-matching.cjs tests/apartment-data-quality.cjs tests/work-image-plan.cjs tests/apartment-presale.cjs tests/apartment-presale-candidates.cjs tests/ai-price-atlas-lab.cjs tests/ai-price-atlas-auto-grade.cjs tests/google-blogger-parser.cjs tests/google-content-plan.cjs && next build",
-    "start": "next start"
+    "build": "node --test tests/jibssuk-voice.cjs tests/paramma-image-plans.cjs tests/paramma-money.cjs tests/apartment-search-plan.cjs tests/apartment-story.cjs tests/apartment-matching.cjs tests/apartment-data-quality.cjs tests/work-image-plan.cjs tests/apartment-presale.cjs tests/apartment-presale-candidates.cjs tests/ai-price-atlas-lab.cjs tests/ai-price-atlas-auto-grade.cjs tests/google-blogger-parser.cjs tests/google-content-plan.cjs tests/ai-three-atlas-v3.cjs && next build",
+    "start": "next start",
+    "test:atlas-v3": "node --test tests/ai-three-atlas-v3.cjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
