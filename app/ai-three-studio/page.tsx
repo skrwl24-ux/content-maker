@@ -6,7 +6,7 @@ import styles from "./page.module.css";
 import {
  STORAGE_KEY,CATEGORIES,STATUS,STATUS_LABEL,PROVIDERS,IMAGE_SLOTS,
  createExperiment,buildCommonQuestion,isLegacyCommonQuestion,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
- buildArticlePrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
+ buildArticlePrompt,buildArticleRepairPrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
  assembleArticle,validPublishedUrl,relatedProjects,
  evidenceSignature,articleSignature,analysisIsFresh,articleIsFresh,imageSourceSignature,imageIsFresh
 } from "@/lib/ai-three-atlas-v3.mjs";
@@ -357,7 +357,7 @@ export default function AiThreeComparisonStudioV3() {
     {stage==="publish"&&<section className={styles.panel}>
      {!selected?<NoSelection/>:<>
       <div className={styles.sectionTitle}><span>STEP 04</span><h2>최종 글 · 목차 · 이미지 · 관련 글</h2>
-       <p>원문은 사이트가 자동 삽입하고, 클릭형 목차는 ID 검사로 확인합니다. 이미 발행된 비교 글만 내부링크로 연결합니다.</p>
+       <p>원문과 클릭형 목차는 사이트가 자동 삽입합니다. GPT는 실제 영문 기사 문단을 작성하면 됩니다. 이미 발행된 글만 내부링크로 연결합니다.</p>
       </div>
       <ProjectTitle selected={selected}/>
       <div className={styles.rule}>
@@ -369,13 +369,14 @@ export default function AiThreeComparisonStudioV3() {
         onClick={()=>copyFactory(()=>buildArticlePrompt(selected),"최종 Blogger 글 요청서")}>최종 글 요청서 복사</button>
        <a className={styles.anchorButton} href="https://chatgpt.com/" target="_blank" rel="noreferrer">ChatGPT 열기 ↗</a>
        <button type="button" onClick={()=>void copy(buildHeroPrompt(selected),"대표 썸네일 이미지 요청서")}>대표 썸네일 요청서</button>
+        <button type="button" disabled={!selected.articleRaw.trim()||!parsed?.errors.length||!analysisIsFresh(selected)} onClick={()=>copyFactory(()=>buildArticleRepairPrompt(selected),"누락된 본문 재작성 요청서")}>오류 원고 재작성 요청서 복사</button>
       </div>
       <label>GPT에서 받은 최종 발행 글 전체 (마커 포함)
        <textarea rows={11} value={selected.articleRaw} onChange={e=>patchProject(selected.id,{articleRaw:e.target.value,articleSignature:e.target.value?articleSignature(selected):"",status:"drafting"})}
         placeholder={"[FINAL_TITLE]\n...\n[META_DESCRIPTION]\n...\n[SLUG]\n...\n[LABELS]\n...\n[BLOGGER_HTML]\n<h2>...</h2>\n[/BLOGGER_HTML]"}/>
       </label>
       <div className={parsed?.valid?styles.validationGood:styles.validation}>
-       <b>{parsed?.valid?"✓ 최종 HTML 형식·목차 검사 통과":"최종 글 검사"}</b>
+       <b>{parsed?.valid?(parsed.navigationGenerated?"✓ HTML 검증 통과 · 클릭형 목차 자동 생성":"✓ 최종 HTML 형식·목차 검사 통과"):"최종 글 검사"}</b>
        {parsed?.errors.length?parsed.errors.map((err,i)=><p key={i}>• {err}</p>):<p>원고 마커, 목차 이동 링크, 원문/이미지 표지, HTML 안전 규칙을 확인합니다.</p>}
       </div>
       {parsed?.valid&&<div className={styles.metaGrid}>

@@ -45,7 +45,8 @@ test("analysis request carries all complete verbatim responses including 40K cha
 });
 test("final prompt uses fixed six anchor ids and editorial voice but injects originals at assembly",async()=>{
  const m=await mod;const p=project(m);const prompt=m.buildArticlePrompt(p);
- for(const id of ["question","chatgpt","claude","gemini","analysis","takeaway"])assert.match(prompt,new RegExp('href="#'+id+'"'));
+ assert.match(prompt,/클릭형 목차.*사이트가 자동 생성/);
+ assert.doesNotMatch(prompt,/href="#question"/);
  assert.match(prompt,/1인칭 탐구형/);assert.match(prompt,/판에 박힌/);assert.match(prompt,/\[\[ORIGINAL_CHATGPT\]\]/);
 });
 test("valid final draft with all 10 placeholders and navigation passes",async()=>{
@@ -162,4 +163,66 @@ test("changing to the new shared question invalidates prior analysis and source 
  assert.equal(m.analysisIsFresh(p),false);
  assert.equal(m.imageIsFresh(p,"gemini"),false);
  assert.equal(m.imageIsFresh(p,"chatgpt"),false);
+});
+
+function editorialDraft() {
+ return '<p>Which career really offers the most meaningful life? I wanted a comparison that would expose the values behind each model’s answer, not just a simple list of winners and losers.</p>'+
+  '[[IMAGE_HERO]]<p>Each model received the exact same question, and each response was kept intact so readers can see the evidence for themselves.</p>'+
+  '[[ORIGINAL_CHATGPT]][[IMAGE_CHATGPT]]'+
+  '[[ORIGINAL_CLAUDE]][[IMAGE_CLAUDE]]'+
+  '[[ORIGINAL_GEMINI]][[IMAGE_GEMINI]]'+
+  '<p>When I compared the original answers, I noticed that the models did not weigh the same kinds of benefits equally. One prioritized meaning in daily work, while another emphasized financial stability. That difference is interesting because it changes what a good career should mean.</p>'+
+  '<p>These are recommendations rather than verified facts about every labor market. Conditions vary with location and experience, and none of these answers settles the question for everyone.</p>'+
+  '[[RELATED_MID]]'+
+  '<p>My takeaway is not that one model has proved the perfect job exists. The more valuable result is seeing which trade-offs I would be willing to accept. What would matter most to you when choosing a career?</p>'+
+  '[[IMAGE_INSIGHT]][[RELATED_END]]';
+}
+test("site creates clickable TOC with six destinations for substantial GPT text without any manual ids",async()=>{
+ const m=await mod;
+ const parsed=m.parseArticle(article(editorialDraft()));
+ assert.equal(parsed.valid,true,parsed.errors.join("; "));
+ assert.equal(parsed.navigationGenerated,true);
+ for(const id of ["question","chatgpt","claude","gemini","analysis","takeaway"]){
+  assert.equal((parsed.html.match(new RegExp('href="#'+id+'"','g'))||[]).length,1);
+  assert.equal((parsed.html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+ }
+ assert.ok(parsed.html.indexOf('href="#analysis"')<parsed.html.indexOf('id="analysis"'));
+ const p=project(m);p.articleRaw=article(editorialDraft());p.articleSignature=m.articleSignature(p);
+ const out=m.assembleArticle(p,[p]);
+ assert.deepEqual(out.errors,[]);
+ assert.equal((out.html.match(/<img /g)||[]).length,5);
+});
+test("placeholder-only output gets one meaningful article error, not twelve TOC errors",async()=>{
+ const m=await mod;
+ const text=m.PLACEHOLDERS||["IMAGE_HERO","ORIGINAL_CHATGPT","IMAGE_CHATGPT","ORIGINAL_CLAUDE","IMAGE_CLAUDE","ORIGINAL_GEMINI","IMAGE_GEMINI","IMAGE_INSIGHT","RELATED_MID","RELATED_END"];
+ const raw=article(text.map(s=>"[["+s+"]]").join("\n"));
+ const parsed=m.parseArticle(raw);
+ assert.equal(parsed.valid,false);
+ assert.ok(parsed.errors.some(x=>x.includes("본문 내용이 부족")));
+ assert.equal(parsed.errors.some(x=>x.includes("목차 링크/위치 누락")),false);
+ assert.ok(parsed.errors.length<=2);
+});
+test("article missing real analysis text cannot pass via fake TOC",async()=>{
+ const m=await mod;
+ const raw=article(editorialDraft().replace(/<p>When I compared[\s\S]*?<\/p>/,"").replace(/<p>These are recommendations[\s\S]*?<\/p>/,""));
+ const parsed=m.parseArticle(raw);
+ assert.equal(parsed.valid,false);
+ assert.ok(parsed.errors.some(x=>x.includes("본문 내용이 부족")));
+});
+test("site preserves correct existing TOC and rejects scripts before adding navigation",async()=>{
+ const m=await mod;
+ const existing=m.parseArticle(article());
+ assert.equal(existing.valid,true);
+ assert.equal(existing.navigationGenerated,false);
+ const invalid=m.parseArticle(article(editorialDraft().replace("[[RELATED_END]]","<script>alert(1)</script>[[RELATED_END]]")));
+ assert.equal(invalid.valid,false);
+ assert.ok(invalid.errors.some(x=>x.includes("허용하지 않은")));
+});
+test("incomplete draft recovery prompt includes original evidence and existing draft",async()=>{
+ const m=await mod,p=project(m);p.articleRaw=article(editorialDraft());
+ const recovered=m.buildArticleRepairPrompt(p);
+ assert.match(recovered,/PREVIOUS INCOMPLETE DRAFT/);
+ assert.match(recovered,/Which career really offers/);
+ assert.match(recovered,/Regenerate the whole article/);
+ assert.match(recovered,/원문/);
 });
