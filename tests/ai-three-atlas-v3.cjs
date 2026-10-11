@@ -128,18 +128,18 @@ test("each AI reply card opens its real AI service in a new tab without leaving 
  assert.match(page,/사이트 열기 ↗/);
 });
 
-test("new experiments request normal chat text and one independent text-free image with a single common prompt",async()=>{
+test("new experiments use one identical text-only question before separate image steps",async()=>{
  const m=await mod;
  const topic="세상에서 가장 좋은 직업은 무엇일까?";
  const p=m.createExperiment(topic,"Money & Career","2026-10-10");
  assert.equal(p.question,m.buildCommonQuestion(topic,"2026-10-10"));
  assert.match(p.question,/세상에서 가장 좋은 직업은 무엇일까/);
+ assert.match(p.question,/choosing ONE clear option/);
  assert.match(p.question,/three strengths, two realistic trade-offs, and uncertainty/i);
- assert.match(p.question,/written answer as normal chat text OUTSIDE the image/);
- assert.match(p.question,/exactly ONE original image/);
- assert.match(p.question,/NO text, words, letters, titles, captions, labels, numbers, charts, tables/i);
- assert.match(p.question,/two separate outputs/);
- assert.doesNotMatch(p.question,/Create ONE original image illustrating your choice\./);
+ assert.match(p.question,/complete English written answer directly as normal chat text/);
+ assert.match(p.question,/Do not create or generate an image/);
+ assert.doesNotMatch(p.question,/two separate outputs|generate exactly one original image/i);
+ assert.equal(m.isCombinedQuestion(p.question),false);
 });
 test("older automatically generated questions are detected but not silently replaced",async()=>{
  const m=await mod;const topic="세상에서 가장 좋은 직업은 무엇일까?",date="2026-10-10";
@@ -151,7 +151,9 @@ test("older automatically generated questions are detected but not silently repl
 test("app exposes explicit safe upgrade instead of rewriting stored experiment evidence",()=>{
  const fs=require("node:fs"), path=require("node:path");
  const screen=fs.readFileSync(path.join(__dirname,"../app/ai-three-studio/page.tsx"),"utf8");
- assert.match(screen,/이미지·글 분리 규칙 적용/);
+ assert.match(screen,/기존 통합 질문을 글 전용으로 변경/);
+ assert.match(screen,/isCombinedQuestion\(selected.question\)/);
+ assert.match(screen,/buildProviderImagePrompt\(selected,id\)/);
  assert.match(screen,/isLegacyCommonQuestion\(selected.question,selected.topic,selected.date\)/);
  assert.match(screen,/hasEvidence&&!window.confirm/);
  assert.match(screen,/selected.status==="published"/);
@@ -250,12 +252,55 @@ test("English-only gate also catches Korean title and description",async()=>{
  assert.ok(m.parseArticle(article().replace("Three AIs on a surprisingly hard question","세 AI가 답한 직업 질문")).errors.some(x=>x.includes("한글이 있습니다")));
  assert.ok(m.parseArticle(article().replace("A real three-AI comparison","실제 비교 A real three-AI comparison")).errors.some(x=>x.includes("한글이 있습니다")));
 });
+test("individual image prompts use each AI's actual saved choice, never another provider's",async()=>{
+ const m=await mod,p=m.createExperiment("Which city is best to live in?","World & Lifestyle","2026-10-10");
+ p.responses.chatgpt="I choose Vienna. Its transit is excellent.";
+ p.responses.claude="I choose Copenhagen for cycling.";
+ p.responses.gemini="I choose Zurich for stability.";
+ const prompts=m.PROVIDERS.map(provider=>m.buildProviderImagePrompt(p,provider));
+ assert.match(prompts[0],/I choose Vienna/);
+ assert.doesNotMatch(prompts[0],/I choose Copenhagen|I choose Zurich/);
+ assert.match(prompts[1],/I choose Copenhagen/);
+ assert.doesNotMatch(prompts[1],/I choose Vienna|I choose Zurich/);
+ assert.match(prompts[2],/I choose Zurich/);
+ for(const prompt of prompts){
+  assert.match(prompt,/Generate exactly ONE original, standalone image/);
+  assert.match(prompt,/NO text, words, letters, titles, captions, labels, numbers/);
+  assert.match(prompt,/do not guess or generate an image/);
+  assert.match(prompt,/REFERENCE DATA/);
+ }
+ assert.throws(()=>m.buildProviderImagePrompt({...p,responses:{...p.responses,gemini:""}},"gemini"),/먼저 저장/);
+ assert.throws(()=>m.buildProviderImagePrompt(p,"unknown"),/지원하지 않는/);
+});
+test("old combined question is detected and upgraded without changing an English translated topic",async()=>{
+ const m=await mod,english="Which city is the best place to live in the world?";
+ const combined=[
+  "As of 2026-10-10, answer the following topic by choosing ONE clear option: "+english,
+  "Explain the criteria behind your selection, three strengths, two realistic trade-offs, and uncertainty. Do not present your opinion as universal fact. Answer in English.",
+  "Present the FULL written answer as normal chat text OUTSIDE the image.",
+  "In this same response, create exactly ONE original image depicting your choice.",
+  "Give two separate outputs: answer and image."
+ ].join("\n\n");
+ assert.equal(m.isCombinedQuestion(combined),true);
+ const converted=m.buildTextOnlyQuestionFromExisting(combined,"세계에서 가장 살기 좋은 도시는 어디일까?","2026-10-10");
+ assert.match(converted,/Which city is the best place to live in the world\?/);
+ assert.doesNotMatch(converted,/create exactly ONE original image|two separate outputs/i);
+ assert.match(converted,/Do not create or generate an image/);
+ assert.equal(m.isCombinedQuestion(converted),false);
+ const legacy="As of 2026-10-10, answer the following topic by choosing ONE clear option: 세계에서 가장 살기 좋은 도시는 어디일까?. Explain your criteria, three strengths, two realistic trade-offs and uncertainty. Do not present your opinion as universal fact. Answer in English. Create ONE original image illustrating your choice.";
+ const old=m.buildTextOnlyQuestionFromExisting(legacy,"세계에서 가장 살기 좋은 도시는 어디일까?","2026-10-10");
+ assert.match(old,/three strengths, two realistic trade-offs and uncertainty/);
+ assert.equal(m.isCombinedQuestion(old),false);
+ assert.throws(()=>m.buildTextOnlyQuestionFromExisting("Custom question. Create ONE original image.",english,"2026-10-10"),/수동으로 제거/);
+});
 test("shared question translation prompt retains actual source as evidence without answering it",async()=>{
  const m=await mod,p=project(m,"세상에서 가장 좋은 직업은 무엇일까?");
  const prompt=m.buildEnglishQuestionTranslationPrompt(p);
  assert.match(prompt,/Return ONLY the fully translated/);
  assert.match(prompt,/without changing the meaning/);
  assert.match(prompt,/Do not answer the topic or generate an image/);
+ assert.match(prompt,/written chat answer only/);
+ assert.throws(()=>m.buildEnglishQuestionTranslationPrompt({...p,question:p.question+" Create ONE original image illustrating your choice."}),/먼저 글·이미지 분리/);
  assert.match(prompt,/세상에서 가장 좋은 직업/);
  assert.equal(m.hasKorean(p.question),true);
  assert.equal(m.hasKorean("Which job is best in the world?"),false);
