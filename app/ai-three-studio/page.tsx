@@ -5,7 +5,7 @@ import {ensureAnonymousSession} from "@/lib/supabase-browser";
 import styles from "./page.module.css";
 import {
  STORAGE_KEY,CATEGORIES,STATUS,STATUS_LABEL,PROVIDERS,IMAGE_SLOTS,
- createExperiment,buildCommonQuestion,isLegacyCommonQuestion,hasKorean,buildEnglishQuestionTranslationPrompt,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
+ createExperiment,buildCommonQuestion,isLegacyCommonQuestion,isCombinedQuestion,buildTextOnlyQuestionFromExisting,buildProviderImagePrompt,hasKorean,buildEnglishQuestionTranslationPrompt,parseBulkTopics,isDuplicateTopic,buildIdeasPrompt,buildAnalysisPrompt,
  buildArticlePrompt,buildArticleRepairPrompt,buildHeroPrompt,buildInsightPrompt,responsesReady,parseArticle,
  assembleArticle,validPublishedUrl,relatedProjects,
  evidenceSignature,articleSignature,analysisIsFresh,articleIsFresh,imageSourceSignature,imageIsFresh
@@ -118,13 +118,15 @@ export default function AiThreeComparisonStudioV3() {
  function updateCommonQuestion() {
   if(!selected)return;
   if(selected.status==="published"){setMessage("이미 발행한 실험의 공통 질문은 변경할 수 없습니다.");return;}
-  const next=buildCommonQuestion(selected.topic,selected.date);
-  if(selected.question===next){setMessage("이미 글과 이미지 분리 규칙이 적용된 질문입니다.");return;}
+  let next="";
+  try{next=buildTextOnlyQuestionFromExisting(selected.question,selected.topic,selected.date);}
+  catch(e){setMessage(e instanceof Error?e.message:"공통 질문을 확인해 주세요.");return;}
+  if(selected.question===next){setMessage("이미 글 전용 질문입니다.");return;}
   const hasEvidence=PROVIDERS.some(id=>!!selected.responses[id]?.trim()||!!selected.images[id]) ||
    !!selected.analysis.trim()||!!selected.articleRaw.trim()||!!selected.images.hero||!!selected.images.insight;
   if(hasEvidence&&!window.confirm("이미 수집한 원문·이미지가 있습니다. 질문을 변경하면 기존 자료와 다른 실험이 되므로 세 AI에게 동일한 새 질문으로 다시 실험해야 합니다. 저장된 답변은 삭제하지 않지만 이전 분석·이미지·최종 글은 재검증 전 발행할 수 없습니다. 변경할까요?"))return;
   patchProject(selected.id,{question:next});
-  setMessage("새 공통 질문 규칙 적용 완료. 이미지와 글을 분리하되 같은 질문을 3사에 한 번씩 입력하세요.");
+  setMessage("글 전용 공통 질문으로 변경했습니다. 새 질문으로 세 AI의 답변을 다시 받고, 각 답변 저장 후 이미지 요청서를 사용하세요.");
  }
  function patchProject(id:string,patch:Partial<AtlasProject>) {
   setProjects(prev=>prev.map(p=>p.id===id?{...p,...patch,updatedAt:todayLocal()}:p));
@@ -294,18 +296,18 @@ export default function AiThreeComparisonStudioV3() {
 
     {stage==="collect"&&<section className={styles.panel}>
      {!selected?<NoSelection/>:<>
-      <div className={styles.sectionTitle}><span>STEP 02</span><h2>공통 질문과 AI 3사 답변</h2><p>같은 질문을 세 AI에 각각 붙여넣고 답변과 원본 이미지를 저장하세요. 내용은 줄이거나 재작성하지 않습니다.</p></div>
+      <div className={styles.sectionTitle}><span>STEP 02</span><h2>공통 글 질문 → 답변 → AI별 이미지</h2><p>① 세 AI에 글 전용 공통 질문을 보냅니다. ② 원문 답변을 각각 저장합니다. ③ 각 AI의 실제 선택으로 이미지 1장을 따로 요청합니다. 글과 이미지는 수정·요약하지 않고 저장하세요.</p></div>
       <ProjectTitle selected={selected}/>
       <label>공통 질문 (영어)
        <textarea rows={9} value={selected.question} onChange={e=>patchProject(selected.id,{question:e.target.value})}/>
       </label>
-      <p className={styles.muted}>공통 질문 하나에 ‘일반 글 답변 + 글자 없는 이미지 1장’을 동시에 요청합니다. 세 AI 모두 정확히 같은 문구를 사용하세요.</p>
+      <p className={styles.muted}>이 칸은 세 AI에 똑같이 보내는 <strong>글 답변 전용</strong> 질문입니다. 이미지는 글 답변을 저장한 뒤 AI별 버튼으로 별도 요청하세요.</p>
       {hasKorean(selected.question)&&<p className={styles.warning}>영어 글로벌 블로그의 실험 질문에 한국어 주제가 들어 있습니다. 아직 답변을 수집하지 않았다면 ‘영문 질문 번역 요청서’로 번역을 받은 뒤 공통 질문 칸에 붙여넣고, 세 AI에 똑같은 영어 질문을 보내세요. 이미 수집한 답변은 기존 질문의 원문을 유지해야 합니다.</p>}
-      {isLegacyCommonQuestion(selected.question,selected.topic,selected.date)&&<p className={styles.warning}>이 주제는 예전 질문 형식입니다. 아래 버튼으로 이미지·글 분리 규칙을 적용할 수 있습니다. 기존 답변은 자동 변경하지 않습니다.</p>}
+      {isCombinedQuestion(selected.question)&&<p className={styles.warning}>이 질문에는 이미지 생성 지시가 포함되어 있습니다{isLegacyCommonQuestion(selected.question,selected.topic,selected.date)?" (이전 자동 생성 형식)":""}. 아래 버튼으로 글 전용 요청서로 변경하세요. 기존 답변과 이미지는 삭제하지 않지만 질문 변경 후 다시 확인해야 합니다.</p>}
       <div className={styles.actions}>
-       <button type="button" className={styles.primary} disabled={!selected.question.trim()} onClick={()=>void copy(selected.question,"공통 질문")}>세 AI 공통 질문 복사</button>
+       <button type="button" className={styles.primary} disabled={!selected.question.trim()||isCombinedQuestion(selected.question)} onClick={()=>void copy(selected.question,"글 전용 공통 질문")}>1단계 · 세 AI 글 질문 복사</button>
        {hasKorean(selected.question)&&<button type="button" onClick={()=>copyFactory(()=>buildEnglishQuestionTranslationPrompt(selected),"영문 질문 번역 요청서")}>영문 질문 번역 요청서 복사</button>}
-       <button type="button" disabled={selected.status==="published"||selected.question===buildCommonQuestion(selected.topic,selected.date)} onClick={updateCommonQuestion}>이미지·글 분리 규칙 적용</button>
+       <button type="button" disabled={selected.status==="published"||!isCombinedQuestion(selected.question)} onClick={updateCommonQuestion}>기존 통합 질문을 글 전용으로 변경</button>
       </div>
       <label>실제 운영자 메모 (선택)
        <textarea rows={3} placeholder="실제로 궁금했던 이유나 개인적인 관찰이 있다면 적어주세요. 없는 경험을 생성하지 않습니다." value={selected.notes} onChange={e=>patchProject(selected.id,{notes:e.target.value})}/>
@@ -319,8 +321,11 @@ export default function AiThreeComparisonStudioV3() {
           <a href={AI_SITES[id]} target="_blank" rel="noopener noreferrer" aria-label={DISPLAY[id]+" 공식 사이트 새 탭에서 열기"}>사이트 열기 ↗</a>
          </div>
         </div>
-        <textarea aria-label={DISPLAY[id]+" 원문"} rows={12} value={selected.responses[id]} placeholder={DISPLAY[id]+"의 실제 답변을 처음부터 끝까지 그대로 붙여넣으세요."}
+        <textarea aria-label={DISPLAY[id]+" 원문"} rows={12} value={selected.responses[id]} placeholder={DISPLAY[id]+"의 실제 글 답변을 처음부터 끝까지 그대로 붙여넣으세요."}
          onChange={e=>setReply(id,e.target.value)}/>
+        <div className={styles.actions}>
+         <button type="button" disabled={!selected.responses[id]?.trim()||isCombinedQuestion(selected.question)} onClick={()=>copyFactory(()=>buildProviderImagePrompt(selected,id),DISPLAY[id]+" 이미지 전용 요청서")}>2단계 · {DISPLAY[id]} 이미지 요청서 복사</button>
+        </div>
         <div className={styles.imageMini}>
          {/^https:\/\//.test(selected.images[id])?<img src={selected.images[id]} alt={DISPLAY[id]+" 생성 이미지"}/>:<span>원본 이미지 업로드 전</span>}
         </div>
