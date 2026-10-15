@@ -191,7 +191,7 @@ test("hero-first editorial draft accepts introduction after thumbnail",async()=>
 test("site reuses authored headings for all six section anchors without duplicate h2s",async()=>{
  const m=await mod;
  const html=editorialDraft()
-  .replace("[[IMAGE_HERO]]","[[IMAGE_HERO]]<h2>What was the question?</h2>")
+  .replace("[[IMAGE_HERO]]","[[IMAGE_HERO]]<h2>What Exactly Did I Ask the Three AIs?</h2>")
   .replace("[[ORIGINAL_CHATGPT]]","<h2>ChatGPT chose Minecraft</h2>[[ORIGINAL_CHATGPT]]")
   .replace("[[ORIGINAL_CLAUDE]]","<h2>Claude chose Minecraft</h2>[[ORIGINAL_CLAUDE]]")
   .replace("[[ORIGINAL_GEMINI]]","<h2>Gemini chose Zelda</h2>[[ORIGINAL_GEMINI]]")
@@ -201,7 +201,7 @@ test("site reuses authored headings for all six section anchors without duplicat
  assert.equal(parsed.valid,true,parsed.errors.join("; "));
  assert.equal(parsed.navigationGenerated,true);
  const headings={
-  question:"What was the question?",
+  question:"What Exactly Did I Ask the Three AIs?",
   chatgpt:"ChatGPT chose Minecraft",
   claude:"Claude chose Minecraft",
   gemini:"Gemini chose Zelda",
