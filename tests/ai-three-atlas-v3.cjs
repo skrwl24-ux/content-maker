@@ -188,6 +188,33 @@ test("hero-first editorial draft accepts introduction after thumbnail",async()=>
  assert.equal(parsed.navigationGenerated,true);
  assert.match(parsed.html,/<h2 id="question">The question I asked<\/h2>\[\[IMAGE_HERO\]\]/);
 });
+test("site reuses authored headings for all six section anchors without duplicate h2s",async()=>{
+ const m=await mod;
+ const html=editorialDraft()
+  .replace("[[IMAGE_HERO]]","[[IMAGE_HERO]]<h2>What was the question?</h2>")
+  .replace("[[ORIGINAL_CHATGPT]]","<h2>ChatGPT chose Minecraft</h2>[[ORIGINAL_CHATGPT]]")
+  .replace("[[ORIGINAL_CLAUDE]]","<h2>Claude chose Minecraft</h2>[[ORIGINAL_CLAUDE]]")
+  .replace("[[ORIGINAL_GEMINI]]","<h2>Gemini chose Zelda</h2>[[ORIGINAL_GEMINI]]")
+  .replace("<p>When I compared","<h2>What the answers reveal</h2><p>When I compared")
+  .replace("[[RELATED_MID]]","[[RELATED_MID]]<h2>What I took away</h2>");
+ const parsed=m.parseArticle(article(html));
+ assert.equal(parsed.valid,true,parsed.errors.join("; "));
+ assert.equal(parsed.navigationGenerated,true);
+ const headings={
+  question:"What was the question?",
+  chatgpt:"ChatGPT chose Minecraft",
+  claude:"Claude chose Minecraft",
+  gemini:"Gemini chose Zelda",
+  analysis:"What the answers reveal",
+  takeaway:"What I took away"
+ };
+ for(const [id,label] of Object.entries(headings)){
+  assert.ok(parsed.html.includes('<h2 id="'+id+'">'+label+'</h2>'));
+  assert.equal((parsed.html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+ }
+ assert.equal((parsed.html.match(/<h2\b/g)||[]).length,7);
+ assert.doesNotMatch(parsed.html,/<h2 id="chatgpt">ChatGPT.s answer<\/h2>/);
+});
 test("site creates clickable TOC with six destinations for substantial GPT text without any manual ids",async()=>{
  const m=await mod;
  const parsed=m.parseArticle(article(editorialDraft()));
