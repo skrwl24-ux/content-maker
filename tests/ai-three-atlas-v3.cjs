@@ -181,12 +181,12 @@ function editorialDraft() {
 }
 test("hero-first editorial draft accepts introduction after thumbnail",async()=>{
  const m=await mod;
- const heroFirst=editorialDraft().replace(/^([\\s\\S]*?<\\/p>)\\[\\[IMAGE_HERO\\]\\]/,"[[IMAGE_HERO]]$1");
- assert.match(heroFirst,/^\\[\\[IMAGE_HERO\\]\\]<p>/);
+ const heroFirst=editorialDraft().replace(/^([\s\S]*?<\/p>)\[\[IMAGE_HERO\]\]/,"[[IMAGE_HERO]]$1");
+ assert.match(heroFirst,/^\[\[IMAGE_HERO\]\]<p>/);
  const parsed=m.parseArticle(article(heroFirst));
  assert.equal(parsed.valid,true,parsed.errors.join("; "));
  assert.equal(parsed.navigationGenerated,true);
- assert.match(parsed.html,/<h2 id="question">The question I asked<\\/h2>\\[\\[IMAGE_HERO\\]\\]/);
+ assert.match(parsed.html,/<h2 id="question">The question I asked<\/h2>\[\[IMAGE_HERO\]\]/);
 });
 test("site creates clickable TOC with six destinations for substantial GPT text without any manual ids",async()=>{
  const m=await mod;
