@@ -67,3 +67,34 @@ test("research prompt encodes 7 plus 3 strategy and action intents", async () =>
   assert.match(prompt, /기존 글/);
   assert.match(prompt, /발행한 글/);
 });
+
+test("automatic money replacement uses only current sourced and nonduplicate candidates", async () => {
+  const { eligibleParammaMoneyCandidates } = await api();
+  const make = (title, expiresAt, sourceUrls = ["https://example.com/official"], moneyScore = 4) => ({
+    title, expiresAt, sourceUrls, moneyScore, timelinessScore: 4, fitScore: 4
+  });
+  const items = [
+    make("이미 큐에 있음", "상시"),
+    make("이미 발행함", "상시"),
+    make("기간이 끝남", "2026-10-16"),
+    make("출처 없음", "2026-10-31", []),
+    make("기간 미확인", "", ["https://example.com/official"]),
+    make("정상 수익형", "2026-10-31", ["https://example.com/official"], 5),
+    make("상시 유효한 주제", "상시")
+  ];
+  const filtered = eligibleParammaMoneyCandidates(items, {
+    queueTitles: ["이미 큐에 있음"],
+    historyTitles: ["이미 발행함"],
+    today: "2026-10-17"
+  });
+  assert.deepEqual(filtered.map((item) => item.title), ["정상 수익형", "상시 유효한 주제"]);
+});
+
+test("no automatic money replacement is made from an unverified or expired candidate", async () => {
+  const { eligibleParammaMoneyCandidates, isParammaMoneyCandidateCurrent } = await api();
+  assert.equal(isParammaMoneyCandidateCurrent({expiresAt:"2026-10-16"}, "2026-10-17"), false);
+  assert.equal(isParammaMoneyCandidateCurrent({expiresAt:"2026-10-17"}, "2026-10-17"), true);
+  assert.equal(isParammaMoneyCandidateCurrent({expiresAt:"상시"}, "2026-10-17"), true);
+  assert.equal(isParammaMoneyCandidateCurrent({expiresAt:"시기 확인 필요"}, "2026-10-17"), false);
+  assert.deepEqual(eligibleParammaMoneyCandidates([], {today:"2026-10-17"}), []);
+});

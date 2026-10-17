@@ -4,12 +4,13 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
-import { buildParammaMoneyResearchPrompt, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
+import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
+import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt } from "../../lib/paramma-story-v4.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
-type SlotId = "00" | "01" | "02" | "03";
+type SlotId = "00" | "01" | "02" | "03" | "04" | "05" | "06" | "07";
 type KickMode = "auto" | "research" | "manual";
 type TopicKind = "curiosity" | "money";
 type MoneyIntent = "신청" | "비용" | "비교" | "구매" | "가입" | "시즌";
@@ -37,6 +38,8 @@ type MoneyCandidate = {
   brief: string;
 } & MoneyTopicMeta;
 
+type PhotoCredit = { provider: "Pexels"; photographer: string; sourceUrl: string; photographerUrl?: string };
+type PexelsPhoto = { id: number; alt: string; sourceUrl: string; photographer: string; photographerUrl: string; thumbnailUrl: string; width: number; height: number };
 type SlotMeta = {
   status: SlotStatus;
   prompt: string;
@@ -54,10 +57,12 @@ type TopicWork = {
   body: string;
   bodyConfirmed: boolean;
   optional03: boolean;
+  version?: "v3" | "v4";
+  imageCount?: number;
   slots: Record<SlotId, SlotMeta>;
 };
 
-type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string };
+type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit };
 type LoadedImage = ImageRecord & { url: string };
 type NaverBlock = {
   type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags";
@@ -142,12 +147,16 @@ const TOPIC_POOL: TopicSeed[] = [
 const STORAGE_KEY = "paramma-publish-queue-v5";
 const DB_NAME = "paramma-blogger-images-v5";
 const DB_STORE = "images";
-const SLOT_IDS: SlotId[] = ["00", "01", "02", "03"];
+const SLOT_IDS: SlotId[] = ["00", "01", "02", "03", "04", "05", "06", "07"];
 const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
   "01": { label: "본문 이미지 01", role: "핵심 원리", width: 1600, height: 900, filename: "01_body.png", copy: "핵심 원리를 한눈에 이해시키는 장면" },
   "02": { label: "본문 이미지 02", role: "이번 글의 발견·보상", width: 1600, height: 900, filename: "02_body.png", copy: "최종 본문의 첫 번째 실용 킥 또는 발견을 저장하기 좋은 정보형 카드로 보여주는 장면" },
   "03": { label: "선택 이미지 03", role: "추가 실용 정보 · 예방 · 비교", width: 1600, height: 900, filename: "03_body.png", copy: "완성 본문에 독립된 후속 정보가 있는 경우 재발 방지·유지 관리·상황별 비교 등을 보여주는 두 번째 저장용 정보 카드" },
+  "04": { label: "본문 이미지 04", role: "상황 비교", width: 1600, height: 900, filename: "04_body.png", copy: "새로운 조건이나 상황의 비교" },
+  "05": { label: "본문 이미지 05", role: "핵심 발견·보상", width: 1600, height: 900, filename: "05_body.png", copy: "독자가 얻어갈 실용적 발견" },
+  "06": { label: "본문 이미지 06", role: "추가 정보", width: 1600, height: 900, filename: "06_body.png", copy: "추가 방법이나 주의점" },
+  "07": { label: "본문 이미지 07", role: "오해 해소·마무리", width: 1600, height: 900, filename: "07_body.png", copy: "독립된 마무리 장면" },
 };
 
 function categoryEmoji(category: Category) {
@@ -800,6 +809,7 @@ function kickContext(work: TopicWork, image02 = false) {
 }
 
 function articlePromptForWork(work: TopicWork, topic: Topic) {
+  if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic);
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
   const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
     ? [
@@ -818,6 +828,13 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
+  if (work.version === "v4") {
+    const plan = extractParammaImagePlans(work.body || "")[slotId] || "";
+    const edited = work.slots[slotId]?.prompt || "";
+    const base = edited.includes("Paramma 네이버 블로그용 이미지 정확히 1장")
+      ? edited : buildParammaV4ImagePrompt(topic, slotId);
+    return base + (plan ? `\n\n[V4 · 완성 원고에서 분석한 ${slotId} 장면 — 현재 원고 내용 우선]\n${plan}\n이 원고에 없는 정보를 추가하지 말 것.` : "");
+  }
   const base = work.slots[slotId].prompt;
   const moneyRules = moneyImageContext(topic, slotId);
   const bodyPlans = extractParammaImagePlans(work.body || "");
@@ -897,6 +914,54 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
 }
 
 
+function topicFromMoneyCandidate(id: number, candidate: MoneyCandidate): Topic {
+  return {
+    id,
+    category: candidate.category,
+    title: candidate.title,
+    thumbnailHook: candidate.thumbnailHook,
+    brief: candidate.brief,
+    kind: "money",
+    money: {
+      intent: candidate.intent,
+      action: candidate.action,
+      mainKeyword: candidate.mainKeyword,
+      subKeywords: candidate.subKeywords,
+      actionQuestions: candidate.actionQuestions,
+      faqQuestions: candidate.faqQuestions,
+      keywords: candidate.keywords,
+      whyNow: candidate.whyNow,
+      expiresAt: candidate.expiresAt,
+      moneyScore: candidate.moneyScore,
+      timelinessScore: candidate.timelinessScore,
+      fitScore: candidate.fitScore,
+      sourceUrls: candidate.sourceUrls,
+    },
+  };
+}
+
+// Older saved V3 works may only contain 00~03. Preserve their prompts and images.
+function restoreV4WorkShapes(works: Record<number, TopicWork>, topics: Topic[]) {
+  const next = { ...works };
+  for (const topic of topics) {
+    const original = next[topic.id];
+    if (!original) continue;
+    const slots = { ...original.slots } as Record<SlotId, SlotMeta>;
+    for (const id of SLOT_IDS) {
+      if (!slots[id]) {
+        slots[id] = { status: "waiting", prompt: buildParammaV4ImagePrompt(topic, id) };
+      }
+    }
+    next[topic.id] = {
+      ...original,
+      version: original.version === "v4" ? "v4" : "v3",
+      imageCount: parammaV4Count(original.imageCount),
+      slots,
+    };
+  }
+  return next;
+}
+
 function normalizeParammaTopic(value: string) {
   return value
     .normalize("NFKC")
@@ -906,20 +971,22 @@ function normalizeParammaTopic(value: string) {
 }
 
 function defaultWork(topic: Topic): TopicWork {
+  const imageCount = 7;
+  const date = formatToday();
+  const slots = Object.fromEntries(SLOT_IDS.map((id) => [id, {
+    status: "waiting", prompt: buildParammaV4ImagePrompt(topic, id)
+  }])) as Record<SlotId, SlotMeta>;
   return {
-    articlePrompt: buildArticlePromptV3(topic),
+    version: "v4",
+    imageCount,
+    articlePrompt: buildParammaV4ArticlePrompt(topic, imageCount, date),
     kickMode: "auto",
     searchNotes: "",
     selectedKick: "",
     body: "",
     bodyConfirmed: false,
     optional03: false,
-    slots: {
-      "00": { status: "waiting", prompt: buildImagePromptV3(topic, "00") },
-      "01": { status: "waiting", prompt: buildImagePromptV3(topic, "01") },
-      "02": { status: "waiting", prompt: buildImagePromptV3(topic, "02") },
-      "03": { status: "waiting", prompt: buildImagePromptV3(topic, "03") },
-    },
+    slots,
   };
 }
 
@@ -1068,18 +1135,28 @@ export default function ParammaBulkPage() {
   const [zipBusy, setZipBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [moneyResearchRaw, setMoneyResearchRaw] = useState("");
+  const [moneyResearchBusy, setMoneyResearchBusy] = useState(false);
+  const [moneyResearchAccessCode, setMoneyResearchAccessCode] = useState("");
   const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
-  const [moneyTargetId, setMoneyTargetId] = useState(1);
+  const [moneyCandidateTargets, setMoneyCandidateTargets] = useState<Record<string, number>>({});
+  const [photoSearchSlot, setPhotoSearchSlot] = useState<SlotId | null>(null);
+  const [photoQuery, setPhotoQuery] = useState("");
+  const [photoResults, setPhotoResults] = useState<PexelsPhoto[]>([]);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const previewUrls = useRef<string[]>([]);
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
+  const isV4 = work.version === "v4";
+  const activeSlotIds = parammaActiveSlots(work.version, work.imageCount, work.optional03) as SlotId[];
+  // Keep the V3 optional 03 card visible even when it is not enabled.
+  const visibleSlotIds = isV4 ? activeSlotIds : SLOT_IDS.slice(0, 4);
   const effectiveArticlePrompt = articlePromptForWork(work, selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
   const bodyImagePlans = useMemo(() => extractParammaImagePlans(work.body), [work.body]);
-  const plannedImageSlots = SLOT_IDS.filter((slotId) => !!bodyImagePlans[slotId]);
+  const plannedImageSlots = activeSlotIds.filter((slotId) => !!bodyImagePlans[slotId]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
   const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
   const moneyCount = useMemo(() => topics.filter((topic) => topic.kind === "money").length, [topics]);
@@ -1092,8 +1169,13 @@ export default function ParammaBulkPage() {
   const availablePoolCount = useMemo(() => {
     const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
     const queueKeys = new Set(topics.map((topic) => normalizeParammaTopic(topic.title)));
-    return TOPIC_POOL.filter((topic) => !historyKeys.has(normalizeParammaTopic(topic.title)) && !queueKeys.has(normalizeParammaTopic(topic.title))).length;
-  }, [historyItems, topics]);
+    const generalCount = TOPIC_POOL.filter((topic) => !historyKeys.has(normalizeParammaTopic(topic.title)) && !queueKeys.has(normalizeParammaTopic(topic.title))).length;
+    const moneyCount = eligibleParammaMoneyCandidates(moneyCandidates, {
+      queueTitles: topics.map((topic) => topic.title),
+      historyTitles: historyItems.map((item) => item.title),
+    }).length;
+    return generalCount + moneyCount;
+  }, [historyItems, topics, moneyCandidates]);
   const filteredHistory = useMemo(() => {
     const keyword = historySearch.trim().toLowerCase();
     return historyItems.filter((item) => {
@@ -1112,10 +1194,13 @@ export default function ParammaBulkPage() {
         setTopics(savedTopics);
         if (parsed?.statuses) setStatuses(parsed.statuses);
         if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
-        if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
+        if (parsed?.works) setWorks(restoreV4WorkShapes(refreshParammaPrompts(parsed.works, savedTopics), savedTopics));
         if (typeof parsed?.moneyResearchRaw === "string") setMoneyResearchRaw(parsed.moneyResearchRaw);
-        if (Array.isArray(parsed?.moneyCandidates)) setMoneyCandidates(parsed.moneyCandidates as MoneyCandidate[]);
-        if (Number.isInteger(parsed?.moneyTargetId) && savedTopics.some((t) => t.id === parsed.moneyTargetId)) setMoneyTargetId(parsed.moneyTargetId);
+        const savedCandidates = Array.isArray(parsed?.moneyCandidates) && parsed.moneyCandidates.length
+          ? parsed.moneyCandidates as MoneyCandidate[]
+          : parseParammaMoneyCandidates(parsed?.moneyResearchRaw || "") as MoneyCandidate[];
+        setMoneyCandidates(savedCandidates);
+        if (parsed?.moneyCandidateTargets && typeof parsed.moneyCandidateTargets === "object") setMoneyCandidateTargets(parsed.moneyCandidateTargets as Record<string, number>);
       }
     } catch {
       setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
@@ -1149,11 +1234,11 @@ export default function ParammaBulkPage() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyCandidateTargets }));
     } catch {
       setNotice("작업 상태 저장에 실패했습니다. 브라우저 저장공간을 확인해주세요.");
     }
-  }, [hydrated, topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId]);
+  }, [hydrated, topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyCandidateTargets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1234,6 +1319,8 @@ export default function ParammaBulkPage() {
 
   function selectTopic(id: number) {
     setSelectedId(id);
+    setPhotoSearchSlot(null);
+    setPhotoResults([]);
     setNotice("");
   }
 
@@ -1325,8 +1412,17 @@ export default function ParammaBulkPage() {
       const key = normalizeParammaTopic(candidate.title);
       return !historyKeys.has(key) && !queueKeys.has(key);
     });
+    // Keep the 7 curiosity / 3 money mix as completed slots are replenished.
+    // Money topics must come from a currently valid, sourced research result.
+    const moneySlotsExcludingCurrent = topics.filter((topic) => topic.id !== id && topic.kind === "money").length;
+    const moneyCandidate = moneySlotsExcludingCurrent < 3
+      ? eligibleParammaMoneyCandidates(moneyCandidates, {
+          queueTitles: topics.filter((topic) => topic.id !== id).map((topic) => topic.title),
+          historyTitles: historyItems.map((item) => item.title),
+        })[0] as MoneyCandidate | undefined
+      : undefined;
 
-    if (!available.length) {
+    if (!available.length && !moneyCandidate) {
       setNotice("새 주제 후보가 모두 소진됐습니다. 주제 풀 보충이 필요합니다.");
       return;
     }
@@ -1346,9 +1442,17 @@ export default function ParammaBulkPage() {
       const bAdjacent = Number(b.category === prevCategory) + Number(b.category === nextCategory);
       return aAdjacent - bAdjacent || (categoryCounts[a.category] || 0) - (categoryCounts[b.category] || 0);
     });
-    const seed = (historyItems.length + id + topics.reduce((sum, topic) => sum + topic.title.length, 0)) % ranked.length;
+    const seed = ranked.length
+      ? (historyItems.length + id + topics.reduce((sum, topic) => sum + topic.title.length, 0)) % ranked.length
+      : 0;
     const picked = ranked[seed];
-    const replacement: Topic = { id, ...picked };
+    const replacement: Topic = moneyCandidate
+      ? topicFromMoneyCandidate(id, moneyCandidate)
+      : { id, ...picked };
+    const savedWork = works[id];
+    const hasSavedWork = !!savedWork?.body?.trim() ||
+      SLOT_IDS.some((slotId) => savedWork?.slots?.[slotId]?.status === "registered");
+    if (hasSavedWork && !window.confirm(`${String(id).padStart(2, "0")}번의 기존 본문·이미지·요청서가 초기화됩니다. 새 주제 "${replacement.title}"로 교체할까요?`)) return;
 
     for (const slotId of SLOT_IDS) {
       try { await idbDelete(id, slotId); } catch {}
@@ -1360,7 +1464,42 @@ export default function ParammaBulkPage() {
     setStatuses((prev) => ({ ...prev, [id]: "waiting" }));
     setWorks((prev) => ({ ...prev, [id]: defaultWork(replacement) }));
     setSelectedId(id);
-    setNotice(`${id}번을 새 주제로 갈아끼웠습니다: ${replacement.title}`);
+    setNotice(`${id}번을 ${replacement.kind === "money" ? "수익형" : "일반"} 새 주제로 갈아끼웠습니다: ${replacement.title}`);
+  }
+
+  async function runAutomaticMoneyResearch() {
+    const accessCode = moneyResearchAccessCode.trim();
+    if (!accessCode) {
+      setNotice("관리자 인증 코드를 입력해주세요. 입력한 코드는 저장하지 않습니다.");
+      return;
+    }
+    if (moneyResearchBusy) return;
+    setMoneyResearchBusy(true);
+    setNotice("최신 웹 자료에서 수익형 주제를 조사 중입니다. 검색·검증에 시간이 걸릴 수 있습니다.");
+    try {
+      const response = await fetch("/api/paramma/research-money", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessCode,
+          queueTitles: topics.map((topic) => topic.title),
+          historyTitles: historyItems.map((item) => item.title),
+        }),
+        cache: "no-store",
+      });
+      const data = await response.json() as { error?: string; candidates?: MoneyCandidate[]; researchedAt?: string };
+      if (!response.ok) throw new Error(data.error || "수익형 주제 자동 조사에 실패했습니다.");
+      const candidates = parseParammaMoneyCandidates(JSON.stringify({ candidates: data.candidates || [] })) as MoneyCandidate[];
+      if (!candidates.length) throw new Error("AI가 반환한 주제 후보를 읽을 수 없습니다. 다시 조사해주세요.");
+      setMoneyCandidates(candidates);
+      setMoneyCandidateTargets({});
+      setMoneyResearchRaw("[MONEY_JSON]\n" + JSON.stringify({ candidates }, null, 2) + "\n[/MONEY_JSON]");
+      setNotice(`✨ ${data.researchedAt || "오늘"} 기준 수익형 후보 ${candidates.length}개가 자동 등록됐습니다. 공식 출처와 유효기간을 확인한 뒤 큐에 넣어주세요.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "수익형 후보를 자동으로 불러오지 못했습니다.");
+    } finally {
+      setMoneyResearchBusy(false);
+    }
   }
 
   function importMoneyCandidates() {
@@ -1370,11 +1509,21 @@ export default function ParammaBulkPage() {
       return;
     }
     setMoneyCandidates(parsed);
-    setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 점수와 유효기간을 보고 큐에 넣을 주제를 선택하세요.`);
+    setMoneyCandidateTargets({});
+    setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 각 후보에서 큐 자리를 선택한 후 등록하세요.`);
   }
 
-  async function applyMoneyCandidate(candidate: MoneyCandidate) {
-    const targetId = moneyTargetId;
+  async function applyMoneyCandidate(candidate: MoneyCandidate, targetId: number) {
+    if (!Number.isInteger(targetId) || targetId < 1 || targetId > 10) {
+      setNotice("수익형 후보 카드에서 등록할 큐 자리를 먼저 선택해주세요.");
+      return;
+    }
+    const candidateKey = normalizeParammaTopic(candidate.title);
+    if (topics.some((topic) => normalizeParammaTopic(topic.title) === candidateKey) ||
+        historyItems.some((item) => item.normalized_key === candidateKey)) {
+      setNotice("이미 큐에 있거나 발행한 주제입니다. 다른 후보를 선택해주세요.");
+      return;
+    }
     const current = topics.find((topic) => topic.id === targetId);
     if (!current) return;
 
@@ -1383,29 +1532,7 @@ export default function ParammaBulkPage() {
       SLOT_IDS.some((slotId) => currentWork?.slots?.[slotId]?.status === "registered");
     if (hasProgress && !window.confirm(`${targetId}번에는 진행 중이거나 저장된 작업이 있습니다. 이 자리를 수익형 주제로 교체할까요? 기존 본문·요청서·등록 이미지는 초기화됩니다.`)) return;
 
-    const replacement: Topic = {
-      id: targetId,
-      category: candidate.category,
-      title: candidate.title,
-      thumbnailHook: candidate.thumbnailHook,
-      brief: candidate.brief,
-      kind: "money",
-      money: {
-        intent: candidate.intent,
-        action: candidate.action,
-        mainKeyword: candidate.mainKeyword,
-        subKeywords: candidate.subKeywords,
-        actionQuestions: candidate.actionQuestions,
-        faqQuestions: candidate.faqQuestions,
-        keywords: candidate.keywords,
-        whyNow: candidate.whyNow,
-        expiresAt: candidate.expiresAt,
-        moneyScore: candidate.moneyScore,
-        timelinessScore: candidate.timelinessScore,
-        fitScore: candidate.fitScore,
-        sourceUrls: candidate.sourceUrls,
-      },
-    };
+    const replacement = topicFromMoneyCandidate(targetId, candidate);
 
     for (const slotId of SLOT_IDS) {
       try { await idbDelete(targetId, slotId); } catch {}
@@ -1432,15 +1559,48 @@ export default function ParammaBulkPage() {
   }
 
 
+  function changeStoryVersion(version: "v3" | "v4", count = parammaV4Count(work.imageCount)) {
+    const current = ensureWork();
+    if (current.version === version && (version !== "v4" || parammaV4Count(current.imageCount) === count)) return;
+    const currentSlots = { ...current.slots };
+    if (current.version !== version) {
+      for (const id of SLOT_IDS) {
+        currentSlots[id] = {
+          ...currentSlots[id],
+          prompt: version === "v4"
+            ? buildParammaV4ImagePrompt(selected, id)
+            : id <= "03" ? buildImagePromptV3(selected, id) : currentSlots[id].prompt,
+        };
+      }
+    }
+    const hasWriting = Boolean(current.body.trim());
+    const nextPrompt = version === "v4"
+      ? buildParammaV4ArticlePrompt(selected, count, formatToday())
+      : buildArticlePromptV3(selected);
+    if (hasWriting && !window.confirm("작성된 원고는 보존되지만 이미지 배치 마커와 새 요청서가 다를 수 있습니다. 제작 방식을 변경할까요?")) return;
+    patchWork({ version, imageCount: count, articlePrompt: nextPrompt, slots: currentSlots });
+    setNotice(`이번 글의 제작 방식을 ${version === "v4" ? "V4 스토리형" : "V3 정보형"}으로 설정했습니다. 기존 원고·등록 이미지는 보존됩니다.`);
+  }
+
   function regenerateParammaV3Prompts() {
-    if (!window.confirm("현재 원고·등록 이미지·진행 상태와 킥 설정은 유지하고, 본문 및 이미지 기본 요청서 문구만 Paramma V3로 다시 생성할까요? 직접 수정한 요청서 문구는 새 내용으로 교체됩니다.")) return;
+    const version = work.version === "v4" ? "v4" : "v3";
+    if (!window.confirm(`현재 원고·이미지는 유지하고 ${version.toUpperCase()} 기본 요청서 문구만 다시 적용할까요? 직접 수정한 요청서 문구는 교체됩니다.`)) return;
     setWorks((prev) => {
       const base = prev[selected.id] || defaultWork(selected);
       const slots = { ...base.slots };
-      for (const slotId of SLOT_IDS) slots[slotId] = { ...slots[slotId], prompt: buildImagePromptV3(selected, slotId) };
-      return { ...prev, [selected.id]: { ...base, articlePrompt: buildArticlePromptV3(selected), slots } };
+      for (const slotId of SLOT_IDS) {
+        slots[slotId] = {
+          ...slots[slotId],
+          prompt: version === "v4" ? buildParammaV4ImagePrompt(selected, slotId) : slotId <= "03" ? buildImagePromptV3(selected, slotId) : slots[slotId].prompt,
+        };
+      }
+      return { ...prev, [selected.id]: {
+        ...base, articlePrompt: version === "v4"
+          ? buildParammaV4ArticlePrompt(selected, parammaV4Count(base.imageCount), formatToday())
+          : buildArticlePromptV3(selected), slots,
+      } };
     });
-    setNotice("이번 글에 Paramma V3 · 검색 의도 기반 요청서를 적용했습니다. 원고와 이미지 파일은 그대로 보존했습니다.");
+    setNotice(`이번 글의 ${version.toUpperCase()} 요청서를 적용했습니다. 원고와 이미지는 보존했습니다.`);
   }
 
   async function copyArticlePrompt() {
@@ -1522,6 +1682,73 @@ export default function ParammaBulkPage() {
     }
   }
 
+  async function searchPexelsPhotos() {
+    const query = photoQuery.trim();
+    if (query.length < 2) {
+      setNotice("실제 사진 검색어를 2글자 이상 입력해주세요.");
+      return;
+    }
+    setPhotoLoading(true);
+    setPhotoResults([]);
+    try {
+      const res = await fetch("/api/paramma/photos?query=" + encodeURIComponent(query), { cache: "no-store" });
+      const data = await res.json() as { error?: string; photos?: PexelsPhoto[] };
+      if (!res.ok) throw new Error(data.error || "사진 검색에 실패했습니다.");
+      setPhotoResults(Array.isArray(data.photos) ? data.photos : []);
+      if (!data.photos?.length) setNotice("사진을 찾지 못했습니다. 영어 단어나 더 구체적인 검색어로 다시 찾아보세요.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "사진 검색에 실패했습니다.");
+    } finally {
+      setPhotoLoading(false);
+    }
+  }
+
+  async function importPexelsPhoto(slotId: SlotId, photo: PexelsPhoto) {
+    if (imageBusy !== null) return;
+    const oldImage = images[slotId];
+    const topicId = selected.id;
+    setImageBusy(slotId);
+    setNotice("선택한 실제 사진을 PNG로 등록하고 있습니다.");
+    try {
+      const res = await fetch("/api/paramma/photo-import?id=" + encodeURIComponent(String(photo.id)), { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || "실제 사진을 가져오지 못했습니다.");
+      }
+      const original = await res.blob();
+      const mime = original.type || "image/jpeg";
+      const file = new File([original], "pexels-" + photo.id + ".jpg", { type: mime });
+      const converted = await convertToPng(file, SLOT_INFO[slotId].width, SLOT_INFO[slotId].height);
+      const record: ImageRecord = {
+        blob: converted.blob, width: converted.width, height: converted.height,
+        updatedAt: new Date().toISOString(),
+        credit: {
+          provider: "Pexels", photographer: photo.photographer,
+          sourceUrl: photo.sourceUrl, photographerUrl: photo.photographerUrl,
+        },
+      };
+      await idbPut(topicId, slotId, record);
+      const url = URL.createObjectURL(record.blob);
+      previewUrls.current.push(url);
+      if (selected.id === topicId) {
+        setImages((prev) => {
+          if (prev[slotId]?.url) URL.revokeObjectURL(prev[slotId]!.url);
+          return { ...prev, [slotId]: { ...record, url } };
+        });
+      }
+      patchSlot(slotId, { status: "registered", width: record.width, height: record.height, warning: converted.warning, updatedAt: record.updatedAt }, topicId);
+      setPhotoSearchSlot(null);
+      setPhotoResults([]);
+      setNotice(`${slotId} 사진을 등록했습니다. 사진 출처는 ZIP의 image_sources.txt에 보존됩니다. 글에서 실제 사례 사진으로 오해되지 않도록 설명해주세요.`);
+    } catch (error) {
+      setNotice(oldImage
+        ? `사진 교체에 실패했습니다. 기존 이미지는 보존했습니다. ${error instanceof Error ? error.message : ""}`
+        : error instanceof Error ? error.message : "사진 등록에 실패했습니다.");
+    } finally {
+      setImageBusy(null);
+    }
+  }
+
   async function deleteImage(slotId: SlotId) {
     if (!images[slotId]) return;
     if (!window.confirm(`${slotId} 등록 이미지를 실제로 삭제할까요?`)) return;
@@ -1551,11 +1778,12 @@ export default function ParammaBulkPage() {
         : "선택 이미지 03을 사용하지 않습니다.");
   }
 
-  const requiredSlots: SlotId[] = ["00", "01", "02"];
+  const requiredSlots: SlotId[] = isV4 ? activeSlotIds : ["00", "01", "02"];
   const missingRequired = requiredSlots.filter((slotId) => !images[slotId]);
-  const optionalMissing = work.optional03 && !images["03"];
+  const optionalMissing = !isV4 && work.optional03 && !images["03"];
+  const missingMarkers = isV4 ? parammaV4MissingMarkers(work.body, work.imageCount) as SlotId[] : [];
   const bodyReady = work.body.trim().length > 0 && work.bodyConfirmed;
-  const canZip = bodyReady && missingRequired.length === 0 && !optionalMissing;
+  const canZip = bodyReady && missingRequired.length === 0 && !optionalMissing && missingMarkers.length === 0;
 
   async function downloadZip() {
     if (!canZip) {
@@ -1569,7 +1797,7 @@ export default function ParammaBulkPage() {
       const zip = new JSZip();
       const folder = zip.folder(cleanFolderName(selected));
       if (!folder) throw new Error("ZIP 폴더를 만들 수 없습니다.");
-      const includeSlots: SlotId[] = current.optional03 ? ["00", "01", "02", "03"] : ["00", "01", "02"];
+      const includeSlots = parammaActiveSlots(current.version, current.imageCount, current.optional03) as SlotId[];
       for (const slotId of includeSlots) {
         const record = await idbGet(selected.id, slotId);
         if (!record) throw new Error(`${slotId} 이미지가 없습니다.`);
@@ -1577,9 +1805,15 @@ export default function ParammaBulkPage() {
         folder.file(SLOT_INFO[slotId].filename, record.blob);
       }
       folder.file("final_post.txt", current.body);
+      const imageCredits: string[] = [];
+      for (const id of includeSlots) {
+        const record = await idbGet(selected.id, id);
+        if (record?.credit) imageCredits.push(`[${id}] Pexels · ${record.credit.photographer} · ${record.credit.sourceUrl}`);
+      }
+      if (imageCredits.length) folder.file("image_sources.txt", imageCredits.join("\n"));
       folder.file("article_request.txt", articlePromptForWork(current, selected));
       folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId, selected)}`).join("\n\n====================\n\n"));
-      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
+      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, version: current.version || "v3", imageCount: current.imageCount || 7, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1620,7 +1854,7 @@ export default function ParammaBulkPage() {
     setSelectedId(1);
     setMoneyResearchRaw("");
     setMoneyCandidates([]);
-    setMoneyTargetId(1);
+    setMoneyCandidateTargets({});
     setNotice("진행 상태와 글 설정을 초기화했습니다. 등록 이미지 파일은 보존했습니다.");
   }
 
@@ -1659,6 +1893,30 @@ export default function ParammaBulkPage() {
           </span>
         </div>
 
+        <div className={styles.moneyAutoResearch}>
+          <div className={styles.moneyAutoHeader}>
+            <div>
+              <b>✨ 최신 수익형 주제 자동 조사</b>
+              <span>클릭하면 웹에서 후보를 조사하고 아래 목록에 자동 등록합니다. 발행 전 내용은 직접 검토해주세요.</span>
+            </div>
+            <label>
+              관리자 인증 코드
+              <input
+                type="password"
+                autoComplete="off"
+                value={moneyResearchAccessCode}
+                onChange={(e) => setMoneyResearchAccessCode(e.target.value)}
+                placeholder="관리자 코드 입력"
+                disabled={moneyResearchBusy}
+              />
+            </label>
+          </div>
+          <button type="button" className={styles.moneyAutoButton} onClick={() => void runAutomaticMoneyResearch()} disabled={moneyResearchBusy || !moneyResearchAccessCode.trim()}>
+            {moneyResearchBusy ? "최신 자료 조사 중…" : "✨ 최신 수익형 후보 자동 조사·등록"}
+          </button>
+          <small>별도 AI API 설정 및 사용 요금이 필요합니다. 인증 코드는 브라우저 저장소에 보관하지 않습니다.</small>
+        </div>
+
         <div className={styles.moneyResearchActions}>
           <a
             className={styles.moneyPrimary}
@@ -1667,29 +1925,34 @@ export default function ParammaBulkPage() {
             rel="noopener noreferrer"
             onClick={() => { void copyText(moneyResearchPrompt, "수익형 주제 조사 요청서를 복사하고 ChatGPT를 열었습니다."); }}
           >
-            🔎 수익형 주제 조사하기
+            🔎 ChatGPT에서 수동 조사하기 (기존 방식)
           </a>
-          <label className={styles.moneyTarget}>
-            <span>교체할 큐 자리</span>
-            <select value={moneyTargetId} onChange={(e) => setMoneyTargetId(Number(e.target.value))}>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {String(topic.id).padStart(2, "0")} · {topic.kind === "money" ? "수익형" : statusOf(topic.id) === "done" ? "완료" : statusOf(topic.id) === "working" ? "진행 중" : "일반"}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className={styles.kickHint}>
+            조사 결과를 붙여넣으면 후보가 자동 등록됩니다.
+            자동 보충 가능한 수익형 후보: {eligibleParammaMoneyCandidates(moneyCandidates, {
+              queueTitles: topics.map((topic) => topic.title),
+              historyTitles: historyItems.map((item) => item.title),
+            }).length}개 · 큐 자리는 각 후보 카드에서 선택
+          </p>
         </div>
 
         <details className={styles.moneyPasteBox}>
           <summary>ChatGPT 조사 결과 붙여넣기 · 후보 자동 인식</summary>
           <textarea
             value={moneyResearchRaw}
-            onChange={(e) => setMoneyResearchRaw(e.target.value)}
-            placeholder="[MONEY_JSON] ... [/MONEY_JSON]이 포함된 조사 결과를 통째로 붙여넣으세요."
+            onChange={(e) => {
+              const raw = e.target.value;
+              setMoneyResearchRaw(raw);
+              const parsed = parseParammaMoneyCandidates(raw) as MoneyCandidate[];
+              if (parsed.length) {
+                setMoneyCandidates(parsed);
+                setMoneyCandidateTargets({});
+              }
+            }}
+            placeholder="[MONEY_JSON] ... [/MONEY_JSON]이 포함된 조사 결과를 붙여넣으면 후보를 자동 인식합니다."
           />
           <div className={styles.moneyPasteActions}>
-            <button type="button" onClick={importMoneyCandidates}>후보 불러오기</button>
+            <button type="button" onClick={importMoneyCandidates}>후보 다시 불러오기</button>
             <span>돈과의 거리 · 시의성 · Paramma 적합도를 각각 5점으로 비교합니다.</span>
           </div>
         </details>
@@ -1704,12 +1967,14 @@ export default function ParammaBulkPage() {
                 </div>
                 <h3>{candidate.title}</h3>
                 <p>{candidate.brief}</p>
-                {candidate.whyNow && <div className={styles.moneyWhy}><b>지금 쓰는 이유</b><span>{candidate.whyNow}</span></div>}
                 <div className={styles.moneyMeta}>
                   <span>행동 · {candidate.action || "정보 확인"}</span>
                   <span>유효 · {candidate.expiresAt || "상시"}</span>
                 </div>
-                <div className={styles.searchBlueprint}>
+                <details className={styles.moneyCandidateDetails}>
+                  <summary>근거·키워드·질문 자세히 보기</summary>
+                  {candidate.whyNow && <div className={styles.moneyWhy}><b>지금 쓰는 이유</b><span>{candidate.whyNow}</span></div>}
+                  <div className={styles.searchBlueprint}>
                   <div><b>메인 키워드</b><span>{candidate.mainKeyword || candidate.keywords[0] || candidate.title}</span></div>
                   {candidate.subKeywords.length > 0 && <div><b>세부 키워드</b><span>{candidate.subKeywords.join(" · ")}</span></div>}
                   {candidate.actionQuestions.length > 0 && (
@@ -1724,7 +1989,8 @@ export default function ParammaBulkPage() {
                       <ul>{candidate.faqQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
                     </div>
                   )}
-                </div>
+                  </div>
+                </details>
                 <div className={styles.moneyScores}>
                   <span>돈 {candidate.moneyScore}/5</span>
                   <span>시의성 {candidate.timelinessScore}/5</span>
@@ -1738,9 +2004,34 @@ export default function ParammaBulkPage() {
                     ))}
                   </div>
                 )}
-                <button type="button" className={styles.moneyApply} onClick={() => void applyMoneyCandidate(candidate)}>
-                  {String(moneyTargetId).padStart(2, "0")}번에 넣기
-                </button>
+                <div className={styles.moneyCandidateApply}>
+                  <label className={styles.moneyTarget}>
+                    <span>이 후보를 넣을 큐 자리</span>
+                    <select
+                      value={moneyCandidateTargets[candidate.title] || ""}
+                      onChange={(e) => setMoneyCandidateTargets((prev) => ({
+                        ...prev, [candidate.title]: Number(e.target.value) || 0,
+                      }))}
+                    >
+                      <option value="">먼저 큐 자리를 선택</option>
+                      {topics.map((topic) => (
+                        <option key={topic.id} value={topic.id}>
+                          {String(topic.id).padStart(2, "0")} · {topic.kind === "money" ? "수익형" : statusOf(topic.id) === "done" ? "발행 완료" : statusOf(topic.id) === "working" ? "진행 중" : "일반"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className={styles.moneyApply}
+                    disabled={!moneyCandidateTargets[candidate.title]}
+                    onClick={() => void applyMoneyCandidate(candidate, moneyCandidateTargets[candidate.title])}
+                  >
+                    {moneyCandidateTargets[candidate.title]
+                      ? `${String(moneyCandidateTargets[candidate.title]).padStart(2, "0")}번에 넣기`
+                      : "큐 선택 후 넣기"}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
@@ -1866,10 +2157,27 @@ export default function ParammaBulkPage() {
               </div>
             )}
 
+            <div className={styles.v4ModePanel}>
+              <div><b>제작 방식</b><small>기존 글 V3는 유지 · 새 글은 V4 권장</small></div>
+              <div className={styles.v4ModeRow}>
+                <button type="button" className={!isV4 ? styles.v4ModeActive : ""} onClick={() => changeStoryVersion("v3")}>V3 · 정보형</button>
+                <button type="button" className={isV4 ? styles.v4ModeActive : ""} onClick={() => changeStoryVersion("v4")}>V4 · 사진 스토리형</button>
+              </div>
+              {isV4 && (
+                <div className={styles.v4ImageCount}>
+                  <span>이미지 수 (썸네일 포함)</span>
+                  {([6,7,8] as const).map((count) => (
+                    <button type="button" key={count} className={parammaV4Count(work.imageCount) === count ? styles.v4CountSelected : ""} onClick={() => changeStoryVersion("v4", count)}>{count}장</button>
+                  ))}
+                </div>
+              )}
+              <p className={styles.kickHint}>{isV4 ? "사진→2~3줄 설명→다음 사진. 각 장면은 서로 다른 사실을 설명하며 실제 사진·AI 설명 이미지를 섞어 제작합니다." : "기존 V3 글/이미지를 보존하며 00~02(+선택 03) 슬롯을 사용합니다."}</p>
+            </div>
+
             <div className={styles.kickPanel}>
               <div className={styles.kickPanelHead}>
                 <div>
-                  <p className={styles.eyebrow}>NEW · PARAMMA V3</p>
+                  <p className={styles.eyebrow}>PARAMMA {isV4 ? "V4 · STORY" : "V3"}</p>
                   <h3>이번 글의 킥 설정</h3>
                 </div>
                 <span>미입력이어도 원고 제작 가능</span>
@@ -1915,7 +2223,7 @@ export default function ParammaBulkPage() {
                   </label>
                 </div>
               )}
-              <p className={styles.kickHint}>최종 킥은 본문과 이미지 02 요청서에 함께 반영됩니다. 설정을 바꿔도 작성한 본문·등록 이미지는 삭제되지 않습니다.</p>
+              <p className={styles.kickHint}>{isV4 ? "이번 글의 보상은 본문 05 전후 장면에 반영됩니다. 글의 흐름에 따라 원리·보상과 각 이미지 역할을 구분합니다." : "최종 킥은 본문과 이미지 02 요청서에 함께 반영됩니다."} 설정을 바꿔도 작성한 본문·등록 이미지는 삭제되지 않습니다.</p>
             </div>
 
             <div className={styles.primaryActions}>
@@ -1935,7 +2243,7 @@ export default function ParammaBulkPage() {
                 요청서만 복사
               </button>
               <button type="button" className={styles.secondary} onClick={regenerateParammaV3Prompts}>
-                ✨ V3 요청서 적용
+                ✨ {isV4 ? "V4" : "V3"} 요청서 적용
               </button>
             </div>
 
@@ -1958,7 +2266,7 @@ export default function ParammaBulkPage() {
               <p className={styles.kickHint} aria-live="polite">
                 {plannedImageSlots.length
                   ? "✓ 이미지 기획 자동 인식: " + plannedImageSlots.join(" · ") + " · 각 이미지의 요청서 복사·ChatGPT 열기·ZIP 내보내기 때 반영됩니다. 기존 요청서·등록 이미지는 보존됩니다."
-                  : "아직 이미지 기획 메모를 찾지 못했습니다. GPT 완성 원고 끝의 [이미지 기획 메모]와 이미지 00~03 설명까지 함께 붙여넣으면 자동 연결됩니다."}
+                  : `아직 이미지 기획 메모를 찾지 못했습니다. 원고 끝의 [이미지 기획 메모]에 이미지 00~${String(activeSlotIds.length - 1).padStart(2, "0")} 설명을 붙여넣으세요.`}
               </p>
             )}
             <button
@@ -1981,11 +2289,12 @@ export default function ParammaBulkPage() {
             </div>
 
             <div className={styles.imageGrid}>
-              {SLOT_IDS.map((slotId) => {
+              {visibleSlotIds.map((slotId) => {
                 const info = SLOT_INFO[slotId];
                 const meta = work.slots[slotId];
                 const image = images[slotId];
-                const optionalInactive = slotId === "03" && !work.optional03;
+                const optionalInactive = !isV4 && slotId === "03" && !work.optional03;
+                const v4Role = isV4 ? PARAMMA_V4_SLOTS.find((slot) => slot.id === slotId) : null;
                 const effectiveImagePrompt = imagePromptForWork(work, slotId, selected);
                 const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
                 return (
@@ -1993,7 +2302,7 @@ export default function ParammaBulkPage() {
                     <div className={styles.imageCardHead}>
                       <div>
                         <span className={styles.slotNo}>{slotId}</span>
-                        <b>{info.label}</b>
+                        <b>{v4Role ? `${slotId} · ${v4Role.role}` : info.label}</b>
                         <small>{info.width}×{info.height}px 제작 목표</small>
                       </div>
                       <span className={`${styles.slotStatus} ${styles[meta.status]}`}>
@@ -2001,7 +2310,7 @@ export default function ParammaBulkPage() {
                       </span>
                     </div>
 
-                     {slotId === "03" && (
+                     {!isV4 && slotId === "03" && (
                        <>
                          <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
                            {work.optional03 ? "✓ 이미지 03 추가 실용 정보 사용 중 · 선택 해제" : "+ 이미지 03 추가 실용 정보·예방·비교"}
@@ -2010,7 +2319,7 @@ export default function ParammaBulkPage() {
                        </>
                      )}
 
-                    {isSpiderwebRemovalTopic(selected) && slotId === "02" && (
+                    {!isV4 && isSpiderwebRemovalTopic(selected) && slotId === "02" && (
                       <p className={styles.kickHint}><b>이 글의 필수 이미지:</b> 집 안·베란다 거미줄 제거 방법 3단계 · 청소 방법을 실제로 보여주는 정보 카드입니다. 03은 재발 방지로 분리합니다.</p>
                     )}
                     {bodyImagePlans[slotId] && (
@@ -2025,11 +2334,14 @@ export default function ParammaBulkPage() {
                       {image ? (
                         <img src={image.url} alt={`${slotId} 미리보기`} />
                       ) : (
-                        <div><b>이미지 미등록</b><span>다른 ChatGPT 창에서 만든 이미지를 여기에 등록</span></div>
+                        <div><b>이미지 미등록</b><span>실제 사진을 검색하거나 ChatGPT 이미지를 제작해 등록하세요.</span></div>
                       )}
                     </div>
 
-                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · 실제 PNG 저장</div>}
+                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · PNG 저장{image.credit ? " · Pexels 실사진" : ""}</div>}
+                    {image?.credit && (
+                      <div className={styles.photoCredit}>사진: <a href={image.credit.sourceUrl} target="_blank" rel="noopener noreferrer">{image.credit.photographer} / Pexels ↗</a> · 실제 사건을 촬영한 증거 사진은 아닙니다.</div>
+                    )}
                     {meta.warning && <div className={styles.ratioWarning}>⚠ {meta.warning}</div>}
 
                     <div className={styles.imageActions}>
@@ -2053,7 +2365,7 @@ export default function ParammaBulkPage() {
                       )}
                     </div>
 
-                    {(bodyImagePlans[slotId] || (isSpiderwebRemovalTopic(selected) && (slotId === "02" || slotId === "03"))) && (
+                    {(bodyImagePlans[slotId] || (!isV4 && isSpiderwebRemovalTopic(selected) && (slotId === "02" || slotId === "03"))) && (
                       <details className={styles.slotPrompt}>
                         <summary>완성 본문 반영된 실제 요청서 미리보기</summary>
                         <textarea value={effectiveImagePrompt} readOnly aria-label={`${slotId} 최종 이미지 요청서`} />
@@ -2061,7 +2373,7 @@ export default function ParammaBulkPage() {
                     )}
 
                     <details className={styles.slotPrompt}>
-                      <summary>기본 요청서 확인·직접 수정 (원본 유지)</summary>
+                      <summary>{isV4 ? "장면별 기본 요청서 (원본 보존)" : "기본 요청서 확인·직접 수정 (원본 유지)"}</summary>
                       <textarea
                         value={meta.prompt}
                         onChange={(e) => patchSlot(slotId, { prompt: e.target.value })}
@@ -2069,6 +2381,37 @@ export default function ParammaBulkPage() {
                       />
                     </details>
 
+                    {isV4 && (
+                      <div className={styles.photoSearch}>
+                        <button type="button" onClick={() => {
+                          if (photoSearchSlot === slotId) { setPhotoSearchSlot(null); setPhotoResults([]); }
+                          else {
+                            setPhotoSearchSlot(slotId); setPhotoResults([]);
+                            setPhotoQuery(bodyImagePlans[slotId]?.replace(/사진 검색 추천|AI 설명 이미지 추천/g, "").slice(0, 70) || selected.title.slice(0, 70));
+                          }
+                        }}>🔎 실제 사진 찾기 (Pexels) {photoSearchSlot === slotId ? "▲" : "▼"}</button>
+                        {photoSearchSlot === slotId && (
+                          <div className={styles.photoFinder}>
+                            <p>장면에 맞는 사진을 검색하세요. 한국어 결과가 적으면 영어 검색어도 시도하세요.</p>
+                            <div className={styles.photoQueryRow}>
+                              <input value={photoQuery} onChange={(e) => setPhotoQuery(e.target.value)} placeholder="예: car battery mechanic" aria-label="실제 사진 검색어" />
+                              <button type="button" onClick={() => void searchPexelsPhotos()} disabled={photoLoading}>{photoLoading ? "검색 중" : "검색"}</button>
+                            </div>
+                            <a className={styles.photoExternalLink} target="_blank" rel="noopener noreferrer" href={"https://www.pexels.com/search/" + encodeURIComponent(photoQuery.trim() || selected.title) + "/"}>Pexels 사이트에서 직접 검색·다운로드 ↗</a>
+                            <div className={styles.photoResults}>
+                              {photoResults.map((photo) => (
+                                <article key={photo.id}>
+                                  <img src={photo.thumbnailUrl} alt={photo.alt || "Pexels 사진 미리보기"} loading="lazy" />
+                                  <small><a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">{photo.photographer} / Pexels ↗</a></small>
+                                  <button type="button" disabled={imageBusy !== null} onClick={() => void importPexelsPhoto(slotId, photo)}>이 사진 사용</button>
+                                </article>
+                              ))}
+                            </div>
+                            <small>검색 결과는 사용 조건을 확인해 선택하세요. 등록하면 사진가와 출처가 ZIP에 기록됩니다. 실제 보도·사건 사진으로 오인시키지 마세요.</small>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className={styles.uploadRow}>
                       <label className={`${styles.uploadButton} ${imageBusy === slotId ? styles.busy : ""}`}>
                         {imageBusy === slotId ? "PNG 변환 중…" : image ? "이미지 교체" : "이미지 등록"}
@@ -2098,8 +2441,8 @@ export default function ParammaBulkPage() {
             <div className={styles.naverEditorHead}>
               <div>
                 <p className={styles.eyebrow}>03 · NAVER FINAL COPY</p>
-                <h2>네이버 최종 편집 · 서식복사</h2>
-                <span>제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다.</span>
+                <h2>{isV4 ? "네이버 사진·글 통합 미리보기" : "네이버 최종 편집 · 서식복사"}</h2>
+                <span>{isV4 ? "이미지 마커 위치에 등록 사진을 함께 표시합니다. 네이버 서식 복사는 글만 복사되며 이미지는 별도로 업로드하세요." : "제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다."}</span>
               </div>
             </div>
 
@@ -2123,6 +2466,23 @@ export default function ParammaBulkPage() {
                     >
                       {block.text}
                     </div>
+                    {isV4 && index === 0 && images["00"] && (
+                      <div className={styles.naverStoryImage}>
+                        <img src={images["00"]!.url} alt="00 대표 썸네일 미리보기" />
+                        <small>00 · 대표 썸네일{images["00"]?.credit ? " · Pexels 사진" : ""}</small>
+                      </div>
+                    )}
+                    {isV4 && block.type === "image" && (() => {
+                      const matched = block.text.match(/^\[이미지\s*(0[1-7])\]/i);
+                      const id = matched?.[1] as SlotId | undefined;
+                      const picture = id ? images[id] : undefined;
+                      return picture ? (
+                        <div className={styles.naverStoryImage}>
+                          <img src={picture.url} alt={id + " 본문 이미지 미리보기"} />
+                          <small>{id} · {PARAMMA_V4_SLOTS.find((slot) => slot.id === id)?.role || "본문 이미지"}{picture.credit ? ` · 사진 ${picture.credit.photographer} / Pexels` : ""}</small>
+                        </div>
+                      ) : null;
+                    })()}
                     {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
                   </div>
                 )) : (
@@ -2158,7 +2518,7 @@ export default function ParammaBulkPage() {
                   <p><b>{slotId} {SLOT_INFO[slotId].label}</b><small>{images[slotId] ? `${images[slotId]!.width}×${images[slotId]!.height}px · 실제 PNG` : "필수 이미지가 없습니다."}</small></p>
                 </div>
               ))}
-              <div className={!work.optional03 || images["03"] ? styles.pass : styles.fail}>
+              {!isV4 && <div className={!work.optional03 || images["03"] ? styles.pass : styles.fail}>
                 <span>{!work.optional03 || images["03"] ? "✓" : "!"}</span>
                 <p>
                   <b>03 선택 이미지</b>
@@ -2168,16 +2528,17 @@ export default function ParammaBulkPage() {
                       : images["03"] ? "사용 안 함 · 등록 이미지는 보관 중, ZIP 제외" : "사용 안 함"}
                   </small>
                 </p>
-              </div>
+              </div>}
             </div>
 
             {missingRequired.length > 0 && <div className={styles.blocker}>필수 이미지 누락: {missingRequired.join(", ")}</div>}
             {optionalMissing && <div className={styles.blocker}>선택 이미지 03을 활성화했습니다. 이미지를 등록하거나 선택 해제해주세요.</div>}
+            {missingMarkers.length > 0 && <div className={styles.blocker}>본문에서 이미지 위치가 누락됐습니다: {missingMarkers.map((id) => "[이미지 " + id + "]").join(", ")}</div>}
 
             <div className={styles.zipInfo}>
               <b>ZIP 내부 글별 폴더</b>
               <code>{cleanFolderName(selected)}/</code>
-              <span>00_thumbnail.png · 01_body.png · 02_body.png{work.optional03 ? " · 03_body.png" : ""} · final_post.txt · 요청서 파일</span>
+              <span>{activeSlotIds.map((id) => SLOT_INFO[id].filename).join(" · ")} · final_post.txt · 요청서 파일{activeSlotIds.some((id) => images[id]?.credit) ? " · image_sources.txt" : ""}</span>
             </div>
 
             <div className={styles.finalActions}>

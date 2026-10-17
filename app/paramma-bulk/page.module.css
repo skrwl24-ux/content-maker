@@ -124,3 +124,63 @@
 .searchBlueprint span{display:block;font-size:11px;line-height:1.5;color:#635b49;word-break:keep-all}
 .searchBlueprint ul{margin:4px 0 0;padding-left:17px}
 .searchBlueprint li{margin:3px 0;font-size:11px;line-height:1.45;color:#6c634f}
+
+/* V4 story mode and real-photo workflow; existing V3 selectors remain unchanged. */
+.v4ModePanel{margin:18px 0 14px;padding:15px;border-radius:15px;border:1px solid #cbded2;background:#f4faf6}
+.v4ModePanel>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.v4ModePanel b{font-weight:950;color:#1d4a33}
+.v4ModePanel small{font-size:11px;color:#708579}
+.v4ModeRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.v4ModeRow button,.v4ImageCount button{padding:10px;border:1px solid #d3ded7;border-radius:10px;background:#fff;color:#345a46;font-weight:900;cursor:pointer}
+.v4ModeRow button.v4ModeActive,.v4ImageCount button.v4CountSelected{background:#1b4b36;border-color:#1b4b36;color:#fff}
+.v4ImageCount{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.v4ImageCount>span{font-size:12px;font-weight:800;color:#395c47;margin-right:5px}
+.v4ImageCount button{padding:7px 13px}
+.photoCredit{font-size:11px;line-height:1.5;color:#557366;background:#eff8f2;border:1px solid #d8ebdd;border-radius:8px;margin-top:7px;padding:8px}
+.photoCredit a{color:#1f6d4d;font-weight:850}
+.photoSearch{margin:12px 0 7px}
+.photoSearch>button{width:100%;border-radius:9px;border:1px solid #abcdbb;padding:10px;background:#f2f8f4;color:#275c43;font-weight:900;cursor:pointer}
+.photoFinder{margin-top:9px;padding:11px;background:#fff;border:1px solid #d8e9de;border-radius:12px}
+.photoFinder>p,.photoFinder>small{font-size:11px;color:#668275;line-height:1.6;margin:0 0 8px}
+.photoQueryRow{display:flex;gap:6px}
+.photoQueryRow input{flex:1;min-width:0;border:1px solid #cddfd2;border-radius:9px;padding:9px;font-size:12px}
+.photoQueryRow button,.photoResults button{padding:8px 11px;border-radius:9px;background:#184834;color:#fff;border:0;font-weight:800;cursor:pointer}
+.photoQueryRow button:disabled,.photoResults button:disabled{opacity:.5;cursor:default}
+.photoResults{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.photoResults article{min-width:0;padding:6px;border:1px solid #dde8e0;border-radius:9px;display:flex;flex-direction:column;gap:5px}
+.photoResults img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px}
+.photoResults small{font-size:10px;overflow-wrap:anywhere}
+.photoResults a{color:#286348}
+.photoResults button{font-size:10px;padding:8px 4px}
+.naverStoryImage{margin:15px auto;max-width:720px;text-align:center}
+.naverStoryImage img{display:block;max-width:100%;max-height:490px;width:auto;height:auto;margin:0 auto;border-radius:4px}
+.naverStoryImage small{display:block;margin-top:5px;color:#6c8277;font-size:11px}
+@media(max-width:700px){.photoResults{grid-template-columns:repeat(2,minmax(0,1fr))}.v4ModePanel>div:first-child{align-items:start;flex-direction:column}.naverStoryImage img{max-height:350px}}
+
+.photoExternalLink{display:block;margin:9px 0 3px;font-size:11px;color:#236e4a;font-weight:800;text-decoration:underline}
+
+
+/* Money candidates: select a queue position on each card, never default to 01. */
+.moneyCandidateApply{display:grid;grid-template-columns:1fr;gap:8px;margin-top:11px}
+.moneyCandidateApply .moneyTarget{width:100%;min-width:0}
+.moneyCandidateApply .moneyTarget select{width:100%;min-width:0}
+.moneyCandidateApply .moneyApply{margin-top:0}
+.moneyCandidateApply .moneyApply:disabled{opacity:.5;cursor:not-allowed}
+
+.moneyCandidateDetails{margin-top:10px;border:1px solid #e3e6dc;border-radius:10px;background:#fffefa}
+.moneyCandidateDetails>summary{cursor:pointer;padding:10px 11px;font-size:11px;font-weight:900;color:#69582c}
+.moneyCandidateDetails .moneyWhy{margin:0 10px 8px}
+.moneyCandidateDetails .searchBlueprint{margin:0 10px 10px}
+
+/* Paramma research: keep private owner code in component state only. */
+.moneyAutoResearch{margin:16px 0 12px;border:1px solid #c9dfd3;background:#f4faf6;border-radius:14px;padding:14px}
+.moneyAutoHeader{display:flex;gap:14px;justify-content:space-between;align-items:end}
+.moneyAutoHeader>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.moneyAutoHeader b{color:#234b36;font-size:14px}
+.moneyAutoHeader span,.moneyAutoResearch>small{font-size:11px;line-height:1.5;color:#657d70}
+.moneyAutoHeader>label{display:flex;flex-direction:column;gap:5px;flex:0 0 220px;font-size:11px;color:#365847;font-weight:800}
+.moneyAutoHeader input{width:100%;padding:10px 12px;border:1px solid #c7d9ce;border-radius:10px;background:#fff;font-size:12px;color:#26382f;outline:none}
+.moneyAutoHeader input:focus{border-color:#3d8868;box-shadow:0 0 0 2px rgba(41,110,76,.09)}
+.moneyAutoButton{width:100%;margin:11px 0 8px;padding:13px;border:0;border-radius:10px;background:#173d2f;color:#fff;font-weight:950;cursor:pointer}
+.moneyAutoButton:disabled{cursor:default;opacity:.55}
+@media(max-width:720px){.moneyAutoHeader{flex-direction:column;align-items:stretch}.moneyAutoHeader>label{flex:auto}}
