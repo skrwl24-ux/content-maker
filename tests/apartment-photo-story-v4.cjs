@@ -27,7 +27,7 @@ test("V4 article prompt uses ONLY original monthly numbers and explicit rights c
  const {buildApartmentV4ArticlePrompt}=await studio();
  const prompt=buildApartmentV4ArticlePrompt(data,7);
  assert.match(prompt,/610000000원/);
- assert.match(prompt,/거래일과 층/);
+ assert.match(prompt,/계약일과 층이/);
  assert.match(prompt,/실제 단지 사진을 이미 확보한 것처럼 말하지 않는다/);
  assert.match(prompt,/사진마다 한 가지/);
  assert.match(prompt,/\[이미지 NN\]/);
