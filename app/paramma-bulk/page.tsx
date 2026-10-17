@@ -2010,10 +2010,27 @@ export default function ParammaBulkPage() {
               </div>
             )}
 
+            <div className={styles.v4ModePanel}>
+              <div><b>제작 방식</b><small>기존 글 V3는 유지 · 새 글은 V4 권장</small></div>
+              <div className={styles.v4ModeRow}>
+                <button type="button" className={!isV4 ? styles.v4ModeActive : ""} onClick={() => changeStoryVersion("v3")}>V3 · 정보형</button>
+                <button type="button" className={isV4 ? styles.v4ModeActive : ""} onClick={() => changeStoryVersion("v4")}>V4 · 사진 스토리형</button>
+              </div>
+              {isV4 && (
+                <div className={styles.v4ImageCount}>
+                  <span>이미지 수 (썸네일 포함)</span>
+                  {([6,7,8] as const).map((count) => (
+                    <button type="button" key={count} className={parammaV4Count(work.imageCount) === count ? styles.v4CountSelected : ""} onClick={() => changeStoryVersion("v4", count)}>{count}장</button>
+                  ))}
+                </div>
+              )}
+              <p className={styles.kickHint}>{isV4 ? "사진→2~3줄 설명→다음 사진. 각 장면은 서로 다른 사실을 설명하며 실제 사진·AI 설명 이미지를 섞어 제작합니다." : "기존 V3 글/이미지를 보존하며 00~02(+선택 03) 슬롯을 사용합니다."}</p>
+            </div>
+
             <div className={styles.kickPanel}>
               <div className={styles.kickPanelHead}>
                 <div>
-                  <p className={styles.eyebrow}>NEW · PARAMMA V3</p>
+                  <p className={styles.eyebrow}>PARAMMA {isV4 ? "V4 · STORY" : "V3"}</p>
                   <h3>이번 글의 킥 설정</h3>
                 </div>
                 <span>미입력이어도 원고 제작 가능</span>
@@ -2059,7 +2076,7 @@ export default function ParammaBulkPage() {
                   </label>
                 </div>
               )}
-              <p className={styles.kickHint}>최종 킥은 본문과 이미지 02 요청서에 함께 반영됩니다. 설정을 바꿔도 작성한 본문·등록 이미지는 삭제되지 않습니다.</p>
+              <p className={styles.kickHint}>{isV4 ? "이번 글의 보상은 본문 05 전후 장면에 반영됩니다. 글의 흐름에 따라 원리·보상과 각 이미지 역할을 구분합니다." : "최종 킥은 본문과 이미지 02 요청서에 함께 반영됩니다."} 설정을 바꿔도 작성한 본문·등록 이미지는 삭제되지 않습니다.</p>
             </div>
 
             <div className={styles.primaryActions}>
@@ -2079,7 +2096,7 @@ export default function ParammaBulkPage() {
                 요청서만 복사
               </button>
               <button type="button" className={styles.secondary} onClick={regenerateParammaV3Prompts}>
-                ✨ V3 요청서 적용
+                ✨ {isV4 ? "V4" : "V3"} 요청서 적용
               </button>
             </div>
 
@@ -2102,7 +2119,7 @@ export default function ParammaBulkPage() {
               <p className={styles.kickHint} aria-live="polite">
                 {plannedImageSlots.length
                   ? "✓ 이미지 기획 자동 인식: " + plannedImageSlots.join(" · ") + " · 각 이미지의 요청서 복사·ChatGPT 열기·ZIP 내보내기 때 반영됩니다. 기존 요청서·등록 이미지는 보존됩니다."
-                  : "아직 이미지 기획 메모를 찾지 못했습니다. GPT 완성 원고 끝의 [이미지 기획 메모]와 이미지 00~03 설명까지 함께 붙여넣으면 자동 연결됩니다."}
+                  : `아직 이미지 기획 메모를 찾지 못했습니다. 원고 끝의 [이미지 기획 메모]에 이미지 00~${String(activeSlotIds.length - 1).padStart(2, "0")} 설명을 붙여넣으세요.`}
               </p>
             )}
             <button
@@ -2125,11 +2142,12 @@ export default function ParammaBulkPage() {
             </div>
 
             <div className={styles.imageGrid}>
-              {SLOT_IDS.map((slotId) => {
+              {activeSlotIds.map((slotId) => {
                 const info = SLOT_INFO[slotId];
                 const meta = work.slots[slotId];
                 const image = images[slotId];
-                const optionalInactive = slotId === "03" && !work.optional03;
+                const optionalInactive = !isV4 && slotId === "03" && !work.optional03;
+                const v4Role = isV4 ? PARAMMA_V4_SLOTS.find((slot) => slot.id === slotId) : null;
                 const effectiveImagePrompt = imagePromptForWork(work, slotId, selected);
                 const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
                 return (
@@ -2137,7 +2155,7 @@ export default function ParammaBulkPage() {
                     <div className={styles.imageCardHead}>
                       <div>
                         <span className={styles.slotNo}>{slotId}</span>
-                        <b>{info.label}</b>
+                        <b>{v4Role ? `${slotId} · ${v4Role.role}` : info.label}</b>
                         <small>{info.width}×{info.height}px 제작 목표</small>
                       </div>
                       <span className={`${styles.slotStatus} ${styles[meta.status]}`}>
@@ -2145,7 +2163,7 @@ export default function ParammaBulkPage() {
                       </span>
                     </div>
 
-                     {slotId === "03" && (
+                     {!isV4 && slotId === "03" && (
                        <>
                          <button type="button" className={styles.optionalToggle} onClick={toggleOptional03}>
                            {work.optional03 ? "✓ 이미지 03 추가 실용 정보 사용 중 · 선택 해제" : "+ 이미지 03 추가 실용 정보·예방·비교"}
@@ -2154,7 +2172,7 @@ export default function ParammaBulkPage() {
                        </>
                      )}
 
-                    {isSpiderwebRemovalTopic(selected) && slotId === "02" && (
+                    {!isV4 && isSpiderwebRemovalTopic(selected) && slotId === "02" && (
                       <p className={styles.kickHint}><b>이 글의 필수 이미지:</b> 집 안·베란다 거미줄 제거 방법 3단계 · 청소 방법을 실제로 보여주는 정보 카드입니다. 03은 재발 방지로 분리합니다.</p>
                     )}
                     {bodyImagePlans[slotId] && (
@@ -2169,11 +2187,14 @@ export default function ParammaBulkPage() {
                       {image ? (
                         <img src={image.url} alt={`${slotId} 미리보기`} />
                       ) : (
-                        <div><b>이미지 미등록</b><span>다른 ChatGPT 창에서 만든 이미지를 여기에 등록</span></div>
+                        <div><b>이미지 미등록</b><span>실제 사진을 검색하거나 ChatGPT 이미지를 제작해 등록하세요.</span></div>
                       )}
                     </div>
 
-                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · 실제 PNG 저장</div>}
+                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · PNG 저장{image.credit ? " · Pexels 실사진" : ""}</div>}
+                    {image?.credit && (
+                      <div className={styles.photoCredit}>사진: <a href={image.credit.sourceUrl} target="_blank" rel="noopener noreferrer">{image.credit.photographer} / Pexels ↗</a> · 실제 사건을 촬영한 증거 사진은 아닙니다.</div>
+                    )}
                     {meta.warning && <div className={styles.ratioWarning}>⚠ {meta.warning}</div>}
 
                     <div className={styles.imageActions}>
@@ -2197,7 +2218,7 @@ export default function ParammaBulkPage() {
                       )}
                     </div>
 
-                    {(bodyImagePlans[slotId] || (isSpiderwebRemovalTopic(selected) && (slotId === "02" || slotId === "03"))) && (
+                    {(bodyImagePlans[slotId] || (!isV4 && isSpiderwebRemovalTopic(selected) && (slotId === "02" || slotId === "03"))) && (
                       <details className={styles.slotPrompt}>
                         <summary>완성 본문 반영된 실제 요청서 미리보기</summary>
                         <textarea value={effectiveImagePrompt} readOnly aria-label={`${slotId} 최종 이미지 요청서`} />
@@ -2205,7 +2226,7 @@ export default function ParammaBulkPage() {
                     )}
 
                     <details className={styles.slotPrompt}>
-                      <summary>기본 요청서 확인·직접 수정 (원본 유지)</summary>
+                      <summary>{isV4 ? "장면별 기본 요청서 (원본 보존)" : "기본 요청서 확인·직접 수정 (원본 유지)"}</summary>
                       <textarea
                         value={meta.prompt}
                         onChange={(e) => patchSlot(slotId, { prompt: e.target.value })}
@@ -2213,6 +2234,36 @@ export default function ParammaBulkPage() {
                       />
                     </details>
 
+                    {isV4 && (
+                      <div className={styles.photoSearch}>
+                        <button type="button" onClick={() => {
+                          if (photoSearchSlot === slotId) { setPhotoSearchSlot(null); setPhotoResults([]); }
+                          else {
+                            setPhotoSearchSlot(slotId); setPhotoResults([]);
+                            setPhotoQuery(bodyImagePlans[slotId]?.replace(/사진 검색 추천|AI 설명 이미지 추천/g, "").slice(0, 70) || selected.title.slice(0, 70));
+                          }
+                        }}>🔎 실제 사진 찾기 (Pexels) {photoSearchSlot === slotId ? "▲" : "▼"}</button>
+                        {photoSearchSlot === slotId && (
+                          <div className={styles.photoFinder}>
+                            <p>장면에 맞는 사진을 검색하세요. 한국어 결과가 적으면 영어 검색어도 시도하세요.</p>
+                            <div className={styles.photoQueryRow}>
+                              <input value={photoQuery} onChange={(e) => setPhotoQuery(e.target.value)} placeholder="예: car battery mechanic" aria-label="실제 사진 검색어" />
+                              <button type="button" onClick={() => void searchPexelsPhotos()} disabled={photoLoading}>{photoLoading ? "검색 중" : "검색"}</button>
+                            </div>
+                            <div className={styles.photoResults}>
+                              {photoResults.map((photo) => (
+                                <article key={photo.id}>
+                                  <img src={photo.thumbnailUrl} alt={photo.alt || "Pexels 사진 미리보기"} loading="lazy" />
+                                  <small><a href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">{photo.photographer} / Pexels ↗</a></small>
+                                  <button type="button" disabled={imageBusy !== null} onClick={() => void importPexelsPhoto(slotId, photo)}>이 사진 사용</button>
+                                </article>
+                              ))}
+                            </div>
+                            <small>검색 결과는 사용 조건을 확인해 선택하세요. 등록하면 사진가와 출처가 ZIP에 기록됩니다. 실제 보도·사건 사진으로 오인시키지 마세요.</small>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div className={styles.uploadRow}>
                       <label className={`${styles.uploadButton} ${imageBusy === slotId ? styles.busy : ""}`}>
                         {imageBusy === slotId ? "PNG 변환 중…" : image ? "이미지 교체" : "이미지 등록"}
