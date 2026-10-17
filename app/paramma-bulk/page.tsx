@@ -1094,6 +1094,8 @@ export default function ParammaBulkPage() {
   const [zipBusy, setZipBusy] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [moneyResearchRaw, setMoneyResearchRaw] = useState("");
+  const [moneyResearchBusy, setMoneyResearchBusy] = useState(false);
+  const [moneyResearchAccessCode, setMoneyResearchAccessCode] = useState("");
   const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
   const [moneyCandidateTargets, setMoneyCandidateTargets] = useState<Record<string, number>>({});
   const previewUrls = useRef<string[]>([]);
@@ -1414,6 +1416,41 @@ export default function ParammaBulkPage() {
     setNotice(`${id}번을 ${replacement.kind === "money" ? "수익형" : "일반"} 새 주제로 갈아끼웠습니다: ${replacement.title}`);
   }
 
+  async function runAutomaticMoneyResearch() {
+    const accessCode = moneyResearchAccessCode.trim();
+    if (!accessCode) {
+      setNotice("관리자 인증 코드를 입력해주세요. 입력한 코드는 저장하지 않습니다.");
+      return;
+    }
+    if (moneyResearchBusy) return;
+    setMoneyResearchBusy(true);
+    setNotice("최신 웹 자료에서 수익형 주제를 조사 중입니다. 검색·검증에 시간이 걸릴 수 있습니다.");
+    try {
+      const response = await fetch("/api/paramma/research-money", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessCode,
+          queueTitles: topics.map((topic) => topic.title),
+          historyTitles: historyItems.map((item) => item.title),
+        }),
+        cache: "no-store",
+      });
+      const data = await response.json() as { error?: string; candidates?: MoneyCandidate[]; researchedAt?: string };
+      if (!response.ok) throw new Error(data.error || "수익형 주제 자동 조사에 실패했습니다.");
+      const candidates = parseParammaMoneyCandidates(JSON.stringify({ candidates: data.candidates || [] })) as MoneyCandidate[];
+      if (!candidates.length) throw new Error("AI가 반환한 주제 후보를 읽을 수 없습니다. 다시 조사해주세요.");
+      setMoneyCandidates(candidates);
+      setMoneyCandidateTargets({});
+      setMoneyResearchRaw("[MONEY_JSON]\n" + JSON.stringify({ candidates }, null, 2) + "\n[/MONEY_JSON]");
+      setNotice(`✨ ${data.researchedAt || "오늘"} 기준 수익형 후보 ${candidates.length}개가 자동 등록됐습니다. 공식 출처와 유효기간을 확인한 뒤 큐에 넣어주세요.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "수익형 후보를 자동으로 불러오지 못했습니다.");
+    } finally {
+      setMoneyResearchBusy(false);
+    }
+  }
+
   function importMoneyCandidates() {
     const parsed = parseParammaMoneyCandidates(moneyResearchRaw) as MoneyCandidate[];
     if (!parsed.length) {
@@ -1698,6 +1735,30 @@ export default function ParammaBulkPage() {
           </span>
         </div>
 
+        <div className={styles.moneyAutoResearch}>
+          <div className={styles.moneyAutoHeader}>
+            <div>
+              <b>✨ 최신 수익형 주제 자동 조사</b>
+              <span>클릭하면 웹에서 후보를 조사하고 아래 목록에 자동 등록합니다. 발행 전 내용은 직접 검토해주세요.</span>
+            </div>
+            <label>
+              관리자 인증 코드
+              <input
+                type="password"
+                autoComplete="off"
+                value={moneyResearchAccessCode}
+                onChange={(e) => setMoneyResearchAccessCode(e.target.value)}
+                placeholder="관리자 코드 입력"
+                disabled={moneyResearchBusy}
+              />
+            </label>
+          </div>
+          <button type="button" className={styles.moneyAutoButton} onClick={() => void runAutomaticMoneyResearch()} disabled={moneyResearchBusy || !moneyResearchAccessCode.trim()}>
+            {moneyResearchBusy ? "최신 자료 조사 중…" : "✨ 최신 수익형 후보 자동 조사·등록"}
+          </button>
+          <small>별도 AI API 설정 및 사용 요금이 필요합니다. 인증 코드는 브라우저 저장소에 보관하지 않습니다.</small>
+        </div>
+
         <div className={styles.moneyResearchActions}>
           <a
             className={styles.moneyPrimary}
@@ -1706,7 +1767,7 @@ export default function ParammaBulkPage() {
             rel="noopener noreferrer"
             onClick={() => { void copyText(moneyResearchPrompt, "수익형 주제 조사 요청서를 복사하고 ChatGPT를 열었습니다."); }}
           >
-            🔎 수익형 주제 조사하기
+            🔎 ChatGPT에서 수동 조사하기 (기존 방식)
           </a>
           <p className={styles.kickHint}>
             조사 결과를 붙여넣으면 후보가 자동 등록됩니다.
