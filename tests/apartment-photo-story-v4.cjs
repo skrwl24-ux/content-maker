@@ -31,7 +31,7 @@ test("V4 article prompt uses ONLY original monthly numbers and explicit rights c
  assert.match(prompt,/실제 단지 사진을 이미 확보한 것처럼 말하지 않는다/);
  assert.match(prompt,/사진마다 한 가지/);
  assert.match(prompt,/\[이미지 NN\]/);
- assert.match(prompt,/이미지 06/);
+ assert.match(prompt,/06 교통·학군·생활권/);
  assert.doesNotMatch(prompt,/이미지 07:/);
 });
 
