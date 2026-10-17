@@ -124,3 +124,10 @@
 .searchBlueprint span{display:block;font-size:11px;line-height:1.5;color:#635b49;word-break:keep-all}
 .searchBlueprint ul{margin:4px 0 0;padding-left:17px}
 .searchBlueprint li{margin:3px 0;font-size:11px;line-height:1.45;color:#6c634f}
+
+/* Money candidates: select a queue position on each card, never default to 01. */
+.moneyCandidateApply{display:grid;grid-template-columns:1fr;gap:8px;margin-top:11px}
+.moneyCandidateApply .moneyTarget{width:100%;min-width:0}
+.moneyCandidateApply .moneyTarget select{width:100%;min-width:0}
+.moneyCandidateApply .moneyApply{margin-top:0}
+.moneyCandidateApply .moneyApply:disabled{opacity:.5;cursor:not-allowed}
