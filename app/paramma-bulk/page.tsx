@@ -5,11 +5,12 @@ import JSZip from "jszip";
 import styles from "./page.module.css";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
+import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt } from "../../lib/paramma-story-v4.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
-type SlotId = "00" | "01" | "02" | "03";
+type SlotId = "00" | "01" | "02" | "03" | "04" | "05" | "06" | "07";
 type KickMode = "auto" | "research" | "manual";
 type TopicKind = "curiosity" | "money";
 type MoneyIntent = "신청" | "비용" | "비교" | "구매" | "가입" | "시즌";
@@ -37,6 +38,8 @@ type MoneyCandidate = {
   brief: string;
 } & MoneyTopicMeta;
 
+type PhotoCredit = { provider: "Pexels"; photographer: string; sourceUrl: string; photographerUrl?: string };
+type PexelsPhoto = { id: number; alt: string; sourceUrl: string; photographer: string; photographerUrl: string; thumbnailUrl: string; width: number; height: number };
 type SlotMeta = {
   status: SlotStatus;
   prompt: string;
@@ -54,10 +57,12 @@ type TopicWork = {
   body: string;
   bodyConfirmed: boolean;
   optional03: boolean;
+  version?: "v3" | "v4";
+  imageCount?: number;
   slots: Record<SlotId, SlotMeta>;
 };
 
-type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string };
+type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit };
 type LoadedImage = ImageRecord & { url: string };
 type NaverBlock = {
   type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags";
@@ -142,12 +147,16 @@ const TOPIC_POOL: TopicSeed[] = [
 const STORAGE_KEY = "paramma-publish-queue-v5";
 const DB_NAME = "paramma-blogger-images-v5";
 const DB_STORE = "images";
-const SLOT_IDS: SlotId[] = ["00", "01", "02", "03"];
+const SLOT_IDS: SlotId[] = ["00", "01", "02", "03", "04", "05", "06", "07"];
 const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
   "01": { label: "본문 이미지 01", role: "핵심 원리", width: 1600, height: 900, filename: "01_body.png", copy: "핵심 원리를 한눈에 이해시키는 장면" },
   "02": { label: "본문 이미지 02", role: "이번 글의 발견·보상", width: 1600, height: 900, filename: "02_body.png", copy: "최종 본문의 첫 번째 실용 킥 또는 발견을 저장하기 좋은 정보형 카드로 보여주는 장면" },
   "03": { label: "선택 이미지 03", role: "추가 실용 정보 · 예방 · 비교", width: 1600, height: 900, filename: "03_body.png", copy: "완성 본문에 독립된 후속 정보가 있는 경우 재발 방지·유지 관리·상황별 비교 등을 보여주는 두 번째 저장용 정보 카드" },
+  "04": { label: "본문 이미지 04", role: "상황 비교", width: 1600, height: 900, filename: "04_body.png", copy: "새로운 조건이나 상황의 비교" },
+  "05": { label: "본문 이미지 05", role: "핵심 발견·보상", width: 1600, height: 900, filename: "05_body.png", copy: "독자가 얻어갈 실용적 발견" },
+  "06": { label: "본문 이미지 06", role: "추가 정보", width: 1600, height: 900, filename: "06_body.png", copy: "추가 방법이나 주의점" },
+  "07": { label: "본문 이미지 07", role: "오해 해소·마무리", width: 1600, height: 900, filename: "07_body.png", copy: "독립된 마무리 장면" },
 };
 
 function categoryEmoji(category: Category) {
@@ -800,6 +809,7 @@ function kickContext(work: TopicWork, image02 = false) {
 }
 
 function articlePromptForWork(work: TopicWork, topic: Topic) {
+  if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic);
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
   const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
     ? [
@@ -818,6 +828,11 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
+  if (work.version === "v4") {
+    const plan = extractParammaImagePlans(work.body || "")[slotId] || "";
+    return buildParammaV4ImagePrompt(topic, slotId, plan)
+      + (slotId !== "00" && plan ? "\n[검수] 실제 최종 원고의 해당 문단만 참고하고 장면을 반복하지 말 것." : "");
+  }
   const base = work.slots[slotId].prompt;
   const moneyRules = moneyImageContext(topic, slotId);
   const bodyPlans = extractParammaImagePlans(work.body || "");
@@ -897,6 +912,28 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
 }
 
 
+// Older saved V3 works may only contain 00~03. Preserve their prompts and images.
+function restoreV4WorkShapes(works: Record<number, TopicWork>, topics: Topic[]) {
+  const next = { ...works };
+  for (const topic of topics) {
+    const original = next[topic.id];
+    if (!original) continue;
+    const slots = { ...original.slots } as Record<SlotId, SlotMeta>;
+    for (const id of SLOT_IDS) {
+      if (!slots[id]) {
+        slots[id] = { status: "waiting", prompt: buildParammaV4ImagePrompt(topic, id) };
+      }
+    }
+    next[topic.id] = {
+      ...original,
+      version: original.version === "v4" ? "v4" : "v3",
+      imageCount: parammaV4Count(original.imageCount),
+      slots,
+    };
+  }
+  return next;
+}
+
 function normalizeParammaTopic(value: string) {
   return value
     .normalize("NFKC")
@@ -906,20 +943,22 @@ function normalizeParammaTopic(value: string) {
 }
 
 function defaultWork(topic: Topic): TopicWork {
+  const imageCount = 7;
+  const date = formatToday();
+  const slots = Object.fromEntries(SLOT_IDS.map((id) => [id, {
+    status: "waiting", prompt: buildParammaV4ImagePrompt(topic, id)
+  }])) as Record<SlotId, SlotMeta>;
   return {
-    articlePrompt: buildArticlePromptV3(topic),
+    version: "v4",
+    imageCount,
+    articlePrompt: buildParammaV4ArticlePrompt(topic, imageCount, date),
     kickMode: "auto",
     searchNotes: "",
     selectedKick: "",
     body: "",
     bodyConfirmed: false,
     optional03: false,
-    slots: {
-      "00": { status: "waiting", prompt: buildImagePromptV3(topic, "00") },
-      "01": { status: "waiting", prompt: buildImagePromptV3(topic, "01") },
-      "02": { status: "waiting", prompt: buildImagePromptV3(topic, "02") },
-      "03": { status: "waiting", prompt: buildImagePromptV3(topic, "03") },
-    },
+    slots,
   };
 }
 
@@ -1112,7 +1151,7 @@ export default function ParammaBulkPage() {
         setTopics(savedTopics);
         if (parsed?.statuses) setStatuses(parsed.statuses);
         if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
-        if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
+        if (parsed?.works) setWorks(restoreV4WorkShapes(refreshParammaPrompts(parsed.works, savedTopics), savedTopics));
         if (typeof parsed?.moneyResearchRaw === "string") setMoneyResearchRaw(parsed.moneyResearchRaw);
         if (Array.isArray(parsed?.moneyCandidates)) setMoneyCandidates(parsed.moneyCandidates as MoneyCandidate[]);
         if (Number.isInteger(parsed?.moneyTargetId) && savedTopics.some((t) => t.id === parsed.moneyTargetId)) setMoneyTargetId(parsed.moneyTargetId);
