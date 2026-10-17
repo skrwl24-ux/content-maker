@@ -4467,6 +4467,10 @@ export default function ApartmentBulkPage() {
               matchingPending: selectedComplexNeedsMatching,
             }}
             body={finalBlogText}
+            referencePhotos={photoCandidates}
+            referenceLoading={photoCandidatesLoading}
+            referenceMessage={photoSearchMessage}
+            onSearchReference={() => { void searchPhotoCandidates(data.name, data.region, 1); }}
             onBodyChange={(next) => {
               setFinalBlogText(next);
               if (activeWorkType === "bulk") setWorkBody(next);
