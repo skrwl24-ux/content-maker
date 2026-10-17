@@ -80,7 +80,7 @@ function dataPlot(input: ApartmentV4Input): Promise<{blob:Blob;width:number;heig
   const ctx=canvas.getContext("2d");
   if(!ctx) return Promise.reject(new Error("그래프 생성 기능을 사용할 수 없습니다."));
   ctx.fillStyle="#ffffff";ctx.fillRect(0,0,1600,900);
-  ctx.fillStyle="#17263a";ctx.font="bold 48px sans-serif";ctx.fillText(name.slice(0,26)+" · 6개월 실거래 흐름",88,105);
+  ctx.fillStyle="#17263a";ctx.font="bold 48px sans-serif";ctx.fillText((name||"단지명 미확인").slice(0,26)+" · 6개월 실거래 흐름",88,105);
   ctx.fillStyle="#63758a";ctx.font="27px sans-serif";ctx.fillText("대표 전용면적 "+(area||"확인 필요")+" · 월별 대표값 (개별 거래가 아님)",90,154);
   const vals=rows.map(r=>r.medianPrice as number), min=Math.min(...vals),max=Math.max(...vals);
   const lower=min===max?min*.9:min-(max-min)*.18, upper=min===max?max*1.1:max+(max-min)*.18;
