@@ -9,6 +9,7 @@ import MegaComplexWorkspace from "./MegaComplexWorkspace";
 import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPanel";
 import PublicationCheckPanel from "./PublicationCheckPanel";
 import LifeVerificationPanel from "./LifeVerificationPanel";
+import ApartmentV4Studio from "./ApartmentV4Studio";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
@@ -4448,6 +4449,30 @@ export default function ApartmentBulkPage() {
           )}
 
           <StoryPlanningPanel input={plannerInput} planner={v3Planner} />
+
+          <ApartmentV4Studio
+            key={activeWorkId || [data.region, data.name, data.area].join(":")}
+            identity={activeWorkId || ["manual", data.region, data.name, data.area].join(":")}
+            data={{
+              name: data.name,
+              region: data.region,
+              area: data.area,
+              recentPrice: data.recentPrice,
+              previousPrice: data.previousPrice,
+              households: data.households,
+              moveIn: data.moveIn,
+              station: data.station,
+              locationLine: data.locationLine,
+              monthly: monthlyStats,
+              matchingPending: selectedComplexNeedsMatching,
+            }}
+            body={finalBlogText}
+            onBodyChange={(next) => {
+              setFinalBlogText(next);
+              if (activeWorkType === "bulk") setWorkBody(next);
+              setNaverCopyMessage("");
+            }}
+          />
 
           <details className={styles.advancedDetails}>
             <summary>이전 V2 동네 스토리 조사 (기존 저장한 자료 보기)</summary>
