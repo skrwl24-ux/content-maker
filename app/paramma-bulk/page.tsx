@@ -2293,8 +2293,8 @@ export default function ParammaBulkPage() {
             <div className={styles.naverEditorHead}>
               <div>
                 <p className={styles.eyebrow}>03 · NAVER FINAL COPY</p>
-                <h2>네이버 최종 편집 · 서식복사</h2>
-                <span>제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다.</span>
+                <h2>{isV4 ? "네이버 사진·글 통합 미리보기" : "네이버 최종 편집 · 서식복사"}</h2>
+                <span>{isV4 ? "이미지 마커 위치에 등록 사진을 함께 표시합니다. 네이버 서식 복사는 글만 복사되며 이미지는 별도로 업로드하세요." : "제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다."}</span>
               </div>
             </div>
 
@@ -2318,6 +2318,23 @@ export default function ParammaBulkPage() {
                     >
                       {block.text}
                     </div>
+                    {isV4 && index === 0 && images["00"] && (
+                      <div className={styles.naverStoryImage}>
+                        <img src={images["00"]!.url} alt="00 대표 썸네일 미리보기" />
+                        <small>00 · 대표 썸네일{images["00"]?.credit ? " · Pexels 사진" : ""}</small>
+                      </div>
+                    )}
+                    {isV4 && block.type === "image" && (() => {
+                      const matched = block.text.match(/^\[이미지\s*(0[1-7])\]/i);
+                      const id = matched?.[1] as SlotId | undefined;
+                      const picture = id ? images[id] : undefined;
+                      return picture ? (
+                        <div className={styles.naverStoryImage}>
+                          <img src={picture.url} alt={id + " 본문 이미지 미리보기"} />
+                          <small>{id} · {PARAMMA_V4_SLOTS.find((slot) => slot.id === id)?.role || "본문 이미지"}{picture.credit ? ` · 사진 ${picture.credit.photographer} / Pexels` : ""}</small>
+                        </div>
+                      ) : null;
+                    })()}
                     {index < naverBlocks.length - 1 && <div className={styles.naverSpacer} aria-hidden="true">&nbsp;</div>}
                   </div>
                 )) : (
@@ -2353,7 +2370,7 @@ export default function ParammaBulkPage() {
                   <p><b>{slotId} {SLOT_INFO[slotId].label}</b><small>{images[slotId] ? `${images[slotId]!.width}×${images[slotId]!.height}px · 실제 PNG` : "필수 이미지가 없습니다."}</small></p>
                 </div>
               ))}
-              <div className={!work.optional03 || images["03"] ? styles.pass : styles.fail}>
+              {!isV4 && <div className={!work.optional03 || images["03"] ? styles.pass : styles.fail}>
                 <span>{!work.optional03 || images["03"] ? "✓" : "!"}</span>
                 <p>
                   <b>03 선택 이미지</b>
@@ -2363,16 +2380,17 @@ export default function ParammaBulkPage() {
                       : images["03"] ? "사용 안 함 · 등록 이미지는 보관 중, ZIP 제외" : "사용 안 함"}
                   </small>
                 </p>
-              </div>
+              </div>}
             </div>
 
             {missingRequired.length > 0 && <div className={styles.blocker}>필수 이미지 누락: {missingRequired.join(", ")}</div>}
             {optionalMissing && <div className={styles.blocker}>선택 이미지 03을 활성화했습니다. 이미지를 등록하거나 선택 해제해주세요.</div>}
+            {missingMarkers.length > 0 && <div className={styles.blocker}>본문에서 이미지 위치가 누락됐습니다: {missingMarkers.map((id) => "[이미지 " + id + "]").join(", ")}</div>}
 
             <div className={styles.zipInfo}>
               <b>ZIP 내부 글별 폴더</b>
               <code>{cleanFolderName(selected)}/</code>
-              <span>00_thumbnail.png · 01_body.png · 02_body.png{work.optional03 ? " · 03_body.png" : ""} · final_post.txt · 요청서 파일</span>
+              <span>{activeSlotIds.map((id) => SLOT_INFO[id].filename).join(" · ")} · final_post.txt · 요청서 파일{activeSlotIds.some((id) => images[id]?.credit) ? " · image_sources.txt" : ""}</span>
             </div>
 
             <div className={styles.finalActions}>
