@@ -131,3 +131,8 @@
 .moneyCandidateApply .moneyTarget select{width:100%;min-width:0}
 .moneyCandidateApply .moneyApply{margin-top:0}
 .moneyCandidateApply .moneyApply:disabled{opacity:.5;cursor:not-allowed}
+
+.moneyCandidateDetails{margin-top:10px;border:1px solid #e3e6dc;border-radius:10px;background:#fffefa}
+.moneyCandidateDetails>summary{cursor:pointer;padding:10px 11px;font-size:11px;font-weight:900;color:#69582c}
+.moneyCandidateDetails .moneyWhy{margin:0 10px 8px}
+.moneyCandidateDetails .searchBlueprint{margin:0 10px 10px}
