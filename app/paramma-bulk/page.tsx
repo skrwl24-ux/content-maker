@@ -1145,8 +1145,10 @@ export default function ParammaBulkPage() {
         if (parsed?.selectedId && savedTopics.some((t) => t.id === parsed.selectedId)) setSelectedId(parsed.selectedId);
         if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
         if (typeof parsed?.moneyResearchRaw === "string") setMoneyResearchRaw(parsed.moneyResearchRaw);
-        if (Array.isArray(parsed?.moneyCandidates)) setMoneyCandidates(parsed.moneyCandidates as MoneyCandidate[]);
-        else if (typeof parsed?.moneyResearchRaw === "string") setMoneyCandidates(parseParammaMoneyCandidates(parsed.moneyResearchRaw) as MoneyCandidate[]);
+        const savedCandidates = Array.isArray(parsed?.moneyCandidates) && parsed.moneyCandidates.length
+          ? parsed.moneyCandidates as MoneyCandidate[]
+          : parseParammaMoneyCandidates(parsed?.moneyResearchRaw || "") as MoneyCandidate[];
+        setMoneyCandidates(savedCandidates);
         if (parsed?.moneyCandidateTargets && typeof parsed.moneyCandidateTargets === "object") setMoneyCandidateTargets(parsed.moneyCandidateTargets as Record<string, number>);
       }
     } catch {
@@ -1409,7 +1411,7 @@ export default function ParammaBulkPage() {
     setStatuses((prev) => ({ ...prev, [id]: "waiting" }));
     setWorks((prev) => ({ ...prev, [id]: defaultWork(replacement) }));
     setSelectedId(id);
-    setNotice(`${id}번을 ${replacement.kind === "money" ? "검증된 수익형" : "일반"} 새 주제로 갈아끼웠습니다: ${replacement.title}`);
+    setNotice(`${id}번을 ${replacement.kind === "money" ? "수익형" : "일반"} 새 주제로 갈아끼웠습니다: ${replacement.title}`);
   }
 
   function importMoneyCandidates() {
