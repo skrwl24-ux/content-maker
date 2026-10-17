@@ -1592,6 +1592,73 @@ export default function ParammaBulkPage() {
     }
   }
 
+  async function searchPexelsPhotos() {
+    const query = photoQuery.trim();
+    if (query.length < 2) {
+      setNotice("실제 사진 검색어를 2글자 이상 입력해주세요.");
+      return;
+    }
+    setPhotoLoading(true);
+    setPhotoResults([]);
+    try {
+      const res = await fetch("/api/paramma/photos?query=" + encodeURIComponent(query), { cache: "no-store" });
+      const data = await res.json() as { error?: string; photos?: PexelsPhoto[] };
+      if (!res.ok) throw new Error(data.error || "사진 검색에 실패했습니다.");
+      setPhotoResults(Array.isArray(data.photos) ? data.photos : []);
+      if (!data.photos?.length) setNotice("사진을 찾지 못했습니다. 영어 단어나 더 구체적인 검색어로 다시 찾아보세요.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "사진 검색에 실패했습니다.");
+    } finally {
+      setPhotoLoading(false);
+    }
+  }
+
+  async function importPexelsPhoto(slotId: SlotId, photo: PexelsPhoto) {
+    if (imageBusy !== null) return;
+    const oldImage = images[slotId];
+    const topicId = selected.id;
+    setImageBusy(slotId);
+    setNotice("선택한 실제 사진을 PNG로 등록하고 있습니다.");
+    try {
+      const res = await fetch("/api/paramma/photo-import?id=" + encodeURIComponent(String(photo.id)), { cache: "no-store" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || "실제 사진을 가져오지 못했습니다.");
+      }
+      const original = await res.blob();
+      const mime = original.type || "image/jpeg";
+      const file = new File([original], "pexels-" + photo.id + ".jpg", { type: mime });
+      const converted = await convertToPng(file, SLOT_INFO[slotId].width, SLOT_INFO[slotId].height);
+      const record: ImageRecord = {
+        blob: converted.blob, width: converted.width, height: converted.height,
+        updatedAt: new Date().toISOString(),
+        credit: {
+          provider: "Pexels", photographer: photo.photographer,
+          sourceUrl: photo.sourceUrl, photographerUrl: photo.photographerUrl,
+        },
+      };
+      await idbPut(topicId, slotId, record);
+      const url = URL.createObjectURL(record.blob);
+      previewUrls.current.push(url);
+      if (selected.id === topicId) {
+        setImages((prev) => {
+          if (prev[slotId]?.url) URL.revokeObjectURL(prev[slotId]!.url);
+          return { ...prev, [slotId]: { ...record, url } };
+        });
+      }
+      patchSlot(slotId, { status: "registered", width: record.width, height: record.height, warning: converted.warning, updatedAt: record.updatedAt }, topicId);
+      setPhotoSearchSlot(null);
+      setPhotoResults([]);
+      setNotice(`${slotId} 사진을 등록했습니다. 사진 출처는 ZIP의 image_sources.txt에 보존됩니다. 글에서 실제 사례 사진으로 오해되지 않도록 설명해주세요.`);
+    } catch (error) {
+      setNotice(oldImage
+        ? `사진 교체에 실패했습니다. 기존 이미지는 보존했습니다. ${error instanceof Error ? error.message : ""}`
+        : error instanceof Error ? error.message : "사진 등록에 실패했습니다.");
+    } finally {
+      setImageBusy(null);
+    }
+  }
+
   async function deleteImage(slotId: SlotId) {
     if (!images[slotId]) return;
     if (!window.confirm(`${slotId} 등록 이미지를 실제로 삭제할까요?`)) return;
