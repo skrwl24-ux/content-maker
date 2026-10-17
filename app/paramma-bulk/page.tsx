@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
-import { buildParammaMoneyResearchPrompt, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
+import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
@@ -897,6 +897,32 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
 }
 
 
+function topicFromMoneyCandidate(id: number, candidate: MoneyCandidate): Topic {
+  return {
+    id,
+    category: candidate.category,
+    title: candidate.title,
+    thumbnailHook: candidate.thumbnailHook,
+    brief: candidate.brief,
+    kind: "money",
+    money: {
+      intent: candidate.intent,
+      action: candidate.action,
+      mainKeyword: candidate.mainKeyword,
+      subKeywords: candidate.subKeywords,
+      actionQuestions: candidate.actionQuestions,
+      faqQuestions: candidate.faqQuestions,
+      keywords: candidate.keywords,
+      whyNow: candidate.whyNow,
+      expiresAt: candidate.expiresAt,
+      moneyScore: candidate.moneyScore,
+      timelinessScore: candidate.timelinessScore,
+      fitScore: candidate.fitScore,
+      sourceUrls: candidate.sourceUrls,
+    },
+  };
+}
+
 function normalizeParammaTopic(value: string) {
   return value
     .normalize("NFKC")
@@ -1069,7 +1095,7 @@ export default function ParammaBulkPage() {
   const [hydrated, setHydrated] = useState(false);
   const [moneyResearchRaw, setMoneyResearchRaw] = useState("");
   const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
-  const [moneyTargetId, setMoneyTargetId] = useState(1);
+  const [moneyCandidateTargets, setMoneyCandidateTargets] = useState<Record<string, number>>({});
   const previewUrls = useRef<string[]>([]);
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
@@ -1092,8 +1118,13 @@ export default function ParammaBulkPage() {
   const availablePoolCount = useMemo(() => {
     const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
     const queueKeys = new Set(topics.map((topic) => normalizeParammaTopic(topic.title)));
-    return TOPIC_POOL.filter((topic) => !historyKeys.has(normalizeParammaTopic(topic.title)) && !queueKeys.has(normalizeParammaTopic(topic.title))).length;
-  }, [historyItems, topics]);
+    const generalCount = TOPIC_POOL.filter((topic) => !historyKeys.has(normalizeParammaTopic(topic.title)) && !queueKeys.has(normalizeParammaTopic(topic.title))).length;
+    const moneyCount = eligibleParammaMoneyCandidates(moneyCandidates, {
+      queueTitles: topics.map((topic) => topic.title),
+      historyTitles: historyItems.map((item) => item.title),
+    }).length;
+    return generalCount + moneyCount;
+  }, [historyItems, topics, moneyCandidates]);
   const filteredHistory = useMemo(() => {
     const keyword = historySearch.trim().toLowerCase();
     return historyItems.filter((item) => {
@@ -1115,7 +1146,8 @@ export default function ParammaBulkPage() {
         if (parsed?.works) setWorks(refreshParammaPrompts(parsed.works, savedTopics));
         if (typeof parsed?.moneyResearchRaw === "string") setMoneyResearchRaw(parsed.moneyResearchRaw);
         if (Array.isArray(parsed?.moneyCandidates)) setMoneyCandidates(parsed.moneyCandidates as MoneyCandidate[]);
-        if (Number.isInteger(parsed?.moneyTargetId) && savedTopics.some((t) => t.id === parsed.moneyTargetId)) setMoneyTargetId(parsed.moneyTargetId);
+        else if (typeof parsed?.moneyResearchRaw === "string") setMoneyCandidates(parseParammaMoneyCandidates(parsed.moneyResearchRaw) as MoneyCandidate[]);
+        if (parsed?.moneyCandidateTargets && typeof parsed.moneyCandidateTargets === "object") setMoneyCandidateTargets(parsed.moneyCandidateTargets as Record<string, number>);
       }
     } catch {
       setNotice("이전 작업 정보 일부를 불러오지 못했습니다.");
@@ -1149,11 +1181,11 @@ export default function ParammaBulkPage() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyCandidateTargets }));
     } catch {
       setNotice("작업 상태 저장에 실패했습니다. 브라우저 저장공간을 확인해주세요.");
     }
-  }, [hydrated, topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyTargetId]);
+  }, [hydrated, topics, statuses, selectedId, works, moneyResearchRaw, moneyCandidates, moneyCandidateTargets]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1325,8 +1357,17 @@ export default function ParammaBulkPage() {
       const key = normalizeParammaTopic(candidate.title);
       return !historyKeys.has(key) && !queueKeys.has(key);
     });
+    // Keep the 7 curiosity / 3 money mix as completed slots are replenished.
+    // Money topics must come from a currently valid, sourced research result.
+    const moneySlotsExcludingCurrent = topics.filter((topic) => topic.id !== id && topic.kind === "money").length;
+    const moneyCandidate = moneySlotsExcludingCurrent < 3
+      ? eligibleParammaMoneyCandidates(moneyCandidates, {
+          queueTitles: topics.filter((topic) => topic.id !== id).map((topic) => topic.title),
+          historyTitles: historyItems.map((item) => item.title),
+        })[0] as MoneyCandidate | undefined
+      : undefined;
 
-    if (!available.length) {
+    if (!available.length && !moneyCandidate) {
       setNotice("새 주제 후보가 모두 소진됐습니다. 주제 풀 보충이 필요합니다.");
       return;
     }
@@ -1346,9 +1387,17 @@ export default function ParammaBulkPage() {
       const bAdjacent = Number(b.category === prevCategory) + Number(b.category === nextCategory);
       return aAdjacent - bAdjacent || (categoryCounts[a.category] || 0) - (categoryCounts[b.category] || 0);
     });
-    const seed = (historyItems.length + id + topics.reduce((sum, topic) => sum + topic.title.length, 0)) % ranked.length;
+    const seed = ranked.length
+      ? (historyItems.length + id + topics.reduce((sum, topic) => sum + topic.title.length, 0)) % ranked.length
+      : 0;
     const picked = ranked[seed];
-    const replacement: Topic = { id, ...picked };
+    const replacement: Topic = moneyCandidate
+      ? topicFromMoneyCandidate(id, moneyCandidate)
+      : { id, ...picked };
+    const savedWork = works[id];
+    const hasSavedWork = !!savedWork?.body?.trim() ||
+      SLOT_IDS.some((slotId) => savedWork?.slots?.[slotId]?.status === "registered");
+    if (hasSavedWork && !window.confirm(`${String(id).padStart(2, "0")}번의 기존 본문·이미지·요청서가 초기화됩니다. 새 주제 "${replacement.title}"로 교체할까요?`)) return;
 
     for (const slotId of SLOT_IDS) {
       try { await idbDelete(id, slotId); } catch {}
@@ -1360,7 +1409,7 @@ export default function ParammaBulkPage() {
     setStatuses((prev) => ({ ...prev, [id]: "waiting" }));
     setWorks((prev) => ({ ...prev, [id]: defaultWork(replacement) }));
     setSelectedId(id);
-    setNotice(`${id}번을 새 주제로 갈아끼웠습니다: ${replacement.title}`);
+    setNotice(`${id}번을 ${replacement.kind === "money" ? "검증된 수익형" : "일반"} 새 주제로 갈아끼웠습니다: ${replacement.title}`);
   }
 
   function importMoneyCandidates() {
@@ -1370,11 +1419,21 @@ export default function ParammaBulkPage() {
       return;
     }
     setMoneyCandidates(parsed);
-    setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 점수와 유효기간을 보고 큐에 넣을 주제를 선택하세요.`);
+    setMoneyCandidateTargets({});
+    setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 각 후보에서 큐 자리를 선택한 후 등록하세요.`);
   }
 
-  async function applyMoneyCandidate(candidate: MoneyCandidate) {
-    const targetId = moneyTargetId;
+  async function applyMoneyCandidate(candidate: MoneyCandidate, targetId: number) {
+    if (!Number.isInteger(targetId) || targetId < 1 || targetId > 10) {
+      setNotice("수익형 후보 카드에서 등록할 큐 자리를 먼저 선택해주세요.");
+      return;
+    }
+    const candidateKey = normalizeParammaTopic(candidate.title);
+    if (topics.some((topic) => normalizeParammaTopic(topic.title) === candidateKey) ||
+        historyItems.some((item) => item.normalized_key === candidateKey)) {
+      setNotice("이미 큐에 있거나 발행한 주제입니다. 다른 후보를 선택해주세요.");
+      return;
+    }
     const current = topics.find((topic) => topic.id === targetId);
     if (!current) return;
 
@@ -1383,29 +1442,7 @@ export default function ParammaBulkPage() {
       SLOT_IDS.some((slotId) => currentWork?.slots?.[slotId]?.status === "registered");
     if (hasProgress && !window.confirm(`${targetId}번에는 진행 중이거나 저장된 작업이 있습니다. 이 자리를 수익형 주제로 교체할까요? 기존 본문·요청서·등록 이미지는 초기화됩니다.`)) return;
 
-    const replacement: Topic = {
-      id: targetId,
-      category: candidate.category,
-      title: candidate.title,
-      thumbnailHook: candidate.thumbnailHook,
-      brief: candidate.brief,
-      kind: "money",
-      money: {
-        intent: candidate.intent,
-        action: candidate.action,
-        mainKeyword: candidate.mainKeyword,
-        subKeywords: candidate.subKeywords,
-        actionQuestions: candidate.actionQuestions,
-        faqQuestions: candidate.faqQuestions,
-        keywords: candidate.keywords,
-        whyNow: candidate.whyNow,
-        expiresAt: candidate.expiresAt,
-        moneyScore: candidate.moneyScore,
-        timelinessScore: candidate.timelinessScore,
-        fitScore: candidate.fitScore,
-        sourceUrls: candidate.sourceUrls,
-      },
-    };
+    const replacement = topicFromMoneyCandidate(targetId, candidate);
 
     for (const slotId of SLOT_IDS) {
       try { await idbDelete(targetId, slotId); } catch {}
@@ -1620,7 +1657,7 @@ export default function ParammaBulkPage() {
     setSelectedId(1);
     setMoneyResearchRaw("");
     setMoneyCandidates([]);
-    setMoneyTargetId(1);
+    setMoneyCandidateTargets({});
     setNotice("진행 상태와 글 설정을 초기화했습니다. 등록 이미지 파일은 보존했습니다.");
   }
 
@@ -1669,27 +1706,26 @@ export default function ParammaBulkPage() {
           >
             🔎 수익형 주제 조사하기
           </a>
-          <label className={styles.moneyTarget}>
-            <span>교체할 큐 자리</span>
-            <select value={moneyTargetId} onChange={(e) => setMoneyTargetId(Number(e.target.value))}>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {String(topic.id).padStart(2, "0")} · {topic.kind === "money" ? "수익형" : statusOf(topic.id) === "done" ? "완료" : statusOf(topic.id) === "working" ? "진행 중" : "일반"}
-                </option>
-              ))}
-            </select>
-          </label>
+          <p className={styles.kickHint}>수익형 후보를 붙여넣으면 자동 등록됩니다. 큐 자리는 아래 각 후보에서 선택합니다.</p>
         </div>
 
         <details className={styles.moneyPasteBox}>
           <summary>ChatGPT 조사 결과 붙여넣기 · 후보 자동 인식</summary>
           <textarea
             value={moneyResearchRaw}
-            onChange={(e) => setMoneyResearchRaw(e.target.value)}
-            placeholder="[MONEY_JSON] ... [/MONEY_JSON]이 포함된 조사 결과를 통째로 붙여넣으세요."
+            onChange={(e) => {
+              const raw = e.target.value;
+              setMoneyResearchRaw(raw);
+              const parsed = parseParammaMoneyCandidates(raw) as MoneyCandidate[];
+              if (parsed.length) {
+                setMoneyCandidates(parsed);
+                setMoneyCandidateTargets({});
+              }
+            }}
+            placeholder="[MONEY_JSON] ... [/MONEY_JSON]이 포함된 조사 결과를 붙여넣으면 후보를 자동 인식합니다."
           />
           <div className={styles.moneyPasteActions}>
-            <button type="button" onClick={importMoneyCandidates}>후보 불러오기</button>
+            <button type="button" onClick={importMoneyCandidates}>후보 다시 불러오기</button>
             <span>돈과의 거리 · 시의성 · Paramma 적합도를 각각 5점으로 비교합니다.</span>
           </div>
         </details>
@@ -1738,9 +1774,34 @@ export default function ParammaBulkPage() {
                     ))}
                   </div>
                 )}
-                <button type="button" className={styles.moneyApply} onClick={() => void applyMoneyCandidate(candidate)}>
-                  {String(moneyTargetId).padStart(2, "0")}번에 넣기
-                </button>
+                <div className={styles.moneyCandidateApply}>
+                  <label className={styles.moneyTarget}>
+                    <span>이 후보를 넣을 큐 자리</span>
+                    <select
+                      value={moneyCandidateTargets[candidate.title] || ""}
+                      onChange={(e) => setMoneyCandidateTargets((prev) => ({
+                        ...prev, [candidate.title]: Number(e.target.value) || 0,
+                      }))}
+                    >
+                      <option value="">먼저 큐 자리를 선택</option>
+                      {topics.map((topic) => (
+                        <option key={topic.id} value={topic.id}>
+                          {String(topic.id).padStart(2, "0")} · {topic.kind === "money" ? "수익형" : statusOf(topic.id) === "done" ? "발행 완료" : statusOf(topic.id) === "working" ? "진행 중" : "일반"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className={styles.moneyApply}
+                    disabled={!moneyCandidateTargets[candidate.title]}
+                    onClick={() => void applyMoneyCandidate(candidate, moneyCandidateTargets[candidate.title])}
+                  >
+                    {moneyCandidateTargets[candidate.title]
+                      ? `${String(moneyCandidateTargets[candidate.title]).padStart(2, "0")}번에 넣기`
+                      : "큐 선택 후 넣기"}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
