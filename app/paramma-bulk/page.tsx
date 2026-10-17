@@ -1121,6 +1121,8 @@ export default function ParammaBulkPage() {
   const work = works[selected.id] || defaultWork(selected);
   const isV4 = work.version === "v4";
   const activeSlotIds = parammaActiveSlots(work.version, work.imageCount, work.optional03) as SlotId[];
+  // Keep the V3 optional 03 card visible even when it is not enabled.
+  const visibleSlotIds = isV4 ? activeSlotIds : SLOT_IDS.slice(0, 4);
   const effectiveArticlePrompt = articlePromptForWork(work, selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
@@ -2144,7 +2146,7 @@ export default function ParammaBulkPage() {
             </div>
 
             <div className={styles.imageGrid}>
-              {activeSlotIds.map((slotId) => {
+              {visibleSlotIds.map((slotId) => {
                 const info = SLOT_INFO[slotId];
                 const meta = work.slots[slotId];
                 const image = images[slotId];
