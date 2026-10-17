@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import {
-  APARTMENT_V4_SCENES, apartmentV4Audit, apartmentV4Count, apartmentV4Scenes,
+  APARTMENT_V4_SCENES, apartmentV4Audit, apartmentV4ArticleOnly, apartmentV4Count, apartmentV4Scenes,
   buildApartmentV4ArticlePrompt, buildApartmentV4ImagePrompt, apartmentV4Snapshot,
 } from "../../lib/apartment-photo-story-v4.mjs";
 import type { ApartmentV4Input } from "../../lib/apartment-photo-story-v4.mjs";
