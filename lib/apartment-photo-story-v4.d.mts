@@ -1,0 +1,10 @@
+export type ApartmentV4Scene = {slot:string;name:string;type:string;hint:string;width:number;height:number};
+export type ApartmentV4Input = {name?:string;region?:string;area?:string;recentPrice?:string;previousPrice?:string;households?:string;moveIn?:string;station?:string;locationLine?:string;matchingPending?:boolean;monthly?:Array<{month:string;medianPrice:number|null;tradeCount:number}>};
+export const APARTMENT_V4_SCENES: ReadonlyArray<ApartmentV4Scene>;
+export function apartmentV4Count(value:unknown):number;
+export function apartmentV4Scenes(count?:number):ApartmentV4Scene[];
+export function apartmentV4ArticleOnly(raw:string):string;
+export function apartmentV4Audit(raw:string,count:number):{missing:string[];repeated:string[];unexpected:string[];outOfOrder:boolean;hasBody:boolean;found:string[]};
+export function apartmentV4Snapshot(input:ApartmentV4Input):ApartmentV4Input & {verifiedSeries:boolean;monthly:Array<{month:string;medianPrice:number|null;tradeCount:number}>};
+export function buildApartmentV4ArticlePrompt(input:ApartmentV4Input,count?:number):string;
+export function buildApartmentV4ImagePrompt(input:ApartmentV4Input,slot:string,count?:number,body?:string):string;
