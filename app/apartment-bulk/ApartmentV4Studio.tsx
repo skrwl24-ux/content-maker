@@ -123,12 +123,16 @@ function dataPlot(input: ApartmentV4Input): Promise<{blob:Blob;width:number;heig
 function normalizeId(value: string) { return value.trim().slice(0,150).replace(/[^a-zA-Z0-9가-힣._-]/g,"-"); }
 
 export default function ApartmentV4Studio({
-  identity, data, body, onBodyChange,
+  identity, data, body, onBodyChange, referencePhotos, referenceLoading, referenceMessage, onSearchReference,
 }: {
   identity:string;
   data:ApartmentV4Input;
   body:string;
   onBodyChange:(value:string)=>void;
+  referencePhotos:Array<{title:string;thumbnailUrl:string;imageUrl:string}>;
+  referenceLoading:boolean;
+  referenceMessage:string;
+  onSearchReference:()=>void;
 }) {
   const [mode,setMode]=useState<"v3"|"v4">("v4");
   const [count,setCount]=useState(7);
@@ -171,6 +175,7 @@ export default function ApartmentV4Studio({
     })();
     return ()=>{cancelled=true;fresh.forEach(url=>URL.revokeObjectURL(url));};
   },[storagePrefix]);
+  useEffect(()=>()=>{objectUrls.current.forEach(url=>URL.revokeObjectURL(url));objectUrls.current=[];},[]);
   function updateSettings(nextMode:"v3"|"v4",nextCount:number){
     setMode(nextMode);setCount(nextCount);
     try {localStorage.setItem(storagePrefix,JSON.stringify({mode:nextMode,count:nextCount}));}
@@ -262,6 +267,20 @@ export default function ApartmentV4Studio({
     </div>
     {mode==="v3" ? <p className={styles.aptV4Hint}>기존 아래쪽의 본문·시세 그래프·스토리 이미지 제작 기능을 그대로 사용할 수 있습니다. V4를 켜도 기존 자료는 삭제되지 않습니다.</p> :
     <>
+      <div className={styles.aptV4PhotoFinder}>
+        <div className={styles.aptV4PhotoFinderHeader}>
+          <div><b>🔎 실제 단지 사진 후보</b><small>기존 사이트의 단지 사진 검색을 활용합니다. 검색 사진은 외관 확인 참고용이며, 이용 허락 전에는 블로그에 넣지 않습니다.</small></div>
+          <button type="button" disabled={!data.name?.trim()||referenceLoading} onClick={onSearchReference}>{referenceLoading?"사진 찾는 중…":"실제 단지 사진 찾기"}</button>
+        </div>
+        {referenceMessage && <p>{referenceMessage}</p>}
+        {referencePhotos.length>0 && <div className={styles.aptV4PhotoReferenceGrid}>
+          {referencePhotos.filter(photo=>/^https:\/\//i.test(photo.thumbnailUrl)&&/^https:\/\//i.test(photo.imageUrl)).slice(0,3).map((photo,i)=><a href={photo.imageUrl} target="_blank" rel="noopener noreferrer" key={photo.imageUrl+i}>
+            <img src={photo.thumbnailUrl} alt={photo.title||"단지 외관 검색 참고 사진"} loading="lazy" referrerPolicy="no-referrer"/>
+            <small>후보 {i+1} · 원본 확인 ↗</small>
+          </a>)}
+        </div>}
+      </div>
+
       <div className={styles.aptV4Count}>
         <b>이미지 장수 · 썸네일 포함</b>
         {[6,7,8].map(n=><button type="button" key={n} className={count===n?styles.aptV4Selected:""} onClick={()=>updateSettings("v4",n)}>{n}장</button>)}
