@@ -1487,6 +1487,16 @@ export default function ParammaBulkPage() {
     const current = ensureWork();
     if (current.version === version && (version !== "v4" || parammaV4Count(current.imageCount) === count)) return;
     const currentSlots = { ...current.slots };
+    if (current.version !== version) {
+      for (const id of SLOT_IDS) {
+        currentSlots[id] = {
+          ...currentSlots[id],
+          prompt: version === "v4"
+            ? buildParammaV4ImagePrompt(selected, id)
+            : id <= "03" ? buildImagePromptV3(selected, id) : currentSlots[id].prompt,
+        };
+      }
+    }
     const hasWriting = Boolean(current.body.trim());
     const nextPrompt = version === "v4"
       ? buildParammaV4ArticlePrompt(selected, count, formatToday())
