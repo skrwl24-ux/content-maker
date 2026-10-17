@@ -21,6 +21,12 @@ export type ParammaMoneyCandidate = {
 };
 
 export function moneyCandidateScore(candidate: Partial<ParammaMoneyCandidate>): number;
+export function isParammaMoneyCandidateCurrent(candidate: Partial<ParammaMoneyCandidate>, today?: string): boolean;
+export function eligibleParammaMoneyCandidates(candidates: ParammaMoneyCandidate[], options?: {
+  queueTitles?: string[];
+  historyTitles?: string[];
+  today?: string;
+}): ParammaMoneyCandidate[];
 export function parseParammaMoneyCandidates(raw: string): ParammaMoneyCandidate[];
 export function buildParammaMoneyResearchPrompt(input?: {
   date?: string;
