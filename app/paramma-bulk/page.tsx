@@ -2254,6 +2254,7 @@ export default function ParammaBulkPage() {
                               <input value={photoQuery} onChange={(e) => setPhotoQuery(e.target.value)} placeholder="예: car battery mechanic" aria-label="실제 사진 검색어" />
                               <button type="button" onClick={() => void searchPexelsPhotos()} disabled={photoLoading}>{photoLoading ? "검색 중" : "검색"}</button>
                             </div>
+                            <a className={styles.photoExternalLink} target="_blank" rel="noopener noreferrer" href={"https://www.pexels.com/search/" + encodeURIComponent(photoQuery.trim() || selected.title) + "/"}>Pexels 사이트에서 직접 검색·다운로드 ↗</a>
                             <div className={styles.photoResults}>
                               {photoResults.map((photo) => (
                                 <article key={photo.id}>
