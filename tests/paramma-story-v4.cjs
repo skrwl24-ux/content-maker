@@ -22,7 +22,7 @@ test("V4 article prompt is short-paragraph, distinct-scene and marker-based", as
   assert.doesNotMatch(prompt,/\[이미지 07\]/);
   assert.match(prompt,/사진 검색 추천/);
   assert.match(prompt,/AI 설명 이미지 추천/);
-  assert.match(prompt,/정부/);
+  assert.match(prompt,/공식기관/);
 });
 
 test("V4 image prompts are one scene each, preserve thumbnail and body formats", async () => {
