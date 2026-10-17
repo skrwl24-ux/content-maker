@@ -1109,16 +1109,22 @@ export default function ParammaBulkPage() {
   const [moneyResearchRaw, setMoneyResearchRaw] = useState("");
   const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
   const [moneyTargetId, setMoneyTargetId] = useState(1);
+  const [photoSearchSlot, setPhotoSearchSlot] = useState<SlotId | null>(null);
+  const [photoQuery, setPhotoQuery] = useState("");
+  const [photoResults, setPhotoResults] = useState<PexelsPhoto[]>([]);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const previewUrls = useRef<string[]>([]);
 
   const selected = topics.find((t) => t.id === selectedId) || topics[0] || TOPICS[0];
   const work = works[selected.id] || defaultWork(selected);
+  const isV4 = work.version === "v4";
+  const activeSlotIds = parammaActiveSlots(work.version, work.imageCount, work.optional03) as SlotId[];
   const effectiveArticlePrompt = articlePromptForWork(work, selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
   const bodyImagePlans = useMemo(() => extractParammaImagePlans(work.body), [work.body]);
-  const plannedImageSlots = SLOT_IDS.filter((slotId) => !!bodyImagePlans[slotId]);
+  const plannedImageSlots = activeSlotIds.filter((slotId) => !!bodyImagePlans[slotId]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
   const progress = Math.round((doneCount / Math.max(1, topics.length)) * 100);
   const moneyCount = useMemo(() => topics.filter((topic) => topic.kind === "money").length, [topics]);
@@ -1273,6 +1279,8 @@ export default function ParammaBulkPage() {
 
   function selectTopic(id: number) {
     setSelectedId(id);
+    setPhotoSearchSlot(null);
+    setPhotoResults([]);
     setNotice("");
   }
 
@@ -1471,15 +1479,38 @@ export default function ParammaBulkPage() {
   }
 
 
+  function changeStoryVersion(version: "v3" | "v4", count = parammaV4Count(work.imageCount)) {
+    const current = ensureWork();
+    if (current.version === version && (version !== "v4" || parammaV4Count(current.imageCount) === count)) return;
+    const currentSlots = { ...current.slots };
+    const hasWriting = Boolean(current.body.trim());
+    const nextPrompt = version === "v4"
+      ? buildParammaV4ArticlePrompt(selected, count, formatToday())
+      : buildArticlePromptV3(selected);
+    if (hasWriting && !window.confirm("작성된 원고는 보존되지만 이미지 배치 마커와 새 요청서가 다를 수 있습니다. 제작 방식을 변경할까요?")) return;
+    patchWork({ version, imageCount: count, articlePrompt: nextPrompt, slots: currentSlots });
+    setNotice(`이번 글의 제작 방식을 ${version === "v4" ? "V4 스토리형" : "V3 정보형"}으로 설정했습니다. 기존 원고·등록 이미지는 보존됩니다.`);
+  }
+
   function regenerateParammaV3Prompts() {
-    if (!window.confirm("현재 원고·등록 이미지·진행 상태와 킥 설정은 유지하고, 본문 및 이미지 기본 요청서 문구만 Paramma V3로 다시 생성할까요? 직접 수정한 요청서 문구는 새 내용으로 교체됩니다.")) return;
+    const version = work.version === "v4" ? "v4" : "v3";
+    if (!window.confirm(`현재 원고·이미지는 유지하고 ${version.toUpperCase()} 기본 요청서 문구만 다시 적용할까요? 직접 수정한 요청서 문구는 교체됩니다.`)) return;
     setWorks((prev) => {
       const base = prev[selected.id] || defaultWork(selected);
       const slots = { ...base.slots };
-      for (const slotId of SLOT_IDS) slots[slotId] = { ...slots[slotId], prompt: buildImagePromptV3(selected, slotId) };
-      return { ...prev, [selected.id]: { ...base, articlePrompt: buildArticlePromptV3(selected), slots } };
+      for (const slotId of SLOT_IDS) {
+        slots[slotId] = {
+          ...slots[slotId],
+          prompt: version === "v4" ? buildParammaV4ImagePrompt(selected, slotId) : slotId <= "03" ? buildImagePromptV3(selected, slotId) : slots[slotId].prompt,
+        };
+      }
+      return { ...prev, [selected.id]: {
+        ...base, articlePrompt: version === "v4"
+          ? buildParammaV4ArticlePrompt(selected, parammaV4Count(base.imageCount), formatToday())
+          : buildArticlePromptV3(selected), slots,
+      } };
     });
-    setNotice("이번 글에 Paramma V3 · 검색 의도 기반 요청서를 적용했습니다. 원고와 이미지 파일은 그대로 보존했습니다.");
+    setNotice(`이번 글의 ${version.toUpperCase()} 요청서를 적용했습니다. 원고와 이미지는 보존했습니다.`);
   }
 
   async function copyArticlePrompt() {
@@ -1590,11 +1621,12 @@ export default function ParammaBulkPage() {
         : "선택 이미지 03을 사용하지 않습니다.");
   }
 
-  const requiredSlots: SlotId[] = ["00", "01", "02"];
+  const requiredSlots: SlotId[] = isV4 ? activeSlotIds : ["00", "01", "02"];
   const missingRequired = requiredSlots.filter((slotId) => !images[slotId]);
-  const optionalMissing = work.optional03 && !images["03"];
+  const optionalMissing = !isV4 && work.optional03 && !images["03"];
+  const missingMarkers = isV4 ? parammaV4MissingMarkers(work.body, work.imageCount) as SlotId[] : [];
   const bodyReady = work.body.trim().length > 0 && work.bodyConfirmed;
-  const canZip = bodyReady && missingRequired.length === 0 && !optionalMissing;
+  const canZip = bodyReady && missingRequired.length === 0 && !optionalMissing && missingMarkers.length === 0;
 
   async function downloadZip() {
     if (!canZip) {
@@ -1608,7 +1640,7 @@ export default function ParammaBulkPage() {
       const zip = new JSZip();
       const folder = zip.folder(cleanFolderName(selected));
       if (!folder) throw new Error("ZIP 폴더를 만들 수 없습니다.");
-      const includeSlots: SlotId[] = current.optional03 ? ["00", "01", "02", "03"] : ["00", "01", "02"];
+      const includeSlots = parammaActiveSlots(current.version, current.imageCount, current.optional03) as SlotId[];
       for (const slotId of includeSlots) {
         const record = await idbGet(selected.id, slotId);
         if (!record) throw new Error(`${slotId} 이미지가 없습니다.`);
@@ -1616,9 +1648,15 @@ export default function ParammaBulkPage() {
         folder.file(SLOT_INFO[slotId].filename, record.blob);
       }
       folder.file("final_post.txt", current.body);
+      const imageCredits: string[] = [];
+      for (const id of includeSlots) {
+        const record = await idbGet(selected.id, id);
+        if (record?.credit) imageCredits.push(`[${id}] Pexels · ${record.credit.photographer} · ${record.credit.sourceUrl}`);
+      }
+      if (imageCredits.length) folder.file("image_sources.txt", imageCredits.join("\n"));
       folder.file("article_request.txt", articlePromptForWork(current, selected));
       folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId, selected)}`).join("\n\n====================\n\n"));
-      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
+      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, version: current.version || "v3", imageCount: current.imageCount || 7, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
