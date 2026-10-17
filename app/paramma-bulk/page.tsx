@@ -1706,7 +1706,13 @@ export default function ParammaBulkPage() {
           >
             🔎 수익형 주제 조사하기
           </a>
-          <p className={styles.kickHint}>수익형 후보를 붙여넣으면 자동 등록됩니다. 큐 자리는 아래 각 후보에서 선택합니다.</p>
+          <p className={styles.kickHint}>
+            조사 결과를 붙여넣으면 후보가 자동 등록됩니다.
+            자동 보충 가능한 수익형 후보: {eligibleParammaMoneyCandidates(moneyCandidates, {
+              queueTitles: topics.map((topic) => topic.title),
+              historyTitles: historyItems.map((item) => item.title),
+            }).length}개 · 큐 자리는 각 후보 카드에서 선택
+          </p>
         </div>
 
         <details className={styles.moneyPasteBox}>
@@ -1740,12 +1746,14 @@ export default function ParammaBulkPage() {
                 </div>
                 <h3>{candidate.title}</h3>
                 <p>{candidate.brief}</p>
-                {candidate.whyNow && <div className={styles.moneyWhy}><b>지금 쓰는 이유</b><span>{candidate.whyNow}</span></div>}
                 <div className={styles.moneyMeta}>
                   <span>행동 · {candidate.action || "정보 확인"}</span>
                   <span>유효 · {candidate.expiresAt || "상시"}</span>
                 </div>
-                <div className={styles.searchBlueprint}>
+                <details className={styles.moneyCandidateDetails}>
+                  <summary>근거·키워드·질문 자세히 보기</summary>
+                  {candidate.whyNow && <div className={styles.moneyWhy}><b>지금 쓰는 이유</b><span>{candidate.whyNow}</span></div>}
+                  <div className={styles.searchBlueprint}>
                   <div><b>메인 키워드</b><span>{candidate.mainKeyword || candidate.keywords[0] || candidate.title}</span></div>
                   {candidate.subKeywords.length > 0 && <div><b>세부 키워드</b><span>{candidate.subKeywords.join(" · ")}</span></div>}
                   {candidate.actionQuestions.length > 0 && (
@@ -1760,7 +1768,8 @@ export default function ParammaBulkPage() {
                       <ul>{candidate.faqQuestions.map((question) => <li key={question}>{question}</li>)}</ul>
                     </div>
                   )}
-                </div>
+                  </div>
+                </details>
                 <div className={styles.moneyScores}>
                   <span>돈 {candidate.moneyScore}/5</span>
                   <span>시의성 {candidate.timelinessScore}/5</span>
