@@ -830,8 +830,10 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
   if (work.version === "v4") {
     const plan = extractParammaImagePlans(work.body || "")[slotId] || "";
-    return buildParammaV4ImagePrompt(topic, slotId, plan)
-      + (slotId !== "00" && plan ? "\n[검수] 실제 최종 원고의 해당 문단만 참고하고 장면을 반복하지 말 것." : "");
+    const edited = work.slots[slotId]?.prompt || "";
+    const base = edited.includes("Paramma 네이버 블로그용 이미지 정확히 1장")
+      ? edited : buildParammaV4ImagePrompt(topic, slotId);
+    return base + (plan ? `\n\n[V4 · 완성 원고에서 분석한 ${slotId} 장면 — 현재 원고 내용 우선]\n${plan}\n이 원고에 없는 정보를 추가하지 말 것.` : "");
   }
   const base = work.slots[slotId].prompt;
   const moneyRules = moneyImageContext(topic, slotId);
