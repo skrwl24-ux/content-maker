@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import styles from "./page.module.css";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
-import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt } from "../../lib/paramma-story-v4.mjs";
+import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
@@ -830,10 +830,10 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
   if (work.version === "v4") {
     const plan = extractParammaImagePlans(work.body || "")[slotId] || "";
-    const edited = work.slots[slotId]?.prompt || "";
-    const base = edited.includes("Paramma 네이버 블로그용 이미지 정확히 1장")
-      ? edited : buildParammaV4ImagePrompt(topic, slotId);
-    return base + (plan ? `\n\n[V4 · 완성 원고에서 분석한 ${slotId} 장면 — 현재 원고 내용 우선]\n${plan}\n이 원고에 없는 정보를 추가하지 말 것.` : "");
+    const context = extractParammaV4ImageContext(work.body || "", slotId);
+    // The finalized plan replaces the old generic scene template instead of
+    // being appended after contradictory default directions.
+    return buildParammaV4ImagePrompt(topic, slotId, plan, context);
   }
   const base = work.slots[slotId].prompt;
   const moneyRules = moneyImageContext(topic, slotId);
@@ -2294,6 +2294,7 @@ export default function ParammaBulkPage() {
                 const meta = work.slots[slotId];
                 const image = images[slotId];
                 const optionalInactive = !isV4 && slotId === "03" && !work.optional03;
+                const missingV4Plan = isV4 && !bodyImagePlans[slotId];
                 const v4Role = isV4 ? PARAMMA_V4_SLOTS.find((slot) => slot.id === slotId) : null;
                 const effectiveImagePrompt = imagePromptForWork(work, slotId, selected);
                 const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
@@ -2322,6 +2323,9 @@ export default function ParammaBulkPage() {
                     {!isV4 && isSpiderwebRemovalTopic(selected) && slotId === "02" && (
                       <p className={styles.kickHint}><b>이 글의 필수 이미지:</b> 집 안·베란다 거미줄 제거 방법 3단계 · 청소 방법을 실제로 보여주는 정보 카드입니다. 03은 재발 방지로 분리합니다.</p>
                     )}
+                    {missingV4Plan && (
+                      <p className={styles.kickHint}>⚠ 이 장면의 이미지 기획 메모가 없습니다. 완성 원고의 [이미지 기획 메모]에 이미지 {slotId} 내용을 넣으면 요청서 복사·ChatGPT 열기가 활성화됩니다.</p>
+                    )}
                     {bodyImagePlans[slotId] && (
                       <p className={styles.kickHint}><b>GPT 본문에서 가져온 기획:</b> {bodyImagePlans[slotId]}{optionalInactive ? " · 03 사용 버튼을 누르면 요청서 제작에 활용할 수 있습니다." : ""}</p>
                     )}
@@ -2345,11 +2349,11 @@ export default function ParammaBulkPage() {
                     {meta.warning && <div className={styles.ratioWarning}>⚠ {meta.warning}</div>}
 
                     <div className={styles.imageActions}>
-                      <button type="button" onClick={() => void copyImagePrompt(slotId)} disabled={optionalInactive}>
+                      <button type="button" onClick={() => void copyImagePrompt(slotId)} disabled={optionalInactive || missingV4Plan}>
                         요청서 복사
                       </button>
-                      {optionalInactive ? (
-                        <span className={styles.chatLinkDisabled} aria-disabled="true">ChatGPT 열기</span>
+                      {optionalInactive || missingV4Plan ? (
+                        <span className={styles.chatLinkDisabled} aria-disabled="true">{missingV4Plan ? "기획 메모 확인 후 열기" : "ChatGPT 열기"}</span>
                       ) : (
                         <a
                           href={chatUrl}
