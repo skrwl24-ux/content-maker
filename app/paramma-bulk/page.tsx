@@ -2377,12 +2377,14 @@ export default function ParammaBulkPage() {
                     )}
 
                     <details className={styles.slotPrompt}>
-                      <summary>{isV4 ? "장면별 기본 요청서 (원본 보존)" : "기본 요청서 확인·직접 수정 (원본 유지)"}</summary>
+                      <summary>{isV4 ? "이전 기본 요청서 보관본 (참고용)" : "기본 요청서 확인·직접 수정 (원본 유지)"}</summary>
                       <textarea
                         value={meta.prompt}
                         onChange={(e) => patchSlot(slotId, { prompt: e.target.value })}
+                        readOnly={isV4}
                         disabled={optionalInactive}
                       />
+                      {isV4 && <p className={styles.kickHint}>실제 이미지 요청서는 위에 붙여넣은 최종 원고의 해당 슬롯 기획 메모와 관련 본문으로 새로 구성됩니다.</p>}
                     </details>
 
                     {isV4 && (
