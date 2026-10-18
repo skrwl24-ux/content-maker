@@ -5,4 +5,5 @@ export function parammaV4Count(value: unknown): 6 | 7 | 8;
 export function parammaActiveSlots(version: string | undefined, imageCount: unknown, optional03?: boolean): ParammaV4SlotId[];
 export function parammaV4MissingMarkers(raw: string, imageCount: unknown): ParammaV4SlotId[];
 export function buildParammaV4ArticlePrompt(topic: ParammaV4Topic, imageCount: unknown, date: string): string;
-export function buildParammaV4ImagePrompt(topic: ParammaV4Topic, slot: ParammaV4SlotId, plan?: string): string;
+export function extractParammaV4ImageContext(raw: string, slot: ParammaV4SlotId): string;
+export function buildParammaV4ImagePrompt(topic: ParammaV4Topic, slot: ParammaV4SlotId, plan?: string, articleContext?: string): string;

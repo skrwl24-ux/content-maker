@@ -119,3 +119,35 @@ test("recognizes the new optional 03 role label and captures its following conte
     "03": "추가 실용 정보 · 예방 · 비교 — 거미줄이 다시 생기는 일을 줄이는 관리법"
   });
 });
+
+
+test("reads V4 role labels with real photo plans on the following line", async () => {
+  const body = [
+    "[이미지 기획 메모]",
+    "- 이미지 00: 대표 썸네일 — 핵심 질문을 보여주는 대표 사진 또는 편집 썸네일",
+    "  AI 설명 이미지 추천 — 문화누리카드 15만원 썸네일",
+    "- 이미지 01 · 첫 장면",
+    "  사진 검색 추천 — 스마트폰으로 카드 신청을 확인하는 책상",
+    "- 이미지 02 · 핵심 원리",
+    "  AI 설명 이미지 추천 — 신규 발급 5단계 순서",
+    "- 이미지 03 · 실제 모습·사례",
+    "  사진 검색 추천 — 주민센터 안내 창구",
+    "- 이미지 04 · 상황 비교",
+    "  AI 설명 이미지 추천 — 기존 카드 자동재충전과 신규 신청 비교",
+    "- 이미지 05 · 이번 글의 발견·보상",
+    "  사진 검색 추천 — 실제 서점 책 진열대",
+    "- 이미지 06 · 추가 정보",
+    "  AI 설명 이미지 추천 — 수령등록 2시간 안내",
+    "- 이미지 07 · 오해 해소·마무리",
+    "  AI 설명 이미지 추천 — 발급 마감과 사용 마감일 비교",
+    "[검수 메모]",
+    "메모에 없는 세부 수치를 넣지 않습니다."
+  ].join("\n");
+  const found = await extract(body);
+  assert.deepEqual(Object.keys(found), ["00","01","02","03","04","05","06","07"]);
+  assert.match(found["00"], /문화누리카드 15만원/);
+  assert.match(found["01"], /스마트폰으로 카드 신청/);
+  assert.match(found["05"], /실제 서점 책 진열대/);
+  assert.match(found["07"], /사용 마감일 비교/);
+  assert.doesNotMatch(found["07"], /세부 수치/);
+});
