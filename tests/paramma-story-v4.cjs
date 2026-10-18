@@ -87,3 +87,21 @@ test("V4 article context reads its own scene without pulling in image plans or s
   assert.equal(extractParammaV4ImageContext(body, "02"), "충전과 교체는 다릅니다.");
   assert.doesNotMatch(extractParammaV4ImageContext(body, "02"),/요청서에 들어가면/);
 });
+
+
+test("V4 last image context stops at FAQ instead of including unrelated answers", async () => {
+  const {extractParammaV4ImageContext} = await v4();
+  const body = [
+    "# 문화누리카드",
+    "[이미지 07]",
+    "지원금은 연말까지 사용할 수 있습니다.",
+    "## 자주 묻는 질문",
+    "Q. 가족 구성원마다 받을 수 있나요?",
+    "A. 조건에 해당하면 받을 수 있습니다.",
+    "[이미지 기획 메모]",
+    "- 이미지 07: 연말 잔액 처리"
+  ].join("\n");
+  const excerpt = extractParammaV4ImageContext(body, "07");
+  assert.match(excerpt, /지원금은 연말까지/);
+  assert.doesNotMatch(excerpt, /가족 구성원/);
+});
