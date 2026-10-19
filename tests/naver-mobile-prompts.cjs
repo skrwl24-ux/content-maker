@@ -20,7 +20,7 @@ test("Paramma V4 prompt alternates image markers and short mobile explanations",
   }, 7, "2026-10-19");
   assert.match(prompt, /\[이미지 NN\] 표시는 독립된 줄/);
   assert.match(prompt, /문단 사이에는 실제 빈 줄/);
-  assert.match(prompt, /숫자/);
+  assert.match(prompt, /시간·가격·자격·제품 수치/);
 });
 
 test("apartment V4 prompt preserves verified facts and adds mobile scene structure", async () => {
