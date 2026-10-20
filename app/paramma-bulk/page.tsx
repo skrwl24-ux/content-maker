@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
+import { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } from "../../lib/paramma-naver-export.mjs";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
@@ -64,11 +65,6 @@ type TopicWork = {
 
 type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit };
 type LoadedImage = ImageRecord & { url: string };
-type NaverBlock = {
-  type: "title" | "subheading" | "emphasis" | "body" | "image" | "tags";
-  text: string;
-};
-
 type Topic = {
   id: number;
   category: Category;
@@ -248,182 +244,6 @@ function moneyImageContext(topic: Topic, slotId: SlotId) {
     "- 광고 문구, 구매 압박, 수익 보장 표현은 금지한다.",
     "- 최신 원고에서 검증된 날짜·가격·대상·조건만 사용하고, 확인되지 않은 숫자를 만들지 않는다."
   ].filter(Boolean).join("\n");
-}
-
-function cleanNaverLine(line: string) {
-  return line
-    .replace(/^>\s?/, "")
-    .replace(/^#{1,6}\s+/, "")
-    .replace(/^\*\*(.*?)\*\*$/, "$1")
-    .replace(/^__(.*?)__$/, "$1")
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/\\#/g, "#")
-    .trim();
-}
-
-function isNonPublishNaverHeading(line: string) {
-  const normalized = cleanNaverLine(line)
-    .replace(/^\[|\]$/g, "")
-    .replace(/^\d+[.)]\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return /^(이미지.*기획\s*메모|검수\s*메모)(?:\s*[:：-].*)?$/i.test(normalized);
-}
-
-function normalizeNaverParagraphLines(raw: string) {
-  const source = raw.replace(/\r\n?/g, "\n").split("\n");
-  const out: string[] = [];
-  let paragraph: string[] = [];
-  let firstPublishLineSeen = false;
-
-  const flushParagraph = () => {
-    if (!paragraph.length) return;
-    out.push(paragraph.join(" ").replace(/\s+/g, " ").trim());
-    paragraph = [];
-  };
-
-  const isStructural = (trimmed: string) => {
-    if (!trimmed) return false;
-    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) return true;
-    if (/^#{1,6}\s+/.test(trimmed)) return true;
-    if (/^(\*\*|__)[\s\S]+\1$/.test(trimmed)) return true;
-    if (/^>\s+/.test(trimmed)) return true;
-    const cleaned = cleanNaverLine(trimmed);
-    if (/^\[이미지\s*\d+/i.test(cleaned)) return true;
-    if (/^#[^\s#]+(?:\s+#[^\s#]+)+/.test(cleaned)) return true;
-    return /^[🐾🌌💡🧠✅📌🔎]/u.test(cleaned) && cleaned.length <= 40 && !/[.!?]$/.test(cleaned);
-  };
-
-  for (const rawLine of source) {
-    const trimmed = rawLine.trim();
-
-    if (!trimmed) {
-      flushParagraph();
-      if (out.length && out[out.length - 1] !== "") out.push("");
-      continue;
-    }
-
-    if (/^:::writing\b/i.test(trimmed) || trimmed === ":::" || /^---option\b/i.test(trimmed)) {
-      flushParagraph();
-      out.push(trimmed);
-      continue;
-    }
-
-    if (!firstPublishLineSeen) {
-      flushParagraph();
-      out.push(trimmed);
-      firstPublishLineSeen = true;
-      continue;
-    }
-
-    if (isStructural(trimmed)) {
-      flushParagraph();
-      out.push(trimmed);
-      continue;
-    }
-
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  return out.join("\n");
-}
-
-function parseNaverBlog(raw: string): NaverBlock[] {
-  const allLines = raw.replace(/\r\n?/g, "\n").split("\n");
-  const cutoff = allLines.findIndex((line) => isNonPublishNaverHeading(line));
-  const publishLines = cutoff >= 0 ? allLines.slice(0, cutoff) : allLines;
-
-  const lines = normalizeNaverParagraphLines(publishLines.join("\n"))
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !/^:::writing\b/i.test(line) && line !== ":::" && !/^---option\b/i.test(line));
-
-  if (!lines.length) return [];
-
-  const blocks: NaverBlock[] = [];
-  let firstContent = true;
-
-  for (const original of lines) {
-    const line = cleanNaverLine(original);
-    if (!line) continue;
-
-    if (firstContent) {
-      blocks.push({ type: "title", text: line });
-      firstContent = false;
-      continue;
-    }
-
-    const hashtagCount = (line.match(/#[^\s#]+/g) || []).length;
-    if (hashtagCount >= 2 && line.startsWith("#")) {
-      blocks.push({ type: "tags", text: line });
-      continue;
-    }
-
-    if (/^\[이미지\s*\d+/i.test(line)) {
-      blocks.push({ type: "image", text: line });
-      continue;
-    }
-
-    const markdownHeading = /^#{2,6}\s+/.test(original);
-    const wholeBold = /^(\*\*|__)[\s\S]+\1$/.test(original);
-    const blockQuote = /^>\s+/.test(original);
-    const emojiHeading = /^[🐾🌌💡🧠✅📌🔎]/u.test(line) && line.length <= 40 && !/[.!?]$/.test(line);
-
-    if (markdownHeading || emojiHeading) {
-      blocks.push({ type: "subheading", text: line });
-      continue;
-    }
-
-    if (wholeBold || blockQuote) {
-      blocks.push({ type: "emphasis", text: line });
-      continue;
-    }
-
-    blocks.push({ type: "body", text: line });
-  }
-
-  return blocks;
-}
-
-function escapeHtml(text: string) {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function naverPlainText(blocks: NaverBlock[]) {
-  return blocks.map((block) => block.text).join("\r\n \r\n");
-}
-
-function naverRichHtml(blocks: NaverBlock[]) {
-  const font = "'Nanum Gothic','Noto Sans KR','Apple SD Gothic Neo',Arial,sans-serif";
-  const blockHtml = blocks.map((block) => {
-    const safe = escapeHtml(block.text);
-    if (block.type === "title") {
-      return `<div style="font-family:${font};font-size:32px;line-height:1.35;font-weight:700;margin:0;">${safe}</div>`;
-    }
-    if (block.type === "subheading") {
-      return `<div style="font-family:${font};font-size:30px;line-height:1.45;font-weight:700;margin:0;">${safe}</div>`;
-    }
-    if (block.type === "emphasis") {
-      return `<div style="font-family:${font};font-size:19px;line-height:1.65;font-weight:700;margin:0;">${safe}</div>`;
-    }
-    if (block.type === "tags") {
-      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:400;margin:0;">${safe}</div>`;
-    }
-    if (block.type === "image") {
-      return `<div style="font-family:${font};font-size:15px;line-height:1.7;font-weight:600;margin:0;">${safe}</div>`;
-    }
-    return `<div style="font-family:${font};font-size:15px;line-height:1.8;font-weight:400;margin:0;">${safe}</div>`;
-  });
-
-  const spacer = `<div style="font-family:${font};font-size:15px;line-height:1.8;margin:0;"><br></div>`;
-  return `<div>${blockHtml.join(spacer)}</div>`;
 }
 
 function buildArticlePromptV1(topic: Topic, date = formatToday()) {
@@ -1157,7 +977,7 @@ export default function ParammaBulkPage() {
   const effectiveArticlePrompt = articlePromptForWork(work, selected);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
-  const naverBlocks = useMemo(() => parseNaverBlog(work.body), [work.body]);
+  const naverBlocks = useMemo(() => parseParammaNaverBlog(work.body), [work.body]);
   const bodyImagePlans = useMemo(() => extractParammaImagePlans(work.body), [work.body]);
   const plannedImageSlots = activeSlotIds.filter((slotId) => !!bodyImagePlans[slotId]);
   const doneCount = useMemo(() => topics.filter((t) => statuses[t.id] === "done").length, [topics, statuses]);
@@ -1630,8 +1450,8 @@ export default function ParammaBulkPage() {
       return;
     }
 
-    const plain = naverPlainText(naverBlocks);
-    const html = naverRichHtml(naverBlocks);
+    const plain = parammaNaverPlainText(naverBlocks);
+    const html = parammaNaverRichHtml(naverBlocks);
 
     try {
       if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
@@ -2464,6 +2284,7 @@ export default function ParammaBulkPage() {
                 {naverBlocks.length ? naverBlocks.map((block, index) => (
                   <div key={index}>
                     <div
+                      style={{ whiteSpace: "pre-line" }}
                       className={
                         block.type === "title" ? styles.naverTitle :
                         block.type === "subheading" ? styles.naverSubheading :
