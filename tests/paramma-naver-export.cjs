@@ -58,3 +58,30 @@ test("image markers, highlights, CRLF and HTML escaping are preserved", async ()
   assert.match(html, /font-size:19px/);
   assert.match(html, /첫째 줄 &lt; 둘째<br>다음 줄 &amp; 셋째/);
 });
+
+test("stray end-of-line slash markers are removed without damaging URLs and dates", async () => {
+  const { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } = await import("../lib/paramma-naver-export.mjs");
+  const raw = [
+    "제목", "",
+    "줄바꿈을 유지합니다. \\",
+    "도시가스 감면 신청/",
+    "고객번호를 확인하세요 /",
+    "혜택이 적용됩니다. \\\\",
+    "https://www.gov.kr/",
+    "2026/10/20 기준",
+    "취사/난방 겸용",
+    "슬래시만 있는 별도 행", "/",
+    "마지막 줄"
+  ].join("\n");
+  const blocks = parseParammaNaverBlog(raw);
+  const body = blocks.filter((b) => b.type === "body").map((b) => b.text).join("\n");
+  assert.match(body, /줄바꿈을 유지합니다\.\n도시가스 감면 신청\n고객번호를 확인하세요\n혜택이 적용됩니다\./);
+  assert.ok(!body.includes("신청/"));
+  assert.ok(!body.includes("됩니다. \\"));
+  assert.ok(!body.split("\n").includes("/"));
+  assert.match(body, /https:\/\/www\.gov\.kr\//);
+  assert.match(body, /2026\/10\/20 기준/);
+  assert.match(body, /취사\/난방 겸용/);
+  assert.match(parammaNaverPlainText(blocks), /유지합니다\.\r\n도시가스/);
+  assert.match(parammaNaverRichHtml(blocks), /유지합니다\.<br>도시가스/);
+});
