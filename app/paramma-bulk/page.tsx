@@ -462,13 +462,13 @@ ${categoryGuide(topic.category)}
 
 [본문 구성]
 - 모바일에서 한 문단마다 한 가지 의미를 담아 짧은 문장 1~2개로 구성. 설명상 꼭 필요한 경우에만 3문장까지 허용.
-- 같은 문단 안에서는 문장마다 엔터하거나 한 줄씩 띄우지 말고 자연스럽게 이어 쓸 것.
-- 의미·논점이 바뀌는 문단 사이에만 완전히 빈 줄 1개를 넣을 것.
+- [모바일 수동 줄바꿈 · 최우선] 일반 본문 한 줄은 한글 약 15~20자(공백 포함) 안팎을 목표로 하고, 문장의 의미가 자연스럽게 이어지는 지점에서 엔터로 미리 줄을 나눌 것. 1~2개의 짧은 줄을 한 문단으로 묶고 문단 사이 실제 빈 줄 하나를 둘 것.
+- 문장이 길다면 먼저 친근하고 쉬운 두 문장으로 고칠 것. 중간에서 글자 수만 세어 단어·조사만 따로 떼어놓지 말고, 의미가 바뀌거나 새 설명이 시작되면 빈 줄 한 줄을 둘 것.
 - 소제목은 콘텐츠메이커가 크기 30으로 인식할 수 있게 반드시 '## 소제목' 형식의 독립된 줄로 작성할 것.
 - 독자가 꼭 기억해야 할 핵심 해석·결론·주의문은 글 전체에서 1~3개만 골라 '**강조 문장 전체**' 형식의 독립된 줄로 작성할 것. 콘텐츠메이커가 이를 크기 19 강조로 변환한다.
 - 일반 본문은 크기 15 기준이며, 단순한 숫자 나열이나 모든 핵심 문장을 강조 처리하지 말 것.
 - 스페이스바 1칸만 들어간 간격용 줄은 만들지 말 것.
-- 문장 중간이나 고유명사·숫자·단위 사이에 모바일 화면 폭을 맞추기 위한 강제 줄바꿈을 넣지 말 것.
+- 긴 고유명사·숫자·단위·제목·소제목은 글자 수 목표보다 정확성을 우선해 중간을 자르지 말 것. 가운데 정렬은 운영자가 네이버 편집기에서 직접 적용하므로 정렬용 HTML은 출력하지 말 것.
 - HTML 공백 엔티티(&#x20;, &nbsp;), 불필요한 역슬래시, 네이버 편집기 UI 문구('image', '사진 삭제', 'AI 활용 설정')를 최종 원고에 넣지 말 것.
 - 도입부에서 독자의 실제 궁금증을 바로 꺼낼 것.
 - 핵심 답을 너무 늦게 숨기지 말 것.
@@ -811,7 +811,8 @@ function kickContext(work: TopicWork, image02 = false) {
 }
 
 function articlePromptForWork(work: TopicWork, topic: Topic) {
-  if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic);
+  const savedPromptMobileOverride = "\n\n[모바일 수동 줄바꿈 · 저장된 요청서보다 우선]\n- 일반 본문은 한글 약 15~20자(공백 포함)를 한 줄 목표로 하고, 자동 줄바꿈에 맡기지 말고 의미 단위에서 직접 엔터를 넣는다.\n- 1~2개의 짧은 줄을 한 문단으로 묶으며 문단 사이 빈 줄 하나를 둔다. 딱딱하지 않은 친근한 말투를 사용한다.\n- 단어 중간, 고유명사, 숫자·단위는 자르지 않는다. 제목·소제목·해시태그·이미지 마커는 제한 대상이 아니다. 가운데 정렬은 편집기에서 사용자가 적용한다.";
+  if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic) + savedPromptMobileOverride;
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
   const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
     ? [
@@ -826,7 +827,7 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
   const storyBridge = work.articlePrompt.includes("[Paramma V3 · 연결형 스토리 구성") ? "" : "\n\n" + PARAMMA_STORY_BRIDGE_RULES;
   const imagePlan = work.articlePrompt.includes("[Paramma V3 · 이미지 02/03 역할 분담 최신 규칙") ? "" : "\n\n" + PARAMMA_IMAGE_PLAN_RULES;
   const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE_ARTICLE_RULES : "";
-  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work) + moneyTopicContext(topic);
+  return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work) + moneyTopicContext(topic) + savedPromptMobileOverride;
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
@@ -2450,7 +2451,7 @@ export default function ParammaBulkPage() {
               <div>
                 <p className={styles.eyebrow}>03 · NAVER FINAL COPY</p>
                 <h2>{isV4 ? "네이버 사진·글 통합 미리보기" : "네이버 최종 편집 · 서식복사"}</h2>
-                <span>{isV4 ? "이미지 마커 위치에 등록 사진을 함께 표시합니다. 네이버 서식 복사는 글만 복사되며 이미지는 별도로 업로드하세요." : "제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 문장마다가 아니라 문단마다 한 줄을 띄웁니다."}</span>
+                <span>{isV4 ? "이미지 마커 위치에 등록 사진을 함께 표시합니다. 네이버 서식 복사는 글만 복사되며 이미지는 별도로 업로드하세요." : "제목 32 · 소제목 30 · 강조 19 · 본문 15를 적용하고, 모바일용 짧은 줄과 문단 여백을 유지합니다."}</span>
               </div>
             </div>
 
