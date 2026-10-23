@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import styles from "./page.module.css";
 import { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } from "../../lib/paramma-naver-export.mjs";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
+import { PARAMMA_EXPLORATION_STORY_RULES } from "../../lib/paramma-exploration-story.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
 
@@ -60,6 +61,7 @@ type TopicWork = {
   optional03: boolean;
   version?: "v3" | "v4";
   imageCount?: number;
+  explorationMode?: boolean;
   slots: Record<SlotId, SlotMeta>;
 };
 
@@ -632,7 +634,11 @@ function kickContext(work: TopicWork, image02 = false) {
 
 function articlePromptForWork(work: TopicWork, topic: Topic) {
   const savedPromptMobileOverride = "\n\n[모바일 수동 줄바꿈 · 저장된 요청서보다 우선]\n- 일반 본문은 한글 약 15~20자(공백 포함)를 한 줄 목표로 하고, 자동 줄바꿈에 맡기지 말고 의미 단위에서 직접 엔터를 넣는다.\n- 1~2개의 짧은 줄을 한 문단으로 묶으며 문단 사이 빈 줄 하나를 둔다. 딱딱하지 않은 친근한 말투를 사용한다.\n- 단어 중간, 고유명사, 숫자·단위는 자르지 않는다. 제목·소제목·해시태그·이미지 마커는 제한 대상이 아니다. 가운데 정렬은 편집기에서 사용자가 적용한다.";
-  if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic) + savedPromptMobileOverride;
+  if (work.version === "v4") {
+    const explorationRules = work.explorationMode && topic.kind !== "money" && (topic.category === "신기한 동물이야기" || topic.category === "신비로운 자연")
+      ? "\n\n" + PARAMMA_EXPLORATION_STORY_RULES : "";
+    return work.articlePrompt + kickContext(work) + moneyTopicContext(topic) + explorationRules + savedPromptMobileOverride;
+  }
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
   const legacyOverride = work.articlePrompt.includes("[Paramma V2 · 호기심 → 발견 → 보상]")
     ? [
@@ -1995,6 +2001,12 @@ export default function ParammaBulkPage() {
                 </div>
               )}
               <p className={styles.kickHint}>{isV4 ? "사진→2~3줄 설명→다음 사진. 각 장면은 서로 다른 사실을 설명하며 실제 사진·AI 설명 이미지를 섞어 제작합니다." : "기존 V3 글/이미지를 보존하며 00~02(+선택 03) 슬롯을 사용합니다."}</p>
+              {isV4 && selected.kind !== "money" && (selected.category === "신기한 동물이야기" || selected.category === "신비로운 자연") && (
+                <label className={styles.kickHint} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={Boolean(work.explorationMode)} onChange={(e) => patchWork({ explorationMode: e.target.checked })} />
+                  <span><strong>🔎 탐사형 스토리 시험</strong> · 해외 원문 연구·박물관 자료를 검증하고, 사진 권리 확인과 단서→발견형 전개를 요청서에 추가합니다. 현재 글에만 적용되며 기존 원고·이미지는 그대로 보존됩니다.</span>
+                </label>
+              )}
             </div>
 
             <div className={styles.kickPanel}>
