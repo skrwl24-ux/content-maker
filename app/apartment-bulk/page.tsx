@@ -222,6 +222,27 @@ const DAILY_TOPIC_PLANS: Record<string, DailyTopicPlan> = {
   },
 };
 
+type SpecialApartmentTopic = { type: Exclude<DailyContentType, "bulk" | "presale" | "moving">; title: string; keywords: string[]; brief: string };
+
+// Search-intent hypotheses: not a verified monthly-volume ranking or confirmed trade comparison.
+const SPECIAL_APARTMENT_TOPICS: SpecialApartmentTopic[] = [
+  {"type":"top3","title":"군포 아파트값이 오른다는데, 실제 거래가 가장 활발한 단지는?","keywords":["군포 아파트 실거래가","군포 거래량 TOP3","산본 아파트"],"brief":"2026년 신고된 계약 중 기간·면적 기준을 맞춘 군포 아파트 거래량 상위 단지를 찾아 가격 흐름과 비교합니다. 이전 군포 TOP3 글과 중복 여부를 먼저 확인하고 현재 순위는 검증 뒤 확정합니다."},
+  {"type":"compare","title":"같은 아파트인데 가격이 억 단위로 다르다고? 실거래가의 비밀","keywords":["아파트 같은 평형 가격 차이","로열층 실거래가","저층 아파트 가격"],"brief":"동일 단지와 동일 전용면적에서 계약일·층·거래 조건을 맞춰 가격 차이가 실제로 큰 사례를 선정합니다. 면적이 다른 거래를 하락·상승으로 잘못 비교하지 않습니다."},
+  {"type":"tip","title":"신고가 찍힌 아파트, 그런데 거래가 취소됐다면?","keywords":["아파트 실거래 취소","신고가 취소","계약 해제"],"brief":"국토교통부 실거래 신고 자료의 계약·해제 표시를 확인하고 신고가 취소 거래가 통계 해석에 미치는 영향을 설명합니다. 사례와 해제 사유에 대한 추측을 분리합니다."},
+  {"type":"compare","title":"동탄·병점 아파트, 같은 예산이라면 어디까지 살 수 있을까?","keywords":["동탄 병점 아파트 비교","84㎡ 실거래가","화성 아파트"],"brief":"예산과 전용면적·기간이 비슷한 실제 거래 단지를 비교하고 준공·위치·교통·세금 및 거래 조건 차이를 확인합니다."},
+  {"type":"power","title":"서울 아파트는 오른다는데, 왜 우리 동네는 다르게 움직일까?","keywords":["서울 아파트 상승 지역","성북구 아파트","서대문구 아파트"],"brief":"한국부동산원 주간 가격지수와 국토부 개별 실거래는 다른 통계임을 설명하며 지역별 지표·단지 사례를 구분해 비교합니다. 최신 수치를 재검증합니다."},
+  {"type":"compare","title":"30년 넘은 아파트가 신축만큼 비쌀까?","keywords":["30년 구축 아파트 실거래가","구축 신축 아파트 비교","노후 아파트 가격"],"brief":"동일 생활권·전용면적 기준으로 준공 30년 이상 아파트와 신축의 실거래를 비교하고 재건축 기대·입지·대지지분은 근거 있을 때만 설명합니다."},
+  {"type":"tip","title":"거래가 딱 1건인데 집값이 급등했다고?","keywords":["아파트 거래량 적은 신고가","실거래 1건 상승률","아파트 거래 표본"],"brief":"거래 건수가 적을 때 중간값·마지막 거래가 흔들리는 이유를 실제 사례와 건수 표시로 설명합니다. 한 건의 신고가를 단지 전체 상승으로 단정하지 않습니다."},
+  {"type":"tip","title":"무순위 청약이 또 나왔다면 무슨 이유일까?","keywords":["아파트 무순위 3차 5차","무순위 청약 추가모집","청약 미계약 사유"],"brief":"공식 입주자모집공고를 통해 무순위·임의공급·계약취소주택을 구분하고 반복 모집의 유형과 공급 규모를 설명합니다. 추정 원인을 사실로 단정하지 않습니다."},
+  {"type":"compare","title":"전셋값이 오르면 매매가격도 따라갈까?","keywords":["아파트 전세가율 상승","매매 전세 가격 비교","전세가율 의미"],"brief":"동일 단지·동일 평형대의 전세와 매매 거래 흐름을 비교하고 전세가율 상승과 매매가 상승이 항상 같지 않음을 사례로 보여줍니다."},
+  {"type":"compare","title":"분당·평촌·산본, 오래된 신도시 어디가 다를까?","keywords":["1기 신도시 84㎡ 비교","분당 평촌 산본 실거래","1기 신도시 아파트"],"brief":"세 1기 신도시의 같은 전용면적대 실거래가와 입지·준공·정비계획을 공식 자료 기준으로 비교합니다. 동일 단지 가격처럼 혼동하지 않습니다."},
+  {"type":"compare","title":"같은 아파트 59㎡와 84㎡, 어느 쪽이 더 비쌀까?","keywords":["아파트 평형별 평당가","59㎡ 84㎡ 가격 차이","면적별 실거래가"],"brief":"같은 단지의 전용 59㎡와 84㎡ 거래를 절대금액·전용면적당 단가로 나누어 비교합니다. 공급면적과 전용면적 단위를 섞지 않습니다."},
+  {"type":"tip","title":"역세권 아파트, 정말 역에서 가까울까?","keywords":["역세권 아파트 실제 거리","아파트 역 거리","지하철 출입구 도보 거리"],"brief":"역 이름만으로 거리·시간을 단정하지 않고 아파트 출입구와 역 출구, 실제 도보 경로를 확인한 단지를 사례로 소개합니다."},
+  {"type":"tip","title":"관리비가 유독 비싼 아파트는 왜 그럴까?","keywords":["아파트 관리비 비교","관리비 항목 조회","K-apt 관리비"],"brief":"K-apt 공개 관리비에서 공용·개별 비용과 세대수·면적 기준을 맞춰 비교하며 실제 차이가 생기는 항목을 검증합니다."},
+  {"type":"compare","title":"청약 인기 아파트, 입주 후 가격은 달라졌을까?","keywords":["청약 경쟁률 실거래가","분양가 실거래가 비교","입주 후 아파트 가격"],"brief":"과거 경쟁률과 모집공고 분양가를 실제 입주 후 거래와 비교하되 발코니·옵션·세금·면적 차이를 명시합니다."},
+  {"type":"compare","title":"매물이 많은데 실거래는 없는 아파트?","keywords":["아파트 매물 거래량 차이","아파트 매도 호가 실거래","매물 많은 아파트"],"brief":"현재 호가와 신고된 계약 건수의 집계시점·중복 매물 문제를 구분하고 실제 비교 가능한 단지만 선정합니다."},
+];
+
 const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
   presale: ["고덕강일3단지 본청약 예정｜공급물량·분양가·토지임대료 확인"],
   top3: [
@@ -235,6 +256,7 @@ const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
     "고양 덕양 아파트 어디가 많이 팔렸나? 최근 6개월 거래 TOP3",
     "노원 10억 이하 아파트 거래 활발 TOP3",
     "강동 15억 이하 아파트 거래 활발 TOP3",
+    ...SPECIAL_APARTMENT_TOPICS.filter((item) => item.type === "top3").map((item) => item.title),
   ],
   tip: [
     "채권 가격은 금리가 내리면 왜 오를까?",
@@ -247,6 +269,7 @@ const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
     "전세가율은 어떻게 계산하고 어디에 써먹을까?",
     "LTV와 DSR은 뭐가 다를까? 주택대출 핵심 용어 정리",
     "아파트 관리비에서 장기수선충당금은 무엇일까?",
+    ...SPECIAL_APARTMENT_TOPICS.filter((item) => item.type === "tip").map((item) => item.title),
   ],
   power: [
     "미국채 10년물 금리가 오르면 성장주는 왜 흔들릴까?",
@@ -258,7 +281,9 @@ const DAILY_TOPIC_POOLS: Partial<Record<DailyContentType, string[]>> = {
     "미국 CPI 발표에 주식·채권·환율이 동시에 반응하는 이유",
     "장단기 금리차는 경기 흐름을 어떻게 보여줄까?",
     "엔캐리 트레이드 청산이 글로벌 시장을 흔드는 과정",
+    ...SPECIAL_APARTMENT_TOPICS.filter((item) => item.type === "power").map((item) => item.title),
   ],
+  compare: SPECIAL_APARTMENT_TOPICS.filter((item) => item.type === "compare").map((item) => item.title),
 };
 
 const PUBLISHED_TOPIC_SEEDS = [
@@ -309,6 +334,20 @@ function normalizeTopicKey(topic: string) {
     .toLowerCase()
     .replace(/\d{4}년|\d{1,2}월|\d{1,2}일/g, "")
     .replace(/[\s·｜|?？!！,.'\"“”‘’()\[\]{}:;~_-]/g, "");
+}
+
+function specialApartmentWorkNotes(topic: string) {
+  const item = SPECIAL_APARTMENT_TOPICS.find((candidate) => normalizeTopicKey(candidate.title) === normalizeTopicKey(topic));
+  if (!item) return "";
+  return [
+    "[집값쓱 특별 검색형 주제 기획]",
+    "독자 검색어: " + item.keywords.join(" / "),
+    "조사 방향: " + item.brief,
+    "검증 조건: 최신 국토부 실거래 자료·한국부동산원·K-apt·공식 모집공고 중 적합한 근거를 확인하세요.",
+    "계약일·전용면적·가격·거래건수·해제 여부를 혼동하지 말고, 발표 시점과 통계 기준을 표시하세요.",
+    "실제 수치·거래·순위·거리·시간은 미확인 상태에서 만들어 쓰지 마세요.",
+    "검색량은 미검증 후보이므로 인기 검색어라고 단정하지 마세요."
+  ].join("\n");
 }
 
 function isPublishedTopic(topic: string, publishedTopics: string[]) {
@@ -2525,6 +2564,8 @@ export default function ApartmentBulkPage() {
   const [mapCopyMessage, setMapCopyMessage] = useState("");
   const [dailyDateKey, setDailyDateKey] = useState("");
   const [dailySlots, setDailySlots] = useState<DailySlot[]>(DEFAULT_DAILY_SLOTS);
+  const [specialApartmentTarget, setSpecialApartmentTarget] = useState(0);
+  const [specialApartmentMessage, setSpecialApartmentMessage] = useState("");
   const [dailyApartmentCandidates, setDailyApartmentCandidates] = useState<DailyApartmentCandidate[]>([]);
   const [publishHistoryItems, setPublishHistoryItems] = useState<PublishHistoryItem[]>([]);
   const [publishHistoryFilter, setPublishHistoryFilter] = useState<PublishHistoryFilter>("all");
@@ -3159,6 +3200,44 @@ export default function ApartmentBulkPage() {
     if (activeWorkSlot?.id === id) setWorkTopic(topic);
   }
 
+  async function applySpecialApartmentTopic(item: SpecialApartmentTopic, targetId: number) {
+    const target = dailySlots.find((slot) => slot.id === targetId);
+    if (!target) {
+      setSpecialApartmentMessage("먼저 발행 큐 자리를 선택해 주세요.");
+      return;
+    }
+    if (target.done) {
+      setSpecialApartmentMessage(`${targetId}번은 발행 완료된 자리입니다. 먼저 갈아끼우기로 새 자리를 만든 뒤 등록해 주세요.`);
+      return;
+    }
+    const key = normalizeTopicKey(item.title);
+    if (dailySlots.some((slot) => normalizeTopicKey(slot.topic || "") === key) ||
+        isPublishedTopic(item.title, getStoredPublishedTopics()) ||
+        publishHistoryItems.some((entry) => entry.item_type === "topic" && normalizeTopicKey(entry.title) === key)) {
+      setSpecialApartmentMessage("이미 발행했거나 큐에 있는 주제입니다. 다른 후보를 선택해 주세요.");
+      return;
+    }
+    if (activeWorkId === target.workId || startedWorkIds.includes(target.workId) ||
+        (target.workId && await readWorkSnapshot(target.workId))) {
+      setSpecialApartmentMessage(`${targetId}번은 이미 작업을 시작했거나 저장된 내용이 있어 교체하지 않았습니다. 대기 중인 빈 작업을 선택해 주세요.`);
+      return;
+    }
+    const updated = dailySlots.map((slot) => slot.id === targetId ? {
+      ...slot,
+      type: item.type,
+      topic: item.title,
+      workId: createWorkId(dailyDateKey || new Date().toISOString().slice(0, 10), targetId),
+      complexId: "",
+      complexName: "",
+      candidateRegion: "",
+      candidateRegionGroup: "",
+      candidateArea: "",
+      candidateAngle: "",
+    } : slot);
+    saveDailySlots(updated);
+    setSpecialApartmentMessage(`${targetId}번에 주제를 등록했습니다: ${item.title}`);
+  }
+
   function toggleDailyDone(id: number) {
     const target = dailySlots.find((slot) => slot.id === id);
     if (!target) return;
@@ -3441,7 +3520,7 @@ export default function ApartmentBulkPage() {
         setWorkSaveMessage("저장된 작업 복원됨");
       } else {
         setWorkTopic(slot.topic || "");
-        setWorkMaterials("");
+        setWorkMaterials(specialApartmentWorkNotes(slot.topic || ""));
         setWorkSearchPlanRaw("");
         setWorkSearchPlan(null);
         setWorkSearchPlanMessage("");
@@ -3972,6 +4051,68 @@ export default function ApartmentBulkPage() {
             );
           })}
         </div>
+
+        <details className={styles.dailySettings} style={{ marginTop: 16 }}>
+          <summary>🔎 특별 검색 주제 15개 · 후보 목록 열기</summary>
+          <div style={{ padding: "16px 0 4px" }}>
+            <p style={{ fontSize: 13, color: "#617186", lineHeight: 1.65, margin: "0 0 12px" }}>
+              실제 계약 데이터를 분석하면 독자에게 새로운 답을 줄 수 있는 주제입니다.
+              검색량·순위·가격은 검증 전 기획 후보이므로 공식 자료 확인 후 발행하세요.
+              이미 진행 중이거나 발행 완료한 큐의 작업은 덮어쓰지 않습니다.
+            </p>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14, fontSize: 13, fontWeight: 800 }}>
+              넣을 발행 큐 자리
+              <select
+                aria-label="특별 검색 주제를 넣을 발행 큐 자리"
+                value={specialApartmentTarget}
+                onChange={(e) => { setSpecialApartmentTarget(Number(e.target.value)); setSpecialApartmentMessage(""); }}
+                style={{ minWidth: 150, padding: "9px 11px", background: "#fff", border: "1px solid #dce4ee", borderRadius: 10 }}
+              >
+                <option value={0}>큐 자리 선택</option>
+                {dailySlots.map((slot) => (
+                  <option key={slot.id} value={slot.id}>
+                    {slot.id}번 · {slot.done ? "발행 완료" : startedWorkIds.includes(slot.workId) || activeWorkId === slot.workId ? "진행 중" : "대기"} · {DAILY_TYPE_META[slot.type].short}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {specialApartmentMessage && <p role="status" style={{ fontSize: 12, color: "#175c6d", fontWeight: 700, margin: "0 0 12px" }}>{specialApartmentMessage}</p>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 10 }}>
+              {SPECIAL_APARTMENT_TOPICS.map((idea, index) => {
+                const key = normalizeTopicKey(idea.title);
+                const inQueue = dailySlots.some((slot) => normalizeTopicKey(slot.topic || "") === key);
+                const alreadyPublished = isPublishedTopic(idea.title, getStoredPublishedTopics()) ||
+                  publishHistoryItems.some((entry) => entry.item_type === "topic" && normalizeTopicKey(entry.title) === key);
+                return (
+                  <article key={idea.title} style={{ background: "#fff", border: "1px solid #e3e9f1", borderRadius: 14, padding: 13 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, color: "#527087", fontWeight: 800, fontSize: 11 }}>
+                      <span>{String(index + 1).padStart(2, "0")} · {DAILY_TYPE_META[idea.type].label}</span>
+                      {inQueue ? <span>큐 등록됨</span> : alreadyPublished ? <span>발행 이력 있음</span> : null}
+                    </div>
+                    <b style={{ display: "block", margin: "9px 0", fontSize: 14, lineHeight: 1.5 }}>{idea.title}</b>
+                    <p style={{ fontSize: 12, lineHeight: 1.55, color: "#66788b", margin: "0 0 8px" }}>{idea.brief}</p>
+                    <small style={{ display: "block", fontSize: 11, lineHeight: 1.5, color: "#7b8797" }}>검색 키워드: {idea.keywords.join(" · ")}</small>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 12 }}>
+                      <button type="button" onClick={() => {
+                        void navigator.clipboard.writeText(idea.keywords.join(", "))
+                          .then(() => setSpecialApartmentMessage("검색 키워드를 복사했습니다."))
+                          .catch(() => setSpecialApartmentMessage("클립보드 복사가 차단됐습니다."));
+                      }} style={{ border: "1px solid #dce4ee", background: "#fff", borderRadius: 9, padding: "8px 10px", cursor: "pointer", fontSize: 11, fontWeight: 800 }}>
+                        키워드 복사
+                      </button>
+                      <button type="button"
+                        disabled={!specialApartmentTarget || inQueue || alreadyPublished}
+                        onClick={() => void applySpecialApartmentTopic(idea, specialApartmentTarget)}
+                        style={{ border: 0, background: "#145d78", color: "#fff", borderRadius: 9, padding: "8px 10px", cursor: !specialApartmentTarget || inQueue || alreadyPublished ? "default" : "pointer", opacity: !specialApartmentTarget || inQueue || alreadyPublished ? 0.45 : 1, fontSize: 11, fontWeight: 800 }}>
+                        선택한 큐에 넣기
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </details>
 
         <details id="daily-type-settings" className={styles.dailySettings}>
           <summary>구성 직접 바꾸기 · 신규 분양정보 선택</summary>
