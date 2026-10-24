@@ -97,7 +97,31 @@ const TOPICS: Topic[] = [
   { id: 10, category: "생활 속 궁금증", title: "유리컵에 뜨거운 물을 부었더니 ‘쩍’… 가끔 깨지는 이유", thumbnailHook: "뜨거운 물에 왜 깨졌지?", brief: "차가운 유리컵에 뜨거운 물을 부었을 때 깨질 수 있는 이유를 유리 안팎의 급격한 온도 차와 열팽창·열응력으로 설명하고 안전하게 사용할 때의 기본 원칙까지 연결하는 생활 과학 소재입니다." },
 ]
 
+type SpecialSearchTopic = TopicSeed & { searchKeywords: string[] };
+
+// Unusual, problem-first search phrases. Monthly search demand is not verified.
+const SPECIAL_SEARCH_TOPICS: SpecialSearchTopic[] = [
+  {"category":"생활 속 궁금증","title":"변기 뚫는 비용, 처음 안내와 왜 이렇게 달라질까?","thumbnailHook":"변기 수리비가 몇 배나?","brief":"배관 막힘 작업의 현장 추가비용, 사전 견적·작업 범위·증빙 확인법을 한국소비자원 사례 및 신뢰할 수 있는 자료로 조사합니다. 실제 비용은 임의로 단정하지 않습니다.","searchKeywords":["변기 뚫는 비용","하수구 추가요금","배관업체 바가지"]},
+  {"category":"생활 속 궁금증","title":"무료 가족사진 촬영했는데 원본 사진은 유료라고?","thumbnailHook":"무료 촬영의 함정?","brief":"무료 촬영 광고와 원본·액자 추가 결제 조건을 소비자 피해 사례로 조사하고 계약 전 확인 항목과 분쟁 대응 절차를 설명합니다.","searchKeywords":["무료 사진 촬영 원본 비용","무료 가족사진 사기","사진관 액자 강매"]},
+  {"category":"생활 속 궁금증","title":"인형뽑기로 받은 인형도 안전검사를 받을까?","thumbnailHook":"뽑기 인형, 안전할까?","brief":"무인 인형뽑기 경품의 안전 표시와 확인 가능한 인증 기준을 공식 조사 결과에 근거해 비교하고 제품별 차이를 설명합니다.","searchKeywords":["인형뽑기 인형 안전","뽑기방 인형 KC인증","경품 안전성"]},
+  {"category":"신기한 동물이야기","title":"방충망에 붙은 노린재, 창문을 닫았는데 어떻게 들어왔을까?","thumbnailHook":"방충망인데 벌레가?","brief":"노린재가 실내로 들어올 수 있는 틈과 계절별 행동을 설명하고 곤충을 무리하게 만지지 않고 안전하게 대처하는 방법을 정리합니다.","searchKeywords":["방충망 노린재","노린재 집에 들어오는 이유","노린재 퇴치"]},
+  {"category":"생활 속 궁금증","title":"쌀통에 하얀 거미줄 같은 실이 생겼다면?","thumbnailHook":"쌀에서 하얀 실이?","brief":"쌀에 실·뭉침이 생기는 원인을 저곡 해충과 보관 조건에서 살펴보고 오염 징후·안전한 폐기·청소·재발 방지를 구분합니다. 사진만으로 종을 확정하지 않습니다.","searchKeywords":["쌀통 하얀 실","쌀 거미줄","쌀벌레 쌀 뭉침"]},
+  {"category":"신기한 동물이야기","title":"드라이플라워에서 작은 벌레가 나왔다면 무엇일까?","thumbnailHook":"말린 꽃에 벌레가?","brief":"말린 꽃에서 발견되는 소형 곤충의 가능한 종류와 구별 단서, 보관·처리 방법을 확인 가능한 자료로 설명합니다.","searchKeywords":["드라이플라워 벌레","말린 꽃 작은 벌레","드라이플라워 해충"]},
+  {"category":"생활 속 궁금증","title":"밤마다 냉장고에서 ‘딱’ 소리가 나는 이유는?","thumbnailHook":"냉장고가 밤에 딱?","brief":"정상적인 온도 변화·제상·부품 작동 소리와 점검이 필요한 이상 소리를 구분하고 제조사 안내를 통해 확인 항목을 정리합니다.","searchKeywords":["냉장고 밤에 딱 소리","냉장고 똑똑 소리","냉장고 소음 원인"]},
+  {"category":"생활 속 궁금증","title":"수돗물이 우윳빛으로 하얗게 나왔다가 투명해지는 이유","thumbnailHook":"수돗물이 하얗다고?","brief":"미세 기포 등 가능한 원인과 이상 징후를 구분하고 지역 수도사업자에 문의해야 할 상황을 공식 수질 안내 중심으로 설명합니다.","searchKeywords":["수돗물 우윳빛","수돗물 하얀색","수돗물 기포"]},
+  {"category":"생활 속 궁금증","title":"같은 세탁기로 빨았는데 수건만 쉰내 나는 이유","thumbnailHook":"수건만 왜 냄새날까?","brief":"수건 재질·세탁·건조 조건에 따른 냄새 원인을 구분하고 무리한 화학제품 혼합 없이 실천할 수 있는 세탁법을 비교합니다.","searchKeywords":["수건만 쉰내","수건 빨아도 냄새","수건 냄새 제거"]},
+  {"category":"신기한 동물이야기","title":"화분 흙에서 검은 날벌레가 계속 나오는 이유는?","thumbnailHook":"화분에서 날파리가?","brief":"화분 주변의 작은 날벌레가 발생하는 조건과 관찰 포인트를 정리하고 과습 관리 등 안전한 대응법을 제안합니다.","searchKeywords":["화분 흙 검은 날벌레","화분 날파리","버섯파리 화분"]},
+  {"category":"생활 속 궁금증","title":"같은 아파트인데 우리 집 창문만 결로가 심한 이유","thumbnailHook":"우리 집 창문만 젖는다?","brief":"방향·실내 습도·환기·단열 성능을 구분해 결로가 생기는 이유를 설명하고 곰팡이 예방을 위한 확인 절차를 정리합니다.","searchKeywords":["겨울 창문 결로 방향","창문만 결로","아파트 창문 결로"]},
+  {"category":"생활 속 궁금증","title":"전자레인지를 켜면 와이파이가 느려지는 이유는?","thumbnailHook":"전자레인지가 인터넷을?","brief":"2.4GHz 대역 간섭 가능성을 기술 자료로 확인하고 네트워크 설정과 기기 점검을 통한 구별 방법을 정리합니다. 위험성을 과장하지 않습니다.","searchKeywords":["전자레인지 와이파이","전자레인지 인터넷 끊김","2.4기가 간섭"]},
+  {"category":"생활 속 궁금증","title":"가구 배송 전 취소했는데 위약금을 내야 할까?","thumbnailHook":"받지도 않았는데 취소비?","brief":"가구 주문 제작 여부·구매 경로·배송 상태 등에 따른 취소 및 비용 기준을 소비자분쟁해결기준과 계약 조건으로 구분합니다.","searchKeywords":["가구 배송 전 취소 위약금","가구 주문 취소비","가구 환불"]},
+  {"category":"생활 속 궁금증","title":"강의를 들으면 현금을 돌려준다는 광고, 조건이 뭘까?","thumbnailHook":"강의 듣고 돈을 돌려줘?","brief":"환급형 온라인 강의의 실제 지급 조건과 입증 자료, 미지급 시 확인 절차를 조사합니다. 광고 문구만으로 환급을 보장한다고 쓰지 않습니다.","searchKeywords":["강의 수강 현금 환급","온라인 강의 환급 조건","환급형 강의"]},
+  {"category":"생활 속 궁금증","title":"해외 ETA 신청했는데 수수료가 예상보다 많이 나온 이유","thumbnailHook":"여행 허가비가 왜 비싸지?","brief":"국가별 전자여행허가 공식 신청 사이트와 대행 사이트 구분법, 안내된 수수료와 환불 조건을 최신 공식 사이트로 검증합니다.","searchKeywords":["해외 ETA 대행 수수료","전자여행허가 대행 수수료","ETA 공식 사이트"]},
+  {"category":"신기한 동물이야기","title":"동물병원 진료비 내역서, 어떤 항목을 확인해야 할까?","thumbnailHook":"반려동물 병원비가 왜?","brief":"진료 항목별 비용 고지와 영수증·세부내역 확인 방법을 국내 동물병원 관련 공식 안내에 맞춰 설명합니다. 병원마다 가격이 다를 수 있음을 명확히 합니다.","searchKeywords":["동물병원 진료비 내역","강아지 병원비 내역서","동물병원 진료비 고지"]},
+  {"category":"생활 속 궁금증","title":"공유 전기자전거를 반납했는데 요금이 계속 나간다면?","thumbnailHook":"반납했는데 계속 결제?","brief":"주차구역·잠금·반납 확인·앱 기록 등 확인할 사항과 고객센터 문의 시 필요한 증빙을 단계별로 정리합니다. 업체마다 약관이 다름을 밝힙니다.","searchKeywords":["공유 전기자전거 반납 오류","전기자전거 요금 계속","공유 자전거 반납 실패"]},
+];
+
 const TOPIC_POOL: TopicSeed[] = [
+  ...SPECIAL_SEARCH_TOPICS,
   { category: "생활 속 궁금증", title: "금속 숟가락은 왜 나무젓가락보다 더 차갑게 느껴질까?", thumbnailHook: "같은 방에 있었는데 왜 더 차갑지?", brief: "같은 온도에 있던 금속과 나무가 손에 닿을 때 다르게 느껴지는 이유를 열전도율과 피부의 열 이동으로 설명하는 생활 과학 소재입니다." },
   { category: "신기한 동물이야기", title: "고양이 수염은 왜 그렇게 길고 민감할까?", thumbnailHook: "수염으로 뭘 느끼는 걸까?", brief: "고양이 수염이 단순한 털이 아니라 주변 공간과 접촉을 감지하는 감각 구조라는 점을 행동과 해부학 중심으로 설명하는 소재입니다." },
   { category: "신기한 우리 몸", title: "하품은 왜 옆 사람에게도 옮는 것처럼 느껴질까?", thumbnailHook: "하품은 정말 전염될까?", brief: "다른 사람의 하품을 보거나 떠올릴 때 하품이 유발될 수 있는 현상을 연구 결과와 함께 설명하고 확실한 점과 아직 논의 중인 부분을 구분하는 우리 몸 소재입니다." },
@@ -962,6 +986,7 @@ export default function ParammaBulkPage() {
   const [moneyResearchAccessCode, setMoneyResearchAccessCode] = useState("");
   const [moneyCandidates, setMoneyCandidates] = useState<MoneyCandidate[]>([]);
   const [moneyCandidateTargets, setMoneyCandidateTargets] = useState<Record<string, number>>({});
+  const [specialTargetId, setSpecialTargetId] = useState(0);
   const [photoSearchSlot, setPhotoSearchSlot] = useState<SlotId | null>(null);
   const [photoQuery, setPhotoQuery] = useState("");
   const [photoResults, setPhotoResults] = useState<PexelsPhoto[]>([]);
@@ -999,6 +1024,14 @@ export default function ParammaBulkPage() {
     }).length;
     return generalCount + moneyCount;
   }, [historyItems, topics, moneyCandidates]);
+  const availableSpecialTopics = useMemo(() => {
+    const historyKeys = new Set(historyItems.map((item) => item.normalized_key));
+    const queueKeys = new Set(topics.map((topic) => normalizeParammaTopic(topic.title)));
+    return SPECIAL_SEARCH_TOPICS.filter((candidate) => {
+      const key = normalizeParammaTopic(candidate.title);
+      return !historyKeys.has(key) && !queueKeys.has(key);
+    });
+  }, [historyItems, topics]);
   const filteredHistory = useMemo(() => {
     const keyword = historySearch.trim().toLowerCase();
     return historyItems.filter((item) => {
@@ -1334,6 +1367,38 @@ export default function ParammaBulkPage() {
     setMoneyCandidates(parsed);
     setMoneyCandidateTargets({});
     setNotice(`수익형 후보 ${parsed.length}개를 불러왔습니다. 각 후보에서 큐 자리를 선택한 후 등록하세요.`);
+  }
+
+  async function applySpecialTopic(candidate: SpecialSearchTopic, targetId: number) {
+    if (!topics.some((topic) => topic.id === targetId)) {
+      setNotice("특별 검색 키워드를 넣을 큐 자리를 먼저 선택해주세요.");
+      return;
+    }
+    const candidateKey = normalizeParammaTopic(candidate.title);
+    if (topics.some((topic) => normalizeParammaTopic(topic.title) === candidateKey) ||
+        historyItems.some((item) => item.normalized_key === candidateKey)) {
+      setNotice("이미 큐에 있거나 발행한 주제입니다. 다른 후보를 선택해주세요.");
+      return;
+    }
+    const currentWork = works[targetId];
+    const hasProgress = statusOf(targetId) !== "waiting" || Boolean(currentWork?.body?.trim()) ||
+      SLOT_IDS.some((slotId) => currentWork?.slots?.[slotId]?.status === "registered");
+    if (hasProgress && !window.confirm(`${targetId}번에는 진행 중이거나 저장된 작업이 있습니다. 특별 검색 주제로 교체할까요? 기존 본문·요청서·등록 이미지는 초기화됩니다.`)) return;
+    const replacement: Topic = {
+      id: targetId, category: candidate.category, title: candidate.title,
+      thumbnailHook: candidate.thumbnailHook, brief: candidate.brief
+    };
+    for (const slotId of SLOT_IDS) {
+      try { await idbDelete(targetId, slotId); } catch {}
+    }
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+    setImages({});
+    setTopics((prev) => prev.map((topic) => topic.id === targetId ? replacement : topic));
+    setStatuses((prev) => ({ ...prev, [targetId]: "waiting" }));
+    setWorks((prev) => ({ ...prev, [targetId]: defaultWork(replacement) }));
+    setSelectedId(targetId);
+    setNotice(`${targetId}번에 특별 검색 주제를 넣었습니다: ${candidate.title}`);
   }
 
   async function applyMoneyCandidate(candidate: MoneyCandidate, targetId: number) {
@@ -1916,6 +1981,51 @@ export default function ParammaBulkPage() {
             </div>
             <strong>남은 후보 {availablePoolCount}개</strong>
           </div>
+
+          <details className={styles.historyPanel}>
+            <summary>
+              <span>🔎 특별 검색 키워드 후보</span>
+              <small>남은 후보 {availableSpecialTopics.length}/{SPECIAL_SEARCH_TOPICS.length}개</small>
+            </summary>
+            <div className={styles.historyBody}>
+              <p style={{ margin: "0 0 12px", color: "#65766e", fontSize: 12, lineHeight: 1.6 }}>
+                AI로 조사해 볼 특이한 현상·소비자 문제입니다. 검색량 검증 전 후보이며, 발행할 때 공식 근거와 최신 조건을 다시 확인하세요.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginBottom: 12 }}>
+                <label htmlFor="special-topic-target" style={{ fontSize: 12, fontWeight: 800 }}>주제를 넣을 큐 자리</label>
+                <select
+                  id="special-topic-target"
+                  value={specialTargetId}
+                  onChange={(e) => setSpecialTargetId(Number(e.target.value))}
+                  style={{ padding: "8px 10px", border: "1px solid #dbe5e0", borderRadius: 9, background: "#fff", minWidth: 155 }}
+                >
+                  <option value={0}>큐 자리 선택</option>
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {String(topic.id).padStart(2, "0")}번 · {statusOf(topic.id) === "done" ? "완료" : statusOf(topic.id) === "working" ? "진행 중" : "대기"}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontSize: 11, color: "#718179" }}>진행 중인 자리의 교체는 확인 후 진행됩니다.</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(235px, 1fr))", gap: 10 }}>
+                {availableSpecialTopics.map((candidate) => (
+                  <article key={candidate.title} style={{ border: "1px solid #e2e9e6", background: "#fff", borderRadius: 12, padding: 12, minWidth: 0 }}>
+                    <span className={`${styles.category} ${categoryClass(candidate.category)}`}>{categoryEmoji(candidate.category)} {candidate.category}</span>
+                    <b style={{ display: "block", fontSize: 14, lineHeight: 1.45, margin: "8px 0 6px" }}>{candidate.title}</b>
+                    <p style={{ color: "#718179", fontSize: 11, lineHeight: 1.5, margin: 0 }}>검색어: {candidate.searchKeywords.join(" · ")}</p>
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                      <button type="button" onClick={() => void copyText(candidate.searchKeywords.join(", "), "검색 키워드를 복사했습니다.")}
+                        style={{ padding: "7px 9px", borderRadius: 8, border: "1px solid #dbe5e0", background: "#fff", color: "#476456", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>키워드 복사</button>
+                      <button type="button" disabled={!specialTargetId} onClick={() => void applySpecialTopic(candidate, specialTargetId)}
+                        style={{ padding: "7px 9px", borderRadius: 8, border: 0, background: "#267856", color: "#fff", fontSize: 11, fontWeight: 800, cursor: specialTargetId ? "pointer" : "default", opacity: specialTargetId ? 1 : 0.45 }}>선택한 자리에 넣기</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {availableSpecialTopics.length === 0 && <p style={{ fontSize: 12 }}>추가 가능한 특별 검색 후보가 없습니다.</p>}
+            </div>
+          </details>
 
           <details className={styles.historyPanel}>
             <summary>
