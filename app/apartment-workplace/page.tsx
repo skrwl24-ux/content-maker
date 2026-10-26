@@ -120,7 +120,7 @@ export default function WorkplaceApartmentStudio() {
     if (!ready) return;
     try { localStorage.setItem(KEY, JSON.stringify(draft)); } catch { /* Storage may be unavailable. */ }
   }, [draft, ready]);
-  const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft(old => ({ ...old, [key]: value }));
+  const update = <K extends keyof Draft,>(key: K, value: Draft[K]) => setDraft(old => ({ ...old, [key]: value }));
   const research = useMemo(() => buildResearch(draft), [draft]);
   const article = useMemo(() => buildArticle(draft), [draft]);
   const articleReady = draft.checkedTrade && draft.checkedListing && draft.checkedRoute && draft.sourceNotes.trim().length > 20;
