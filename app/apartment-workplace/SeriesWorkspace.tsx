@@ -1,18 +1,19 @@
 "use client";
 import { useEffect, useState } from "react";
 import styles from "./page.module.css";
+import EvidenceUploader from "./EvidenceUploader";
 type Episode = { id: string; values: Record<string, string>; article: string; status: string };
 const KEY = "jibssuk-workplace-series-v1";
 const fields = [
- ["name", "단지명"], ["address", "주소·사용승인일"], ["area", "比較 전용면적(㎡)"],
+ ["name", "단지명"], ["address", "주소·사용승인일"], ["area", "비교 전용면적(㎡)"],
  ["route", "출퇴근 경로·거리·시간·출입구 확인 여부"],
  ["sale", "매매 실거래(계약일·층·금액·해제 여부)"],
  ["listing", "현재 호가(거래 유형·가격·확인일·중복 가능성)"],
  ["rent", "전세 실거래(계약일·층·보증금·갱신·해제 여부)"],
  ["monthly", "월세 실거래(계약일·층·보증금·월세·갱신·해제 여부)"],
- ["caution", "입주 전 확인사항"], ["sources", "항목별 출처 링크·캡처명·確認 범위"],
+ ["caution", "입주 전 확인사항"], ["sources", "항목별 출처 링크·캡처명·확인 범위"],
  ["notes", "캡처·영상 자료 메모"],
-].map(([key, label]) => [key, label.replace("比較", "비교").replace("確認", "확인")]);
+];
 const value = (s?: string) => s?.trim() || "확인 필요(needs_check)";
 export default function SeriesWorkspace({ place }: { place: string }) {
  const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -59,6 +60,7 @@ export default function SeriesWorkspace({ place }: { place: string }) {
    }}>＋ 단지 추가</button>
   </div>
   {current ? <div className={styles.panel} style={{marginTop:20}}>
+   <EvidenceUploader key={current.id} episodeId={current.id} place={place} values={current.values} onApply={patch => { update({values: {...current.values, ...patch}}); }} />
    <div className={styles.two}>
     <label>진행 상태<select value={current.status} onChange={e => update({status:e.target.value})}>{["자료 수집","초안 작성","검토 완료","발행 완료"].map(s => <option key={s}>{s}</option>)}</select></label>
     <label>자료 확인일<input type="date" value={current.values.date || ""} onChange={e => field("date", e.target.value)} /></label>
@@ -72,6 +74,6 @@ export default function SeriesWorkspace({ place }: { place: string }) {
    <div className={styles.actions}><button type="button" disabled={!current.article.trim()} onClick={() => copy(current.article)}>원고 복사</button></div>
   </div> : <p className={styles.hint}>‘단지 추가’로 1편을 시작하세요.</p>}
   {notice && <p role="status" className={styles.notice}>{notice}</p>}
-  <p className={styles.hint}>단지별 자료·원고·상태는 이 브라우저에 자동 저장됩니다. 빈 항목은 확인 필요로 표시합니다. 캡처·영상 자동 판독과 실제 발행은 별도이며, 상태는 직접 변경합니다.</p>
+  <p className={styles.hint}>단지별 자료·원고·상태는 이 브라우저에 자동 저장됩니다. 빈 항목은 확인 필요로 표시합니다. 첨부 화면 판독 후 검토한 항목만 반영하세요. 실제 발행과 진행 상태는 직접 관리합니다.</p>
  </section>;
 }
