@@ -29,3 +29,10 @@ test('candidate placeholders retain supplied names, escape tables and never fill
  assert.match(table,/후보 A/);assert.ok(table.includes('후보 B\\|별칭'));assert.match(table,/후보 C/);assert.equal((table.match(/\| needs_check \|/g)||[]).length>0,true);
  assert.doesNotMatch(table,/verified|0분|0원/);
 });
+
+test('image handoff uses the pasted comparison article without feeding old article into research',()=>{
+ const d={...draft,articleText:'챗에서 확인한 비교글 원고: 면적은 확인 필요'};
+ for(const slot of imageSlots)assert.ok(buildImagePrompt(d,slot).includes(d.articleText));
+ assert.equal(buildResearch(d).includes(d.articleText),false);
+ assert.equal(buildArticle(d).includes(d.articleText),false);
+});

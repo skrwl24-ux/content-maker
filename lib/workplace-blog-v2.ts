@@ -5,7 +5,7 @@ export type HomeType = "전체" | "매매" | "전세" | "월세";
 export type WorkplaceDraft = {
  facility:Facility;place:string;city:string;address:string;entrance:string;travel:Travel;travelTarget:string;
  homeType:HomeType;budget:string;candidateNames:string;sourceNotes:string;checkedAt:string;
- checkedTrade:boolean;checkedListing:boolean;checkedRoute:boolean;
+ checkedTrade:boolean;checkedListing:boolean;checkedRoute:boolean;articleText?:string;
 };
 const text=(v:string|undefined,fallback="확인 필요(needs_check)")=>v?.trim()||fallback;
 export const candidateLines=(v:string)=>v.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -65,7 +65,7 @@ export function buildComparisonTable(d:WorkplaceDraft) {
 }
 export function buildArticle(d:WorkplaceDraft){return ["[집값쓱 직주근접 아파트 최종 원고 요청서 V2]",context(d),"자료와 첨부를 직접 대조한 뒤 다음 고정 순서로 작성해줘. 근거가 부족하면 부족 목록과 needs_check가 표시된 초안을 반환하고 완성된 추천글로 꾸미지 마.",articleStructure,"[첫 비교표의 작업 틀]",buildComparisonTable(d),"[모바일 문체·이미지 흐름]","친근하지만 과장하지 않는 말투. 짧은 1~2행 문장과 의미 단위 약 15~20자 줄바꿈, 문단 사이 빈 줄. 이미지 한 장 → 설명 2~3줄 → 다음 이미지. 강조는 1~3개, 자동 가운데 정렬·긴 설명·미리보기는 불필요.","00 썸네일 1254×1254 / 01~07 본문 1600×900. 본문에 [이미지 01] 등 슬롯 위치를 표시하고 고정 구성의 순서를 보존한다. 10초 비교표는 긴 설명보다 먼저 둔다. Q&A는 발견 뒤, 07 요약 이미지·결론은 Q&A 뒤에 둔다. 근거 부족 슬롯은 생략 또는 검증 안내 카드로 대체한다.","[필수 검증 규칙]",verificationRules,"[이미지 슬롯]",...imageSlots.map(s=>`${s.id} / ${s.size} / ${s.title}: ${s.message}`),"이미지마다 한 가지 핵심 메시지만. AI 설명 카드와 사진 검색·직접 촬영 추천을 구분한다. 실물·출입구·주변 시설·지도·거리·거래를 창작해 증거로 쓰지 않는다. 지도 캡처의 출판 권한도 별도 확인한다."].join("\n\n");}
 export function buildImagePrompt(d:WorkplaceDraft,slot:typeof imageSlots[number]){return [
- `[집값쓱 이미지 ${slot.id} · ${slot.title}]`,`${slot.size} 픽셀. 핵심 메시지 하나: ${slot.message}.`,context(d),
+ `[집값쓱 이미지 ${slot.id} · ${slot.title}]`,`${slot.size} 픽셀. 핵심 메시지 하나: ${slot.message}.`,context(d),"[챗에서 받은 비교글 원고 · 원자료와 대조해 사용]",text(d.articleText,"원고 미입력(needs_check). 같은 챗에 원고와 원자료를 첨부받은 뒤 작업해줘."),
  "[AI 설명 이미지 요청서]",`${slot.title}에 해당하는 확인된 정보만 사용해 큰 글씨의 간결한 설명 카드를 구성해줘. 자료가 없으면 숫자·지도를 창작하지 말고 확인 필요(needs_check) 안내 카드로 대체하거나 생략을 제안해줘.`,
  slot.id==="00"?"직장명 + 아파트 선택 질문을 1~2줄로. 검증되지 않은 가격·도보 시간은 썸네일에 넣지 마.":"본문에서 이 이미지 다음에 놓을 설명을 2~3줄로 따로 작성해줘.",
  slot.id==="05"?"실제 출입구 간 경로 근거가 없으면 출입구·횡단보도·야간 체크리스트 카드로 대체한다.":"이미지 한 장에 여러 주제를 섞지 않는다.",
