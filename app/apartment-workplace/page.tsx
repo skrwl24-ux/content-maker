@@ -16,7 +16,6 @@ const DEFAULTS: Draft = {
   checkedTrade: false, checkedListing: false, checkedRoute: false,
 };
 
-function normalized(v: string, fallback: string) { return v.trim() || fallback; }
 async function copyText(value: string, setNotice: (s: string) => void) {
   try {
     await navigator.clipboard.writeText(value);
@@ -48,12 +47,6 @@ export default function WorkplaceApartmentStudio() {
   const article = useMemo(() => buildArticle(draft), [draft]);
   const hasSourceNotes = draft.sourceNotes.trim().length > 0;
   const candidates = candidateLines(draft.candidateNames);
-  const keywords = [
-    normalized(draft.place, "근무지") + " 근처 아파트",
-    normalized(draft.place, "근무지") + " 출퇴근 아파트",
-    normalized(draft.place, "근무지") + " 주변 전세",
-    normalized(draft.place, "근무지") + " 아파트 실거래가",
-  ];
   const stages = ["근무지·조건", "후보 조사", "자료 첨부·챗 전달", "비교글 작성", "이미지 제작", "최종 확인"];
   return (
     <main className={styles.page}>
@@ -88,14 +81,14 @@ export default function WorkplaceApartmentStudio() {
         <div className={styles.actions}><button type="button" className={styles.primary} onClick={()=>copyText(research,setNotice)}>조사 요청서 복사</button><a href={"https://chatgpt.com/?q="+encodeURIComponent(research)} target="_blank" rel="noreferrer">챗에서 후보 조사 ↗</a></div>
         <details className={styles.requestDetails}><summary>조사 요청서 보기</summary><textarea className={styles.prompt} readOnly value={research} aria-label="조사 요청서" /></details>
         <label>아파트 후보 이름 <small>한 줄에 하나씩. 위치 미확인은 추천 확정을 뜻하지 않습니다.</small><textarea rows={4} value={draft.candidateNames} onChange={e=>update("candidateNames",e.target.value)} placeholder={"단지명 1\n단지명 2\n단지명 3"} /></label>
-        <details className={styles.requestDetails}><summary>검색어·자료 확인처</summary>{keywords.map(k=><div key={k} className={styles.keyword}>{k}</div>)}<p className={styles.hint}>검색량을 확인한 키워드는 아닙니다.</p><div className={styles.actions}><a href="https://rt.molit.go.kr/" target="_blank" rel="noreferrer">국토부 실거래 ↗</a><a href="https://new.land.naver.com/" target="_blank" rel="noreferrer">네이버부동산 ↗</a><a href="https://map.naver.com/" target="_blank" rel="noreferrer">네이버지도 ↗</a></div></details>
+        <details className={styles.requestDetails}><summary>자료 확인처</summary><div className={styles.actions}><a href="https://rt.molit.go.kr/" target="_blank" rel="noreferrer">국토부 실거래 ↗</a><a href="https://new.land.naver.com/" target="_blank" rel="noreferrer">네이버부동산 ↗</a><a href="https://map.naver.com/" target="_blank" rel="noreferrer">네이버지도 ↗</a></div></details>
         <div className={styles.actions}><a href="#workplace-step-3">다음: 자료 첨부·챗 전달 →</a></div>
       </section>
       <section id="workplace-step-3" aria-labelledby="workplace-heading-3" className={`${styles.output} ${styles.workflowStep}`}>
         <h2 id="workplace-heading-3">03 · 자료 첨부·챗 전달</h2>
         <p>후보별로 작업을 추가하고 단지정보·매매·전세·월세·현재 매물·경로를 첨부하세요. 자료 ZIP은 챗에 직접 올려 확인받습니다.</p>
         <SeriesWorkspace place={draft.place} />
-        <p className={styles.hint}>단지별 자료와 원고는 각각 보관됩니다. 모든 후보의 자료가 모이면 04에서 비교글을 요청하세요.</p>
+        <p className={styles.hint}>기존 단지별 원고는 보관 영역에서 열 수 있습니다. 모든 후보의 자료가 모이면 04에서 비교글을 요청하세요.</p>
         <div className={styles.actions}><a href="#workplace-step-4">다음: 비교글 작성 →</a></div>
       </section>
       <section id="workplace-step-4" aria-labelledby="workplace-heading-4" className={`${styles.panel} ${styles.workflowStep}`}>
@@ -129,7 +122,7 @@ export default function WorkplaceApartmentStudio() {
         </div>
         <p>이미지 사이 설명 2~3줄, Q&A 3개, 결론·3줄 요약과 조사일·출처를 확인한 뒤 블로그에서 이미지를 배치하고 발행하세요.</p>
         <div className={styles.actions}><button type="button" className={styles.primary} disabled={!draft.articleText?.trim()} onClick={()=>copyText(draft.articleText||"",setNotice)}>비교글 원고 복사</button><a href="#workplace-step-4">원고 수정으로 돌아가기</a></div>
-        <details className={styles.requestDetails}><summary>이 비교글 입력값 초기화</summary><p>단지별 첨부·원고는 유지됩니다. 비교글 입력값과 붙여넣은 비교글 원고만 초기화합니다.</p><div className={styles.actions}><button type="button" onClick={()=>{if(window.confirm("비교글 조건·자료 메모·원고를 초기화할까요? 단지별 첨부와 원고는 유지됩니다.")){setDraft({...DEFAULTS,checkedAt:new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"})});setNotice("비교글 입력값을 초기화했습니다.");}}}>비교글 입력값 초기화</button></div></details>
+
         <p className={styles.hint}>입력과 원고는 이 브라우저에 자동 저장됩니다. 사이트에서 블로그에 자동 발행하지 않습니다.</p>
       </section>
     </main>
