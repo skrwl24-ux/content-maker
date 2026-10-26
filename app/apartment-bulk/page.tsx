@@ -3947,10 +3947,10 @@ export default function ApartmentBulkPage() {
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT CONTENT STUDIO</p>
-          <h1>오늘 만들 콘텐츠만 고르면<br />작업 화면이 깔끔하게 열립니다.</h1>
-          <p>단지 대량발행 · 신규 분양정보 · 학군 아파트 · 수도권 초대형단지를 한 곳에서 작업합니다.</p>
+          <h1>직장 주변 아파트부터<br />실거래 분석까지</h1>
+          <p>근무지 생활권 비교는 새로운 제작실에서, 기존 단지 글·TOP3·발행 큐는 이 화면에서 이어서 작업하세요.</p>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}><a href="/apartment-presale" className={styles.heroChip}>🏙️ 분양정보 주력 제작실 →</a><a href="/apartment-bulk/discover" className={styles.heroChip}>오늘 쓸 단지 찾기 →</a></div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 9 }}><a href="/apartment-workplace" className={styles.heroChip}>📍 직장 주변 아파트 비교 →</a><a href="/apartment-bulk/discover" className={styles.heroChip}>기존 단지 찾기 →</a><a href="/apartment-presale" className={styles.heroChip}>분양 제작실 →</a></div>
       </section>
 
       <nav className={styles.contentTabs} aria-label="아파트 콘텐츠 종류">
