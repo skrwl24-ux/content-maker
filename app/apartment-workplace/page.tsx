@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
+import SeriesWorkspace from "./SeriesWorkspace";
 
 type Facility = "상업시설" | "산업단지·공장" | "업무지구·기업" | "병원·대학교" | "기타";
 type Travel = "도보" | "대중교통" | "자동차";
@@ -142,6 +143,7 @@ export default function WorkplaceApartmentStudio() {
         <p>스타필드·산업단지·업무지구 주변의 실거주 검색형 글을 만듭니다. 자료가 검증되지 않았으면 숫자를 만들지 않습니다.</p>
         <div className={styles.pills}><span>실거래가</span><span>현재 매물</span><span>실제 이동 경로</span><span>전세·월세</span></div>
       </section>
+      <SeriesWorkspace place={draft.place} />
       <div className={styles.grid}>
         <section className={styles.panel}>
           <h2><span>01</span> 근무지와 독자 조건</h2>
