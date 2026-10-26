@@ -1363,11 +1363,17 @@ export default function Home() {
     <header className="header">
       <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V13 · 정보판 가독성 V4</span></button>
       <div className="inlineActions">
-        <a className="presaleNavLink" href="/apartment-presale/discover">🔎 관심 분양 찾기</a>
-        <a className="presaleNavLink" href="/presale-v1">🏙️ 분양 제작실 V2</a>
-        <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule/lab"}>🔬 AI 실전 검증실</button>
-        <button className="secondary compact" onClick={() => window.location.href = "/google-blog-schedule"}>📅 구글 블로그 스케줄</button>
-        <button className="secondary compact" onClick={() => window.location.href = "/ai-three-studio"}>🤖 AI 3사 비교 전용 V3</button>
+        <a className="presaleNavLink" href="/apartment-workplace">📍 직장 주변 아파트</a>
+        <details style={{ position: "relative", alignSelf: "center" }}>
+          <summary className="secondary compact" style={{ cursor: "pointer", listStyle: "none", fontSize: 12 }}>추가 도구 ▾</summary>
+          <div style={{ position: "absolute", right: 0, top: "100%", width: 225, zIndex: 30, padding: 12, display: "grid", gap: 8, borderRadius: 12, background: "white", boxShadow: "0 10px 35px #10203030" }}>
+            <a href="/apartment-presale/discover">🔎 관심 분양 찾기</a>
+            <a href="/presale-v1">🏙️ 분양 제작실</a>
+            <a href="/google-blog-schedule/lab">🔬 AI 실전 검증실</a>
+            <a href="/google-blog-schedule">📅 구글 블로그 스케줄</a>
+            <a href="/ai-three-studio">🤖 AI 3사 비교 V3</a>
+          </div>
+        </details>
         <button className="secondary compact" onClick={saveCloud} disabled={loading || phase === "home"}>☁ 저장</button>
       </div>
     </header>
@@ -1381,27 +1387,27 @@ export default function Home() {
       <div className="contentHubHead">
         <div>
           <span>집값쓱 · 아파트 블로그 콘텐츠메이커</span>
-          <h2>오늘 만들 글을 고르세요</h2>
-          <p>각 카테고리에서 추천 후보 2개를 보고 바로 제작을 시작하는 구조로 바꾸고 있습니다.</p>
+          <h2>어떤 독자를 위한 글을 만들까요?</h2>
+          <p>직장·생활시설 주변 아파트 비교를 우선으로, 기존 단지·분양 제작실은 그대로 이용할 수 있습니다.</p>
         </div>
         <span className="contentHubVersion">V1</span>
       </div>
       <div className="contentHubTabs">
-        <a className="contentHubTab active" href="/apartment-v1">
+        <a className="contentHubTab active" href="/apartment-workplace">
+          <span className="contentHubIcon">📍</span>
+          <b>직장 주변 아파트</b>
+          <small>실거래가 · 매물 · 출퇴근 거리</small>
+        </a>
+        <a className="contentHubTab" href="/apartment-v1">
           <span className="contentHubIcon">🏢</span>
           <b>아파트 단지 글</b>
-          <small>거래량 추천 2개 · 새 제작 흐름</small>
+          <small>단지별 실거래 분석</small>
         </a>
         <a className="contentHubTab" href="/presale-v1">
           <span className="contentHubIcon">🏙️</span>
           <b>분양 글</b>
           <small>후보 10개 · 파트별 조사 · 최종 원고</small>
         </a>
-        <button className="contentHubTab" type="button" disabled>
-          <span className="contentHubIcon">💰</span>
-          <b>금융·재테크 글</b>
-          <small>다음 구현</small>
-        </button>
         <a className="contentHubTab" href="/real-estate-tips">
           <span className="contentHubIcon">💡</span>
           <b>부동산 꿀팁</b>
@@ -1410,10 +1416,10 @@ export default function Home() {
       </div>
       <div className="contentHubFocus">
         <div>
-          <strong>아파트 단지 글 V1</strong>
-          <p>올해 누적 실거래 기준 추천 단지 2개 → 평형별 가격 → 구조 확인 → 생활 킥 1개 → 최종 원고까지 한 화면에서 진행합니다.</p>
+          <strong>새로운 주력 제작실 · 직주근접 아파트 비교</strong>
+          <p>스타필드·산업단지·업무지구를 입력하고 주변 단지 후보 → 실거래·매물 확인 → 실제 출퇴근 경로 → 검색형 원고를 기획합니다.</p>
         </div>
-        <a href="/apartment-v1">추천 단지 2개 보기 →</a>
+        <a href="/apartment-workplace">근무지 주변 아파트 글 만들기 →</a>
       </div>
     </section>}
     {error && <div className="error">{error}</div>}
