@@ -4,28 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import SeriesWorkspace from "./SeriesWorkspace";
 
-type Facility = "상업시설" | "산업단지·공장" | "업무지구·기업" | "병원·대학교" | "기타";
-type Travel = "도보" | "대중교통" | "자동차";
-type HomeType = "전체" | "매매" | "전세" | "월세";
-type Draft = {
-  facility: Facility;
-  place: string;
-  city: string;
-  entrance: string;
-  travel: Travel;
-  travelTarget: string;
-  homeType: HomeType;
-  budget: string;
-  candidateNames: string;
-  sourceNotes: string;
-  checkedAt: string;
-  checkedTrade: boolean;
-  checkedListing: boolean;
-  checkedRoute: boolean;
-};
+import { buildResearch, buildArticle, buildImagePrompt, imageSlots, candidateLines, type WorkplaceDraft as Draft, type Facility, type Travel, type HomeType } from "../../lib/workplace-blog-v2";
+
 const KEY = "jibssuk-workplace-comparison-draft-v1";
 const DEFAULTS: Draft = {
-  facility: "상업시설", place: "스타필드 수원", city: "수원시 장안구",
+  address: "", facility: "상업시설", place: "스타필드 수원", city: "수원시 장안구",
   entrance: "근무지 실제 출입구(확인 필요)", travel: "도보", travelTarget: "20분 이내",
   homeType: "전체", budget: "", candidateNames: "", sourceNotes: "",
   checkedAt: new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
@@ -33,67 +16,6 @@ const DEFAULTS: Draft = {
 };
 
 function normalized(v: string, fallback: string) { return v.trim() || fallback; }
-function lines(v: string) { return v.split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 10); }
-function placeTitle(d: Draft) { return normalized(d.place, "근무지") + " 주변 아파트"; }
-function buildResearch(d: Draft) {
-  const names = lines(d.candidateNames);
-  return [
-    "[집값쓱 직주근접 아파트 조사 요청서]",
-    "오늘 날짜/검증 기준: " + normalized(d.checkedAt, "조사 당일 날짜를 확인"),
-    "목적: " + placeTitle(d) + " 중 실제 출퇴근과 주거비를 비교할 수 있는 생활권 안내 글을 준비한다.",
-    "근무지 유형: " + d.facility,
-    "근무지 이름: " + normalized(d.place, "확인 필요"),
-    "지역 힌트: " + normalized(d.city, "확인 필요"),
-    "기준 출입구: " + normalized(d.entrance, "실제 출입구 확인 필요"),
-    "출퇴근 수단/희망 범위: " + d.travel + " / " + normalized(d.travelTarget, "범위 미설정"),
-    "주택 거래 유형: " + d.homeType,
-    "예산: " + normalized(d.budget, "미설정(임의로 가정 금지)"),
-    "후보 단지: " + (names.length ? names.join(", ") : "주변 아파트 후보 3~5곳을 실제 위치 확인 후 추천"),
-    "",
-    "필수 조사:",
-    "1. 근무지의 정확한 주소와 실제 출입구를 먼저 확인한다. 도로 경계나 직선거리만으로 접근성을 판단하지 않는다.",
-    "2. 아파트 후보의 정확한 단지명·주소·준공연도·전용면적을 대조한다. 동명이인 단지와 면적 혼합을 금지한다.",
-    "3. 국토교통부 실거래가 공개시스템에서 같은 단지·같은 전용면적의 거래일·층·금액·해제 표시를 확인하고, 매매/전월세 계약 자료를 구분한다.",
-    "4. 네이버부동산 등 현재 공개 매물의 호가는 실거래가와 별개로 확인하며, 조사일·거래 유형·보증금·월세·중복 가능성을 표시한다. 매물이 없는 경우 없음/확인 불가를 구분한다.",
-    "5. 네이버지도 또는 다른 경로 안내에서 근무지의 실제 출입구↔아파트 출입구를 기준으로 " + d.travel + " 경로를 검증한다. 자동차는 시간대/교통상황, 대중교통은 배차·환승을 구분한다.",
-    "6. 근거 링크와 확인일을 항목별로 붙인다. 웹에서 확인할 수 없는 값은 절대 추정하거나 숫자를 만들어내지 말고 '확인 필요(needs_check)'로 표시한다.",
-    "7. 장점뿐 아니라 야간 출퇴근, 횡단보도, 정체, 주차, 경사, 출입구 위치 등 실제 입주 전에 확인해야 할 항목을 적는다.",
-    "",
-    "결과 형식: ① 독자 검색의도·대표 키워드 ② 후보 단지 3~5개 표(단지명/위치/전용면적/실거래가/매물 호가/" + d.travel + "거리·시간/자료 기준일/출처/검증 상태) ③ 데이터 부족 항목 ④ 검색형 제목 3개 ⑤ 독자에게 줄 실용적인 발견 1개.",
-    "주의: 실제 검증 자료 없이 예시 가격·거리·분수를 발명하지 마라. 상승·하락 원인이나 출퇴근 편의성을 단정하지 마라.",
-  ].join("\n");
-}
-function buildArticle(d: Draft) {
-  return [
-    "[집값쓱 직주근접 아파트 최종 원고 요청서]",
-    "주제: " + placeTitle(d) + ", 출퇴근과 집값을 함께 비교해 보자",
-    "대상: " + d.facility + "에서 근무하거나 이사하려는 사람, 인근 주민",
-    "지역: " + normalized(d.city, "확인 필요"),
-    "이동 기준: " + d.travel + " / " + normalized(d.travelTarget, "별도 확인"),
-    "거래 유형: " + d.homeType + " / 예산 " + normalized(d.budget, "미설정"),
-    "후보 단지: " + (lines(d.candidateNames).join(", ") || "검증한 자료에 나온 단지만"),
-    "검증 기준일: " + normalized(d.checkedAt, "작성일"),
-    "",
-    "[검증된 원자료 및 출처 — 입력자가 직접 확인한 내용]",
-    normalized(d.sourceNotes, "입력된 사실 자료 없음. 숫자·매물·이동시간을 만들지 말고 확인 필요로 남긴다."),
-    "",
-    "글 작성 조건:",
-    "- 검색 유입 키워드를 자연스럽게 포함하고 독자의 의문에 답하는 제목을 1개 고른다.",
-    "- 도입에서 '근무지에 가까운 아파트를 선택할 때 가격과 이동 동선을 동시에 살펴보자'는 질문을 제시한다.",
-    "- 첫 핵심 비교표에는 확인된 실거래가(계약일/전용면적/층/해제 여부), 현재 매물 호가(확인일), " + d.travel + " 이동 경로(출입구 기준)만 싣는다.",
-    "- 매매 실거래, 전월세 실거래, 현재 매물 가격은 서로 다르다는 점을 명확히 표시한다.",
-    "- 주소·거리·시간·금액·건수·교통편을 임의로 보간하거나 상상하지 않는다. 증빙 없는 필드는 '확인 필요'로 둔다.",
-    "- '추천 1위' 같은 투자 권유 대신 조건별 장단점과 실거주 체크사항을 공정하게 설명한다.",
-    "- 네이버 모바일 기준 짧은 1~2행 문장, 문단 사이 충분한 여백, 친근하면서 과장하지 않는 말투로 작성한다.",
-    "- 목차에 ① 위치·이동 ② 아파트·가격 ③ 생활 체크 ④ 자주 묻는 질문을 포함한다.",
-    "- 이미지 순서 00 대표 썸네일(1254×1254), 01 실제 생활권 지도, 02 단지 비교, 03 실거래와 매물 호가 차이, 04 출퇴근 경로, 05 실거주 주의점, 06 최종 3줄 요약(본문 이미지는 1600×900).",
-    "- 이미지 요청서를 슬롯별로 생성하고, 확인되지 않은 사진·데이터나 지도상 거리를 새로 만들지 않는다.",
-    "- 마지막에 확인일·자료명·출처 링크와 해시태그 7~10개를 붙인다.",
-    "- 원고 완료 전에 출처/수치/지도 경로/매물 유효성 검수 체크리스트를 표시한다.",
-    "",
-    "증빙된 내용이 부족하면 완성된 것처럼 꾸미지 말고 부족한 확인 목록을 먼저 반환한다.",
-  ].join("\n");
-}
 async function copyText(value: string, setNotice: (s: string) => void) {
   try {
     await navigator.clipboard.writeText(value);
@@ -124,7 +46,8 @@ export default function WorkplaceApartmentStudio() {
   const update = <K extends keyof Draft,>(key: K, value: Draft[K]) => setDraft(old => ({ ...old, [key]: value }));
   const research = useMemo(() => buildResearch(draft), [draft]);
   const article = useMemo(() => buildArticle(draft), [draft]);
-  const articleReady = draft.checkedTrade && draft.checkedListing && draft.checkedRoute && draft.sourceNotes.trim().length > 20;
+  const hasSourceNotes = draft.sourceNotes.trim().length > 0;
+  const candidates = candidateLines(draft.candidateNames);
   const keywords = [
     normalized(draft.place, "근무지") + " 근처 아파트",
     normalized(draft.place, "근무지") + " 출퇴근 아파트",
@@ -141,11 +64,10 @@ export default function WorkplaceApartmentStudio() {
         <div className={styles.eyebrow}>집값쓱 · 생활권 중심 콘텐츠</div>
         <h1>직장 가까운 아파트,<br />가격과 출퇴근을 한 번에 비교</h1>
         <p>스타필드·산업단지·업무지구 주변의 실거주 검색형 글을 만듭니다. 자료가 검증되지 않았으면 숫자를 만들지 않습니다.</p>
-        <label className={styles.workplaceInput}>이번 시리즈의 근무지<input value={draft.place} onChange={e=>update("place",e.target.value)} placeholder="예: 스타필드 수원" /></label>
+        <label className={styles.workplaceInput}>이번 글의 근무지<input value={draft.place} onChange={e=>update("place",e.target.value)} placeholder="예: 스타필드 수원" /></label>
         <div className={styles.pills}><span>실거래가</span><span>현재 매물</span><span>실제 이동 경로</span><span>전세·월세</span></div>
       </section>
-      <SeriesWorkspace place={draft.place} />
-      <details className={styles.legacyTools}><summary>상세 조건 설정·기존 비교 조사 도구 (선택)</summary>
+      <section className={styles.workflowIntro}><h2>근무지 주변 아파트 3~5곳 비교 · V2</h2><p>조건·자료 정리 → 요청서 복사 → 챗에서 글 작성 → 이미지 00~07 요청서</p><p>사이트는 자료와 요청서를 준비합니다. 입력한 이동 범위는 희망 조건이며 실제 출입구 경로 확인 전 확정하지 않습니다.</p></section>
       <div className={styles.grid}>
         <section className={styles.panel}>
           <h2><span>01</span> 근무지와 독자 조건</h2>
@@ -160,6 +82,9 @@ export default function WorkplaceApartmentStudio() {
             </label>
             <label>지역
               <input value={draft.city} onChange={e => update("city", e.target.value)} placeholder="시·구·동" />
+            </label>
+            <label>근무지 공식 주소
+              <input value={draft.address} onChange={e=>update("address",e.target.value)} placeholder="공식 주소를 원문과 대조 · 미확인은 needs_check" />
             </label>
             <label>이동 기준 출입구
               <input value={draft.entrance} onChange={e => update("entrance", e.target.value)} placeholder="직원 출입구 위치를 확인" />
@@ -192,11 +117,11 @@ export default function WorkplaceApartmentStudio() {
             <input type="date" value={draft.checkedAt} onChange={e => update("checkedAt",e.target.value)} />
           </label>
           <div className={styles.checks}>
-            <strong>원고 작성 전 검증</strong>
+            <strong>원고 작성 전 사용자 점검</strong>
             <label><input type="checkbox" checked={draft.checkedTrade} onChange={e=>update("checkedTrade",e.target.checked)}/> 실거래가·면적·계약해제 여부 확인</label>
             <label><input type="checkbox" checked={draft.checkedListing} onChange={e=>update("checkedListing",e.target.checked)}/> 현재 매물과 실거래가 구분·날짜 확인</label>
             <label><input type="checkbox" checked={draft.checkedRoute} onChange={e=>update("checkedRoute",e.target.checked)}/> 근무지·아파트 출입구 기준 실제 이동 경로 확인</label>
-            <p>확인할 수 없는 항목은 가짜 숫자를 넣지 말고 '확인 필요'로 남겨 두세요.</p>
+            <p>체크는 점검 메모이며 공식 검증 상태를 부여하지 않습니다. 항목별 출처·확인일을 대조하고 미확인은 needs_check로 남기세요.</p>
           </div>
         </section>
         <aside className={styles.side}>
@@ -214,7 +139,7 @@ export default function WorkplaceApartmentStudio() {
           </section>
           <section className={styles.panel}>
             <h2>권장 이미지 흐름</h2>
-            <p>00 썸네일 → 01 생활권 위치 → 02 단지 비교 → 03 실거래·호가 → 04 출퇴근 → 05 주의점 → 06 요약</p>
+            <p>00 썸네일 → 01 근무지 → 02 위치 → 03 후보 비교 → 04 주거비 → 05 경로 → 06 생활 조건 → 07 발견·요약</p>
             <p className={styles.hint}>대표 1254×1254 / 본문 1600×900. 거리·가격을 그림에서 임의 생성하지 않습니다.</p>
           </section>
         </aside>
@@ -227,11 +152,11 @@ export default function WorkplaceApartmentStudio() {
             <button type="button" className={tab==="article"?styles.active:""} onClick={()=>setTab("article")}>② 최종 원고</button>
           </div>
         </div>
-        {tab==="article" && !articleReady && <div className={styles.warning}>현재 매물·실거래·출퇴근 거리의 근거와 확인 체크가 부족합니다. 원고 요청서는 볼 수 있지만 발행 전 검증을 완료해야 합니다.</div>}
+        {tab==="article" && <div className={styles.warning}>{hasSourceNotes?"입력 메모는 검증 완료를 뜻하지 않습니다. 항목별 출처·정확한 면적·해제 여부·출입구 경로를 챗에서 대조하세요.":"자료가 아직 없습니다. 요청서는 복사할 수 있지만 수치와 경로는 needs_check로 남겨야 합니다."} 후보 {candidates.length}곳 입력{candidates.length<3||candidates.length>5?" · 비교 후보 3~5곳을 실제 위치 대조 후 선정하세요.":" · 실제 위치 대조 전에는 추천 확정 금지."}</div>}
         <textarea className={styles.prompt} readOnly value={tab==="research"?research:article} aria-label="생성한 ChatGPT 요청서" />
         <div className={styles.actions}>
           <button type="button" className={styles.primary} onClick={()=>copyText(tab==="research"?research:article,setNotice)}>요청서 한 번에 복사</button>
-          <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT 열기 ↗</a>
+          <a href={"https://chatgpt.com/?q="+encodeURIComponent(tab==="research"?research:article)} target="_blank" rel="noopener noreferrer">ChatGPT에서 이어서 작업 ↗</a>
           <button type="button" className={styles.secondary} onClick={()=>{
             if(window.confirm("이 작업의 입력값만 초기화할까요? 기존 아파트 제작실 데이터는 변경되지 않습니다.")){
               setDraft({...DEFAULTS,checkedAt:new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Seoul"})});setNotice("현재 입력값만 초기화했습니다.");
@@ -241,7 +166,17 @@ export default function WorkplaceApartmentStudio() {
         {notice && <p className={styles.notice} role="status">{notice}</p>}
         <p className={styles.hint}>현재 입력 내용은 이 브라우저에 자동 저장됩니다. 이 페이지는 기존 발행 큐·저장 원고·다른 블로그 도구에 영향을 주지 않습니다.</p>
       </section>
-      </details>
+      <section className={styles.output} aria-label="V2 이미지 요청서">
+        <h2>04 · 이미지 00~07 요청서</h2>
+        <p>각 이미지에 핵심 메시지 하나, 이미지 사이 설명 2~3줄. 실제 사진과 AI 설명 카드는 구분합니다.</p>
+        <div className={styles.imageSlots}>{imageSlots.map(slot=><article className={styles.imageSlot} key={slot.id}>
+          <h3>{slot.id} · {slot.title}</h3><p>{slot.size} · {slot.message}</p>
+          <div className={styles.actions}><button type="button" onClick={()=>copyText(buildImagePrompt(draft,slot),setNotice)}>이미지 {slot.id} 요청서 복사</button><a href={"https://chatgpt.com/?q="+encodeURIComponent(buildImagePrompt(draft,slot))} target="_blank" rel="noreferrer">ChatGPT 열기 ↗</a></div>
+          <details><summary>요청서·사진 추천 보기</summary><textarea readOnly rows={8} aria-label={"이미지 "+slot.id+" 요청서"} value={buildImagePrompt(draft,slot)} /></details>
+        </article>)}</div>
+        <p role="status" className={styles.notice}>{notice}</p>
+      </section>
+      <details className={styles.legacyTools}><summary>단지별 시리즈 자료 모으기·챗 전달·받은 원고 보관</summary><SeriesWorkspace place={draft.place} /></details>
     </main>
   );
 }

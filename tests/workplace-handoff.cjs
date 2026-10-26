@@ -1,6 +1,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const ts=require('typescript');const fs=require('node:fs');const vm=require('node:vm');
 const moduleOut={exports:{}};
-vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/workplace-handoff.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:moduleOut.exports,module:moduleOut});
+function localRequire(name){if(name==="./workplace-blog-v2"){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync("lib/workplace-blog-v2.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports});return m.exports;}return require(name);}
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/workplace-handoff.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:moduleOut.exports,module:moduleOut,require:localRequire});
 const {buildWorkplaceHandoff,safeFileName}=moduleOut.exports;
 const steps=[{id:'basic',title:'단지정보'},{id:'route',title:'도보 경로'}];
 const files=[{id:'a',name:'../단지.png',step:'basic',frames:['frame'],labels:['단지 구간1']},{id:'b',name:'영상.mp4',step:'route',frames:['f1','f2'],labels:['0.0초','2.0초']}];
