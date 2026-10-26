@@ -5,9 +5,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const {NextRequest} = require('next/server');
 const keys = ['name','address','area','route','sale','listing','rent','monthly','caution','sources','notes'];
-function load(env, fetch) {
+function load(env, fetch, route = "workplace-evidence") {
  const module = {exports:{}};
- const source = ts.transpileModule(fs.readFileSync('app/api/apartment/workplace-evidence/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const source = ts.transpileModule(fs.readFileSync(`app/api/apartment/${route}/route.ts`,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  vm.runInNewContext(source,{module,exports:module.exports,require,process:{env},fetch,AbortSignal,console});
  return module.exports.POST;
 }
@@ -40,4 +40,23 @@ test('provider failure and malformed output never pass as analysis',async()=>{
  assert.equal((await post(request(body))).status,502);
  post=load({OPENAI_API_KEY:'test-only'},async()=>({ok:true,json:async()=>({output_text:'{"name":"단지"}'})}));
  assert.equal((await post(request(body))).status,502);
+});
+
+test('article writer rejects empty data and explicitly reports missing key',async()=>{
+ const post=load({},()=>{throw Error('must not call');},'workplace-article');
+ assert.equal((await post(request({values:{date:'2026-10-26'}}))).status,400);
+ assert.equal((await post(request({values:{name:'단지'}}))).status,503);
+});
+test('article writer forwards facts and missing evidence, excluding internal progress',async()=>{
+ const post=load({OPENAI_API_KEY:'test-only'},async(url,options)=>{
+  const sent=JSON.parse(options.body), input=JSON.parse(sent.input);
+  assert.equal(sent.store,false);
+  assert.equal(input.values._reviewed_sale,undefined);
+  assert.equal(input.values._skip_route,'직원 출입구 확인 불가');
+  assert.equal(input.values.area,'84.79㎡');
+  assert.match(sent.instructions,/발명/);
+  return {ok:true,json:async()=>({output_text:'# 확인된 자료로 쓴 글'})};
+ },'workplace-article');
+ const response=await post(request({place:'근무지',episode:2,values:{name:'단지',area:'84.79㎡',_reviewed_sale:'1',_skip_route:'직원 출입구 확인 불가'}}));
+ assert.equal(response.status,200);assert.equal((await response.json()).article,'# 확인된 자료로 쓴 글');
 });

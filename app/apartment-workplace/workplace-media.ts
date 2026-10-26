@@ -1,4 +1,4 @@
-export type Evidence = { id: string; episodeId: string; name: string; file: File; frames: string[]; labels: string[] };
+export type Evidence = { id: string; episodeId: string; name: string; step?: string; file: File; frames: string[]; labels: string[] };
 export const MAX_FRAMES = 12;
 export async function evidenceStore(action: "load" | "put" | "delete", item?: Evidence | string): Promise<Evidence[]> {
  const db = await new Promise<IDBDatabase>((resolve,reject) => {

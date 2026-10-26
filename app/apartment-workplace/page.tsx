@@ -141,9 +141,11 @@ export default function WorkplaceApartmentStudio() {
         <div className={styles.eyebrow}>집값쓱 · 생활권 중심 콘텐츠</div>
         <h1>직장 가까운 아파트,<br />가격과 출퇴근을 한 번에 비교</h1>
         <p>스타필드·산업단지·업무지구 주변의 실거주 검색형 글을 만듭니다. 자료가 검증되지 않았으면 숫자를 만들지 않습니다.</p>
+        <label className={styles.workplaceInput}>이번 시리즈의 근무지<input value={draft.place} onChange={e=>update("place",e.target.value)} placeholder="예: 스타필드 수원" /></label>
         <div className={styles.pills}><span>실거래가</span><span>현재 매물</span><span>실제 이동 경로</span><span>전세·월세</span></div>
       </section>
       <SeriesWorkspace place={draft.place} />
+      <details className={styles.legacyTools}><summary>상세 조건 설정·기존 비교 조사 도구 (선택)</summary>
       <div className={styles.grid}>
         <section className={styles.panel}>
           <h2><span>01</span> 근무지와 독자 조건</h2>
@@ -239,6 +241,7 @@ export default function WorkplaceApartmentStudio() {
         {notice && <p className={styles.notice} role="status">{notice}</p>}
         <p className={styles.hint}>현재 입력 내용은 이 브라우저에 자동 저장됩니다. 이 페이지는 기존 발행 큐·저장 원고·다른 블로그 도구에 영향을 주지 않습니다.</p>
       </section>
+      </details>
     </main>
   );
 }

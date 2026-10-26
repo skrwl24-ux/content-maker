@@ -19,6 +19,7 @@ export default function SeriesWorkspace({ place }: { place: string }) {
  const [episodes, setEpisodes] = useState<Episode[]>([]);
  const [selected, setSelected] = useState("");
  const [loaded, setLoaded] = useState(false);
+ const [writing, setWriting] = useState(false);
  const [notice, setNotice] = useState("");
  useEffect(() => {
   try {
@@ -42,12 +43,23 @@ export default function SeriesWorkspace({ place }: { place: string }) {
   try { await navigator.clipboard.writeText(text); setNotice("복사했습니다."); }
   catch { setNotice("복사에 실패했습니다. 원고를 직접 선택해 복사하세요."); }
  }
- function compose() {
+ async function compose() {
   if(current.article && !window.confirm("편집 중인 원고를 입력 자료로 다시 만들까요?")) return;
   const v = current.values;
   const cell = (s?: string) => value(s).replace(/\|/g, "\\|").replace(/\r?\n/g, " / ");
-  const article = `# ${place || "근무지"} 출퇴근 아파트 ${episodes.indexOf(current)+1}편 · ${value(v.name)}\n\n${value(v.route)}\n\n- 주소·사용승인: ${value(v.address)}\n- 비교 전용면적: ${value(v.area)}\n\n| 구분 | 확인 내용 |\n|---|---|\n| 매매 실거래 | ${cell(v.sale)} |\n| 현재 매물 호가 | ${cell(v.listing)} |\n| 전세 실거래 | ${cell(v.rent)} |\n| 월세 실거래 | ${cell(v.monthly)} |\n\n입주 전 확인: ${value(v.caution)}\n\n실거래는 과거 계약금액이며 현재 입주 가능한 가격을 뜻하지 않습니다.\n\n자료 확인일: ${value(v.date)}\n출처·검증 범위: ${value(v.sources)}`;
-  update({article, status: current.status === "자료 수집" ? "초안 작성" : current.status});
+  const article = `# ${place || "근무지"} 출퇴근 아파트 ${episodes.indexOf(current)+1}편 · ${value(v.name)}\n\n${value(v.route)}\n\n- 주소·사용승인: ${value(v.address)}\n- 비교 전용면적: ${value(v.area)}\n\n| 구분 | 확인 내용 |\n|---|---|\n| 매매 실거래 | ${cell(v.sale)} |\n| 현재 매물 호가 | ${cell(v.listing)} |\n| 전세 실거래 | ${cell(v.rent)} |\n| 월세 실거래 | ${cell(v.monthly)} |\n\n입주 전 확인: ${value(v.caution)}\n\n실거래는 과거 계약금액이며 현재 입주 가능한 가격을 뜻하지 않습니다.\n\n자료 확인일: ${value(v.date)}\n출처·검증 범위: ${value(v.sources)}${Object.entries(v).filter(([k,text])=>k.startsWith("_skip_")&&text.trim()).length ? "\n\n미확보 자료:\n"+Object.entries(v).filter(([k,text])=>k.startsWith("_skip_")&&text.trim()).map(([,text])=>"- "+text).join("\n") : ""}`;
+  setWriting(true);setNotice("첨부에서 확인한 자료로 짧은 글을 작성하고 있습니다…");
+  try {
+   const response = await fetch("/api/apartment/workplace-article", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({place,episode:episodes.indexOf(current)+1,values:v}),signal:AbortSignal.timeout(60000)});
+   const result = await response.json();
+   if(!response.ok || typeof result.article!=="string") throw new Error(result.error||"AI 글 작성 실패");
+   update({article:result.article,status:current.status === "자료 수집" ? "초안 작성" : current.status});
+   setNotice("글을 작성했습니다. 아래 원고를 확인하고 수정·복사하세요.");
+  } catch(e) {
+   update({article,status:current.status === "자료 수집" ? "초안 작성" : current.status});
+   setNotice((e instanceof Error ? e.message : "AI 연결 실패")+" 입력 자료를 그대로 배치한 기본 초안을 만들었습니다. AI 작성 결과가 아닙니다.");
+  } finally {setWriting(false);}
+
  }
  return <section className={styles.output} aria-label="단지별 시리즈 작업판">
   <h2>단지별 시리즈 작업판</h2>
@@ -60,17 +72,19 @@ export default function SeriesWorkspace({ place }: { place: string }) {
    }}>＋ 단지 추가</button>
   </div>
   {current ? <div className={styles.panel} style={{marginTop:20}}>
-   <EvidenceUploader key={current.id} episodeId={current.id} place={place} values={current.values} onApply={patch => { update({values: {...current.values, ...patch}}); }} />
+   <EvidenceUploader key={current.id} episodeId={current.id} place={place} values={current.values} writing={writing} onCompose={compose} onApply={patch => { setEpisodes(old => old.map(e => e.id === current.id ? {...e, values: {...e.values, ...patch}} : e)); }} />
+   <details><summary>단지 정보·자료 직접 수정 (선택)</summary>
    <div className={styles.two}>
     <label>진행 상태<select value={current.status} onChange={e => update({status:e.target.value})}>{["자료 수집","초안 작성","검토 완료","발행 완료"].map(s => <option key={s}>{s}</option>)}</select></label>
     <label>자료 확인일<input type="date" value={current.values.date || ""} onChange={e => field("date", e.target.value)} /></label>
     {fields.map(([key,label]) => <label key={key}>{label}<textarea rows={key === "notes" || key === "sources" ? 4 : 2} value={current.values[key] || ""} onChange={e => field(key,e.target.value)} placeholder="미확인 항목은 비워두거나 확인 필요로 기록" /></label>)}
    </div>
    <div className={styles.actions}>
-    <button type="button" className={styles.primary} onClick={compose}>짧은 원고 만들기</button>
+    <button type="button" className={styles.primary} disabled={writing} onClick={compose}>{writing?"작성 중…":"짧은 원고 만들기"}</button>
     <button type="button" onClick={() => copy(`[${value(current.values.name)} 자료 정리 요청]\n근무지: ${place}\n확인일: ${value(current.values.date)}\n첨부한 캡처·영상에서 단지 기본정보, 같은 전용면적의 매매·전세·월세 실거래, 현재 호가, 실제 출입구 간 경로를 정리해줘. 계약일·층·해제·갱신·중복 여부와 항목별 출처를 구분하고 미확인은 needs_check로 남겨줘. 네이버의 국토부 제공 자료와 국토부 원문 직접 대조 여부를 구분해줘. 숫자를 추정하지 마.\n기존 입력 자료:\n${JSON.stringify(current.values,null,2)}`)}>자료 정리 요청 복사</button>
    </div>
-   <label style={{marginTop:20}}>편집 가능한 원고<textarea rows={15} value={current.article} onChange={e => update({article:e.target.value})} /></label>
+   </details>
+   <label style={{marginTop:20}}>편집 가능한 원고<textarea rows={15} disabled={writing} value={current.article} onChange={e => update({article:e.target.value})} /></label>
    <div className={styles.actions}><button type="button" disabled={!current.article.trim()} onClick={() => copy(current.article)}>원고 복사</button></div>
   </div> : <p className={styles.hint}>‘단지 추가’로 1편을 시작하세요.</p>}
   {notice && <p role="status" className={styles.notice}>{notice}</p>}

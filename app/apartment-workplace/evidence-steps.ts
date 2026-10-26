@@ -1,0 +1,10 @@
+export const evidenceSteps = [
+ {id:"workplace",title:"근무지·출입구",url:"https://map.naver.com/",source:"네이버지도 또는 근무지 공식 홈페이지",instructions:"근무지를 검색하고 정확한 주소와 출입구가 보이게 캡처하세요. 직원·야간 출입구는 근무처에 확인하고, 모르면 확인 필요로 남기세요.",needs:["근무지 이름·도로명주소","출입구 위치·명칭·이용 가능 시간"],fields:["route","caution"]},
+ {id:"basic",title:"단지정보",url:"https://new.land.naver.com/",source:"네이버부동산 → 단지 검색 → 단지정보",instructions:"단지명·주소·사용승인일이 보이는 화면과, 면적을 ㎡로 바꾼 화면을 첨부하세요. 비교할 전용면적 하나를 정해 주세요.",needs:["정확한 단지명·주소·사용승인일","공급면적과 전용면적(㎡)"],fields:["name","address","area"]},
+ {id:"sale",title:"매매 실거래",url:"https://new.land.naver.com/",source:"네이버부동산 → 시세 → 매매 → 면적 선택 → 실거래가 더보기",instructions:"앞 단계와 같은 전용면적을 선택하세요. 연도와 거래 표가 함께 보이도록 천천히 스크롤해 캡처하거나 녹화하세요.",needs:["계약연도·계약일·층·금액","직거래·해제 표시와 자료 출처"],fields:["sale","area"]},
+ {id:"rent",title:"전세 실거래",url:"https://new.land.naver.com/",source:"네이버부동산 → 시세 → 전세 → 같은 면적 → 실거래가 더보기",instructions:"같은 전용면적의 전세 계약을 첨부하세요. 현재 매물이 없어도 과거 실거래는 별도로 확인할 수 있습니다.",needs:["계약연도·계약일·층·보증금","갱신 여부·해제 표시"],fields:["rent","area"]},
+ {id:"monthly",title:"월세 실거래",url:"https://new.land.naver.com/",source:"네이버부동산 → 시세 → 월세 → 같은 면적",instructions:"보증금과 월세가 함께 보이게 첨부하세요. KB 등 시세 표와 국토부 기준 실거래 표를 구분합니다.",needs:["계약연도·계약일·층","보증금·월세·갱신 여부·해제 표시"],fields:["monthly","area"]},
+ {id:"listing",title:"현재 매물",url:"https://new.land.naver.com/",source:"네이버부동산 → 매물 → 거래 유형·면적 선택",instructions:"매매·전세·월세를 구분해 첨부하세요. 매물 0건이면 선택한 필터와 0건 표시가 보이는 화면을 첨부하세요. 확인할 수 없으면 아래에 사유를 남기세요.",needs:["거래 유형·전용면적·층·호가 또는 보증금·월세","매물 확인일·중개사 중복 등록 표시"],fields:["listing","area"]},
+ {id:"route",title:"도보 경로",url:"https://map.naver.com/",source:"네이버지도 → 길찾기 → 도보",instructions:"아파트 출입구와 실제 이용할 근무지 출입구를 지정하세요. 전체 경로와 거리·시간을 함께 캡처하세요. 건물 중심점만 지정했다면 그 한계를 남깁니다.",needs:["출발·도착 지점·전체 경로·거리·시간","횡단보도·야간 출입 등 미확인 사항"],fields:["route","caution"]},
+] as const;
+export const evidenceLabels:Record<string,string>={name:"단지명",address:"주소·사용승인일",area:"면적",route:"출퇴근 경로",sale:"매매 실거래",listing:"현재 호가",rent:"전세 실거래",monthly:"월세 실거래",caution:"확인사항",sources:"출처",notes:"자료 메모"};
