@@ -8,6 +8,7 @@ import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
 import { DEFAULT_DRILLMAL_SETTINGS, normalizeDrillmalSettings, drillmalArticleRules, drillmalImageRules, drillmalImageApplies } from "../../lib/paramma-drillmal.mjs";
+import { appendParammaQuotedHeadlineRules, extractParammaQuotedThumbnailHook } from "../../lib/paramma-quote-headline.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
@@ -684,7 +685,7 @@ function baseArticlePromptForWork(work: TopicWork, topic: Topic) {
 }
 
 function articlePromptForWork(work: TopicWork, topic: Topic, brand: DrillmalSettings) {
-  return baseArticlePromptForWork(work, topic) + drillmalArticleRules(brand);
+  return appendParammaQuotedHeadlineRules(baseArticlePromptForWork(work, topic) + drillmalArticleRules(brand));
 }
 
 function baseImagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
@@ -693,7 +694,8 @@ function baseImagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
     const context = extractParammaV4ImageContext(work.body || "", slotId);
     // The finalized plan replaces the old generic scene template instead of
     // being appended after contradictory default directions.
-    return buildParammaV4ImagePrompt(topic, slotId, plan, context);
+    const cover = slotId === "00" ? extractParammaQuotedThumbnailHook(work.body, topic.thumbnailHook) : "";
+    return buildParammaV4ImagePrompt(topic, slotId, plan, context, cover);
   }
   const base = work.slots[slotId].prompt;
   const moneyRules = moneyImageContext(topic, slotId);
@@ -737,7 +739,16 @@ function baseImagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
 }
 
 function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic, brand: DrillmalSettings) {
-  return baseImagePromptForWork(work, slotId, topic) + drillmalImageRules(brand, slotId);
+  let prompt = baseImagePromptForWork(work, slotId, topic);
+  if (work.version !== "v4" && slotId === "00") {
+    const quoteHook = extractParammaQuotedThumbnailHook(work.body, topic.thumbnailHook);
+    // Replace only the thumbnail copy in the effective prompt, never saved metadata.
+    const oldCoverLine = "\n" + topic.thumbnailHook + "\n";
+    if (quoteHook !== topic.thumbnailHook && prompt.includes(oldCoverLine)) {
+      prompt = prompt.replace(oldCoverLine, "\n" + quoteHook + "\n");
+    }
+  }
+  return prompt + drillmalImageRules(brand, slotId);
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -1029,6 +1040,9 @@ function buildNextTenPrompt() {
 - 각 항목마다 실제 발행용 글 제목과 네이버 홈용 썸네일 후킹 문구를 따로 제안할 것.
 - 썸네일 문구는 1초 안에 이해되는 짧은 질문형·호기심형을 우선하고 답을 미리 알려주지 말 것.
 - 썸네일 문구가 모두 같은 “왜 ~할까?” 문법으로 반복되지 않게 자연스럽게 섞을 것.
+- 각 제목은 검색 키워드가 분명한 일반형과 짧은 일상 한마디를 “ ”로 묶은 제목형을 내부 비교해 더 자연스러운 최종 제목 하나만 제안한다. 따옴표를 강제로 넣지는 말 것.
+- 실제 발언으로 오해될 가짜 인터뷰·인물 대사·후기식 인용을 만들지 말 것. 출처로 확인된 실제 발언만 발언자로 귀속한다.
+- 클릭 직후 첫 3~5줄에 공감 상황·질문과 핵심 발견의 방향을 보여주고, 본문에 새 사례·비교·실용 보상을 배치할 수 있는 주제를 선택할 것.
 
 [이전 10개]
 ${previous}
@@ -2303,6 +2317,10 @@ export default function ParammaBulkPage() {
               )}
               <p className={styles.kickHint}>{isV4 ? "사진→2~3줄 설명→다음 사진. 각 장면은 서로 다른 사실을 설명하며 실제 사진·AI 설명 이미지를 섞어 제작합니다." : "기존 V3 글/이미지를 보존하며 00~02(+선택 03) 슬롯을 사용합니다."}</p>
             </div>
+
+            <p className={styles.kickHint} style={{ borderLeft: "3px solid #247451", padding: "10px 12px", background: "#f7faf7", borderRadius: 6 }}>
+              <b>“ ” 한마디 제목 전략 적용</b> · 자연스러운 한마디형과 검색형 제목을 비교해 최종 1개 선택 · 실제 발언은 반드시 검증 · 첫 3~5줄에 공감과 핵심 답 제시 · 확정 제목의 인용문은 썸네일 후킹 문구에도 반영
+            </p>
 
             <section className={styles.drillmalPanel} aria-label="드릴말 캐릭터 브랜드 설정">
               <div className={styles.drillmalHeader}>
