@@ -6,4 +6,4 @@ export function parammaActiveSlots(version: string | undefined, imageCount: unkn
 export function parammaV4MissingMarkers(raw: string, imageCount: unknown): ParammaV4SlotId[];
 export function buildParammaV4ArticlePrompt(topic: ParammaV4Topic, imageCount: unknown, date: string): string;
 export function extractParammaV4ImageContext(raw: string, slot: ParammaV4SlotId): string;
-export function buildParammaV4ImagePrompt(topic: ParammaV4Topic, slot: ParammaV4SlotId, plan?: string, articleContext?: string): string;
+export function buildParammaV4ImagePrompt(topic: ParammaV4Topic, slot: ParammaV4SlotId, plan?: string, articleContext?: string, thumbnailHook?: string): string;
