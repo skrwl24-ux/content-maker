@@ -7,12 +7,19 @@ import { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } fr
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
+import { DEFAULT_DRILLMAL_SETTINGS, normalizeDrillmalSettings, drillmalArticleRules, drillmalImageRules, drillmalImageApplies } from "../../lib/paramma-drillmal.mjs";
 
 type Category = "신기한 동물이야기" | "신비로운 자연" | "생활 속 궁금증" | "신기한 우리 몸";
 type Status = "waiting" | "working" | "done";
 type SlotStatus = "waiting" | "working" | "registered";
 type SlotId = "00" | "01" | "02" | "03" | "04" | "05" | "06" | "07";
 type KickMode = "auto" | "research" | "manual";
+type DrillmalSettings = {
+  enabled: boolean;
+  voice: "light" | "balanced" | "strong";
+  imageMode: "key" | "thumbnail" | "all";
+  corner: "left" | "right";
+};
 type TopicKind = "curiosity" | "money";
 type MoneyIntent = "신청" | "비용" | "비교" | "구매" | "가입" | "시즌";
 
@@ -63,7 +70,7 @@ type TopicWork = {
   slots: Record<SlotId, SlotMeta>;
 };
 
-type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit };
+type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit; drillmalApplied?: boolean };
 type LoadedImage = ImageRecord & { url: string };
 type Topic = {
   id: number;
@@ -167,6 +174,8 @@ const TOPIC_POOL: TopicSeed[] = [
 const STORAGE_KEY = "paramma-publish-queue-v5";
 const DB_NAME = "paramma-blogger-images-v5";
 const DB_STORE = "images";
+const DRILLMAL_STORAGE_KEY = "paramma-drillmal-brand-v1";
+const DRILLMAL_IMAGE_KEY = "brand/drillmal/original";
 const SLOT_IDS: SlotId[] = ["00", "01", "02", "03", "04", "05", "06", "07"];
 const SLOT_INFO: Record<SlotId, { label: string; role: string; width: number; height: number; filename: string; copy: string }> = {
   "00": { label: "썸네일", role: "대표 썸네일", width: 1254, height: 1254, filename: "00_thumbnail.png", copy: "주제를 한눈에 이해시키는 질문형 썸네일" },
@@ -654,7 +663,7 @@ function kickContext(work: TopicWork, image02 = false) {
   ].filter(Boolean).join("\n");
 }
 
-function articlePromptForWork(work: TopicWork, topic: Topic) {
+function baseArticlePromptForWork(work: TopicWork, topic: Topic) {
   const savedPromptMobileOverride = "\n\n[모바일 수동 줄바꿈 · 저장된 요청서보다 우선]\n- 일반 본문은 한글 약 15~20자(공백 포함)를 한 줄 목표로 하고, 자동 줄바꿈에 맡기지 말고 의미 단위에서 직접 엔터를 넣는다.\n- 1~2개의 짧은 줄을 한 문단으로 묶으며 문단 사이 빈 줄 하나를 둔다. 딱딱하지 않은 친근한 말투를 사용한다.\n- 단어 중간, 고유명사, 숫자·단위는 자르지 않는다. 제목·소제목·해시태그·이미지 마커는 제한 대상이 아니다. 가운데 정렬은 편집기에서 사용자가 적용한다.";
   if (work.version === "v4") return work.articlePrompt + kickContext(work) + moneyTopicContext(topic) + savedPromptMobileOverride;
   // 저장된 V2 요청서를 사용자가 수정했더라도 원문은 보존하고 최신 규칙을 복사 시 우선 적용한다.
@@ -674,7 +683,11 @@ function articlePromptForWork(work: TopicWork, topic: Topic) {
   return work.articlePrompt + legacyOverride + storyBridge + imagePlan + topicRules + kickContext(work) + moneyTopicContext(topic) + savedPromptMobileOverride;
 }
 
-function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
+function articlePromptForWork(work: TopicWork, topic: Topic, brand: DrillmalSettings) {
+  return baseArticlePromptForWork(work, topic) + drillmalArticleRules(brand);
+}
+
+function baseImagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
   if (work.version === "v4") {
     const plan = extractParammaImagePlans(work.body || "")[slotId] || "";
     const context = extractParammaV4ImageContext(work.body || "", slotId);
@@ -721,6 +734,10 @@ function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
     : "";
   const topicRules = isSpiderwebRemovalTopic(topic) ? "\n\n" + SPIDERWEB_IMAGE02_RULES : "";
   return base + legacyOverride + kickContext(work, true) + nextSlot + syncedPlan + topicRules + moneyRules;
+}
+
+function imagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic, brand: DrillmalSettings) {
+  return baseImagePromptForWork(work, slotId, topic) + drillmalImageRules(brand, slotId);
 }
 
 function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: Topic[]) {
@@ -846,6 +863,7 @@ function imageKey(topicId: number, slotId: SlotId) {
   return `topic-${topicId}/slot-${slotId}`;
 }
 
+// A separate key in the existing store keeps the mascot independent from all topic/slot images.
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -888,6 +906,27 @@ async function idbDelete(topicId: number, slotId: SlotId) {
   });
 }
 
+async function idbGetDrillmal(): Promise<ImageRecord | null> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readonly");
+    const req = tx.objectStore(DB_STORE).get(DRILLMAL_IMAGE_KEY);
+    req.onsuccess = () => resolve((req.result as ImageRecord | undefined) || null);
+    req.onerror = () => reject(req.error || new Error("드릴말 원본을 읽지 못했습니다."));
+    tx.oncomplete = () => db.close();
+  });
+}
+
+async function idbPutDrillmal(record: ImageRecord) {
+  const db = await openDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(record, DRILLMAL_IMAGE_KEY);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error || new Error("드릴말 원본을 저장하지 못했습니다.")); };
+  });
+}
+
 function loadHtmlImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
@@ -920,6 +959,38 @@ async function convertToPng(file: File, targetWidth: number, targetHeight: numbe
     return { blob, width: img.naturalWidth, height: img.naturalHeight, warning };
   } finally {
     URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+// Add an editorial sticker only when the user explicitly asks. Never replace the source silently.
+async function stampDrillmalPng(source: Blob, mascot: Blob, corner: "left" | "right") {
+  const urls = [URL.createObjectURL(source), URL.createObjectURL(mascot)];
+  try {
+    const [scene, character] = await Promise.all(urls.map((url) => loadHtmlImage(url)));
+    const canvas = document.createElement("canvas");
+    canvas.width = scene.naturalWidth;
+    canvas.height = scene.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("이미지 합성 기능을 사용할 수 없습니다.");
+    context.drawImage(scene, 0, 0);
+    const ratio = character.naturalWidth / character.naturalHeight;
+    const width = Math.min(canvas.width * 0.17, canvas.height * 0.35 * ratio);
+    const height = width / ratio;
+    const gap = Math.round(Math.min(canvas.width, canvas.height) * 0.035);
+    const x = corner === "left" ? gap : canvas.width - width - gap;
+    const y = canvas.height - height - gap;
+    context.save();
+    context.shadowColor = "rgba(0,0,0,0.26)";
+    context.shadowBlur = Math.max(3, Math.round(gap * 0.34));
+    context.shadowOffsetY = Math.max(2, Math.round(gap * 0.12));
+    context.drawImage(character, x, y, width, height);
+    context.restore();
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((out) => out ? resolve(out) : reject(new Error("드릴말 PNG 합성에 실패했습니다.")), "image/png");
+    });
+    return { blob, width: canvas.width, height: canvas.height };
+  } finally {
+    urls.forEach((url) => URL.revokeObjectURL(url));
   }
 }
 
@@ -976,6 +1047,13 @@ export default function ParammaBulkPage() {
   const [historySearch, setHistorySearch] = useState("");
   const [historyLoading, setHistoryLoading] = useState(false);
   const [images, setImages] = useState<Partial<Record<SlotId, LoadedImage>>>({});
+  const [drillmal, setDrillmal] = useState<DrillmalSettings>({ ...DEFAULT_DRILLMAL_SETTINGS } as DrillmalSettings);
+  const [drillmalReady, setDrillmalReady] = useState(false);
+  const [drillmalImage, setDrillmalImage] = useState<LoadedImage | null>(null);
+  const [drillmalBusy, setDrillmalBusy] = useState(false);
+  const drillmalUrl = useRef<string | null>(null);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const [notice, setNotice] = useState("");
   const [naverCopyMessage, setNaverCopyMessage] = useState("");
   const [imageBusy, setImageBusy] = useState<SlotId | null>(null);
@@ -999,7 +1077,7 @@ export default function ParammaBulkPage() {
   const activeSlotIds = parammaActiveSlots(work.version, work.imageCount, work.optional03) as SlotId[];
   // Keep the V3 optional 03 card visible even when it is not enabled.
   const visibleSlotIds = isV4 ? activeSlotIds : SLOT_IDS.slice(0, 4);
-  const effectiveArticlePrompt = articlePromptForWork(work, selected);
+  const effectiveArticlePrompt = articlePromptForWork(work, selected, drillmal);
   const articleChatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveArticlePrompt);
   const kickMode = work.kickMode || "auto";
   const naverBlocks = useMemo(() => parseParammaNaverBlog(work.body), [work.body]);
@@ -1063,6 +1141,40 @@ export default function ParammaBulkPage() {
     } finally {
       setHydrated(true);
     }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRILLMAL_STORAGE_KEY);
+      if (saved) setDrillmal(normalizeDrillmalSettings(JSON.parse(saved)) as DrillmalSettings);
+    } catch {
+      setNotice("드릴말 브랜드 설정을 불러오지 못해 기본값을 사용합니다.");
+    } finally {
+      setDrillmalReady(true);
+    }
+    let cancelled = false;
+    void idbGetDrillmal().then((record) => {
+      if (!record || cancelled) return;
+      const url = URL.createObjectURL(record.blob);
+      drillmalUrl.current = url;
+      setDrillmalImage({ ...record, url });
+    }).catch(() => {
+      if (!cancelled) setNotice("드릴말 원본 이미지를 읽지 못했습니다. 다시 등록할 수 있습니다.");
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!drillmalReady) return;
+    try {
+      localStorage.setItem(DRILLMAL_STORAGE_KEY, JSON.stringify(drillmal));
+    } catch {
+      setNotice("드릴말 설정을 저장하지 못했습니다. 브라우저 저장공간을 확인해주세요.");
+    }
+  }, [drillmalReady, drillmal]);
+
+  useEffect(() => () => {
+    if (drillmalUrl.current) URL.revokeObjectURL(drillmalUrl.current);
   }, []);
 
   useEffect(() => {
@@ -1494,19 +1606,75 @@ export default function ParammaBulkPage() {
   async function copyArticlePrompt() {
     startTopic(selected.id);
     const current = ensureWork();
-    await copyText(articlePromptForWork(current, selected), `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
+    await copyText(articlePromptForWork(current, selected, drillmal), `${selected.id}번 본문·이미지 기획 요청서를 복사했습니다.`);
   }
 
   async function copyImagePrompt(slotId: SlotId) {
     const current = ensureWork();
     const meta = current.slots[slotId];
     const copied = await copyText(
-      imagePromptForWork(current, slotId, selected),
+      imagePromptForWork(current, slotId, selected, drillmal),
       `${slotId} ${SLOT_INFO[slotId].label} 요청서를 복사했습니다. ChatGPT 새 채팅에서 Ctrl+V로 붙여넣으세요.`
     );
     if (!copied) return;
     startTopic(selected.id);
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
+  }
+
+  async function handleDrillmalUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setDrillmalBusy(true);
+    try {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("PNG/JPEG/WebP 이미지만 지원합니다.");
+      if (file.size > 8 * 1024 * 1024) throw new Error("원본은 8MB 이하로 등록해주세요.");
+      const converted = await convertToPng(file, 500, 500);
+      const record: ImageRecord = {
+        blob: converted.blob, width: converted.width, height: converted.height,
+        updatedAt: new Date().toISOString(),
+      };
+      await idbPutDrillmal(record);
+      const url = URL.createObjectURL(record.blob);
+      if (drillmalUrl.current) URL.revokeObjectURL(drillmalUrl.current);
+      drillmalUrl.current = url;
+      setDrillmalImage({ ...record, url });
+      setNotice("드릴말 원본을 이 브라우저에 저장했습니다. 투명 배경 PNG일수록 깨끗하게 붙습니다.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "드릴말 원본 등록에 실패했습니다.");
+    } finally {
+      setDrillmalBusy(false);
+    }
+  }
+
+  async function applyDrillmalSticker(slotId: SlotId) {
+    if (!drillmalImage || imageBusy !== null) return;
+    const topicId = selected.id;
+    const previous = images[slotId];
+    if (!previous || previous.drillmalApplied) return;
+    setImageBusy(slotId);
+    try {
+      const original = await idbGet(topicId, slotId);
+      if (!original) throw new Error("이미지 원본이 없습니다.");
+      if (original.drillmalApplied) throw new Error("이미 드릴말이 적용된 이미지입니다. 다시 합성하려면 원본 이미지를 새로 등록하세요.");
+      const output = await stampDrillmalPng(original.blob, drillmalImage.blob, drillmal.corner);
+      const saved: ImageRecord = { ...original, ...output, updatedAt: new Date().toISOString(), drillmalApplied: true };
+      await idbPut(topicId, slotId, saved);
+      if (selectedIdRef.current === topicId) {
+        const url = URL.createObjectURL(saved.blob);
+        previewUrls.current.push(url);
+        setImages((prev) => {
+          if (prev[slotId]?.url) URL.revokeObjectURL(prev[slotId]!.url);
+          return { ...prev, [slotId]: { ...saved, url } };
+        });
+        patchSlot(slotId, { status: "registered", updatedAt: saved.updatedAt }, topicId);
+      }
+      setNotice(slotId + " 이미지에 드릴말 스티커를 합성했습니다. 원본 이미지로 되돌리려면 해당 이미지를 다시 등록해주세요.");
+    } catch (error) {
+      setNotice("드릴말 적용 실패 · 기존 이미지는 보존했습니다. " + (error instanceof Error ? error.message : ""));
+    } finally {
+      setImageBusy(null);
+    }
   }
 
   async function copyNaverRichText() {
@@ -1699,9 +1867,9 @@ export default function ParammaBulkPage() {
         if (record?.credit) imageCredits.push(`[${id}] Pexels · ${record.credit.photographer} · ${record.credit.sourceUrl}`);
       }
       if (imageCredits.length) folder.file("image_sources.txt", imageCredits.join("\n"));
-      folder.file("article_request.txt", articlePromptForWork(current, selected));
-      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId, selected)}`).join("\n\n====================\n\n"));
-      folder.file("project.json", JSON.stringify({ topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, version: current.version || "v3", imageCount: current.imageCount || 7, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
+      folder.file("article_request.txt", articlePromptForWork(current, selected, drillmal));
+      folder.file("image_prompts.txt", includeSlots.map((slotId) => `[${slotId} ${SLOT_INFO[slotId].label}]\n${imagePromptForWork(current, slotId, selected, drillmal)}`).join("\n\n====================\n\n"));
+      folder.file("project.json", JSON.stringify({ drillmal, topic: selected, kickMode: current.kickMode || "auto", searchNotes: current.searchNotes || "", selectedKick: current.selectedKick || "", bodyConfirmed: current.bodyConfirmed, optional03: current.optional03, version: current.version || "v3", imageCount: current.imageCount || 7, slots: current.slots, exportedAt: new Date().toISOString() }, null, 2));
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -2107,6 +2275,49 @@ export default function ParammaBulkPage() {
               <p className={styles.kickHint}>{isV4 ? "사진→2~3줄 설명→다음 사진. 각 장면은 서로 다른 사실을 설명하며 실제 사진·AI 설명 이미지를 섞어 제작합니다." : "기존 V3 글/이미지를 보존하며 00~02(+선택 03) 슬롯을 사용합니다."}</p>
             </div>
 
+            <section className={styles.drillmalPanel} aria-label="드릴말 캐릭터 브랜드 설정">
+              <div className={styles.drillmalHeader}>
+                <div><b>🐴 드릴말 브랜드</b><small>글은 자연스럽게 · 이미지에는 같은 캐릭터를 선택적으로</small></div>
+                <label className={styles.drillmalSwitch}>
+                  <input type="checkbox" checked={drillmal.enabled} onChange={(e) => setDrillmal((prev) => ({ ...prev, enabled: e.target.checked }))} />
+                  {drillmal.enabled ? "적용 중" : "사용 안 함"}
+                </label>
+              </div>
+              <div className={styles.drillmalControls}>
+                <label>본문 말투
+                  <select value={drillmal.voice} onChange={(e) => setDrillmal((prev) => ({ ...prev, voice: e.target.value as DrillmalSettings["voice"] }))} disabled={!drillmal.enabled}>
+                    <option value="light">절제 · 한마디만</option>
+                    <option value="balanced">보통 · 도입 + 발견 (추천)</option>
+                    <option value="strong">적극 · 진행자 느낌</option>
+                  </select>
+                </label>
+                <label>이미지 적용
+                  <select value={drillmal.imageMode} onChange={(e) => setDrillmal((prev) => ({ ...prev, imageMode: e.target.value as DrillmalSettings["imageMode"] }))} disabled={!drillmal.enabled}>
+                    <option value="key">00 · 05 · 06만 (추천)</option>
+                    <option value="thumbnail">00 썸네일만</option>
+                    <option value="all">모든 슬롯</option>
+                  </select>
+                </label>
+                <label>붙일 위치
+                  <select value={drillmal.corner} onChange={(e) => setDrillmal((prev) => ({ ...prev, corner: e.target.value as DrillmalSettings["corner"] }))} disabled={!drillmal.enabled}>
+                    <option value="right">오른쪽 아래</option>
+                    <option value="left">왼쪽 아래</option>
+                  </select>
+                </label>
+              </div>
+              <div className={styles.drillmalAsset}>
+                {drillmalImage ? <img src={drillmalImage.url} alt="등록한 드릴말 원본" /> : <span className={styles.drillmalPlaceholder}>원본 미등록</span>}
+                <div>
+                  <label className={styles.drillmalUpload}>
+                    {drillmalBusy ? "원본 등록 중…" : drillmalImage ? "드릴말 원본 교체" : "드릴말 원본 등록"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" disabled={drillmalBusy} onChange={(e) => void handleDrillmalUpload(e)} />
+                  </label>
+                  <small>앞서 확정한 드릴 모양 코의 말 캐릭터 원본을 등록하세요. 투명 배경 PNG 권장 · 8MB 이하.</small>
+                  <small>원본은 현재 브라우저에만 저장됩니다. ChatGPT 채팅에 자동 첨부되지는 않으며, 등록 이미지의 ‘드릴말 붙이기’로 동일한 캐릭터를 합성할 수 있습니다.</small>
+                </div>
+              </div>
+            </section>
+
             <div className={styles.kickPanel}>
               <div className={styles.kickPanelHead}>
                 <div>
@@ -2229,7 +2440,7 @@ export default function ParammaBulkPage() {
                 const optionalInactive = !isV4 && slotId === "03" && !work.optional03;
                 const missingV4Plan = isV4 && !bodyImagePlans[slotId];
                 const v4Role = isV4 ? PARAMMA_V4_SLOTS.find((slot) => slot.id === slotId) : null;
-                const effectiveImagePrompt = imagePromptForWork(work, slotId, selected);
+                const effectiveImagePrompt = imagePromptForWork(work, slotId, selected, drillmal);
                 const chatUrl = "https://chatgpt.com/?q=" + encodeURIComponent(effectiveImagePrompt);
                 return (
                   <article key={slotId} className={`${styles.imageCard} ${optionalInactive ? styles.inactiveCard : ""}`}>
@@ -2275,7 +2486,7 @@ export default function ParammaBulkPage() {
                       )}
                     </div>
 
-                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · PNG 저장{image.credit ? " · Pexels 실사진" : ""}</div>}
+                    {image && <div className={styles.imageMeta}>{image.width}×{image.height}px · PNG 저장{image.credit ? " · Pexels 실사진" : ""}{image.drillmalApplied ? " · 드릴말 적용" : ""}</div>}
                     {image?.credit && (
                       <div className={styles.photoCredit}>사진: <a href={image.credit.sourceUrl} target="_blank" rel="noopener noreferrer">{image.credit.photographer} / Pexels ↗</a> · 실제 사건을 촬영한 증거 사진은 아닙니다.</div>
                     )}
@@ -2350,6 +2561,12 @@ export default function ParammaBulkPage() {
                           </div>
                         )}
                       </div>
+                    )}
+                    {drillmal.enabled && drillmalImageApplies(drillmal, slotId) && (
+                      <button type="button" className={styles.drillmalStamp} onClick={() => void applyDrillmalSticker(slotId)}
+                        disabled={!image || !drillmalImage || !!image.drillmalApplied || imageBusy !== null || optionalInactive}>
+                        {image?.drillmalApplied ? "✓ 드릴말 적용됨" : !drillmalImage ? "드릴말 원본 등록 후 붙이기" : "🐴 드릴말 붙이기 · 원본 PNG 합성"}
+                      </button>
                     )}
                     <div className={styles.uploadRow}>
                       <label className={`${styles.uploadButton} ${imageBusy === slotId ? styles.busy : ""}`}>
