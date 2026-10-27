@@ -23,6 +23,8 @@ test("V4 article prompt is short-paragraph, distinct-scene and marker-based", as
   assert.match(prompt,/사진 검색 추천/);
   assert.match(prompt,/AI 설명 이미지 추천/);
   assert.match(prompt,/공식기관/);
+  assert.match(prompt,/한마디 제목과 읽히는 도입/);
+  assert.match(prompt,/첫 3~5줄/);
 });
 
 test("V4 image prompts are one scene each, preserve thumbnail and body formats", async () => {
@@ -30,6 +32,9 @@ test("V4 image prompts are one scene each, preserve thumbnail and body formats",
   const thumbnail = buildParammaV4ImagePrompt(topic,"00","대표 배터리");
   const photo = buildParammaV4ImagePrompt(topic,"06","견적을 확인하는 장면");
   assert.match(thumbnail,/1254×1254/);
+  const confirmedCover = buildParammaV4ImagePrompt(topic,"00","대표 배터리","본문 설명","“또 방전됐어?”");
+  assert.match(confirmedCover,/\[썸네일 짧은 문구\] “또 방전됐어\?”/);
+  assert.match(thumbnail,/교체해야 하나\?/);
   assert.match(photo,/1600×900/);
   assert.match(photo,/견적을 확인하는 장면/);
   assert.doesNotMatch(photo,/썸네일 짧은 문구/);
