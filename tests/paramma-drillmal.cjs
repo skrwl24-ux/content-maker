@@ -10,13 +10,14 @@ test("Drillmal brand defaults and safe disabled mode", async () => {
   assert.equal(drillmalImageRules(off,"00"), "");
 });
 
-test("Drillmal brand keeps factual slots clear by default", async () => {
+test("Drillmal brand covers all slots by default when mascot PNG is registered", async () => {
   const {DEFAULT_DRILLMAL_SETTINGS, drillmalImageApplies, drillmalImageRules} = await brand();
   assert.equal(drillmalImageApplies(DEFAULT_DRILLMAL_SETTINGS,"00"), true);
   assert.equal(drillmalImageApplies(DEFAULT_DRILLMAL_SETTINGS,"05"), true);
-  assert.equal(drillmalImageApplies(DEFAULT_DRILLMAL_SETTINGS,"03"), false);
+  assert.equal(drillmalImageApplies(DEFAULT_DRILLMAL_SETTINGS,"03"), true);
+  assert.equal(DEFAULT_DRILLMAL_SETTINGS.autoStamp, true);
   assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"00"),/자동 첨부하지 않는다/);
-  assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"05"),/드릴말 붙이기/);
+  assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"05"),/자동 합성/);
 });
 
 test("Thumbnail/all modes, corner and narrative intensity are respected", async () => {
@@ -29,4 +30,15 @@ test("Thumbnail/all modes, corner and narrative intensity are respected", async 
   assert.equal(drillmalImageApplies(all,"03"),true);
   assert.match(drillmalArticleRules(all),/한 곳에서만/);
   assert.equal(normalizeDrillmalSettings({voice:"invalid",imageMode:"unsafe"}).voice,"balanced");
+});
+
+test("existing saved settings upgrade to auto compositing without discarding choices", async () => {
+  const {normalizeDrillmalSettings, drillmalImageApplies} = await brand();
+  const fromOldVersion = normalizeDrillmalSettings({enabled:true,voice:"light",imageMode:"key",corner:"left"});
+  assert.equal(fromOldVersion.autoStamp,true);
+  assert.equal(fromOldVersion.imageMode,"key");
+  assert.equal(drillmalImageApplies(fromOldVersion,"03"),false);
+  assert.equal(drillmalImageApplies(fromOldVersion,"05"),true);
+  assert.equal(normalizeDrillmalSettings({enabled:true,autoStamp:false}).autoStamp,false);
+  assert.equal(normalizeDrillmalSettings({imageMode:"garbage"}).imageMode,"all");
 });

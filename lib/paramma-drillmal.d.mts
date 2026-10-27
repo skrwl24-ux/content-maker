@@ -2,6 +2,7 @@ export type DrillmalSettings = {
   enabled: boolean;
   voice: "light" | "balanced" | "strong";
   imageMode: "key" | "thumbnail" | "all";
+  autoStamp: boolean;
   corner: "left" | "right";
 };
 export const DEFAULT_DRILLMAL_SETTINGS: Readonly<DrillmalSettings>;

@@ -211,3 +211,16 @@
   .drillmalAsset img, .drillmalPlaceholder { flex-basis: 63px; width: 63px; height: 63px; }
   .drillmalControls { grid-template-columns: 1fr; }
 }
+
+
+/* Clearly distinguish automatic mascot compositing from image generation in ChatGPT. */
+.drillmalAutoRow { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #bcd8c4; border-radius: 11px; background: #eaf6ed; cursor: pointer; color: #245f41; }
+.drillmalAutoRow > input { flex: 0 0 auto; width: 20px; height: 20px; accent-color: #25845d; margin: 1px 0 0; }
+.drillmalAutoRow > span { display: grid; gap: 4px; }
+.drillmalAutoRow b { font-size: 13px; }
+.drillmalAutoRow small { font-size: 11px; color: #477559; line-height: 1.55; }
+.drillmalWarning { margin: 0; padding: 11px 12px; border: 1px solid #eecf91; border-radius: 10px; background: #fff7e8; color: #7b4a07; font-size: 12px; line-height: 1.6; font-weight: 700; }
+.drillmalDownload { display: inline-block; font-size: 12px; color: #24694f; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
+.drillmalBatchButton { padding: 12px 14px; border-radius: 10px; border: 0; background: #236d4d; color: #fff; font-weight: 800; font-size: 13px; cursor: pointer; }
+.drillmalBatchButton:disabled { opacity: .5; cursor: default; }
+.drillmalFootnote { font-size: 11px; line-height: 1.55; color: #5b7466; }
