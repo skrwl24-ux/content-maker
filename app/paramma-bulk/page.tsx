@@ -19,6 +19,7 @@ type DrillmalSettings = {
   enabled: boolean;
   voice: "light" | "balanced" | "strong";
   imageMode: "key" | "thumbnail" | "all";
+  autoStamp: boolean;
   corner: "left" | "right";
 };
 type TopicKind = "curiosity" | "money";
@@ -1065,6 +1066,7 @@ export default function ParammaBulkPage() {
   const [drillmalReady, setDrillmalReady] = useState(false);
   const [drillmalImage, setDrillmalImage] = useState<LoadedImage | null>(null);
   const [drillmalBusy, setDrillmalBusy] = useState(false);
+  const [drillmalBatchBusy, setDrillmalBatchBusy] = useState(false);
   const drillmalUrl = useRef<string | null>(null);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
@@ -1635,6 +1637,28 @@ export default function ParammaBulkPage() {
     if (meta.status !== "registered") patchSlot(slotId, { status: "working" });
   }
 
+  // Keep an untouched image for easy restoration. Failures never discard uploaded photos.
+  async function prepareDrillmalImage(slotId: SlotId, source: ImageRecord) {
+    if (!drillmal.enabled || !drillmal.autoStamp || !drillmalImageApplies(drillmal, slotId)) {
+      return { record: source, note: "" };
+    }
+    if (!drillmalImage) {
+      return { record: source, note: " · 드릴말 원본 미등록으로 캐릭터는 넣지 못했습니다." };
+    }
+    try {
+      const output = await stampDrillmalPng(source.blob, drillmalImage.blob, drillmal.corner);
+      return {
+        record: {
+          ...source, ...output, sourceBlob: source.blob, drillmalApplied: true,
+        } as ImageRecord,
+        note: " · 🐴 드릴말 자동 합성 완료",
+      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "";
+      return { record: source, note: " · 드릴말 합성에 실패했습니다. 원본 이미지는 보존했습니다. " + detail };
+    }
+  }
+
   async function handleDrillmalUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1689,6 +1713,46 @@ export default function ParammaBulkPage() {
     } finally {
       setImageBusy(null);
     }
+  }
+
+  async function applyDrillmalToExistingImages() {
+    if (!drillmalImage || drillmalBatchBusy || imageBusy !== null) return;
+    const topicId = selected.id;
+    const targets = activeSlotIds.filter((id) =>
+      drillmalImageApplies(drillmal, id) && images[id] && !images[id]?.drillmalApplied
+    );
+    if (!targets.length) {
+      setNotice("적용할 이미지가 없습니다. 드릴말이 적용되었거나 선택한 이미지 슬롯에 등록 사진이 없습니다.");
+      return;
+    }
+    setDrillmalBatchBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const id of targets) {
+      try {
+        const original = await idbGet(topicId, id);
+        if (!original || original.drillmalApplied) continue;
+        const output = await stampDrillmalPng(original.blob, drillmalImage.blob, drillmal.corner);
+        const record: ImageRecord = {
+          ...original, ...output, sourceBlob: original.blob, drillmalApplied: true,
+          updatedAt: new Date().toISOString(),
+        };
+        await idbPut(topicId, id, record);
+        if (selectedIdRef.current === topicId) {
+          const url = URL.createObjectURL(record.blob);
+          previewUrls.current.push(url);
+          setImages((prev) => {
+            if (prev[id]?.url) URL.revokeObjectURL(prev[id]!.url);
+            return { ...prev, [id]: { ...record, url } };
+          });
+        }
+        done += 1;
+      } catch {
+        failed.push(id);
+      }
+    }
+    setDrillmalBatchBusy(false);
+    setNotice(`드릴말 일괄 적용: ${done}장 완료.${failed.length ? " 실패한 슬롯: " + failed.join(", ") + " · 원본 보존" : " 언제든 원본으로 복원할 수 있습니다."}`);
   }
 
   async function restoreUnstampedImage(slotId: SlotId) {
@@ -1762,7 +1826,9 @@ export default function ParammaBulkPage() {
     setNotice("");
     try {
       const converted = await convertToPng(file, info.width, info.height);
-      const record: ImageRecord = { blob: converted.blob, width: converted.width, height: converted.height, updatedAt: new Date().toISOString() };
+      const source: ImageRecord = { blob: converted.blob, width: converted.width, height: converted.height, updatedAt: new Date().toISOString() };
+      const prepared = await prepareDrillmalImage(slotId, source);
+      const record = prepared.record;
       await idbPut(selected.id, slotId, record);
       const url = URL.createObjectURL(record.blob);
       previewUrls.current.push(url);
@@ -1771,7 +1837,7 @@ export default function ParammaBulkPage() {
         return { ...prev, [slotId]: { ...record, url } };
       });
       patchSlot(slotId, { status: "registered", width: record.width, height: record.height, warning: converted.warning, updatedAt: record.updatedAt });
-      setNotice(`${slotId} 이미지를 실제 PNG로 변환해 등록했습니다.${converted.warning ? " 비율 경고를 확인해주세요." : ""}`);
+      setNotice(`${slotId} 이미지를 실제 PNG로 변환해 등록했습니다.${prepared.note}${converted.warning ? " 비율 경고를 확인해주세요." : ""}`);
     } catch (error: any) {
       setNotice(oldImage
         ? `이미지 교체에 실패했습니다. 기존 ${slotId} 이미지는 그대로 보존했습니다. ${error?.message || ""}`
@@ -1818,7 +1884,7 @@ export default function ParammaBulkPage() {
       const mime = original.type || "image/jpeg";
       const file = new File([original], "pexels-" + photo.id + ".jpg", { type: mime });
       const converted = await convertToPng(file, SLOT_INFO[slotId].width, SLOT_INFO[slotId].height);
-      const record: ImageRecord = {
+      const source: ImageRecord = {
         blob: converted.blob, width: converted.width, height: converted.height,
         updatedAt: new Date().toISOString(),
         credit: {
@@ -1826,6 +1892,8 @@ export default function ParammaBulkPage() {
           sourceUrl: photo.sourceUrl, photographerUrl: photo.photographerUrl,
         },
       };
+      const prepared = await prepareDrillmalImage(slotId, source);
+      const record = prepared.record;
       await idbPut(topicId, slotId, record);
       const url = URL.createObjectURL(record.blob);
       previewUrls.current.push(url);
@@ -1838,7 +1906,7 @@ export default function ParammaBulkPage() {
       patchSlot(slotId, { status: "registered", width: record.width, height: record.height, warning: converted.warning, updatedAt: record.updatedAt }, topicId);
       setPhotoSearchSlot(null);
       setPhotoResults([]);
-      setNotice(`${slotId} 사진을 등록했습니다. 사진 출처는 ZIP의 image_sources.txt에 보존됩니다. 글에서 실제 사례 사진으로 오해되지 않도록 설명해주세요.`);
+      setNotice(`${slotId} 사진을 등록했습니다.${prepared.note} 사진 출처는 ZIP의 image_sources.txt에 보존됩니다. 실제 사례 사진으로 오해되지 않도록 설명해주세요.`);
     } catch (error) {
       setNotice(oldImage
         ? `사진 교체에 실패했습니다. 기존 이미지는 보존했습니다. ${error instanceof Error ? error.message : ""}`
