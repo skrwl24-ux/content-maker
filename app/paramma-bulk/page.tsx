@@ -70,7 +70,7 @@ type TopicWork = {
   slots: Record<SlotId, SlotMeta>;
 };
 
-type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit; drillmalApplied?: boolean };
+type ImageRecord = { blob: Blob; width: number; height: number; updatedAt: string; credit?: PhotoCredit; drillmalApplied?: boolean; sourceBlob?: Blob };
 type LoadedImage = ImageRecord & { url: string };
 type Topic = {
   id: number;
@@ -1658,7 +1658,7 @@ export default function ParammaBulkPage() {
       if (!original) throw new Error("이미지 원본이 없습니다.");
       if (original.drillmalApplied) throw new Error("이미 드릴말이 적용된 이미지입니다. 다시 합성하려면 원본 이미지를 새로 등록하세요.");
       const output = await stampDrillmalPng(original.blob, drillmalImage.blob, drillmal.corner);
-      const saved: ImageRecord = { ...original, ...output, updatedAt: new Date().toISOString(), drillmalApplied: true };
+      const saved: ImageRecord = { ...original, ...output, sourceBlob: original.blob, updatedAt: new Date().toISOString(), drillmalApplied: true };
       await idbPut(topicId, slotId, saved);
       if (selectedIdRef.current === topicId) {
         const url = URL.createObjectURL(saved.blob);
@@ -1669,9 +1669,38 @@ export default function ParammaBulkPage() {
         });
         patchSlot(slotId, { status: "registered", updatedAt: saved.updatedAt }, topicId);
       }
-      setNotice(slotId + " 이미지에 드릴말 스티커를 합성했습니다. 원본 이미지로 되돌리려면 해당 이미지를 다시 등록해주세요.");
+      setNotice(slotId + " 이미지에 드릴말을 합성했습니다. 기존 원본은 보관되므로 버튼으로 다시 복원할 수 있습니다.");
     } catch (error) {
       setNotice("드릴말 적용 실패 · 기존 이미지는 보존했습니다. " + (error instanceof Error ? error.message : ""));
+    } finally {
+      setImageBusy(null);
+    }
+  }
+
+  async function restoreUnstampedImage(slotId: SlotId) {
+    if (imageBusy !== null) return;
+    const topicId = selected.id;
+    setImageBusy(slotId);
+    try {
+      const current = await idbGet(topicId, slotId);
+      if (!current?.drillmalApplied || !current.sourceBlob) throw new Error("되돌릴 이미지 원본이 없습니다.");
+      const restored: ImageRecord = {
+        ...current, blob: current.sourceBlob, sourceBlob: undefined,
+        drillmalApplied: false, updatedAt: new Date().toISOString(),
+      };
+      await idbPut(topicId, slotId, restored);
+      if (selectedIdRef.current === topicId) {
+        const url = URL.createObjectURL(restored.blob);
+        previewUrls.current.push(url);
+        setImages((prev) => {
+          if (prev[slotId]?.url) URL.revokeObjectURL(prev[slotId]!.url);
+          return { ...prev, [slotId]: { ...restored, url } };
+        });
+        patchSlot(slotId, { status: "registered", updatedAt: restored.updatedAt }, topicId);
+      }
+      setNotice(slotId + " 원본 이미지로 복원했습니다. 캐릭터 원본은 그대로 보관됩니다.");
+    } catch (error) {
+      setNotice("이미지 복원 실패 · 현재 이미지는 보존했습니다. " + (error instanceof Error ? error.message : ""));
     } finally {
       setImageBusy(null);
     }
@@ -2313,7 +2342,7 @@ export default function ParammaBulkPage() {
                     <input type="file" accept="image/png,image/jpeg,image/webp" disabled={drillmalBusy} onChange={(e) => void handleDrillmalUpload(e)} />
                   </label>
                   <small>앞서 확정한 드릴 모양 코의 말 캐릭터 원본을 등록하세요. 투명 배경 PNG 권장 · 8MB 이하.</small>
-                  <small>원본은 현재 브라우저에만 저장됩니다. ChatGPT 채팅에 자동 첨부되지는 않으며, 등록 이미지의 ‘드릴말 붙이기’로 동일한 캐릭터를 합성할 수 있습니다.</small>
+                  <small>원본은 현재 브라우저에만 저장됩니다. ChatGPT 채팅에 자동 첨부되지는 않으며, 등록 이미지의 ‘드릴말 붙이기’로 동일한 캐릭터를 합성할 수 있습니다. 합성 전 이미지도 보관되어 복원할 수 있습니다.</small>
                 </div>
               </div>
             </section>
@@ -2563,9 +2592,10 @@ export default function ParammaBulkPage() {
                       </div>
                     )}
                     {drillmal.enabled && drillmalImageApplies(drillmal, slotId) && (
-                      <button type="button" className={styles.drillmalStamp} onClick={() => void applyDrillmalSticker(slotId)}
-                        disabled={!image || !drillmalImage || !!image.drillmalApplied || imageBusy !== null || optionalInactive}>
-                        {image?.drillmalApplied ? "✓ 드릴말 적용됨" : !drillmalImage ? "드릴말 원본 등록 후 붙이기" : "🐴 드릴말 붙이기 · 원본 PNG 합성"}
+                      <button type="button" className={styles.drillmalStamp}
+                        onClick={() => void (image?.drillmalApplied ? restoreUnstampedImage(slotId) : applyDrillmalSticker(slotId))}
+                        disabled={!image || (!drillmalImage && !image?.drillmalApplied) || imageBusy !== null || optionalInactive}>
+                        {image?.drillmalApplied ? "↶ 드릴말 제거 · 원본 이미지 복원" : !drillmalImage ? "드릴말 원본 등록 후 붙이기" : "🐴 드릴말 붙이기 · 원본 PNG 합성"}
                       </button>
                     )}
                     <div className={styles.uploadRow}>
