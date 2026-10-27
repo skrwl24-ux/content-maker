@@ -2591,7 +2591,7 @@ export default function ParammaBulkPage() {
                         )}
                       </div>
                     )}
-                    {drillmal.enabled && drillmalImageApplies(drillmal, slotId) && (
+                    {(image?.drillmalApplied || (drillmal.enabled && drillmalImageApplies(drillmal, slotId))) && (
                       <button type="button" className={styles.drillmalStamp}
                         onClick={() => void (image?.drillmalApplied ? restoreUnstampedImage(slotId) : applyDrillmalSticker(slotId))}
                         disabled={!image || (!drillmalImage && !image?.drillmalApplied) || imageBusy !== null || optionalInactive}>
