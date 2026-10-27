@@ -184,3 +184,30 @@
 .moneyAutoButton{width:100%;margin:11px 0 8px;padding:13px;border:0;border-radius:10px;background:#173d2f;color:#fff;font-weight:950;cursor:pointer}
 .moneyAutoButton:disabled{cursor:default;opacity:.55}
 @media(max-width:720px){.moneyAutoHeader{flex-direction:column;align-items:stretch}.moneyAutoHeader>label{flex:auto}}
+
+
+/* Drillmal brand: additive controls; existing Paramma layouts remain intact. */
+.drillmalPanel { margin: 16px 0; padding: 17px; border: 1px solid #d8e7d9; background: #f7fbf7; border-radius: 16px; display: grid; gap: 13px; }
+.drillmalHeader { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.drillmalHeader > div { display: grid; gap: 4px; }
+.drillmalHeader b { font-size: 17px; color: #254b3b; }
+.drillmalHeader small, .drillmalAsset small { color: #62776b; font-size: 12px; line-height: 1.65; }
+.drillmalSwitch { display: flex; align-items: center; gap: 7px; font-weight: 800; color: #236b4c; font-size: 13px; cursor: pointer; }
+.drillmalSwitch input { accent-color: #25845d; width: 17px; height: 17px; }
+.drillmalControls { display: grid; grid-template-columns: repeat(auto-fit,minmax(155px,1fr)); gap: 10px; }
+.drillmalControls label { display: grid; gap: 5px; color: #3e584b; font-weight: 800; font-size: 12px; }
+.drillmalControls select { padding: 9px; width: 100%; max-width: 100%; background: #fff; color: #213f33; border: 1px solid #ccdcd2; border-radius: 9px; font-size: 12px; }
+.drillmalControls select:disabled { opacity: .58; }
+.drillmalAsset { display: flex; align-items: center; gap: 12px; min-width: 0; padding-top: 8px; border-top: 1px solid #e0ebe1; }
+.drillmalAsset img, .drillmalPlaceholder { display: grid; place-items: center; flex: 0 0 78px; width: 78px; height: 78px; border: 1px solid #dbe7df; border-radius: 12px; background: #fff; object-fit: contain; }
+.drillmalPlaceholder { padding: 9px; text-align: center; color: #7d9485; font-size: 11px; }
+.drillmalAsset > div { display: grid; justify-items: start; gap: 4px; min-width: 0; }
+.drillmalUpload { display: inline-flex; align-items: center; border: 1px solid #2f7756; border-radius: 9px; padding: 8px 11px; background: #fff; color: #246b4b; cursor: pointer; font-size: 12px; font-weight: 800; }
+.drillmalUpload input { display: none; }
+.drillmalStamp { display: block; width: 100%; margin: 9px 0 6px; border: 1px solid #a7cfaf; background: #eaf7ec; color: #255f3c; border-radius: 10px; padding: 10px; cursor: pointer; font-size: 12px; font-weight: 800; }
+.drillmalStamp:disabled { cursor: default; opacity: .5; }
+@media (max-width: 480px) {
+  .drillmalPanel { padding: 12px; }
+  .drillmalAsset img, .drillmalPlaceholder { flex-basis: 63px; width: 63px; height: 63px; }
+  .drillmalControls { grid-template-columns: 1fr; }
+}
