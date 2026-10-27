@@ -17,7 +17,7 @@ test("Drillmal brand covers all slots by default when mascot PNG is registered",
   assert.equal(drillmalImageApplies(DEFAULT_DRILLMAL_SETTINGS,"03"), true);
   assert.equal(DEFAULT_DRILLMAL_SETTINGS.autoStamp, true);
   assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"00"),/자동 첨부하지 않는다/);
-  assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"05"),/드릴말 붙이기/);
+  assert.match(drillmalImageRules(DEFAULT_DRILLMAL_SETTINGS,"05"),/자동 합성/);
 });
 
 test("Thumbnail/all modes, corner and narrative intensity are respected", async () => {
