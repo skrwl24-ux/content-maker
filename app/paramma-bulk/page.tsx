@@ -2392,7 +2392,7 @@ export default function ParammaBulkPage() {
 
             <section className={styles.drillmalPanel} aria-label="드릴말 캐릭터 브랜드 설정">
               <div className={styles.drillmalHeader}>
-                <div><b>🐴 드릴말 브랜드</b><small>글은 자연스럽게 · 이미지에는 같은 캐릭터를 선택적으로</small></div>
+                <div><b>🐴 드릴말 브랜드</b><small>원본 PNG 1회 등록 → 이미지를 등록할 때 드릴말 자동 합성</small></div>
                 <label className={styles.drillmalSwitch}>
                   <input type="checkbox" checked={drillmal.enabled} onChange={(e) => setDrillmal((prev) => ({ ...prev, enabled: e.target.checked }))} />
                   {drillmal.enabled ? "적용 중" : "사용 안 함"}
@@ -2408,9 +2408,9 @@ export default function ParammaBulkPage() {
                 </label>
                 <label>이미지 적용
                   <select value={drillmal.imageMode} onChange={(e) => setDrillmal((prev) => ({ ...prev, imageMode: e.target.value as DrillmalSettings["imageMode"] }))} disabled={!drillmal.enabled}>
-                    <option value="key">00 · 05 · 06만 (추천)</option>
+                    <option value="key">00 · 05 · 06만</option>
                     <option value="thumbnail">00 썸네일만</option>
-                    <option value="all">모든 슬롯</option>
+                    <option value="all">모든 슬롯 (추천)</option>
                   </select>
                 </label>
                 <label>붙일 위치
@@ -2420,6 +2420,17 @@ export default function ParammaBulkPage() {
                   </select>
                 </label>
               </div>
+              <label className={styles.drillmalAutoRow}>
+                <input type="checkbox" checked={drillmal.autoStamp}
+                  onChange={(e) => setDrillmal((prev) => ({ ...prev, autoStamp: e.target.checked }))}
+                  disabled={!drillmal.enabled} />
+                <span><b>이미지 등록 시 드릴말 자동 합성</b><small>선택한 이미지 슬롯에 동일한 원본 캐릭터를 붙입니다. 원본 파일은 보존되며 언제든 복원할 수 있습니다.</small></span>
+              </label>
+              {!drillmalImage && drillmal.enabled && (
+                <p className={styles.drillmalWarning} role="status">
+                  ⚠ 드릴말 원본이 등록되지 않았습니다. 글 요청서만으로는 이미지에 캐릭터가 생기지 않아요. 아래에서 먼저 원본 PNG를 등록해주세요.
+                </p>
+              )}
               <div className={styles.drillmalAsset}>
                 {drillmalImage ? <img src={drillmalImage.url} alt="등록한 드릴말 원본" /> : <span className={styles.drillmalPlaceholder}>원본 미등록</span>}
                 <div>
@@ -2428,9 +2439,20 @@ export default function ParammaBulkPage() {
                     <input type="file" accept="image/png,image/jpeg,image/webp" disabled={drillmalBusy} onChange={(e) => void handleDrillmalUpload(e)} />
                   </label>
                   <small>앞서 확정한 드릴 모양 코의 말 캐릭터 원본을 등록하세요. 투명 배경 PNG 권장 · 8MB 이하.</small>
-                  <small>원본은 현재 브라우저에만 저장됩니다. ChatGPT 채팅에 자동 첨부되지는 않으며, 등록 이미지의 ‘드릴말 붙이기’로 동일한 캐릭터를 합성할 수 있습니다. 합성 전 이미지도 보관되어 복원할 수 있습니다.</small>
+                  <small>드릴말 원본은 이 브라우저에 보관됩니다. ChatGPT 생성 화면에는 자동으로 나타나지 않고, 콘텐츠메이커에서 완성 이미지를 등록할 때 합성됩니다.</small>
+                  {drillmalImage && (
+                    <a className={styles.drillmalDownload} href={drillmalImage.url} download="drillmal_original.png">
+                      드릴말 PNG 저장 · ChatGPT에 직접 첨부할 때 사용
+                    </a>
+                  )}
                 </div>
               </div>
+              <button type="button" className={styles.drillmalBatchButton}
+                onClick={() => void applyDrillmalToExistingImages()}
+                disabled={!drillmalImage || !drillmal.enabled || drillmalBatchBusy || imageBusy !== null}>
+                {drillmalBatchBusy ? "기존 이미지에 드릴말 적용 중…" : "🐴 이미 등록된 이미지에도 드릴말 한꺼번에 넣기"}
+              </button>
+              <small className={styles.drillmalFootnote}>원본이 있는 이미지만 합성합니다. ChatGPT에서 만든 이미지 자체에 넣고 싶다면 원본 PNG를 해당 채팅에 직접 첨부해야 합니다.</small>
             </section>
 
             <div className={styles.kickPanel}>
@@ -2680,7 +2702,7 @@ export default function ParammaBulkPage() {
                     {(image?.drillmalApplied || (drillmal.enabled && drillmalImageApplies(drillmal, slotId))) && (
                       <button type="button" className={styles.drillmalStamp}
                         onClick={() => void (image?.drillmalApplied ? restoreUnstampedImage(slotId) : applyDrillmalSticker(slotId))}
-                        disabled={!image || (!drillmalImage && !image?.drillmalApplied) || imageBusy !== null || optionalInactive}>
+                        disabled={!image || (!drillmalImage && !image?.drillmalApplied) || imageBusy !== null || drillmalBatchBusy || optionalInactive}>
                         {image?.drillmalApplied ? "↶ 드릴말 제거 · 원본 이미지 복원" : !drillmalImage ? "드릴말 원본 등록 후 붙이기" : "🐴 드릴말 붙이기 · 원본 PNG 합성"}
                       </button>
                     )}
@@ -2691,7 +2713,7 @@ export default function ParammaBulkPage() {
                           type="file"
                           accept="image/png,image/jpeg,image/webp"
                           onChange={(e) => void handleUpload(slotId, e)}
-                          disabled={imageBusy !== null || optionalInactive}
+                          disabled={imageBusy !== null || drillmalBatchBusy || optionalInactive}
                         />
                       </label>
                       <button
