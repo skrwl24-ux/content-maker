@@ -67,3 +67,26 @@
 
 .backupLabel{display:inline-flex!important;align-items:center;justify-content:center;cursor:pointer;background:#fff;border:1px solid #d7e0ec;color:#41536a;border-radius:10px;padding:10px 12px;font-size:13px!important;font-weight:700!important;margin:0!important}
 .backupLabel input{display:none}
+
+/* Five-topic research queue */
+.batchArea{max-width:1180px;margin:24px auto 0;padding:25px 24px;background:#fff;border:1px solid #dce6ed;border-radius:22px;box-shadow:0 8px 35px rgba(18,36,61,.045);color:#15243a}
+.batchHeading{display:flex;gap:20px;align-items:start;justify-content:space-between}
+.batchHeading h1{font-size:24px;letter-spacing:-.6px;line-height:1.3;margin:10px 0}
+.batchHeading p{color:#60728a;font-size:13px;line-height:1.7;margin:0}
+.batchActions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px}
+.batchInputBox{background:#f4faf8;border:1px solid #cfe8dd;border-radius:14px;padding:17px;margin-top:19px}
+.batchInputBox label{font-size:13px;font-weight:850;display:block;margin:0 0 9px}
+.batchInputBox textarea{width:100%;min-height:150px;border:1px solid #c6d8d9;border-radius:12px;padding:12px;background:#fff;color:#26394d;font-size:14px;line-height:1.75;resize:vertical}
+.batchInputFooter{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:10px}
+.batchInputFooter span{color:#607584;font-size:12px;line-height:1.6}
+.slotList{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:20px}
+.slotButton,.slotActive{text-align:left;display:flex;gap:10px;align-items:flex-start;min-width:0;min-height:86px;padding:13px 11px;border-radius:13px;background:#f8fafb;color:#243447;border:1px solid #dbe4ed}
+.slotActive{border:2px solid #0c827c;background:#edf9f6;padding:12px 10px}
+.slotButton:hover{border-color:#799c9e;background:#f2f8f7}
+.slotNumber{display:grid;place-items:center;width:26px;height:26px;border-radius:9px;background:#dce9ea;color:#126361;font-weight:900;font-size:12px;flex:0 0 26px}
+.slotActive .slotNumber{background:#0b7772;color:#fff}
+.slotBody{min-width:0;display:block}
+.slotBody strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:13px;line-height:1.45;font-weight:850}
+.slotBody small{display:block;font-size:11px;margin-top:6px;color:#688092}
+@media(max-width:1000px){.slotList{grid-template-columns:repeat(3,minmax(0,1fr))}.batchHeading{flex-direction:column}.batchActions{justify-content:flex-start}}
+@media(max-width:600px){.batchArea{margin:12px 14px 0;padding:16px}.batchHeading h1{font-size:21px}.slotList{grid-template-columns:repeat(2,minmax(0,1fr))}.slotButton,.slotActive{min-height:76px}.batchInputFooter{flex-direction:column;align-items:stretch}.batchInputFooter button{width:100%}}
