@@ -58,3 +58,22 @@ test("presale prompt requests short paragraphs without breaking names or amounts
   assert.match(prompt, /공고 확인 필요/);
   assert.match(prompt, /15~20자/);
 });
+
+test("reader-first apartment writing removes mandatory structure and image quota", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "../app/apartment-bulk/page.tsx"), "utf8");
+  const start = source.indexOf("function makeBodyPrompt(");
+  const block = source.slice(start, source.indexOf("복사해서 네이버 블로그에 바로 붙여넣을 수 있는 내용만 작성해줘.", start));
+  assert.ok(start >= 0 && block.length > 1000);
+  assert.match(block, /READER_FIRST_EDITORIAL_RULES/);
+  assert.match(block, /독자의 질문부터/);
+  assert.match(block, /본문 구성 — 독자 질문에 따라 가변/);
+  assert.match(block, /이미지 위치 — 필요한 경우에만/);
+  assert.doesNotMatch(block, /본문 구조 — 지역 확장 \+ 단지 집중/);
+  assert.doesNotMatch(block, /이미지 위치 3개 포함/);
+  assert.doesNotMatch(block, /3줄 요약 정확히 3문장/);
+  const { READER_FIRST_EDITORIAL_RULES } = await import("../lib/apartment-reader-intent.mjs");
+  assert.match(READER_FIRST_EDITORIAL_RULES, /핵심 답을 첫 화면에서 제공/);
+  assert.match(READER_FIRST_EDITORIAL_RULES, /짧게 끝낸다/);
+  assert.match(READER_FIRST_EDITORIAL_RULES, /핵심 답까지 부족하면/);
+  assert.match(READER_FIRST_EDITORIAL_RULES, /지도로 제시하지 않는다/);
+});
