@@ -15,7 +15,7 @@ export default function PublicationCheckPanel({
   dataSummary?: string;
   sourceData?: { area?: string; recentPrice?: string; previousPrice?: string; monthly?: Array<{ month: string; medianPrice: number | null; tradeCount: number }> } | null;
 }) {
-  const result = useMemo(() => auditApartmentArticle({ mode, name, body, plan, dataSummary, sourceData }),
+  const result = useMemo(() => auditApartmentArticle({ mode, name, body, plan, dataSummary, sourceData, flexibleImageSlots: mode === "bulk" }),
     [mode, name, body, plan, dataSummary, sourceData]);
   const warnings = result.checks.filter(item => item.status === "warning");
   const reviews = result.checks.filter(item => item.status === "review");
