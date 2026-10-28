@@ -124,6 +124,33 @@ export default function ResearchStudioPage() {
     setApprovedKeys([]);setSelectedAngleId("");setStatus("새 작업을 시작할 수 있습니다.");
   }
 
+  async function importBackup(file: File) {
+    if (file.size > 5_000_000) {
+      setStatus("백업 파일이 너무 큽니다. 5MB 이하 JSON 파일만 불러올 수 있습니다.");
+      return;
+    }
+    try {
+      const obj = JSON.parse(await file.text());
+      if (!obj || obj.version !== 1 || typeof obj.topic !== "string" ||
+          typeof obj.notes !== "string" || typeof obj.raw !== "string") {
+        throw new Error("콘텐츠 메이커 조사 작업 백업 파일이 아닙니다.");
+      }
+      if (!window.confirm("현재 작업을 이 백업으로 교체할까요? 현재 작업은 먼저 백업해 주세요.")) return;
+      const next = parseResearchReport(obj.raw);
+      const validKeys = new Set((next?.facts || []).filter(f=>f.sourceUrl).map(factKey));
+      setChannel(obj.channel==="집값쓱" || obj.channel==="Paramma" ? obj.channel : "기타");
+      setTopic(obj.topic.slice(0,600));
+      setNotes(obj.notes.slice(0,80000));
+      setRaw(obj.raw.slice(0,180000));
+      setReport(next);
+      setSelectedAngleId(next?.angles.some(a=>a.id===obj.selectedAngleId) ? obj.selectedAngleId : (next?.angles[0]?.id || ""));
+      setApprovedKeys(Array.isArray(obj.approvedKeys) ? obj.approvedKeys.filter((k:unknown)=>typeof k==="string" && validKeys.has(k)) : []);
+      setStatus("조사 작업 백업을 불러왔습니다. 확인 표시가 원문과 일치하는지 다시 점검하세요.");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "백업을 읽지 못했습니다.");
+    }
+  }
+
   function exportBackup() {
     const contents = JSON.stringify({
       version:1, exportedAt:new Date().toISOString(),channel,topic,notes,raw,selectedAngleId,approvedKeys,
@@ -146,6 +173,7 @@ export default function ResearchStudioPage() {
         </div>
         <div className={styles.topActions}>
           <button type="button" className={styles.minor} onClick={exportBackup}>현재 작업 백업</button>
+          <label className={styles.backupLabel}>백업 불러오기<input type="file" accept=".json,application/json" onChange={e=>{const file=e.currentTarget.files?.[0]; if(file) void importBackup(file); e.currentTarget.value="";}} /></label>
           <button type="button" className={styles.minor} onClick={clearWork}>새 조사</button>
         </div>
       </header>
@@ -300,7 +328,7 @@ export default function ResearchStudioPage() {
         </section>
       )}
       <footer className={styles.footer}>
-        현재 작업은 이 브라우저의 로컬 저장소에 자동 보관됩니다. 다른 기기와 동기화되지 않으며 시크릿 모드나 브라우저 데이터 삭제 시 사라질 수 있습니다.
+        현재 작업은 이 브라우저의 로컬 저장소에 자동 보관됩니다. 다른 기기와 자동 동기화되지 않으므로 백업 파일로 옮겨야 합니다. 시크릿 모드나 브라우저 데이터 삭제 시 사라질 수 있습니다.
         개인정보나 비공개 자료는 붙여넣지 마세요.
       </footer>
     </main>
