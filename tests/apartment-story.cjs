@@ -563,3 +563,22 @@ test("V3 prioritizes verified complex-direct management stories before generic l
   assert.match(prompt, /단지 직접 공지·관리·운영 사례 → 실제 생활권 → 지역 대표 소재/);
   assert.match(prompt, /주민 전체의 수준·성향으로 일반화 금지/);
 });
+
+test("reader-first apartment articles can omit unused images without suppressing duplicate detection", async () => {
+  const mod = await import("../lib/apartment-publish-check.mjs");
+  const base = { mode: "bulk", name: "테스트아파트", flexibleImageSlots: true };
+  const noImage = mod.auditApartmentArticle({
+    ...base,
+    body: "테스트아파트 전용 59㎡의 최근 거래는 원본 확인이 필요합니다.\n#아파트 #실거래 #테스트지역 #전용면적 #거래가격 #매매 #단지정보 #생활권",
+  });
+  assert.ok(noImage.checks.some(item => item.label === "본문 이미지 위치" && item.status === "pass"));
+  const duplicate = mod.auditApartmentArticle({
+    ...base,
+    body: "테스트아파트 매매 정보입니다.\n[이미지 01]\n[이미지 01]\n#아파트 #실거래 #테스트지역 #전용면적 #거래가격 #매매 #단지정보 #생활권",
+  });
+  assert.ok(duplicate.checks.some(item => item.label === "본문 이미지 위치" && item.status === "warning"));
+  const legacy = mod.auditApartmentArticle({
+    mode: "bulk", name: "테스트아파트", body: "테스트아파트 매매 정보\n#아파트 #실거래 #테스트지역 #전용면적 #거래가격 #매매 #단지정보 #생활권",
+  });
+  assert.ok(legacy.checks.some(item => item.label === "본문 이미지 위치" && item.status === "warning"));
+});
