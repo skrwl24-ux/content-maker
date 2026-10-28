@@ -4266,7 +4266,7 @@ export default function ApartmentBulkPage() {
                 data-testid="work-materials"
                 value={workMaterials}
                 onChange={(e) => setWorkMaterials(e.target.value)}
-                placeholder={activeWorkType === "presale" ? "공식 모집공고 URL·확인일 / 전체 세대수와 금회 물량 / 가격(확정·추정 구분) / 일정(예정·확정 구분) / 킥 / 입지 근거를 붙여넣으세요." : "확인할 자료, 출처, 수치, 비교 기준 등을 저장합니다."}
+                placeholder={activeWorkType === "presale" ? "공식 모집공고 URL·확인일 / 전체 세대수와 금회 물량 / 가격(확정·추정 구분) / 일정(예정·확정 구분) / 킥 / 입지 근거를 붙여넣으세요." : "발견한 기사·방송·공식 원문 URL, 발표일, 실제 수치, 확인 여부를 함께 붙여넣으세요. 메모는 원본 그대로 요청서에 전달됩니다."}
               />
             </label>
           </div>
