@@ -46,7 +46,7 @@ async function putImage(key: string, image: SavedPhoto | null) {
   });
 }
 
-async function encodeImage(file: File, maximum: number) {
+async function encodeImage(file: File, width = 1600, height = 900) {
   if (!["image/jpeg","image/png","image/webp"].includes(file.type)) throw new Error("PNG·JPG·WEBP만 등록할 수 있습니다.");
   if (file.size > MAX_FILE) throw new Error("15MB 이하 이미지로 등록해주세요.");
   const url = URL.createObjectURL(file);
@@ -57,14 +57,15 @@ async function encodeImage(file: File, maximum: number) {
       node.onerror = () => reject(new Error("사진 파일을 해석하지 못했습니다."));
       node.src = url;
     });
-    const scale = Math.min(1, maximum / Math.max(image.naturalWidth, image.naturalHeight));
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    // Preserve the aspect ratio; center crop to a consistent 16:9 output.
+    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
     const canvas = document.createElement("canvas");
     canvas.width = width; canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("이미지 변환 기능을 사용할 수 없습니다.");
-    context.drawImage(image,0,0,width,height);
+    context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(file => file ? resolve(file) : reject(new Error("PNG 변환에 실패했습니다.")),"image/png"));
     return { blob, width, height };
@@ -203,7 +204,7 @@ export default function ApartmentV4Studio({
     }
     setBusy(slot);
     try {
-      const png=await encodeImage(file,slot==="00"?1254:1600);
+      const png=await encodeImage(file,1600,900);
       await save(slot,{...png,origin:kind,credit:kind==="self"?"직접 촬영":kind==="data"?"원본 자료 기반 정보 이미지":kind==="ai"?"AI 제작 이미지":note,sourceUrl:kind==="licensed"?url:"",savedAt:new Date().toISOString()});
       setMessage(slot+" 이미지가 등록됐습니다. 원본 비율은 보존하며 ZIP에는 PNG로 저장됩니다.");
     } catch(error){setMessage(error instanceof Error?error.message:"이미지 저장에 실패했습니다. 기존 파일은 보존했습니다.");}
@@ -287,11 +288,11 @@ export default function ApartmentV4Studio({
         <small>{knownRows.verifiedSeries?"월별 실거래 연결됨 · 숫자 재확인 필요":"실거래 자료 매칭 미확인 · 시세 단정 금지"}</small>
       </div>
       <div className={styles.aptV4Prompt}>
-        <strong>① V4 원고 요청서</strong>
-        <p>실제 사진 2~3장과 실거래 표·그래프 중심. 각 장면 사이에 짧은 2~3줄 설명을 넣습니다.</p>
+        <strong>① 집값쓱 V5 고정 원고 요청서</strong>
+        <p>고정 지침이 자동 적용됩니다. 선택한 단지·실거래 자료를 채워 제목 5안, 흥미로운 본문, 생활킥, Q&A, 해시태그와 1600×900 클로즈업 썸네일까지 한 번에 요청합니다.</p>
         <div>
-          <button type="button" onClick={()=>void copy(prompt)}>요청서 복사</button>
-          <a href={"https://chatgpt.com/?q="+encodeURIComponent(prompt)} target="_blank" rel="noopener noreferrer">ChatGPT에서 V4 원고 작성 ↗</a>
+          <button type="button" onClick={()=>void copy(prompt)}>최종 요청서 복사</button>
+          <a href={"https://chatgpt.com/?q="+encodeURIComponent(prompt)} target="_blank" rel="noopener noreferrer">ChatGPT에서 최종 원고 작성 ↗</a>
         </div>
       </div>
       <label className={styles.aptV4BodyLabel}><b>② V4 완성 원고 · 네이버 최종 편집과 연결</b>
@@ -304,6 +305,7 @@ export default function ApartmentV4Studio({
           <p>누락 {audit.missing.join(", ")||"없음"} · 중복 {audit.repeated.join(", ")||"없음"} · 범위 밖 {audit.unexpected.join(", ")||"없음"}{audit.outOfOrder?" · 이미지 순서 오류":""}</p>}
         <small>기존 자동 가격·거래량 검사는 화면 아래 ‘네이버 최종편집 · 발행 전 검사’에서도 반드시 확인해주세요.</small>
       </div>
+      <p className={styles.aptV4Hint}>모든 이미지 저장 규격: 1600×900(16:9). 다른 비율은 중앙 크롭되므로 썸네일 글자·숫자가 잘리지 않는지 미리보기에서 확인하세요. 기존 저장 이미지는 자동 삭제하지 않습니다.</p>
       <div className={styles.aptV4SceneGrid}>
         {scenes.map(scene=>{
           const pic=photos[scene.slot],kind=origin[scene.slot]|| (scene.type==="photo"?"self":"ai");
@@ -312,7 +314,7 @@ export default function ApartmentV4Studio({
             <div className={styles.aptV4SceneHead}>
               <b>{scene.slot} · {scene.name}</b><small>{scene.width}×{scene.height}</small>
             </div>
-            <p>{scene.hint}</p>
+            <p>{scene.hint}{scene.slot==="00"?" · 중앙 안전영역 안의 문구, 배경은 과감히 크롭":""}</p>
             <div className={styles.aptV4ImagePreview}>
               {pic?<img src={pic.url} alt={scene.name+" 등록 이미지"}/>:<span>이미지 미등록 · {scene.type==="photo"?"사용권 확인된 실사진 권장":"원본 정보로 제작"}</span>}
             </div>
