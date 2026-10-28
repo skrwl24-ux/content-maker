@@ -7,6 +7,7 @@ import { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } fr
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
 import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
+import { EDITORIAL_DIRECTOR_RULES, buildEvidenceHandoff } from "../../lib/editorial-director.mjs";
 import { DEFAULT_DRILLMAL_SETTINGS, normalizeDrillmalSettings, drillmalArticleRules, drillmalImageRules, drillmalImageApplies } from "../../lib/paramma-drillmal.mjs";
 import { appendParammaQuotedHeadlineRules, extractParammaQuotedThumbnailHook } from "../../lib/paramma-quote-headline.mjs";
 
@@ -686,7 +687,11 @@ function baseArticlePromptForWork(work: TopicWork, topic: Topic) {
 }
 
 function articlePromptForWork(work: TopicWork, topic: Topic, brand: DrillmalSettings) {
-  return appendParammaQuotedHeadlineRules(baseArticlePromptForWork(work, topic) + drillmalArticleRules(brand));
+  return [
+    EDITORIAL_DIRECTOR_RULES,
+    buildEvidenceHandoff({ notes: work.searchNotes || "" }),
+    appendParammaQuotedHeadlineRules(baseArticlePromptForWork(work, topic) + drillmalArticleRules(brand)),
+  ].join("\n\n");
 }
 
 function baseImagePromptForWork(work: TopicWork, slotId: SlotId, topic: Topic) {
