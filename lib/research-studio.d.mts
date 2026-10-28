@@ -15,6 +15,8 @@ export declare function buildDeepResearchPrompt(input?: {
   channel?: string; topic?: string; notes?: string; today?: string;
 }): string;
 export declare function parseResearchReport(raw: string): ResearchReport | null;
+export type NaverFinalArticle = {title: string; body: string};
+export declare function parseNaverFinalArticle(raw: string): NaverFinalArticle | null;
 export declare function factKey(fact: ResearchFact): string;
 export declare function buildFollowupResearchPrompt(input?: {
   channel?: string; topic?: string; notes?: string; report?: ResearchReport | null;

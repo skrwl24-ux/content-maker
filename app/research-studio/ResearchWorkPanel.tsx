@@ -5,7 +5,7 @@ import Link from "next/link";
 import styles from "./page.module.css";
 import {
   buildDeepResearchPrompt, buildFollowupResearchPrompt,
-  buildFinalArticlePrompt, parseResearchReport, factKey,
+  buildFinalArticlePrompt, parseResearchReport, parseNaverFinalArticle, factKey,
 } from "../../lib/research-studio.mjs";
 import type { ResearchReport } from "../../lib/research-studio.mjs";
 import { researchSlotKey } from "../../lib/research-batch.mjs";
@@ -27,6 +27,9 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
   const [raw, setRaw] = useState("");
+  const [finalRaw, setFinalRaw] = useState("");
+  const [finalTitle, setFinalTitle] = useState("");
+  const [finalBody, setFinalBody] = useState("");
   const [report, setReport] = useState<ResearchReport | null>(null);
   const [selectedAngleId, setSelectedAngleId] = useState("");
   const [approvedKeys, setApprovedKeys] = useState<string[]>([]);
@@ -43,6 +46,9 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
           if (obj.channel === "집값쓱" || obj.channel === "Paramma" || obj.channel === "기타") setChannel(obj.channel);
           if (typeof obj.topic === "string") setTopic(obj.topic.slice(0,600));
           if (typeof obj.notes === "string") setNotes(obj.notes.slice(0,80000));
+          if (typeof obj.finalRaw === "string") setFinalRaw(obj.finalRaw.slice(0,180000));
+          if (typeof obj.finalTitle === "string") setFinalTitle(obj.finalTitle.slice(0,250));
+          if (typeof obj.finalBody === "string") setFinalBody(obj.finalBody.slice(0,120000));
           if (typeof obj.raw === "string") {
             const imported = parseResearchReport(obj.raw);
             setRaw(obj.raw.slice(0,180000));
@@ -63,13 +69,13 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
     if (!hydrated) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        version:1,channel,topic,notes,raw,selectedAngleId,approvedKeys,
+        version:1,channel,topic,notes,raw,selectedAngleId,approvedKeys,finalRaw,finalTitle,finalBody,
       }));
       onSnapshot(slotId, { topic, hasReport: Boolean(report), approvedCount: approvedKeys.length });
     } catch {
       setStatus("브라우저 저장 공간이 부족하거나 차단됐습니다. 중요한 자료는 별도로 백업해 주세요.");
     }
-  }, [hydrated,channel,topic,notes,raw,selectedAngleId,approvedKeys,report,slotId,STORAGE_KEY,onSnapshot]);
+  }, [hydrated,channel,topic,notes,raw,selectedAngleId,approvedKeys,finalRaw,finalTitle,finalBody,report,slotId,STORAGE_KEY,onSnapshot]);
 
   const researchPrompt = useMemo(() => buildDeepResearchPrompt({channel,topic,notes,today}), [channel,topic,notes,today]);
   const followupPrompt = useMemo(() => buildFollowupResearchPrompt({channel,topic,notes,report,approvedKeys,today}), [channel,topic,notes,report,approvedKeys,today]);
@@ -80,12 +86,12 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
   const checkedCount = report?.facts.filter(f => f.sourceUrl && approvedKeys.includes(factKey(f))).length || 0;
   const unverifiedCount = (report?.facts.length || 0) - checkedCount;
 
-  async function copy(value: string, label: string) {
+  async function copy(value: string, label: string, destination = "ChatGPT 새 대화에 붙여넣으세요.") {
     try {
       await navigator.clipboard.writeText(value);
-      setStatus(label + " 복사했습니다. ChatGPT 새 대화에 붙여넣으세요.");
+      setStatus(label + " 복사했습니다. " + destination);
     } catch {
-      setStatus("클립보드 복사 실패. 아래 요청서 미리보기에서 직접 복사하세요.");
+      setStatus("클립보드 복사 실패. 화면의 입력 칸에서 직접 복사해 주세요.");
     }
   }
 
@@ -102,30 +108,45 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
     setStatus("조사 보고서를 불러왔습니다. 주장을 원문과 대조한 뒤 확인 표시를 해 주세요.");
   }
 
+  function importFinalArticle() {
+    const parsed = parseNaverFinalArticle(finalRaw);
+    if (!parsed) {
+      setStatus("최종 원고를 읽지 못했습니다. [NAVER_FINAL_ARTICLE_JSON] 태그와 유효한 JSON 또는 일반 본문인지 확인해 주세요.");
+      return;
+    }
+    if ((finalTitle || finalBody) && !window.confirm("현재 편집 중인 최종 원고를 붙여넣은 내용으로 교체할까요?")) return;
+    setFinalTitle(parsed.title);
+    setFinalBody(parsed.body);
+    setStatus("최종 원고를 가져왔습니다. 내용과 출처를 확인하고 제목·본문을 별도로 복사할 수 있습니다.");
+  }
+
   function toggleApproval(key: string, checked: boolean) {
     setApprovedKeys(prev => checked ? [...new Set([...prev,key])] : prev.filter(k => k!==key));
   }
 
   function changeTopic(next: string) {
-    if (report) {
-      if (!window.confirm("주제를 변경하면 기존 조사 결과와 확인 표시가 초기화됩니다. 계속할까요?")) return;
+    if (report || finalRaw || finalBody) {
+      if (!window.confirm("주제를 변경하면 기존 조사·최종 원고 자료가 초기화됩니다. 계속할까요?")) return;
       setReport(null);setRaw("");setApprovedKeys([]);setSelectedAngleId("");
+      setFinalRaw("");setFinalTitle("");setFinalBody("");
     }
     setTopic(next);
   }
 
   function changeChannel(next: Channel) {
-    if (report) {
-      if (!window.confirm("발행 블로그를 변경하면 기존 조사 결과와 확인 표시가 초기화됩니다. 계속할까요?")) return;
+    if (report || finalRaw || finalBody) {
+      if (!window.confirm("발행 블로그를 변경하면 기존 조사·최종 원고 자료가 초기화됩니다. 계속할까요?")) return;
       setReport(null);setRaw("");setApprovedKeys([]);setSelectedAngleId("");
+      setFinalRaw("");setFinalTitle("");setFinalBody("");
     }
     setChannel(next);
   }
 
   function clearWork() {
-    if (report && !window.confirm("현재 조사 내용과 확인 표시를 지우고 새 작업을 시작할까요?")) return;
+    if ((report || finalRaw || finalBody) && !window.confirm("현재 조사와 최종 원고를 모두 지우고 새 작업을 시작할까요?")) return;
     setTopic("");setNotes("");setRaw("");setReport(null);
-    setApprovedKeys([]);setSelectedAngleId("");setStatus("새 작업을 시작할 수 있습니다.");
+    setApprovedKeys([]);setSelectedAngleId("");
+    setFinalRaw("");setFinalTitle("");setFinalBody("");setStatus("새 작업을 시작할 수 있습니다.");
   }
 
   async function importBackup(file: File) {
@@ -146,6 +167,9 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
       setTopic(obj.topic.slice(0,600));
       setNotes(obj.notes.slice(0,80000));
       setRaw(obj.raw.slice(0,180000));
+      setFinalRaw(typeof obj.finalRaw==="string"?obj.finalRaw.slice(0,180000):"");
+      setFinalTitle(typeof obj.finalTitle==="string"?obj.finalTitle.slice(0,250):"");
+      setFinalBody(typeof obj.finalBody==="string"?obj.finalBody.slice(0,120000):"");
       setReport(next);
       setSelectedAngleId(next?.angles.some(a=>a.id===obj.selectedAngleId) ? obj.selectedAngleId : (next?.angles[0]?.id || ""));
       setApprovedKeys(Array.isArray(obj.approvedKeys) ? obj.approvedKeys.filter((k:unknown)=>typeof k==="string" && validKeys.has(k)) : []);
@@ -157,7 +181,7 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
 
   function exportBackup() {
     const contents = JSON.stringify({
-      version:1, exportedAt:new Date().toISOString(),channel,topic,notes,raw,selectedAngleId,approvedKeys,
+      version:1, exportedAt:new Date().toISOString(),channel,topic,notes,raw,selectedAngleId,approvedKeys,finalRaw,finalTitle,finalBody,
     },null,2);
     const blob = new Blob([contents],{type:"application/json;charset=utf-8"});
     const url = URL.createObjectURL(blob);
@@ -331,6 +355,39 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
           </div>
         </section>
       )}
+      <section className={styles.panel}>
+        <div className={styles.sectionHeading}>
+          <span className={styles.number}>05</span>
+          <div><h2>네이버 최종 원고 붙여넣기</h2><p>ChatGPT에서 완성한 글을 이곳에 가져와 제목과 본문을 따로 복사하세요.</p></div>
+        </div>
+        <label htmlFor="naver-final-import">완성 원고 붙여넣기 · [NAVER_FINAL_ARTICLE_JSON] 또는 일반 본문</label>
+        <textarea id="naver-final-import" rows={8} value={finalRaw} maxLength={180000}
+          onChange={e=>setFinalRaw(e.target.value)}
+          placeholder={"[NAVER_FINAL_ARTICLE_JSON]\\n{\\n  \\"title\\": \\"글 제목\\",\\n  \\"body\\": \\"네이버 발행 본문\\",\\n}\\n[/NAVER_FINAL_ARTICLE_JSON]"} />
+        <div className={styles.actionRow}>
+          <button type="button" className={styles.primary} disabled={!finalRaw.trim()} onClick={importFinalArticle}>최종 원고 불러오기</button>
+          <span className={styles.finalHint}>태그 형식이 아니어도 일반 본문을 붙여넣을 수 있습니다.</span>
+        </div>
+        {(finalTitle || finalBody) && <div className={styles.finalEditor}>
+          <h3>네이버 발행용 편집 · 복사</h3>
+          <p className={styles.smallText}>제목·본문을 바로 수정할 수 있습니다. 복사 시 JSON 태그는 포함되지 않습니다.</p>
+          <label htmlFor="naver-final-title">제목</label>
+          <input id="naver-final-title" type="text" value={finalTitle} maxLength={250} onChange={e=>setFinalTitle(e.target.value)}
+            placeholder="네이버 글 제목을 입력하세요" />
+          <label htmlFor="naver-final-body">본문</label>
+          <textarea id="naver-final-body" className={styles.finalPreview} rows={15} value={finalBody}
+            maxLength={120000} onChange={e=>setFinalBody(e.target.value)} />
+          <div className={styles.actionRow}>
+            <button type="button" className={styles.secondary} disabled={!finalTitle.trim()}
+              onClick={()=>void copy(finalTitle,"제목","네이버 글 제목 칸에 붙여넣으세요.")}>제목 복사</button>
+            <button type="button" className={styles.primary} disabled={!finalBody.trim()}
+              onClick={()=>void copy(finalBody,"본문","네이버 글 본문 칸에 붙여넣으세요.")}>본문 복사</button>
+            <button type="button" className={styles.secondary} disabled={!finalBody.trim()}
+              onClick={()=>void copy([finalTitle,finalBody].filter(Boolean).join("\\n\\n"),"제목+본문","필요한 곳에 붙여넣으세요.")}>전체 복사</button>
+          </div>
+          <p className={styles.smallText}>이 기능은 원고 보관과 복사만 합니다. 네이버 블로그에 직접 발행하지 않으며, 이미지·표 서식은 별도 편집이 필요합니다.</p>
+        </div>}
+      </section>
       <footer className={styles.footer}>
         현재 작업은 이 브라우저의 로컬 저장소에 자동 보관됩니다. 다른 기기와 자동 동기화되지 않으므로 백업 파일로 옮겨야 합니다. 시크릿 모드나 브라우저 데이터 삭제 시 사라질 수 있습니다.
         개인정보나 비공개 자료는 붙여넣지 마세요.

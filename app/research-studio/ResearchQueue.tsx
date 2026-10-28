@@ -9,7 +9,7 @@ import type { TopicRecommendation } from "../../lib/topic-recommendations.mjs";
 import {RESEARCH_BATCH_SIZE,emptyResearchSlot,parseResearchBatchTopics,researchSlotKey} from "../../lib/research-batch.mjs";
 import {parseResearchReport,factKey} from "../../lib/research-studio.mjs";
 type Summary={topic:string;hasReport:boolean;approvedCount:number};
-type Stored={version:number;channel:string;topic:string;notes:string;raw:string;selectedAngleId:string;approvedKeys:string[]};
+type Stored={version:number;channel:string;topic:string;notes:string;raw:string;selectedAngleId:string;approvedKeys:string[];finalRaw:string;finalTitle:string;finalBody:string};
 const ACTIVE_KEY="content-maker-research-studio-active-slot-v2";
 const LEGACY_KEY="content-maker-research-studio-v1";
 const emptySummary=():Summary=>({topic:"",hasReport:false,approvedCount:0});
@@ -25,6 +25,9 @@ function readSlot(n:number):Stored {
       raw:typeof value.raw==="string"?value.raw.slice(0,180000):"",
       selectedAngleId:typeof value.selectedAngleId==="string"?value.selectedAngleId:"",
       approvedKeys:Array.isArray(value.approvedKeys)?value.approvedKeys.filter((k:unknown)=>typeof k==="string"):[],
+      finalRaw:typeof value.finalRaw==="string"?value.finalRaw.slice(0,180000):"",
+      finalTitle:typeof value.finalTitle==="string"?value.finalTitle.slice(0,250):"",
+      finalBody:typeof value.finalBody==="string"?value.finalBody.slice(0,120000):"",
     };
   }catch{return emptyResearchSlot();}
 }
@@ -69,7 +72,7 @@ export default function ResearchQueue(){
   function applyBatch(){
     const result=parseResearchBatchTopics(batch);
     if(result.error){setNotice(result.error);return;}
-    const occupied=result.topics.some((_,i)=>{const s=readSlot(i+1);return Boolean(s.topic||s.notes||s.raw);});
+    const occupied=result.topics.some((_,i)=>{const s=readSlot(i+1);return Boolean(s.topic||s.notes||s.raw||s.finalRaw||s.finalBody);});
     if(occupied&&!window.confirm("1~"+result.topics.length+"번에 저장된 기존 주제·조사 자료를 교체합니다. 먼저 전체 백업을 권장합니다. 계속할까요?"))return;
     try{
       const channel=readSlot(active).channel;
@@ -86,7 +89,7 @@ export default function ResearchQueue(){
     }
     const occupied=items.some((_,i)=>{
       const slot=readSlot(i+1);
-      return Boolean(slot.topic||slot.notes||slot.raw);
+      return Boolean(slot.topic||slot.notes||slot.raw||slot.finalRaw||slot.finalBody);
     });
     if(occupied&&!window.confirm("1~"+items.length+"번의 기존 주제와 조사 자료를 추천 주제로 교체합니다. 필요하면 먼저 전체 백업하세요. 계속할까요?"))return false;
     try{
@@ -126,6 +129,9 @@ export default function ResearchQueue(){
         const slot=emptyResearchSlot(String(s.topic).slice(0,600),channel);
         slot.notes=typeof s.notes==="string"?s.notes.slice(0,80000):"";
         slot.raw=typeof s.raw==="string"?s.raw.slice(0,180000):"";
+        slot.finalRaw=typeof s.finalRaw==="string"?s.finalRaw.slice(0,180000):"";
+        slot.finalTitle=typeof s.finalTitle==="string"?s.finalTitle.slice(0,250):"";
+        slot.finalBody=typeof s.finalBody==="string"?s.finalBody.slice(0,120000):"";
         slot.selectedAngleId=typeof s.selectedAngleId==="string"?s.selectedAngleId:"";
         const report=parseResearchReport(slot.raw);
         const keys=new Set(report?.facts.filter(f=>f.sourceUrl).map(factKey)||[]);
