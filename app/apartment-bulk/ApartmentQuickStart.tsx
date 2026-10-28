@@ -90,6 +90,10 @@ export default function ApartmentQuickStart({ linked, advancedOpen, onToggleAdva
       </div>
       <span className={styles.imagePill}>모든 이미지 1600×900 · 썸네일 클로즈업</span>
     </div>
+    <div className={styles.workplaceLink}>
+      <div><b>직장인 아파트 TOP 10 시리즈</b><span>판교·마곡·광교처럼 업무지구를 기준으로 주변 아파트 매매 거래량을 비교하는 글</span></div>
+      <a href="/apartment-workplace">전용 글쓰기 열기 →</a>
+    </div>
     <div className={styles.fields}>
       <label><span>아파트 이름 <b>*</b></span><input value={form.name} onChange={e=>change("name",e.target.value)} placeholder="예: 화서주공4단지" /></label>
       <label><span>지역</span><input value={form.region} onChange={e=>change("region",e.target.value)} placeholder="예: 수원시 팔달구 화서동" /></label>
