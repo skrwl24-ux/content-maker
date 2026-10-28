@@ -4,6 +4,7 @@ export type ApartmentCheck = { status: ApartmentCheckStatus; label: string; deta
 export declare function auditApartmentArticle(input: {
   mode?: ApartmentStoryMode; name?: string; body: string;
   plan?: ApartmentStoryCandidate | null; dataSummary?: string;
+  flexibleImageSlots?: boolean;
   sourceData?: {
     area?: string; recentPrice?: string; previousPrice?: string;
     monthly?: Array<{ month: string; medianPrice: number | null; tradeCount: number }>;
