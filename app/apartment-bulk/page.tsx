@@ -2,6 +2,7 @@
 
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
+import { EDITORIAL_DIRECTOR_RULES, buildEvidenceHandoff } from "../../lib/editorial-director.mjs";
 import { READER_FIRST_EDITORIAL_RULES } from "../../lib/apartment-reader-intent.mjs";
 import styles from "./page.module.css";
 import Top3Workspace from "./Top3Workspace";
@@ -510,7 +511,11 @@ function makeDailySlots(dateKey: string, publishedTopics: string[] = []) {
 }
 
 function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string, materials: string, dateKey: string) {
-  if (contentType === "presale") return makePresaleArticlePrompt(topic, materials, dateKey);
+  if (contentType === "presale") return [
+    EDITORIAL_DIRECTOR_RULES,
+    buildEvidenceHandoff({ notes: materials, checkedAt: dateKey }),
+    makePresaleArticlePrompt(topic, materials, dateKey),
+  ].join("\n\n");
   const safeTopic = topic.trim() || "작업 주제 미정";
   const typeLabel = contentType ? DAILY_TYPE_META[contentType].label : "블로그 콘텐츠";
   const top3MobileRules = contentType === "top3" ? `
@@ -558,6 +563,8 @@ function makeSavedWorkPrompt(contentType: DailyContentType | null, topic: string
 
   return `재테크·생활정보 네이버 블로그용 글을 최종 발행본으로 작성해줘.
 
+${EDITORIAL_DIRECTOR_RULES}
+
 [작성 기준일]
 ${dateKey || "작성일 기준 최신"}
 
@@ -567,8 +574,8 @@ ${typeLabel}
 [주제]
 ${safeTopic}
 
-[운영자 메모]
-${materials.trim() || "별도 메모 없음"}
+[운영자 메모와 근거 전달]
+${buildEvidenceHandoff({ notes: materials, checkedAt: dateKey })}
 
 [가장 중요한 작업 방식]
 - 먼저 웹 검색으로 최신 사실을 확인한 뒤 작성할 것.
@@ -586,14 +593,14 @@ ${topicGuide}
 - 첫 3문장 안에 이 글에서 얻을 핵심 답을 먼저 보여줄 것.
 - 제목 후보는 내부적으로 5개 정도 비교한 뒤 최종 제목 1개만 출력할 것.
 - 제목에는 핵심 검색어를 자연스럽게 앞쪽에 배치하고 과장형 낚시 표현은 피할 것.
-- 소제목은 실제 내용에 맞게 4~6개 정도를 기본으로 하되, 공동 순위처럼 소개할 대상이 더 많다면 필요한 만큼 독립된 소제목을 쓸 것.
+- 소제목 개수는 독자의 질문과 실제 자료에 따라 결정한다. 짧은 답변에는 불필요한 소제목을 추가하지 않는다.
 - 핵심 숫자나 일정이 여러 개면 마크다운 표를 우선 활용하되, 검증된 값만 사용할 것.
 - 표를 사용할 때는 첫 행을 항목명 헤더로 만들고 표 바로 위에 내용을 설명하는 소제목을 둘 것. 콘텐츠메이커가 이 표를 자동 감지해 이미지 요청서로 활용한다.
-- 글 마지막에는 앞으로 확인할 변수 2~4개와 핵심 요약 3줄을 넣을 것.
+- 추후 확인할 변수가 실제로 있고 독자에게 도움될 때만 정리한다. 답이 충분하면 별도의 요약이나 마무리 없이 끝내도 된다.
 - 네이버 태그는 핵심 검색어 중심으로 8~12개를 마지막 한 줄에 작성할 것.
 
 [모바일 가독성 · 네이버 붙여넣기 형식]
-- 도입은 짧은 질문이나 확인된 핵심 숫자로 시작하고 2~3개의 짧은 문장으로 읽는 이유를 보여줄 것.
+- 독자가 원하는 답을 가장 먼저 보여준다. 질문만 되풀이하는 도입은 생략하고 확인된 핵심 숫자나 정보를 바로 제공할 수 있다.
 - 소제목은 각각 독립된 한 줄로 쓰고, 준비된 이미지가 있으면 그 위치 다음에 해당 장면을 설명하는 1~3개의 짧은 문장을 배치해 이미지 → 짧은 설명 → 다음 내용으로 이어갈 것.
 - [모바일 수동 줄바꿈 · 최우선] 일반 본문은 한 줄에 한글 약 15~20자(공백 포함) 안팎을 목표로 작성할 것. 자동 줄바꿈에 맡기지 않고 의미 단위로 미리 엔터를 넣어 1~2줄을 한 문단으로 묶고, 문단 사이에는 실제 빈 줄 하나를 둘 것. 긴 문장은 먼저 짧게 고치고 같은 사실을 반복하지 말 것.
 - 아파트 단지명, 숫자와 단위, 날짜, 고유명사는 중간에 자르지 말고 길면 별도 줄에 놓을 것. 단어·조사만 남기는 글자 수별 기계적 자르기 금지. 제목·소제목·표·태그는 줄 길이 목표 예외로 두며 가운데 정렬은 운영자가 네이버 편집기에서 직접 적용할 것.
@@ -1882,6 +1889,8 @@ function makeBodyPrompt(
   }).format(new Date());
 
   return `네이버 블로그용 아파트 분석글을 최종 발행본으로 작성해줘.
+
+${EDITORIAL_DIRECTOR_RULES}
 
 ${READER_FIRST_EDITORIAL_RULES}
 
