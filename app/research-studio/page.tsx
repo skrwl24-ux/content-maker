@@ -195,7 +195,7 @@ export default function ResearchStudioPage() {
             <div><h2>AI 조사 결과 가져오기</h2><p>ChatGPT 답변 전체를 붙여넣으면 조사 결과를 분류합니다.</p></div>
           </div>
           <label htmlFor="research-result">[RESEARCH_REPORT_JSON]이 포함된 조사 결과</label>
-          <textarea id="research-result" value={raw} rows={10} onChange={e=>setRaw(e.target.value)}
+          <textarea id="research-result" value={raw} rows={10} onChange={e=>{ setRaw(e.target.value); setReport(null); }}
             placeholder={"[RESEARCH_REPORT_JSON]\n{ \"topic\": \"...\", \"facts\": [], \"angles\": [], \"gaps\": [] }\n[/RESEARCH_REPORT_JSON]"}/>
           <div className={styles.actionRow}>
             <button type="button" className={styles.primary} disabled={!raw.trim()} onClick={importResult}>조사 보고서 불러오기</button>
@@ -287,7 +287,7 @@ export default function ResearchStudioPage() {
             <button type="button" className={styles.primary} disabled={!articlePrompt} onClick={()=>void copy(articlePrompt,"최종 원고 요청서")}>검토 자료로 원고 요청서 복사</button>
             <a className={styles.secondary} href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT 열기 ↗</a>
           </div>
-          {!articlePrompt && <p className={styles.smallText}>원고 요청서는 글감을 선택하고 출처 URL이 있는 사실을 최소 1개 직접 확인하면 활성화됩니다.</p>}
+          {!articlePrompt && <p className={styles.smallText}>원고 요청서는 선택한 글감에 실제 연결된 출처 사실을 최소 1개 직접 확인하면 활성화됩니다.</p>}
           {articlePrompt && <details className={styles.details}>
             <summary>최종 원고 요청서 내용 확인</summary>
             <textarea className={styles.promptPreview} value={articlePrompt} readOnly rows={12} aria-label="최종 원고 요청서 미리보기"/>
