@@ -1363,6 +1363,7 @@ export default function Home() {
     <header className="header">
       <button className="brandBtn" onClick={resetNew}><span className="brand">콘텐츠 메이커</span><span className="badge">V13 · 정보판 가독성 V4</span></button>
       <div className="inlineActions">
+        <a className="presaleNavLink" href="/research-studio">🔎 AI 심층 조사</a>
         <a className="presaleNavLink" href="/apartment-workplace">📍 직장 주변 아파트</a>
         <details style={{ position: "relative", alignSelf: "center" }}>
           <summary className="secondary compact" style={{ cursor: "pointer", listStyle: "none", fontSize: 12 }}>추가 도구 ▾</summary>
