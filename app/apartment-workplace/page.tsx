@@ -1,130 +1,129 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import styles from "./page.module.css";
-import SeriesWorkspace from "./SeriesWorkspace";
+import {
+  WORKPLACE_TOP10_PRESETS, WORKPLACE_TOP10_SLOTS,
+  buildTop10ArticlePrompt, buildTop10ImagePrompt, buildTop10ResearchPrompt,
+  type WorkplaceTop10Input
+} from "../../lib/workplace-top10.mjs";
+import styles from "./top10.module.css";
 
-import { buildResearch, buildArticle, buildImagePrompt, imageSlots, candidateLines, type WorkplaceDraft as Draft, type Facility, type Travel, type HomeType } from "../../lib/workplace-blog-v2";
-
-const KEY = "jibssuk-workplace-comparison-draft-v1";
-const DEFAULTS: Draft = {
-  articleText: "",
-  address: "", facility: "상업시설", place: "스타필드 수원", city: "수원시 장안구",
-  entrance: "근무지 실제 출입구(확인 필요)", travel: "도보", travelTarget: "20분 이내",
-  homeType: "전체", budget: "", candidateNames: "", sourceNotes: "",
-  checkedAt: new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
-  checkedTrade: false, checkedListing: false, checkedRoute: false,
+const KEY = "jibssuk-workplace-top10-v1";
+const DEFAULTS: WorkplaceTop10Input = {
+  place:"", region:"", neighborhoods:"", period:"최근 12개월", area:"전용 59㎡대와 84㎡대",
+  researchNotes:"", articleText:""
 };
 
-async function copyText(value: string, setNotice: (s: string) => void) {
-  try {
-    await navigator.clipboard.writeText(value);
-    setNotice("복사했습니다. 원하는 곳에 붙여넣으세요.");
-  } catch {
-    setNotice("클립보드 복사에 실패했습니다. 아래 요청서 텍스트를 직접 선택해 복사하세요.");
-  }
-}
-export default function WorkplaceApartmentStudio() {
-  const [draft, setDraft] = useState<Draft>(DEFAULTS);
-  const [ready, setReady] = useState(false);
-  const [notice, setNotice] = useState("");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<Draft>;
-        setDraft({ ...DEFAULTS, ...parsed });
-      }
-    } catch { /* Keep the editable defaults if local storage is unavailable. */ }
-    setReady(true);
-  }, []);
-  useEffect(() => {
-    if (!ready) return;
-    try { localStorage.setItem(KEY, JSON.stringify(draft)); } catch { /* Storage may be unavailable. */ }
-  }, [draft, ready]);
-  const update = <K extends keyof Draft,>(key: K, value: Draft[K]) => setDraft(old => ({ ...old, [key]: value }));
-  const research = useMemo(() => buildResearch(draft), [draft]);
-  const article = useMemo(() => buildArticle(draft), [draft]);
-  const hasSourceNotes = draft.sourceNotes.trim().length > 0;
-  const candidates = candidateLines(draft.candidateNames);
-  const stages = ["근무지·조건", "후보 조사", "자료 첨부·챗 전달", "비교글 작성", "이미지 제작", "최종 확인"];
-  return (
-    <main className={styles.page}>
-      <header className={styles.top}><a href="/" className={styles.back}>← 콘텐츠 메이커</a><a href="/apartment-bulk" className={styles.subLink}>기존 아파트 제작실</a></header>
-      <section className={styles.hero}>
-        <div className={styles.eyebrow}>집값쓱 · 직주근접 블로그 V2</div>
-        <h1>위에서 아래로,<br />자료부터 발행 준비까지</h1>
-        <p>사이트에서 자료를 모으고 챗에서 글과 이미지를 만듭니다. 입력한 이동 범위는 희망 조건이며 실제 출입구 경로 확인 전 확정하지 않습니다.</p>
-      </section>
-      <nav className={styles.productionNav} aria-label="블로그 제작 순서">{stages.map((name,i)=><a key={name} href={"#workplace-step-"+(i+1)}><span>{String(i+1).padStart(2,"0")}</span>{name}</a>)}</nav>
-      {notice && <p className={styles.workflowNotice} role="status">{notice}</p>}
-      <section id="workplace-step-1" aria-labelledby="workplace-heading-1" className={`${styles.panel} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-1"><span>01</span> 근무지·조건 입력</h2>
-        <p>어디로 출근하는지, 어떤 집을 찾는지 정하세요. 모르는 정보와 예산은 비워둬도 됩니다.</p>
-        <div className={styles.two}>
-          <label>근무지 유형<select value={draft.facility} onChange={e=>update("facility",e.target.value as Facility)}>{(["상업시설","산업단지·공장","업무지구·기업","병원·대학교","기타"] as Facility[]).map(v=><option key={v}>{v}</option>)}</select></label>
-          <label>근무지 이름<input value={draft.place} onChange={e=>update("place",e.target.value)} placeholder="예: 스타필드 수원" /></label>
-          <label>지역<input value={draft.city} onChange={e=>update("city",e.target.value)} placeholder="시·구·동" /></label>
-          <label>근무지 공식 주소<input value={draft.address} onChange={e=>update("address",e.target.value)} placeholder="미확인은 needs_check" /></label>
-          <label>이동 기준 출입구<input value={draft.entrance} onChange={e=>update("entrance",e.target.value)} placeholder="실제 이용할 출입구 · 확인 필요" /></label>
-          <label>이동 수단<select value={draft.travel} onChange={e=>update("travel",e.target.value as Travel)}>{(["도보","대중교통","자동차"] as Travel[]).map(v=><option key={v}>{v}</option>)}</select></label>
-          <label>희망 이동 범위<input value={draft.travelTarget} onChange={e=>update("travelTarget",e.target.value)} placeholder="예: 20분 이내 · 실제 경로 검증 전 희망 조건" /></label>
-          <label>비교 거래 유형<select value={draft.homeType} onChange={e=>update("homeType",e.target.value as HomeType)}>{(["전체","매매","전세","월세"] as HomeType[]).map(v=><option key={v}>{v}</option>)}</select></label>
-          <label>예산 (선택)<input value={draft.budget} onChange={e=>update("budget",e.target.value)} placeholder="미설정이면 비워두기" /></label>
-          <label>자료 확인일<input type="date" value={draft.checkedAt} onChange={e=>update("checkedAt",e.target.value)} /></label>
-        </div>
-        <div className={styles.actions}><a href="#workplace-step-2">다음: 후보 조사 →</a></div>
-      </section>
-      <section id="workplace-step-2" aria-labelledby="workplace-heading-2" className={`${styles.panel} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-2"><span>02</span> 후보 3~5곳 조사</h2>
-        <p>조사 요청서를 챗에 보내 후보를 찾고, 실제 위치를 대조한 후보 이름을 아래에 기록하세요.</p>
-        <div className={styles.actions}><button type="button" className={styles.primary} onClick={()=>copyText(research,setNotice)}>조사 요청서 복사</button><a href={"https://chatgpt.com/?q="+encodeURIComponent(research)} target="_blank" rel="noreferrer">챗에서 후보 조사 ↗</a></div>
-        <details className={styles.requestDetails}><summary>조사 요청서 보기</summary><textarea className={styles.prompt} readOnly value={research} aria-label="조사 요청서" /></details>
-        <label>아파트 후보 이름 <small>한 줄에 하나씩. 위치 미확인은 추천 확정을 뜻하지 않습니다.</small><textarea rows={4} value={draft.candidateNames} onChange={e=>update("candidateNames",e.target.value)} placeholder={"단지명 1\n단지명 2\n단지명 3"} /></label>
-        <details className={styles.requestDetails}><summary>자료 확인처</summary><div className={styles.actions}><a href="https://rt.molit.go.kr/" target="_blank" rel="noreferrer">국토부 실거래 ↗</a><a href="https://new.land.naver.com/" target="_blank" rel="noreferrer">네이버부동산 ↗</a><a href="https://map.naver.com/" target="_blank" rel="noreferrer">네이버지도 ↗</a></div></details>
-        <div className={styles.actions}><a href="#workplace-step-3">다음: 자료 첨부·챗 전달 →</a></div>
-      </section>
-      <section id="workplace-step-3" aria-labelledby="workplace-heading-3" className={`${styles.output} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-3">03 · 자료 첨부·챗 전달</h2>
-        <p>후보별로 작업을 추가하고 단지정보·매매·전세·월세·현재 매물·경로를 첨부하세요. 자료 ZIP은 챗에 직접 올려 확인받습니다.</p>
-        <SeriesWorkspace place={draft.place} />
-        <p className={styles.hint}>기존 단지별 원고는 보관 영역에서 열 수 있습니다. 모든 후보의 자료가 모이면 04에서 비교글을 요청하세요.</p>
-        <div className={styles.actions}><a href="#workplace-step-4">다음: 비교글 작성 →</a></div>
-      </section>
-      <section id="workplace-step-4" aria-labelledby="workplace-heading-4" className={`${styles.panel} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-4"><span>04</span> 챗에서 비교글 작성</h2>
-        <p>후보별로 챗에서 확인한 내용을 모아 아래에 붙여넣고 최종 원고를 요청하세요. 자료 ZIP도 같은 챗에 직접 첨부해야 합니다.</p>
-        <label>실제 확인한 자료 및 출처 링크 <small>각 후보의 정확한 전용면적·계약일·층·금액·해제 여부·호가 확인일·실제 경로·출처를 함께 기록하세요. 03의 파일은 요청서로 자동 전송되지 않습니다.</small><textarea rows={7} value={draft.sourceNotes} onChange={e=>update("sourceNotes",e.target.value)} placeholder="후보별 확인 내용과 출처, 미확인 항목을 챗에서 받아 붙여넣기" /></label>
-        <div className={styles.warning}>{hasSourceNotes?"입력 메모는 검증 완료를 뜻하지 않습니다. 정확한 면적·해제 여부·출입구 경로와 출처를 대조하세요.":"아직 자료 메모가 없습니다. 미확인 수치와 경로는 needs_check로 남깁니다."} 후보 {candidates.length}곳 입력 · 비교 후보 3~5곳을 실제 위치 대조 후 선정하세요.</div>
-        <div className={styles.actions}><button type="button" className={styles.primary} onClick={()=>copyText(article,setNotice)}>최종 원고 요청서 복사</button><a href={"https://chatgpt.com/?q="+encodeURIComponent(article)} target="_blank" rel="noreferrer">챗에서 비교글 작성 ↗</a></div>
-        <details className={styles.requestDetails}><summary>최종 원고 요청서 보기</summary><textarea className={styles.prompt} readOnly value={article} aria-label="최종 원고 요청서" /></details>
-        <label>챗에서 받은 비교글 원고<textarea rows={10} value={draft.articleText||""} onChange={e=>update("articleText",e.target.value)} placeholder="완성 원고를 여기에 붙여넣으세요. 다음 이미지 요청서에 함께 포함됩니다." /></label>
-        <div className={styles.actions}><a href="#workplace-step-5">다음: 이미지 제작 →</a></div>
-      </section>
-      <section id="workplace-step-5" aria-labelledby="workplace-heading-5" className={`${styles.output} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-5">05 · 이미지 00~07 제작</h2>
-        <p>완성 원고를 같은 챗에 두고 슬롯별 요청서를 보내세요. 이미지 한 장 뒤에 설명 2~3줄을 넣습니다.</p>
-        {!draft.articleText?.trim()&&<p className={styles.warning}>04에 비교글 원고를 붙여넣으면 이미지 요청서에도 포함됩니다. 원고 없이 작업하면 챗에 원고와 자료를 별도로 첨부하세요.</p>}
-        <div className={styles.imageSlots}>{imageSlots.map(slot=><article className={styles.imageSlot} key={slot.id}>
-          <h3>{slot.id} · {slot.title}</h3><p>{slot.size} · {slot.message}</p>
-          <div className={styles.actions}><button type="button" onClick={()=>copyText(buildImagePrompt(draft,slot),setNotice)}>이미지 {slot.id} 요청서 복사</button><a href={"https://chatgpt.com/?q="+encodeURIComponent(buildImagePrompt(draft,slot))} target="_blank" rel="noreferrer">ChatGPT 열기 ↗</a></div>
-          <details><summary>요청서·사진 추천 보기</summary><textarea readOnly rows={8} aria-label={"이미지 "+slot.id+" 요청서"} value={buildImagePrompt(draft,slot)} /></details>
-        </article>)}</div>
-        <div className={styles.actions}><a href="#workplace-step-6">다음: 최종 확인 →</a></div>
-      </section>
-      <section id="workplace-step-6" aria-labelledby="workplace-heading-6" className={`${styles.panel} ${styles.workflowStep}`}>
-        <h2 id="workplace-heading-6"><span>06</span> 최종 확인·발행 준비</h2>
-        <div className={styles.checks}><strong>발행 전 사용자 점검</strong>
-          <label><input type="checkbox" checked={draft.checkedTrade} onChange={e=>update("checkedTrade",e.target.checked)} /> 단지·전용면적·계약일·층·금액·해제 여부와 출처 대조</label>
-          <label><input type="checkbox" checked={draft.checkedListing} onChange={e=>update("checkedListing",e.target.checked)} /> 실거래와 현재 호가 구분·조회일·전월세 계약 조건 확인</label>
-          <label><input type="checkbox" checked={draft.checkedRoute} onChange={e=>update("checkedRoute",e.target.checked)} /> 실제 출입구 경로 확인·미확인 값 needs_check 표시</label>
-          <p>체크는 점검 메모이며 공식 검증 상태를 부여하지 않습니다.</p>
-        </div>
-        <p>이미지 사이 설명 2~3줄, Q&A 3개, 결론·3줄 요약과 조사일·출처를 확인한 뒤 블로그에서 이미지를 배치하고 발행하세요.</p>
-        <div className={styles.actions}><button type="button" className={styles.primary} disabled={!draft.articleText?.trim()} onClick={()=>copyText(draft.articleText||"",setNotice)}>비교글 원고 복사</button><a href="#workplace-step-4">원고 수정으로 돌아가기</a></div>
+export default function WorkplaceTop10Studio() {
+  const [draft,setDraft] = useState<WorkplaceTop10Input>(DEFAULTS);
+  const [hydrated,setHydrated] = useState(false);
+  const [notice,setNotice] = useState("");
+  const [showAdvanced,setShowAdvanced] = useState(false);
 
-        <p className={styles.hint}>입력과 원고는 이 브라우저에 자동 저장됩니다. 사이트에서 블로그에 자동 발행하지 않습니다.</p>
-      </section>
-    </main>
-  );
+  useEffect(()=>{
+    try {
+      const old = JSON.parse(localStorage.getItem(KEY)||"null") as Partial<WorkplaceTop10Input> | null;
+      if (old && typeof old==="object") {
+        const updated = { ...DEFAULTS };
+        for (const key of Object.keys(DEFAULTS) as Array<keyof WorkplaceTop10Input>) {
+          if (typeof old[key] === "string") updated[key] = old[key];
+        }
+        setDraft(updated);
+      }
+    } catch {setNotice("이전에 저장한 내용을 읽지 못했습니다. 기존 자료는 삭제하지 않았습니다.");}
+    setHydrated(true);
+  },[]);
+  useEffect(()=>{
+    if (!hydrated) return;
+    try {localStorage.setItem(KEY,JSON.stringify(draft));}
+    catch {setNotice("이 브라우저에서는 자동 저장이 제한됩니다. 작성한 결과를 별도로 복사해 두세요.");}
+  },[draft,hydrated]);
+
+  function update(key:keyof WorkplaceTop10Input,value:string) {
+    setDraft(prev=>({...prev,[key]:value}));
+  }
+  const hasPlace = Boolean(draft.place.trim());
+  const research = useMemo(()=>buildTop10ResearchPrompt(draft),[draft]);
+  const article = useMemo(()=>buildTop10ArticlePrompt(draft),[draft]);
+
+  async function copy(value:string,message:string) {
+    try {await navigator.clipboard.writeText(value);setNotice(message);}
+    catch {setNotice("클립보드 복사가 차단됐습니다. 해당 요청서 펼치기에서 직접 복사해 주세요.");}
+  }
+  function applyPreset(preset:typeof WORKPLACE_TOP10_PRESETS[number]){
+    setDraft(prev=>({...prev,...preset}));
+    setNotice(preset.place+" 기준으로 입력했습니다. 생활권은 실제 자료 확인 후 조정하세요.");
+  }
+
+  return <main className={styles.page}>
+    <div className={styles.top}>
+      <a href="/" className={styles.back}>← 콘텐츠 메이커</a>
+      <a href="/apartment-bulk" className={styles.back}>일반 아파트 글쓰기</a>
+    </div>
+    <header className={styles.hero}>
+      <span className={styles.kicker}>집값쓱 · 직장인 아파트 시리즈</span>
+      <h1>직장 이름 하나로<br/>주변 아파트 TOP 10 글쓰기</h1>
+      <p>판교테크노밸리처럼 회사·업무지구를 먼저 고르고, 주변 아파트의 거래량과 실제 계약가격을 비교합니다.</p>
+      <div className={styles.rules}><span>최근 12개월 매매 거래량</span><span>실거래가격 비교</span><span>이미지 1600×900</span></div>
+    </header>
+
+    <section className={styles.card} aria-labelledby="step1">
+      <div className={styles.heading}><span className={styles.number}>01</span><div><h2 id="step1">어느 직장 주변을 볼까요?</h2><p>아래 예시를 눌러 바로 시작하거나 직접 입력하세요.</p></div></div>
+      <div className={styles.presets}>
+        {WORKPLACE_TOP10_PRESETS.map(p=><button type="button" key={p.place} onClick={()=>applyPreset(p)} className={draft.place===p.place?styles.presetSelected:styles.preset}>{p.place}</button>)}
+      </div>
+      <div className={styles.formGrid}>
+        <label><span>업무지구·회사 이름 <strong>*</strong></span><input value={draft.place} onChange={e=>update("place",e.target.value)} placeholder="예: LG사이언스파크" /></label>
+        <label><span>위치</span><input value={draft.region} onChange={e=>update("region",e.target.value)} placeholder="예: 서울 강서구 마곡동" /></label>
+        <label className={styles.wide}><span>비교할 주변 생활권 <small>실제 순위를 매길 지역 범위</small></span><input value={draft.neighborhoods} onChange={e=>update("neighborhoods",e.target.value)} placeholder="예: 마곡동·발산동·가양동" /></label>
+        <label><span>거래량 비교 기간</span><select value={draft.period} onChange={e=>update("period",e.target.value)}><option>최근 12개월</option><option>최근 6개월</option><option>최근 3개월</option></select></label>
+        <label><span>실거래가격 비교 면적</span><select value={draft.area} onChange={e=>update("area",e.target.value)}><option>전용 59㎡대와 84㎡대</option><option>전용 59㎡대</option><option>전용 84㎡대</option><option>전체 면적</option></select></label>
+      </div>
+    </section>
+
+    <section className={styles.card} aria-labelledby="step2">
+      <div className={styles.heading}><span className={styles.number}>02</span><div><h2 id="step2">TOP 10 실거래 조사</h2><p>한 번의 요청으로 업무지구 규모, 거래량 순위, 실제 가격을 조사합니다.</p></div></div>
+      <div className={styles.actions}>
+        <button type="button" className={styles.primary} disabled={!hasPlace} onClick={()=>void copy(research,"조사 요청서를 복사했습니다. ChatGPT에 붙여넣으세요.")}>조사 요청서 복사</button>
+        <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" className={styles.secondary}>ChatGPT 열기 ↗</a>
+      </div>
+      <details className={styles.details}><summary>조사 요청서 미리보기</summary><textarea readOnly value={research} rows={10} aria-label="조사 요청서 미리보기" /></details>
+      <label className={styles.textareaLabel}><span>조사 결과 붙여넣기 <small>선택 · 실제 출처와 수치가 포함된 결과</small></span>
+        <textarea value={draft.researchNotes} onChange={e=>update("researchNotes",e.target.value)} rows={6} placeholder="ChatGPT가 확인한 아파트 거래량 TOP 10, 계약일·층수·가격, 근거 링크를 여기에 붙여넣으세요." />
+      </label>
+      <p className={styles.tip}>이 사이트는 실거래를 자동 조회하지 않습니다. 조사 결과에 확인되지 않은 가격이나 순위가 있으면 최종 글에도 사실처럼 사용하지 않도록 요청합니다.</p>
+    </section>
+
+    <section className={styles.card} aria-labelledby="step3">
+      <div className={styles.heading}><span className={styles.number}>03</span><div><h2 id="step3">최종 블로그 글 만들기</h2><p>집값쓱 V5 고정 규칙이 자동 적용됩니다. 제목 5개 · 발견 중심 본문 · 생활킥 · Q&A · 출처.</p></div></div>
+      <div className={styles.actions}>
+        <button type="button" className={styles.primary} disabled={!hasPlace} onClick={()=>void copy(article,"최종 원고 요청서를 복사했습니다. 같은 ChatGPT 대화에 붙여넣으세요.")}>최종 글 요청서 복사</button>
+        <a href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer" className={styles.secondary}>ChatGPT 열기 ↗</a>
+      </div>
+      <details className={styles.details}><summary>최종 원고 요청서 미리보기</summary><textarea readOnly value={article} rows={10} aria-label="최종 원고 요청서 미리보기" /></details>
+      <label className={styles.textareaLabel}><span>완성 글 붙여넣기 <small>이미지 요청서에 연결됩니다</small></span>
+        <textarea value={draft.articleText} onChange={e=>update("articleText",e.target.value)} rows={7} placeholder="완성된 제목과 본문을 여기에 붙여넣으세요."/>
+      </label>
+      <div className={styles.articleActions}><button type="button" disabled={!draft.articleText.trim()} onClick={()=>void copy(draft.articleText,"완성된 블로그 원고를 복사했습니다.")}>완성 원고 복사</button><span>본문과 입력값은 이 브라우저에 자동 저장됩니다.</span></div>
+    </section>
+
+    <section className={styles.card} aria-labelledby="step4">
+      <div className={styles.heading}><span className={styles.number}>04</span><div><h2 id="step4">이미지 개별 요청서</h2><p>썸네일부터 본문까지 모두 1600×900px. 대표 썸네일은 클로즈업 크롭으로 고정합니다.</p></div></div>
+      {!draft.articleText.trim() && <p className={styles.tip}>위에 완성 글을 붙여넣으면 이미지별 내용이 자동 연결됩니다. 원고가 없을 때는 이미지 요청서를 사용할 수 없습니다.</p>}
+      <div className={styles.images}>
+        {WORKPLACE_TOP10_SLOTS.map(slot=><div key={slot.id} className={styles.imageRow}>
+          <div className={styles.imageInfo}><b>{slot.id} · {slot.title}</b><span>{slot.purpose}</span></div>
+          <button type="button" disabled={!draft.articleText.trim() || !hasPlace} onClick={()=>void copy(buildTop10ImagePrompt(draft,slot),slot.id+"번 이미지 요청서를 복사했습니다.")}>요청서 복사</button>
+          <details className={styles.imageDetails}><summary>내용 보기</summary><textarea rows={8} readOnly value={buildTop10ImagePrompt(draft,slot)} aria-label={slot.id+"번 이미지 요청서"}/></details>
+        </div>)}
+      </div>
+      <p className={styles.tip}>실제 사진이나 공식 자료가 없는 이미지는 억지로 만들지 않습니다. 모든 슬롯은 한 번에 한 장씩 요청하세요.</p>
+    </section>
+
+    <footer className={styles.footer}>
+      <button type="button" onClick={()=>setShowAdvanced(x=>!x)} aria-expanded={showAdvanced}>{showAdvanced?"이전 제작실 안내 닫기":"기존 직주근접 제작실 사용하기"}</button>
+      {showAdvanced && <p>이전에 작성한 3~5개 단지 비교·단지별 첨부 자료가 필요한 경우 <a href="/apartment-workplace/legacy">기존 제작실 열기 ↗</a>를 이용하세요. 기존 저장 자료는 삭제하지 않았습니다.</p>}
+    </footer>
+    {notice && <div className={styles.toast} role="status">{notice}<button type="button" onClick={()=>setNotice("")} aria-label="알림 닫기">×</button></div>}
+  </main>;
 }
