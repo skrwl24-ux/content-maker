@@ -90,9 +90,9 @@ test("research studio is reachable from homepage and has five independent saved 
 
 test("naver final article parser handles tagged JSON, plain text and invalid research reports",async()=>{
   const {parseNaverFinalArticle}=await studio();
-  const result=parseNaverFinalArticle('[NAVER_FINAL_ARTICLE_JSON]\\n'+JSON.stringify({title:"독자 질문",body:"첫 문단\\n\\n둘째 문단"})+'\\n[/NAVER_FINAL_ARTICLE_JSON]');
-  assert.deepEqual(result,{title:"독자 질문",body:"첫 문단\\n\\n둘째 문단"});
-  assert.deepEqual(parseNaverFinalArticle("본문 하나\\n\\n본문 둘"),{title:"",body:"본문 하나\\n\\n본문 둘"});
+  const result=parseNaverFinalArticle('[NAVER_FINAL_ARTICLE_JSON]\\n'+JSON.stringify({title:"독자 질문",body:"첫 문단\n\n둘째 문단"})+'\\n[/NAVER_FINAL_ARTICLE_JSON]');
+  assert.deepEqual(result,{title:"독자 질문",body:"첫 문단\n\n둘째 문단"});
+  assert.deepEqual(parseNaverFinalArticle("본문 하나\n\n본문 둘"),{title:"",body:"본문 하나\n\n본문 둘"});
   assert.equal(parseNaverFinalArticle("[NAVER_FINAL_ARTICLE_JSON]{}"),null);
   assert.equal(parseNaverFinalArticle("[RESEARCH_REPORT_JSON]{}[/RESEARCH_REPORT_JSON]"),null);
   assert.equal(parseNaverFinalArticle('{"title":"missing body"}'),null);

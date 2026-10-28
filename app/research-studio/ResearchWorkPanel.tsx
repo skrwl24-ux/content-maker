@@ -363,7 +363,7 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
         <label htmlFor="naver-final-import">완성 원고 붙여넣기 · [NAVER_FINAL_ARTICLE_JSON] 또는 일반 본문</label>
         <textarea id="naver-final-import" rows={8} value={finalRaw} maxLength={180000}
           onChange={e=>setFinalRaw(e.target.value)}
-          placeholder={"[NAVER_FINAL_ARTICLE_JSON]\\n{\\n  \\"title\\": \\"글 제목\\",\\n  \\"body\\": \\"네이버 발행 본문\\",\\n}\\n[/NAVER_FINAL_ARTICLE_JSON]"} />
+          placeholder="완성된 JSON 또는 일반 본문을 붙여넣으세요." />
         <div className={styles.actionRow}>
           <button type="button" className={styles.primary} disabled={!finalRaw.trim()} onClick={importFinalArticle}>최종 원고 불러오기</button>
           <span className={styles.finalHint}>태그 형식이 아니어도 일반 본문을 붙여넣을 수 있습니다.</span>
@@ -383,7 +383,7 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
             <button type="button" className={styles.primary} disabled={!finalBody.trim()}
               onClick={()=>void copy(finalBody,"본문","네이버 글 본문 칸에 붙여넣으세요.")}>본문 복사</button>
             <button type="button" className={styles.secondary} disabled={!finalBody.trim()}
-              onClick={()=>void copy([finalTitle,finalBody].filter(Boolean).join("\\n\\n"),"제목+본문","필요한 곳에 붙여넣으세요.")}>전체 복사</button>
+              onClick={()=>void copy([finalTitle,finalBody].filter(Boolean).join("\n\n"),"제목+본문","필요한 곳에 붙여넣으세요.")}>전체 복사</button>
           </div>
           <p className={styles.smallText}>이 기능은 원고 보관과 복사만 합니다. 네이버 블로그에 직접 발행하지 않으며, 이미지·표 서식은 별도 편집이 필요합니다.</p>
         </div>}
