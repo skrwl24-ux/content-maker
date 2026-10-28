@@ -1,8 +1,11 @@
 "use client";
-import {useCallback,useEffect,useState} from "react";
+import {useCallback,useEffect,useMemo,useState} from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
 import ResearchWorkPanel from "./ResearchWorkPanel";
+import TopicRecommendationsPanel from "./TopicRecommendationsPanel";
+import { recommendationToResearchNotes } from "../../lib/topic-recommendations.mjs";
+import type { TopicRecommendation } from "../../lib/topic-recommendations.mjs";
 import {RESEARCH_BATCH_SIZE,emptyResearchSlot,parseResearchBatchTopics,researchSlotKey} from "../../lib/research-batch.mjs";
 import {parseResearchReport,factKey} from "../../lib/research-studio.mjs";
 type Summary={topic:string;hasReport:boolean;approvedCount:number};
@@ -41,6 +44,8 @@ export default function ResearchQueue(){
   const [summaries,setSummaries]=useState<Summary[]>(Array.from({length:RESEARCH_BATCH_SIZE},emptySummary));
   const [batch,setBatch]=useState("");
   const [batchOpen,setBatchOpen]=useState(false);
+  const [recommendOpen,setRecommendOpen]=useState(false);
+  const existingTopics=useMemo(()=>summaries.map(s=>s.topic).filter(Boolean),[summaries]);
   const [notice,setNotice]=useState("");
   useEffect(()=>{
     setSummaries(Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>summary(i+1)));
@@ -74,6 +79,30 @@ export default function ResearchQueue(){
       setBatch("");setBatchOpen(false);
       setNotice(result.topics.length+"개 주제를 목록에 등록했습니다. 번호별로 따로 조사하고 저장할 수 있습니다.");
     }catch{setNotice("저장에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.");}
+  }
+  function applyRecommended(items:TopicRecommendation[], checkedAt:string):boolean{
+    if(!items.length||items.length>RESEARCH_BATCH_SIZE){
+      setNotice("추천 주제는 최대 5개까지 등록할 수 있습니다.");return false;
+    }
+    const occupied=items.some((_,i)=>{
+      const slot=readSlot(i+1);
+      return Boolean(slot.topic||slot.notes||slot.raw);
+    });
+    if(occupied&&!window.confirm("1~"+items.length+"번의 기존 주제와 조사 자료를 추천 주제로 교체합니다. 필요하면 먼저 전체 백업하세요. 계속할까요?"))return false;
+    try{
+      items.forEach((item,i)=>{
+        const slot=emptyResearchSlot(item.title,item.channel);
+        slot.notes=recommendationToResearchNotes(item,checkedAt);
+        localStorage.setItem(researchSlotKey(i+1),JSON.stringify(slot));
+      });
+      setSummaries(Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>summary(i+1)));
+      setEpoch(n=>n+1);setActive(1);localStorage.setItem(ACTIVE_KEY,"1");
+      setBatchOpen(false);
+      setNotice(items.length+"개 추천 주제를 1번부터 등록했습니다. 각 주제의 메모에 추천 근거가 함께 저장됩니다.");
+      return true;
+    }catch{
+      setNotice("추천 주제를 저장하지 못했습니다. 브라우저 저장 공간을 확인하세요.");return false;
+    }
   }
   function exportAll(){
     saveFile("content-maker-research-five-topics.json",{
@@ -120,13 +149,15 @@ export default function ResearchQueue(){
           <p>주제 5개를 한 번에 등록하고 하나씩 조사·검증·원고 작성하세요. 각 번호의 자료는 독립적으로 저장됩니다.</p>
         </div>
         <div className={styles.batchActions}>
-          <button type="button" className={styles.minor} onClick={()=>setBatchOpen(v=>!v)}>{batchOpen?"일괄 입력 닫기":"+ 주제 5개 한 번에 입력"}</button>
+          <button type="button" className={styles.minor} onClick={()=>{setRecommendOpen(v=>!v);setBatchOpen(false);}}>{recommendOpen?"AI 추천 닫기":"✨ AI 주제 5개 추천받기"}</button>
+          <button type="button" className={styles.minor} onClick={()=>{setBatchOpen(v=>!v);setRecommendOpen(false);}}>{batchOpen?"일괄 입력 닫기":"+ 주제 5개 직접 입력"}</button>
           <button type="button" className={styles.minor} onClick={exportAll}>5개 전체 백업</button>
           <label className={styles.backupLabel}>전체 백업 불러오기
             <input type="file" accept=".json,application/json" onChange={e=>{const f=e.currentTarget.files?.[0];if(f)void importAll(f);e.currentTarget.value="";}}/>
           </label>
         </div>
       </div>
+      {recommendOpen&&<TopicRecommendationsPanel existingTopics={existingTopics} onApply={applyRecommended}/>}
       {batchOpen&&<div className={styles.batchInputBox}>
         <label htmlFor="topic-five-lines">한 줄에 주제 하나 · 최대 5개</label>
         <textarea id="topic-five-lines" rows={5} value={batch} onChange={e=>setBatch(e.target.value)}
