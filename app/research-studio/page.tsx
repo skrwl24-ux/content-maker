@@ -102,6 +102,22 @@ export default function ResearchStudioPage() {
     setApprovedKeys(prev => checked ? [...new Set([...prev,key])] : prev.filter(k => k!==key));
   }
 
+  function changeTopic(next: string) {
+    if (report) {
+      if (!window.confirm("주제를 변경하면 기존 조사 결과와 확인 표시가 초기화됩니다. 계속할까요?")) return;
+      setReport(null);setRaw("");setApprovedKeys([]);setSelectedAngleId("");
+    }
+    setTopic(next);
+  }
+
+  function changeChannel(next: Channel) {
+    if (report) {
+      if (!window.confirm("발행 블로그를 변경하면 기존 조사 결과와 확인 표시가 초기화됩니다. 계속할까요?")) return;
+      setReport(null);setRaw("");setApprovedKeys([]);setSelectedAngleId("");
+    }
+    setChannel(next);
+  }
+
   function clearWork() {
     if (report && !window.confirm("현재 조사 내용과 확인 표시를 지우고 새 작업을 시작할까요?")) return;
     setTopic("");setNotes("");setRaw("");setReport(null);
@@ -150,13 +166,13 @@ export default function ResearchStudioPage() {
           </div>
 
           <label htmlFor="research-channel">발행 블로그</label>
-          <select id="research-channel" value={channel} onChange={e=>setChannel(e.target.value as Channel)}>
+          <select id="research-channel" value={channel} onChange={e=>changeChannel(e.target.value as Channel)}>
             <option value="집값쓱">집값쓱 · 아파트·지역</option>
             <option value="Paramma">Paramma · 생활·동물·자연</option>
             <option value="기타">기타 콘텐츠</option>
           </select>
           <label htmlFor="research-topic">주제 또는 발견한 소식</label>
-          <input id="research-topic" value={topic} maxLength={600} onChange={e=>setTopic(e.target.value)}
+          <input id="research-topic" value={topic} maxLength={600} onChange={e=>changeTopic(e.target.value)}
             placeholder="예: 드라마에 나온 아파트가 실제 촬영지인지" />
           <label htmlFor="research-notes">기사 링크·방송 정보·직접 조사한 자료 <small>(선택)</small></label>
           <textarea id="research-notes" value={notes} onChange={e=>setNotes(e.target.value)}
