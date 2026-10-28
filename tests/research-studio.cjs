@@ -68,14 +68,21 @@ test("followup prompt carries gaps and unconfirmed claims",async()=>{
   assert.match(prompt,/전체 보고서/);
 });
 
-test("research studio is reachable from homepage and preserves draft in browser storage",()=>{
+test("research studio is reachable from homepage and has five independent saved workspaces",()=>{
   const home=fs.readFileSync("app/page.tsx","utf8");
   const page=fs.readFileSync("app/research-studio/page.tsx","utf8");
+  const queue=fs.readFileSync("app/research-studio/ResearchQueue.tsx","utf8");
+  const panel=fs.readFileSync("app/research-studio/ResearchWorkPanel.tsx","utf8");
   assert.match(home,/href="\/research-studio"/);
-  assert.match(page,/localStorage.setItem/);
-  assert.match(page,/원문 대조 완료/);
-  assert.match(page,/조사 보고서 불러오기/);
-  assert.match(page,/재조사 요청서 복사/);
-  assert.match(page,/buildFinalArticlePrompt/);
-  assert.match(page,/function changeTopic/);
+  assert.match(page,/ResearchQueue/);
+  assert.match(queue,/parseResearchBatchTopics/);
+  assert.match(queue,/slotId=\{active\}/);
+  assert.match(queue,/5개 전체 백업/);
+  assert.match(queue,/setEpoch/);
+  assert.match(panel,/localStorage.setItem/);
+  assert.match(panel,/원문 대조 완료/);
+  assert.match(panel,/조사 보고서 불러오기/);
+  assert.match(panel,/재조사 요청서 복사/);
+  assert.match(panel,/buildFinalArticlePrompt/);
+  assert.match(panel,/function changeTopic/);
 });
