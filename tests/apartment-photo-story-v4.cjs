@@ -32,6 +32,10 @@ test("V4 article prompt uses ONLY original monthly numbers and explicit rights c
  assert.match(prompt,/사진마다 한 가지/);
  assert.match(prompt,/\[이미지 NN\]/);
  assert.match(prompt,/06 교통·학군·생활권/);
+ assert.match(prompt,/집값쓱 고정 마스터 V5/);
+ assert.match(prompt,/해시태그 10개/);
+ assert.match(prompt,/1600×900px/);
+ assert.match(prompt,/생활킥/);
  assert.doesNotMatch(prompt,/이미지 07:/);
 });
 
@@ -61,6 +65,8 @@ test("single scene V4 prompts keep scale, area and verified-source warnings",asy
  assert.match(p,/1600×900/);
  assert.match(p,/실거래 연결 미확인/);
  assert.match(p,/가격·날짜·층수 수치 임의 생성 금지/);
- assert.match(buildApartmentV4ImagePrompt(data,"00",7),/1254×1254/);
+ assert.match(buildApartmentV4ImagePrompt(data,"00",7),/1600×900/);
+ assert.match(buildApartmentV4ImagePrompt(data,"00",7),/클로즈업/);
+ assert.match(buildApartmentV4ImagePrompt(data,"00",7),/X=350~1250/);
  assert.equal(buildApartmentV4ImagePrompt(data,"07",6),"");
 });
