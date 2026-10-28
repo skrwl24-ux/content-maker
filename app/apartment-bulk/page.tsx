@@ -10,6 +10,7 @@ import StoryPlanningPanel, { useApartmentStoryPlanner } from "./StoryPlanningPan
 import PublicationCheckPanel from "./PublicationCheckPanel";
 import LifeVerificationPanel from "./LifeVerificationPanel";
 import ApartmentV4Studio from "./ApartmentV4Studio";
+import ApartmentQuickStart from "./ApartmentQuickStart";
 import { makeApprovedStoryBlock, makeApprovedStoryVisualPrompt, makeStoryFactSheet, extractStoryExcerpt, safeStoryDisplayText, makeAutomaticLivingStoryBlock, makeArticleBasedStoryVisualPrompt } from "../../lib/apartment-story.mjs";
 import { Top3Work, emptyTop3, normalizeTop3 } from "./top3-model";
 import { parseApartmentStoryResearch, makeApartmentStoryResearchPrompt } from "../../lib/apartment-story.mjs";
@@ -2514,6 +2515,7 @@ async function makeStoryMapCard(
 
 export default function ApartmentBulkPage() {
   const [contentMode, setContentMode] = useState<ContentMode>("bulk");
+  const [showLegacyTools, setShowLegacyTools] = useState(false);
   const [data, setData] = useState<ApartmentData>(SAMPLE);
   const [mapDataUrl, setMapDataUrl] = useState("");
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStat[]>([]);
@@ -3944,6 +3946,15 @@ export default function ApartmentBulkPage() {
         <span className={styles.modeBadge}>아파트 콘텐츠 작업실</span>
       </div>
 
+      <ApartmentQuickStart
+        linked={selectedComplexName && data.name.trim() === selectedComplexName.trim() ? {
+          name: data.name, region: data.region, area: data.area,
+          monthly: monthlyStats, matchingPending: selectedComplexNeedsMatching,
+        } : null}
+        advancedOpen={showLegacyTools}
+        onToggleAdvanced={() => setShowLegacyTools(prev => !prev)}
+      />
+      {showLegacyTools && (<>
       <section className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>집값쓱 APARTMENT CONTENT STUDIO</p>
@@ -5136,6 +5147,7 @@ export default function ApartmentBulkPage() {
           <OutputCard title="02 · 입지 지도 카드" size="1600×900" src={outputs.map} filename="02_location.png" />
         </section>
       )}
+      </>)}
     </main>
   );
 }
