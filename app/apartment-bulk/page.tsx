@@ -3941,6 +3941,7 @@ export default function ApartmentBulkPage() {
     <main className={styles.page}>
       <div className={styles.topbar}>
         <a href="/" className={styles.back}>← 콘텐츠 메이커</a>
+        <a href="/jibssuk-queue" className={styles.back}>🏙️ 집값쓱 글감 10개</a>
         <span className={styles.modeBadge}>아파트 콘텐츠 작업실</span>
       </div>
 
