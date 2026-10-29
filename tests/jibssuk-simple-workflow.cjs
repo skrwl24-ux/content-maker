@@ -49,3 +49,56 @@ test("final prompt keeps selected issue as focus but may use other sourced and r
   assert.doesNotMatch(prompt,/출처 없는 주장/);
   assert.equal(buildJibssukIssueArticlePrompt({topic:example.topic,report,selectedAngleId:"invalid"}),"");
 });
+
+
+test("Jibssuk final writer includes the agreed diary-style discovery voice, not just factual summary rules",async()=>{
+  const {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt}=await api();
+  const report=parseJibssukCopiedReport(JSON.stringify(example)).report;
+  const prompt=buildJibssukIssueArticlePrompt({topic:example.topic,report,selectedAngleId:"a1",today:"2026-10-30"});
+  assert.match(prompt,/일기처럼 편안한 개인 블로그 말투/);
+  assert.match(prompt,/남들이 지나친 정보를 나만 발견한 듯한 재미/);
+  assert.match(prompt,/B형의 자연스러운 일기 같은 도입과 C형의 구체적인 정보 밀도/);
+  assert.match(prompt,/자료를 읽으며 남들이 지나치기 쉬운 사실을 발견한 사람이/);
+  assert.match(prompt,/뉴스를 정리하거나 강의하는 말투보다/);
+  assert.match(prompt,/■ 기호/);
+  assert.match(prompt,/실제로 하지 않은 방문·취재·경험·감정/);
+  assert.match(prompt,/독점정보나 비밀 취재처럼 꾸미지는 않는다/);
+  assert.match(prompt,/출력 전에 다시 다듬어라/);
+  assert.match(prompt,/조사는 깊게, 글은 짧고 명확하게/);
+});
+
+test("Jibssuk selects one discovery and caps secondary evidence instead of dumping 27 facts",async()=>{
+  const {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt}=await api();
+  const facts=Array.from({length:27},(_,i)=>({
+    id:"f"+(i+1),claim:"원문에서 확인할 주장 고유항목-"+(i+1),
+    sourceUrl:"https://example.org/f"+(i+1),sourceTitle:"원문"+(i+1),publishedAt:"2026-10-29"
+  }));
+  const angles=[
+    {id:"a1",title:"다시 공급된 이유",readerQuestion:"다시 나온 이유?",uniqueValue:"두 날짜의 동호수가 다름",factIds:facts.slice(0,7).map(f=>f.id)},
+    {id:"a2",title:"실제 돈은 얼마인가",readerQuestion:"옵션 포함 금액?",uniqueValue:"선택품목까지 계산하면 금액이 달라짐",factIds:facts.slice(7,17).map(f=>f.id)},
+    {id:"a3",title:"청약할 수 있나",readerQuestion:"접수 조건?",uniqueValue:"무주택세대주 및 접수일",factIds:facts.slice(17,27).map(f=>f.id)}
+  ];
+  const report=parseJibssukCopiedReport(JSON.stringify({topic:example.topic,checkedAt:"2026-10-30",facts,angles,gaps:[],trendLinks:[]})).report;
+  const prompt=buildJibssukIssueArticlePrompt({topic:example.topic,report,selectedAngleId:"a1",today:"2026-10-30"});
+  assert.match(prompt,/원문에서 확인할 주장 고유항목-7\b/);
+  assert.match(prompt,/원문에서 확인할 주장 고유항목-8\b/);
+  assert.match(prompt,/원문에서 확인할 주장 고유항목-11\b/);
+  assert.match(prompt,/원문에서 확인할 주장 고유항목-18\b/);
+  assert.match(prompt,/원문에서 확인할 주장 고유항목-21\b/);
+  assert.doesNotMatch(prompt,/원문에서 확인할 주장 고유항목-12\b/);
+  assert.doesNotMatch(prompt,/원문에서 확인할 주장 고유항목-22\b/);
+  assert.match(prompt,/조사 내용은 원고에 전부 옮기는 목록이 아니다/);
+  assert.match(prompt,/발견 1개\(필요할 때 2개\)/);
+});
+
+test("Jibssuk style is topic-neutral and final import format remains unchanged",async()=>{
+  const {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt}=await api();
+  const report=parseJibssukCopiedReport(JSON.stringify(example)).report;
+  const p=buildJibssukIssueArticlePrompt({topic:"다른 도시 아파트 수상",report,selectedAngleId:"a1",today:"2026-10-30"});
+  assert.doesNotMatch(p,/4월 사건의 사유가 10월 사건에도/);
+  assert.match(p,/서로 다른 시기의 사건이나 공급 물량/);
+  assert.match(p,/NAVER_FINAL_ARTICLE_JSON/);
+  assert.match(p,/코드 복사/);
+  assert.match(p,/title/);
+  assert.match(p,/body/);
+});
