@@ -149,3 +149,53 @@ test("research studio edits and saves two independent directions across all five
   assert.match(panel,/기본 문구 복원/);
   assert.match(panel,/전체 최종 원고 요청서 보기/);
 });
+
+
+test("Jibssuk research follows the verified news event, without forcing real-estate prices or popularity claims",async()=>{
+  const {buildDeepResearchPrompt,parseResearchReport,buildFollowupResearchPrompt}=await studio();
+  const prompt=buildDeepResearchPrompt({channel:"집값쓱",topic:"OO단지 살기 좋은 아파트 수상 소식",directions:"임의로 저장된 과거 조사 스타일"});
+  assert.match(prompt,/선택된 주제의 출발점은 최근 뉴스·방송·사건·수상·분양/);
+  assert.match(prompt,/왜 지금 이 아파트가 뉴스에 나왔는지/);
+  assert.match(prompt,/공식 수상 발표|선정 근거/);
+  assert.match(prompt,/실거래 비교를 억지로 붙이지 마라/);
+  assert.match(prompt,/검색량 상승·인기 폭증을 입증할 자료가 없으면 주장하지 마라/);
+  assert.match(prompt,/임의로 저장된 과거 조사 스타일/);
+  assert.match(prompt,/RESEARCH_REPORT_JSON/);
+  const report=parseResearchReport(reportText);
+  const follow=buildFollowupResearchPrompt({channel:"집값쓱",topic:"드라마 나온 아파트",report,directions:"보존할 개인 설정"});
+  assert.match(follow,/집값쓱 이슈 중심 추가 조사/);
+  assert.match(follow,/보존할 개인 설정/);
+  assert.match(follow,/전체 보고서를 다시 작성하라/);
+});
+
+test("Jibssuk final writing is concise, issue-led, and grounded, including for legacy custom prose",async()=>{
+  const {parseResearchReport,buildFinalArticlePrompt,factKey,buildDeepResearchPrompt}=await studio();
+  const report=parseResearchReport(reportText);
+  const prompt=buildFinalArticlePrompt({
+    channel:"집값쓱",topic:"드라마 나온 아파트",
+    report,selectedAngleId:"a1",approvedKeys:[factKey(report.facts[0])],
+    directions:"예전에 저장한 지시문: 혼잣말을 길게 써라",
+  });
+  assert.match(prompt,/집값쓱 이슈 중심 최종 원고/);
+  assert.match(prompt,/조사는 깊게, 글은 짧고 명확하게/);
+  assert.match(prompt,/뉴스·사건·수상·분양·방송·지역 변화/);
+  assert.match(prompt,/B형 도입과 C형 정보 밀도/);
+  assert.match(prompt,/억지 반전·호기심 질문·감탄·혼잣말/);
+  assert.match(prompt,/가격과 비교표를 형식적으로 추가하지 않는다/);
+  assert.match(prompt,/최근 1년 동안 상승세가 이어졌다/);
+  assert.match(prompt,/예전에 저장한 지시문/);
+  assert.match(prompt,/NAVER_FINAL_ARTICLE_JSON/);
+  assert.doesNotMatch(prompt,/javascript:alert/);
+  const other=buildDeepResearchPrompt({channel:"Paramma",topic:"생활 소식"});
+  assert.doesNotMatch(other,/집값쓱 이슈 중심 심층 조사/);
+  const otherFinal=buildFinalArticlePrompt({channel:"Paramma",topic:"생활 소식",report,selectedAngleId:"a1",approvedKeys:[factKey(report.facts[0])]});
+  assert.doesNotMatch(otherFinal,/집값쓱 이슈 중심 최종 원고/);
+});
+
+test("Jibssuk guidance is visible without overwriting existing saved directions or schemas",()=>{
+  const panel=fs.readFileSync("app/research-studio/ResearchWorkPanel.tsx","utf8");
+  assert.match(panel,/해당 아파트가 화제가 됐는지 확인하고/);
+  assert.match(panel,/이전에 저장한 문체 설정보다 우선/);
+  assert.match(panel,/localStorage.setItem\(DEEP_DIRECTIONS_KEY,deepDirections\)/);
+  assert.match(panel,/localStorage.setItem\(FINAL_DIRECTIONS_KEY,finalDirections\)/);
+});
