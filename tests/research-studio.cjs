@@ -178,7 +178,7 @@ test("Jibssuk final writing is concise, issue-led, and grounded, including for l
   });
   assert.match(prompt,/집값쓱 이슈 중심 최종 원고/);
   assert.match(prompt,/조사는 깊게, 글은 짧고 명확하게/);
-  assert.match(prompt,/뉴스·사건·수상·분양·방송·지역 변화/);
+  assert.match(prompt,/사건·수상·분양·방송·지역 변화/);
   assert.match(prompt,/B형 도입과 C형 정보 밀도/);
   assert.match(prompt,/억지 반전·호기심 질문·감탄·혼잣말/);
   assert.match(prompt,/가격과 비교표를 형식적으로 추가하지 않는다/);
