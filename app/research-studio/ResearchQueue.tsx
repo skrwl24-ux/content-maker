@@ -8,6 +8,9 @@ import { recommendationToResearchNotes } from "../../lib/topic-recommendations.m
 import type { TopicRecommendation } from "../../lib/topic-recommendations.mjs";
 import {RESEARCH_BATCH_SIZE,emptyResearchSlot,parseResearchBatchTopics,researchSlotKey} from "../../lib/research-batch.mjs";
 import {parseResearchReport,factKey} from "../../lib/research-studio.mjs";
+import {JIBSSUK_RESEARCH_HANDOFF_KEY,parseResearchHandoff,
+  researchNotesFromHandoff,pickResearchDestination} from "../../lib/jibssuk-research-handoff.mjs";
+import type {ResearchHandoff} from "../../lib/jibssuk-research-handoff.mjs";
 type Summary={topic:string;hasReport:boolean;approvedCount:number};
 type Stored={version:number;channel:string;topic:string;notes:string;raw:string;selectedAngleId:string;approvedKeys:string[];finalRaw:string;finalTitle:string;finalBody:string};
 const ACTIVE_KEY="content-maker-research-studio-active-slot-v2";
@@ -50,12 +53,55 @@ export default function ResearchQueue(){
   const [recommendOpen,setRecommendOpen]=useState(false);
   const existingTopics=useMemo(()=>summaries.map(s=>s.topic).filter(Boolean),[summaries]);
   const [notice,setNotice]=useState("");
+  const [incoming,setIncoming]=useState<ResearchHandoff|null>(null);
   useEffect(()=>{
-    setSummaries(Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>summary(i+1)));
     try {
       const n=Number(localStorage.getItem(ACTIVE_KEY));
       if(Number.isInteger(n)&&n>=1&&n<=RESEARCH_BATCH_SIZE)setActive(n);
-    }catch{/* storage unavailable */}
+      const raw=localStorage.getItem(JIBSSUK_RESEARCH_HANDOFF_KEY);
+      if(raw){
+        const handoff=parseResearchHandoff(raw);
+        if(!handoff){
+          localStorage.removeItem(JIBSSUK_RESEARCH_HANDOFF_KEY);
+          setNotice("전달된 글감 형식이 올바르지 않습니다. 집값쓱 목록에서 다시 선택해 주세요.");
+        } else {
+          const stored=Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>
+            localStorage.getItem(researchSlotKey(i+1)) ||
+            (i===0?localStorage.getItem(LEGACY_KEY):null));
+          const destination=pickResearchDestination(stored,handoff);
+          if(destination.kind==="free"){
+            const slot=emptyResearchSlot(handoff.title,"집값쓱");
+            slot.notes=researchNotesFromHandoff(handoff);
+            localStorage.setItem(researchSlotKey(destination.slot),JSON.stringify(slot));
+            localStorage.setItem(ACTIVE_KEY,String(destination.slot));
+            localStorage.removeItem(JIBSSUK_RESEARCH_HANDOFF_KEY);
+            setActive(destination.slot);
+            setNotice("집값쓱의 최근 이슈·기사 링크를 "+destination.slot+"번 빈 조사 칸으로 가져왔습니다. 원문을 대조한 뒤 심층 조사를 시작하세요.");
+          } else if(destination.kind==="existing"){
+            const slot=readSlot(destination.slot);
+            const notes=researchNotesFromHandoff(handoff);
+            if(!slot.notes.includes(handoff.sourceUrl)){
+              const merged=[slot.notes,notes].filter(Boolean).join("\n\n");
+              if(merged.length<=80000){
+                localStorage.setItem(researchSlotKey(destination.slot),JSON.stringify({...slot,notes:merged}));
+              } else {
+                setNotice("기존 조사 자료의 메모 용량이 가득 찼습니다. 기사 링크는 기존 자료를 지키기 위해 자동 추가하지 않았습니다.");
+              }
+            }
+            localStorage.setItem(ACTIVE_KEY,String(destination.slot));
+            localStorage.removeItem(JIBSSUK_RESEARCH_HANDOFF_KEY);
+            setActive(destination.slot);
+            setNotice(prev=>prev||"같은 제목의 기존 "+destination.slot+"번 조사 작업을 열었습니다. 기존 근거·원고는 유지하고 새 기사 링크는 메모에만 추가했습니다.");
+          } else {
+            setIncoming(handoff);
+            setNotice("심층 조사 5칸이 모두 사용 중입니다. 기존 작업을 유지하려면 교체할 칸을 직접 선택하거나 가져오기를 취소하세요.");
+          }
+        }
+      }
+    }catch{
+      setNotice("전달된 글감을 저장하지 못했습니다. 기존 조사 자료는 그대로 유지됩니다. 브라우저 저장소를 확인해 주세요.");
+    }
+    setSummaries(Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>summary(i+1)));
     setReady(true);
   },[]);
   const onSnapshot=useCallback((slot:number,next:Summary)=>{
@@ -68,6 +114,26 @@ export default function ResearchQueue(){
   function select(n:number){
     setActive(n);setNotice("");
     try{localStorage.setItem(ACTIVE_KEY,String(n));}catch{/* no-op */}
+  }
+  function replaceWithIncoming(slotNumber:number){
+    if(!incoming)return;
+    const previous=readSlot(slotNumber);
+    const label=previous.topic||"저장된 자료";
+    if(!window.confirm(slotNumber+"번 '"+label+"'의 기존 조사·원고를 새 집값쓱 글감으로 교체합니다. 필요한 경우 먼저 전체 백업을 받으세요. 계속할까요?"))return;
+    try {
+      const slot=emptyResearchSlot(incoming.title,"집값쓱");
+      slot.notes=researchNotesFromHandoff(incoming);
+      localStorage.setItem(researchSlotKey(slotNumber),JSON.stringify(slot));
+      localStorage.setItem(ACTIVE_KEY,String(slotNumber));
+      localStorage.removeItem(JIBSSUK_RESEARCH_HANDOFF_KEY);
+      setIncoming(null);setActive(slotNumber);setEpoch(v=>v+1);
+      setSummaries(Array.from({length:RESEARCH_BATCH_SIZE},(_,i)=>summary(i+1)));
+      setNotice(slotNumber+"번에 이슈와 원문 링크를 가져왔습니다. 이전 조사 자료는 교체됐습니다.");
+    }catch{setNotice("조사 자료를 교체하지 못했습니다. 저장소를 확인해 주세요.");}
+  }
+  function cancelIncoming(){
+    try {localStorage.removeItem(JIBSSUK_RESEARCH_HANDOFF_KEY);}catch{/* no-op */}
+    setIncoming(null);setNotice("집값쓱 글감 가져오기를 취소했습니다. 기존 작업은 유지됩니다.");
   }
   function applyBatch(){
     const result=parseResearchBatchTopics(batch);
@@ -151,6 +217,7 @@ export default function ResearchQueue(){
       <div className={styles.batchHeading}>
         <div>
           <Link href="/" className={styles.back}>← 콘텐츠 메이커</Link>
+          <Link href="/jibssuk-queue" className={styles.back}>집값쓱 발행 목록 ↗</Link>
           <h1>AI 심층 조사 · 5개 작업 목록</h1>
           <p>주제 5개를 한 번에 등록하고 하나씩 조사·검증·원고 작성하세요. 각 번호의 자료는 독립적으로 저장됩니다.</p>
         </div>
@@ -163,6 +230,20 @@ export default function ResearchQueue(){
           </label>
         </div>
       </div>
+      {incoming&&<div className={styles.batchInputBox}>
+        <strong>집값쓱 글감 가져오기 · 조사 칸 5개가 모두 사용 중입니다</strong>
+        <p>선택한 글감: <b>{incoming.title}</b></p>
+        <p>원문: <a href={incoming.sourceUrl} target="_blank" rel="noopener noreferrer">{incoming.sourceUrl} ↗</a></p>
+        <p>기존 자료는 자동으로 지우지 않습니다. 교체할 작업을 직접 선택하면 확인창이 열립니다.</p>
+        <div className={styles.slotList}>
+          {summaries.map((item,i)=><button type="button" key={i+1}
+            className={styles.slotButton} onClick={()=>replaceWithIncoming(i+1)}>
+            <span className={styles.slotNumber}>{i+1}</span>
+            <span className={styles.slotBody}><strong>{item.topic||"저장된 자료"}</strong><small>이 작업을 교체</small></span>
+          </button>)}
+        </div>
+        <div className={styles.batchActions}><button type="button" className={styles.minor} onClick={cancelIncoming}>가져오기 취소 · 기존 작업 유지</button></div>
+      </div>}
       {recommendOpen&&<TopicRecommendationsPanel existingTopics={existingTopics} onApply={applyRecommended}/>}
       {batchOpen&&<div className={styles.batchInputBox}>
         <label htmlFor="topic-five-lines">한 줄에 주제 하나 · 최대 5개</label>
