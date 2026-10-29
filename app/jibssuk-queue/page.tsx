@@ -3,6 +3,7 @@ import {useEffect,useMemo,useState} from "react";
 import styles from "./page.module.css";
 import {QUEUE_SIZE,SCOPES,emptyState,restore,buildPrompt,parseRecommendations,addRecommendations,placeCandidate,changeStatus,topicKey} from "../../lib/jibssuk-topic-queue.mjs";
 import type {JibssukScope,JibssukState,JibssukCandidate} from "../../lib/jibssuk-topic-queue.mjs";
+import {JIBSSUK_RESEARCH_HANDOFF_KEY,makeResearchHandoff} from "../../lib/jibssuk-research-handoff.mjs";
 const STORAGE="content-maker-jibssuk-topic-queue-v1";
 function seoulDay(){return new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());}
 const statusText={waiting:"발행 대기",working:"제작 중",done:"발행 완료"} as const;
@@ -57,6 +58,17 @@ export default function JibssukTopicQueuePage(){
     if(!window.confirm('"'+item.title+'"을 실제 네이버에 발행한 것으로 기록할까요?'))return;
     setState(old=>changeStatus(old,slot,"done"));
     setNotice("발행 이력에 저장했습니다. 이제 이 자리의 갈아끼우기를 사용할 수 있습니다.");
+  }
+  function handoffToResearch(){
+    if(!active)return;
+    const handoff=makeResearchHandoff(active);
+    if(!handoff){setNotice("이 글감의 원문 링크 또는 발표일이 없어 심층 조사로 전달할 수 없습니다. 원문 근거를 확인해 주세요.");return;}
+    try {
+      localStorage.setItem(JIBSSUK_RESEARCH_HANDOFF_KEY,JSON.stringify(handoff));
+      window.location.assign("/research-studio");
+    } catch {
+      setNotice("조사 화면으로 글감을 전달하지 못했습니다. 브라우저의 저장소 설정을 확인해 주세요.");
+    }
   }
   function replaceDone(slot:number){
     if(!state.queue[slot]||state.queue[slot]?.status!=="done")return;
@@ -147,13 +159,21 @@ export default function JibssukTopicQueuePage(){
           {active&&selected!==null?<div className={styles.selectedTopic}>
             <span className={styles.candidateTag}>{active.category}</span><h3>{active.title}</h3>
             <p>현재 상태: <b>{statusText[active.status]}</b></p>
+            <details className={styles.sourceDetail}><summary>이 글감의 원문·추천 근거</summary>
+              <p>{active.interestType} · {active.interestEvidence}</p>
+              <a href={active.sourceUrl} target="_blank" rel="noopener noreferrer">원문 보기 ↗</a>
+              <small>원문 발표일 {active.sourceDate} · 조사 전 원문 재확인 필요</small>
+            </details>
+            <button className={styles.primary} type="button" onClick={handoffToResearch}>
+              심층 조사·원고 작성으로 이동 ↗
+            </button>
             {active.status==="waiting"&&<button className={styles.primary} type="button" onClick={()=>setState(old=>changeStatus(old,selected,"working"))}>제작 중으로 표시</button>}
             {active.status==="working"&&<button className={styles.primary} type="button" onClick={()=>onDone(selected)}>네이버 발행 완료 표시</button>}
             {active.status==="done"&&<div className={styles.actions}>
               <button className={styles.primary} type="button" onClick={()=>replaceDone(selected)}>새 글감으로 갈아끼우기</button>
               <button className={styles.secondary} type="button" onClick={()=>setState(old=>changeStatus(old,selected,"working"))}>완료 취소</button>
             </div>}
-            <p className={styles.smallInfo}>현재는 1단계 글감·상태 관리만 연결되어 있습니다. 원고 조사·이미지 제작은 다음 단계에서 붙입니다.</p>
+            <p className={styles.smallInfo}>심층 조사로 이동하면 주제·이슈·원문 주소를 빈 조사 칸에 전달합니다. 저장된 기존 조사는 자동으로 덮어쓰지 않습니다. 이미지 제작은 별도 단계입니다.</p>
           </div>:<p className={styles.empty}>발행 목록에서 등록된 글감을 선택하세요.</p>}
         </section>
       </div>
