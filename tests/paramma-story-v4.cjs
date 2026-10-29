@@ -116,7 +116,7 @@ test("V4 writer now discovers an interesting fact in an inner-monologue voice wi
   const {buildParammaV4ArticlePrompt,PARAMMA_V4_DISCOVERY_BLOCK}=await v4();
   const out=buildParammaV4ArticlePrompt(topic,7,"2026-10-29");
   assert.match(out,/혼잣말 편집 원칙/);
-  assert.match(out,/남들이 지나치기 쉬운/);
+  assert.match(out,/놓칠 법한/);
   assert.match(out,/혼자 곱씹듯/);
   assert.match(out,/\[이미지 06\]/);
   assert.match(out,/\[이미지 기획 메모\]/);
