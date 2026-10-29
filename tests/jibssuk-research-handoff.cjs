@@ -49,7 +49,7 @@ test("Jibssuk queue keeps research and writing inline, and does not redirect",()
   assert.ok(panel.includes("researchNotesFromHandoff(handoff)"));
   assert.ok(panel.includes("buildDeepResearchPrompt"));
   assert.ok(panel.includes("buildFollowupResearchPrompt"));
-  assert.ok(panel.includes("buildFinalArticlePrompt"));
+  assert.ok(panel.includes("buildJibssukIssueArticlePrompt"));
   assert.ok(panel.includes("parseJibssukCopiedReport(input)"));
   assert.ok(panel.includes("parseNaverFinalArticle(finalPaste)"));
   assert.ok(panel.includes("사실마다 체크할 필요 없습니다"));
