@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 import {
   buildTopicRecommendationPrompt,
+  DEFAULT_TOPIC_DISCOVERY_DIRECTIONS,
   parseTopicRecommendations,
 } from "../../lib/topic-recommendations.mjs";
 import type { TopicRecommendation, TopicRecommendationReport } from "../../lib/topic-recommendations.mjs";
 
 type Scope = "전체" | "집값쓱" | "Paramma";
+const DIRECTION_STORAGE_KEY = "content-maker-topic-discovery-directions-v1";
 
 function localDate() {
   const d = new Date();
@@ -25,6 +27,20 @@ export default function TopicRecommendationsPanel({
   const [scope,setScope] = useState<Scope>("전체");
   const [days,setDays] = useState(7);
   const [focus,setFocus] = useState("");
+  const [directions,setDirections] = useState(DEFAULT_TOPIC_DISCOVERY_DIRECTIONS);
+  const [directionsReady,setDirectionsReady] = useState(false);
+  useEffect(()=>{
+    try {
+      const saved=window.localStorage.getItem(DIRECTION_STORAGE_KEY);
+      if(saved!==null) setDirections(saved.slice(0,12000));
+    } catch { /* Storage is optional. */ }
+    setDirectionsReady(true);
+  },[]);
+  useEffect(()=>{
+    if(!directionsReady) return;
+    try { window.localStorage.setItem(DIRECTION_STORAGE_KEY,directions); }
+    catch { setNotice("이 브라우저에서 요청서 설정을 저장할 수 없습니다. 문구를 따로 백업해 주세요."); }
+  },[directions,directionsReady]);
   const [raw,setRaw] = useState("");
   const [report,setReport] = useState<TopicRecommendationReport | null>(null);
   const [selected,setSelected] = useState<string[]>([]);
@@ -35,9 +51,14 @@ export default function TopicRecommendationsPanel({
     lookbackDays:days,
     today:localDate(),
     existingTopics,
-  }),[scope,days,focus,existingTopics]);
+    directions,
+  }),[scope,days,focus,existingTopics,directions]);
 
   async function copyPrompt(){
+    if(!directions.trim()) {
+      setNotice("AI 조사 방향을 입력하거나 기본 문구로 복원한 뒤 복사해 주세요.");
+      return;
+    }
     try{
       await navigator.clipboard.writeText(prompt);
       setNotice("최신 소재 추천 조사 요청서를 복사했습니다. ChatGPT에서 붙여넣어 조사해 주세요.");
@@ -101,9 +122,21 @@ export default function TopicRecommendationsPanel({
         <button type="button" className={styles.primary} onClick={()=>void copyPrompt()}>1 · AI 주제 추천 요청서 복사</button>
         <a className={styles.secondary} href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT 열기 ↗</a>
       </div>
-      <details className={styles.details}>
-        <summary>조사 요청서 내용 확인</summary>
-        <textarea className={styles.promptPreview} readOnly value={prompt} aria-label="AI 주제 추천 요청서" rows={7}/>
+      <details className={styles.details} open>
+        <summary>조사 요청서 직접 수정하기</summary>
+        <p className={styles.smallText}>아래는 AI가 무엇을 발견할지 정하는 지시문입니다. 자유롭게 수정하세요. 날짜·추천 범위·결과 JSON 형식은 자동으로 붙습니다.</p>
+        <label htmlFor="discovery-directions" className={styles.promptEditorLabel}>AI 조사 방향 · 직접 편집</label>
+        <textarea id="discovery-directions" className={styles.promptEditor} value={directions} rows={7} maxLength={12000}
+          onChange={e=>setDirections(e.target.value)} aria-label="수정 가능한 AI 주제 추천 조사 방향" />
+        <div className={styles.promptEditorActions}>
+          <span>{directionsReady ? "변경 내용은 이 브라우저에 자동 저장됩니다." : "설정을 불러오는 중입니다."}</span>
+          <button type="button" className={styles.secondary} disabled={directions===DEFAULT_TOPIC_DISCOVERY_DIRECTIONS}
+            onClick={()=>{if(window.confirm("AI 조사 방향을 기본 문구로 복원할까요?")){setDirections(DEFAULT_TOPIC_DISCOVERY_DIRECTIONS);setNotice("기본 조사 지시문으로 복원했습니다.");}}}>기본 문구 복원</button>
+        </div>
+        <details className={styles.details}>
+          <summary>ChatGPT에 복사되는 전체 요청서 미리보기</summary>
+          <textarea className={styles.promptPreview} readOnly value={prompt} aria-label="전체 AI 주제 추천 요청서 미리보기" rows={10}/>
+        </details>
       </details>
       <div className={styles.recommendImport}>
         <label htmlFor="recommendation-result">2 · ChatGPT의 추천 조사 결과 붙여넣기</label>

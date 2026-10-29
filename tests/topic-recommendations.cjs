@@ -23,7 +23,7 @@ test("AI recommendation prompt actively researches new facts and rejects fabrica
   assert.match(prompt,/최근 7일/);
   assert.match(prompt,/기존 작업 주제/);
   assert.match(prompt,/아파트 거래량 비교/);
-  assert.match(prompt,/비공개 주거지/);
+  assert.match(prompt,/사적인 거주지/);
   assert.match(prompt,/TOPIC_RECOMMENDATIONS_JSON/);
   assert.doesNotMatch(prompt,/https:\/\/example\.org\/source/);
   const monthly=buildTopicRecommendationPrompt({channel:"Paramma",lookbackDays:30});
@@ -75,4 +75,24 @@ test("site connects AI recommendations to existing five-slot workspaces with rep
   assert.match(panel,/선택한 .*개를 작업 목록에 넣기/);
   assert.match(panel,/selected\.length>=5/);
   assert.match(panel,/ChatGPT 열기/);
+});
+
+
+test("discovery directions are editable while current settings and JSON schema remain generated",async()=>{
+  const {buildTopicRecommendationPrompt,DEFAULT_TOPIC_DISCOVERY_DIRECTIONS}=await api();
+  assert.match(DEFAULT_TOPIC_DISCOVERY_DIRECTIONS,/눈에 띄는 변화/);
+  const custom="사용자가 직접 정한 발견 기준: 거래가격 차이를 조사한다.";
+  const p=buildTopicRecommendationPrompt({channel:"집값쓱",today:"2026-10-29",lookbackDays:30,focus:"재건축",existingTopics:["기존 주제"],directions:custom});
+  assert.match(p,/사용자가 직접 정한 발견 기준/);
+  assert.doesNotMatch(p,/독자가 가장 알고 싶어 할 질문/);
+  assert.match(p,/발행 채널: 집값쓱/);
+  assert.match(p,/조사 기준일: 2026-10-29/);
+  assert.match(p,/최근 30일/);
+  assert.match(p,/기존 주제/);
+  assert.match(p,/TOPIC_RECOMMENDATIONS_JSON/);
+  const ui=fs.readFileSync("app/research-studio/TopicRecommendationsPanel.tsx","utf8");
+  assert.match(ui,/setDirections\(e.target.value\)/);
+  assert.match(ui,/localStorage.setItem\(DIRECTION_STORAGE_KEY,directions\)/);
+  assert.match(ui,/기본 문구 복원/);
+  assert.match(ui,/전체 요청서 미리보기/);
 });
