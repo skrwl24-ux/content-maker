@@ -14,7 +14,15 @@ test("prompt is one fixed JSON contract with user-approved full scope, 7-to-30-d
  assert.match(p,/기존 아파트/);assert.match(p,/완료된 교통/);assert.match(p,/지난번 추천/);
  assert.match(p,/아파트 중심과 지역 변화를 모두 조사/);
  assert.match(p,new RegExp("\\["+TAG+"\\]"));
- const pp=buildPrompt({scope:"아파트 중심"});assert.match(pp,/아파트 실거래/);
+ const pp=buildPrompt({scope:"아파트 중심"});
+ assert.match(pp,/실제 아파트 단지/);
+ assert.match(pp,/뉴스·방송·사건·수상·분양/);
+ assert.match(pp,/피해자 신상/);
+ assert.match(pp,/연예인의 사적인 집 주소·거주 단지는 유추하지 않는다/);
+ assert.match(pp,/공식 수상 발표/);
+ assert.match(pp,/공식 모집공고/);
+ assert.match(pp,/이슈 없이.*실거래 분석.*억지로 추천하지 않는다/);
+ assert.match(pp,/검색량 상승을 증명해야 하는 것은 아니다/);
  assert.match(buildPrompt({scope:"지역 변화"}),/GTX·지하철·트램/);
 });
 test("parser accepts only version 1 tagged JSON and rejects invented or missing evidence",async()=>{
