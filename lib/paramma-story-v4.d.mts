@@ -1,5 +1,6 @@
 export type ParammaV4SlotId = "00"|"01"|"02"|"03"|"04"|"05"|"06"|"07";
 export type ParammaV4Topic = { category: string; title: string; thumbnailHook: string; brief: string };
+export const PARAMMA_V4_DISCOVERY_BLOCK: string;
 export const PARAMMA_V4_SLOTS: Array<{ id: ParammaV4SlotId; role: string; scene: string }>;
 export function parammaV4Count(value: unknown): 6 | 7 | 8;
 export function parammaActiveSlots(version: string | undefined, imageCount: unknown, optional03?: boolean): ParammaV4SlotId[];
