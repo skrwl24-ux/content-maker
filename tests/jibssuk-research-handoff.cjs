@@ -38,20 +38,21 @@ test("empty research slot chosen without clobbering any occupied slot",async()=>
   assert.deepEqual(pickResearchDestination(["{garbled",null,null,null,null],incoming),{kind:"full",slot:0});
   assert.deepEqual(pickResearchDestination([null,null],incoming),{kind:"invalid",slot:0});
 });
-test("queue sends chosen story and source to research, research imports only with empty space or confirmation",()=>{
+test("Jibssuk queue keeps research and writing inline, and does not redirect",()=>{
   const queue=fs.readFileSync("app/jibssuk-queue/page.tsx","utf8");
-  const research=fs.readFileSync("app/research-studio/ResearchQueue.tsx","utf8");
-  assert.match(queue,/makeResearchHandoff\(active\)/);
-  assert.match(queue,/localStorage\.setItem\(JIBSSUK_RESEARCH_HANDOFF_KEY,JSON\.stringify\(handoff\)\)/);
-  assert.match(queue,/window\.location\.assign\("\/research-studio"\)/);
-  assert.match(queue,/심층 조사·원고 작성으로 이동/);
-  assert.match(research,/pickResearchDestination\(stored,handoff\)/);
-  assert.match(research,/destination.kind==="free"/);
-  assert.match(research,/destination.kind==="existing"/);
-  assert.match(research,/window\.confirm\(slotNumber/);
-  assert.match(research,/setIncoming\(handoff\)/);
-  assert.match(research,/setEpoch\(v=>v\+1\)/);
-  assert.match(research,/researchNotesFromHandoff\(handoff\)/);
-  assert.match(research,/가져오기 취소 · 기존 작업 유지/);
-  assert.match(research,/ResearchWorkPanel/);
+  const panel=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  assert.match(queue,/JibssukArticleWorkflow/);
+  assert.match(queue,/이 화면에서 심층 조사·원고 작성/);
+  assert.doesNotMatch(queue,/window\\.location\\.assign\\("\\/research-studio"\\)/);
+  assert.match(queue,/key=\\{active.addedAt\\}/);
+  assert.match(panel,/STORAGE_PREFIX\\+item.addedAt/);
+  assert.match(panel,/researchNotesFromHandoff\\(handoff\\)/);
+  assert.match(panel,/buildDeepResearchPrompt/);
+  assert.match(panel,/buildFollowupResearchPrompt/);
+  assert.match(panel,/buildFinalArticlePrompt/);
+  assert.match(panel,/parseResearchReport\\(reportPaste\\)/);
+  assert.match(panel,/parseNaverFinalArticle\\(finalPaste\\)/);
+  assert.match(panel,/원문을 확인한 사실만 체크/);
+  assert.match(panel,/최종 원고 요청서 복사/);
+  assert.match(panel,/본문 복사/);
 });
