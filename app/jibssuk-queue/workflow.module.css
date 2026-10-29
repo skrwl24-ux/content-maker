@@ -1,0 +1,16 @@
+.shell{max-width:1250px;margin:20px auto 0;background:white;border:1px solid #dce4ee;border-radius:20px;padding:24px;box-shadow:0 8px 30px #23364f09;color:#152139}
+.shell *{box-sizing:border-box}.shell button,.shell input,.shell select,.shell textarea{font:inherit}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:15px}.header h2{font-size:23px;line-height:1.3;margin:5px 0 8px}
+.eyebrow{font-size:10px;color:#7290b4;font-weight:900;letter-spacing:.13em}.topic{font-size:15px;font-weight:800;line-height:1.5;margin:0 0 9px}.hint,.step p,.disclaimer{font-size:12px;line-height:1.7;color:#63768e}.hint{margin:0}
+.sourceLink,.fact a{color:#285d95;font-size:12px;font-weight:750;text-decoration:none;overflow-wrap:anywhere}.sourceLink{border:1px solid #d5e2ef;padding:11px 13px;border-radius:9px;white-space:nowrap}
+.notice{background:#eff7ff;border:1px solid #c9dcee;border-radius:10px;padding:12px;margin-bottom:14px;color:#214f79;font-size:12px}
+.progress{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 17px}.progress span{background:#eaf2fa;border-radius:40px;padding:6px 12px;color:#3e648b;font-size:11px;font-weight:800}
+.step{border-top:1px solid #e4eaf2;padding:20px 0 18px}.step h3{margin:0 0 7px;font-size:17px}.step p{margin:7px 0 12px}
+.step label{display:block;margin:13px 0 7px;font-size:12px;font-weight:800;color:#2f425d}.step textarea,.step input:not([type="checkbox"]),.step select{display:block;width:100%;border:1px solid #ccd9e8;border-radius:9px;padding:11px;font-size:12px;line-height:1.5;background:white;color:#1e3047;resize:vertical}.step textarea:focus,.step input:focus,.step select:focus{outline:2px solid #94b8e0;outline-offset:1px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0}.mainButton,.otherButton{display:inline-flex;align-items:center;justify-content:center;border-radius:9px;padding:11px 14px;text-decoration:none;line-height:1.5;font-size:12px;font-weight:800;cursor:pointer}
+.mainButton{border:1px solid #20558f;background:#20558f;color:white}.otherButton{background:white;color:#315778;border:1px solid #cddbe7}
+.mainButton:disabled,.otherButton:disabled{opacity:.48;cursor:not-allowed}
+.details{border:1px solid #e1e8f0;border-radius:9px;padding:11px 12px;margin:13px 0}.details summary{cursor:pointer;font-size:12px;color:#466684;font-weight:750}.details textarea{margin-top:10px}.details ul{font-size:12px;line-height:1.7;color:#566d88}
+.factList{display:grid;gap:9px;margin:12px 0}.fact{border:1px solid #e4eaf2;border-radius:11px;padding:12px;display:grid;gap:7px}.fact .check{display:flex;align-items:flex-start;gap:8px;margin:0;line-height:1.55}.check input{margin-top:3px}.fact a,.fact small{margin-left:22px}.fact small{font-size:11px;color:#8391a3}
+.summary{background:#f4f7fb;padding:10px 12px;border-radius:10px}.editor{border-top:1px solid #e4eaf2;margin-top:20px;padding-top:17px}.editor h3{margin-bottom:14px}.disclaimer{border-top:1px solid #e4eaf2;margin:0;padding-top:15px}.loading{text-align:center;color:#63768e;padding:18px}
+@media(max-width:700px){.shell{padding:16px;margin-top:14px}.header{flex-direction:column;gap:10px}.header h2{font-size:20px}.sourceLink{white-space:normal}.mainButton,.otherButton{flex:1 1 auto}}
