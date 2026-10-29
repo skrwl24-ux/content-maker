@@ -174,7 +174,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
 
     {report&&<section className={styles.step}>
       <h3>3. 네이버 원고 작성</h3>
-      <p>선택한 관점을 중심으로 전체 조사에서 관련 있는 내용을 골라 원문을 다시 확인하도록 요청합니다. 조사는 깊게, 글은 짧고 명확하게.</p>
+      <p>선택한 사건을 중심으로 <b>일기 같은 자연스러운 말투와 남들이 지나친 발견</b>을 살려 원고를 요청합니다. 조사 내용은 필요한 만큼만 쓰고 원문은 다시 확인합니다.</p>
       <div className={styles.actions}>
         <button type="button" className={styles.mainButton} disabled={!finalPrompt}
           onClick={()=>void copy(finalPrompt,"네이버 최종 원고 요청서")}>최종 원고 요청서 복사</button>
