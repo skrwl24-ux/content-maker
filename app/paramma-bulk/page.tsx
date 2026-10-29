@@ -4,9 +4,10 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import styles from "./page.module.css";
 import { parseParammaNaverBlog, parammaNaverPlainText, parammaNaverRichHtml } from "../../lib/paramma-naver-export.mjs";
+import { normalizeParammaCompletedArticle } from "../../lib/paramma-naver-import.mjs";
 import { extractParammaImagePlans } from "../../lib/paramma-image-plans.mjs";
 import { buildParammaMoneyResearchPrompt, eligibleParammaMoneyCandidates, moneyCandidateScore, parseParammaMoneyCandidates } from "../../lib/paramma-money.mjs";
-import { PARAMMA_V4_SLOTS, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
+import { PARAMMA_V4_SLOTS, PARAMMA_V4_DISCOVERY_BLOCK, parammaActiveSlots, parammaV4MissingMarkers, parammaV4Count, buildParammaV4ArticlePrompt, buildParammaV4ImagePrompt, extractParammaV4ImageContext } from "../../lib/paramma-story-v4.mjs";
 import { EDITORIAL_DIRECTOR_RULES, buildEvidenceHandoff } from "../../lib/editorial-director.mjs";
 import { DEFAULT_DRILLMAL_SETTINGS, normalizeDrillmalSettings, drillmalArticleRules, drillmalImageRules, drillmalImageApplies } from "../../lib/paramma-drillmal.mjs";
 import { appendParammaQuotedHeadlineRules, extractParammaQuotedThumbnailHook } from "../../lib/paramma-quote-headline.mjs";
@@ -767,9 +768,16 @@ function refreshParammaPrompts(works: Record<number, TopicWork>, savedTopics: To
 
     const savedDate = current.articlePrompt?.match(/\[작성 기준일\]\n([^\n]+)\n\n\[발행 정보\]/)?.[1] || formatToday();
     // 이미 직접 수정한 요청서는 자동으로 덮어쓰지 않는다.
-    const articlePrompt = current.articlePrompt === buildArticlePromptV1(topic, savedDate) || current.articlePrompt === buildArticlePrompt(topic, savedDate)
+    let articlePrompt = current.articlePrompt === buildArticlePromptV1(topic, savedDate) || current.articlePrompt === buildArticlePrompt(topic, savedDate)
       ? buildArticlePromptV3(topic, savedDate)
       : current.articlePrompt;
+    if (current.version === "v4") {
+      const v4Date = current.articlePrompt?.match(/\[기준일\]\n([^\n]+)\n\n\[기획\]/)?.[1] || formatToday();
+      const latest = buildParammaV4ArticlePrompt(topic, parammaV4Count(current.imageCount), v4Date);
+      // Upgrade only an exact previous default: preserve custom directions, all pasted work and registered images.
+      const previousDefault = latest.replace("\n\n" + PARAMMA_V4_DISCOVERY_BLOCK, "");
+      if (articlePrompt === previousDefault) articlePrompt = latest;
+    }
     const slots = { ...current.slots };
     let topicChanged = articlePrompt !== current.articlePrompt;
 
@@ -833,8 +841,11 @@ function restoreV4WorkShapes(works: Record<number, TopicWork>, topics: Topic[]) 
         slots[id] = { status: "waiting", prompt: buildParammaV4ImagePrompt(topic, id) };
       }
     }
+    const normalizedBody = normalizeParammaCompletedArticle(original.body || "");
     next[topic.id] = {
       ...original,
+      body: normalizedBody,
+      bodyConfirmed: normalizedBody === (original.body || "") ? original.bodyConfirmed : false,
       version: original.version === "v4" ? "v4" : "v3",
       imageCount: parammaV4Count(original.imageCount),
       slots,
@@ -2544,15 +2555,24 @@ export default function ParammaBulkPage() {
               <textarea
                 className={styles.bodyEditor}
                 value={work.body}
-                onChange={(e) => patchWork({ body: e.target.value, bodyConfirmed: false })}
-                placeholder="최종 제목 + 본문 + 태그 + [이미지 기획 메모]를 모두 붙여넣으세요."
+                onChange={(e) => {
+                  const pasted = e.target.value;
+                  const normalized = normalizeParammaCompletedArticle(pasted);
+                  patchWork({ body: normalized, bodyConfirmed: false });
+                  if (normalized !== pasted) setNotice("ChatGPT 원고 JSON을 제목·본문·이미지 기획 형식으로 불러왔습니다. 아래 이미지 슬롯 인식 결과를 확인해 주세요.");
+                }}
+                placeholder="최종 제목 + 본문 + 태그 + [이미지 기획 메모] 또는 [NAVER_FINAL_ARTICLE_JSON] 결과를 붙여넣으세요."
               />
             </label>
             {work.body.trim() && (
               <p className={styles.kickHint} aria-live="polite">
                 {plannedImageSlots.length
-                  ? "✓ 이미지 기획 자동 인식: " + plannedImageSlots.join(" · ") + " · 각 이미지의 요청서 복사·ChatGPT 열기·ZIP 내보내기 때 반영됩니다. 기존 요청서·등록 이미지는 보존됩니다."
-                  : `아직 이미지 기획 메모를 찾지 못했습니다. 원고 끝의 [이미지 기획 메모]에 이미지 00~${String(activeSlotIds.length - 1).padStart(2, "0")} 설명을 붙여넣으세요.`}
+                  ? "✓ 이미지 기획 자동 인식: " + plannedImageSlots.join(" · ") + " · 이미지 요청서에 자동 연결됩니다. 기존 원고·이미지는 보존됩니다."
+                  : `이미지 기획은 아직 읽히지 않았습니다. 완성 답변의 [이미지 기획 메모]에 이미지 00~${String(activeSlotIds.length - 1).padStart(2, "0")} 장면을 넣어 주세요. 글 내용만 있는 JSON은 이미지를 자동으로 만들어내지 않습니다.`}
+                {isV4 && work.body.trim() && activeSlotIds.filter((id) => !bodyImagePlans[id]).length > 0
+                  ? " · 빠진 기획: " + activeSlotIds.filter((id) => !bodyImagePlans[id]).join(", ")
+                  : ""}
+                {isV4 && missingMarkers.length ? " · 빠진 본문 위치: " + missingMarkers.join(", ") : ""}
               </p>
             )}
             <button

@@ -110,3 +110,49 @@ test("V4 last image context stops at FAQ instead of including unrelated answers"
   assert.match(excerpt, /지원금은 연말까지/);
   assert.doesNotMatch(excerpt, /가족 구성원/);
 });
+\n\ntest("V4 writer now discovers one interesting fact in a natural inner-monologue voice without changing image contract",async()=>{
+  const {buildParammaV4ArticlePrompt,PARAMMA_V4_DISCOVERY_BLOCK}=await v4();
+  const out=buildParammaV4ArticlePrompt(topic,7,"2026-10-29");
+  assert.match(out,/혼잣말 편집 원칙/);
+  assert.match(out,/남들이 지나치기 쉬운/);
+  assert.match(out,/혼자 곱씹듯/);
+  assert.match(out,/\[이미지 06\]/);
+  assert.match(out,/\[이미지 기획 메모\]/);
+  assert.equal(out.replace("\\n\\n"+PARAMMA_V4_DISCOVERY_BLOCK,"").includes("혼잣말 편집 원칙"),false);
+});
+
+test("ChatGPT tagged final JSON can be pasted into V4 without losing original image markers and plans",async()=>{
+  const {normalizeParammaCompletedArticle}=await import("../lib/paramma-naver-import.mjs");
+  const {extractParammaImagePlans}=await imageParser();
+  const title="“왜 이러지?” 수건 냄새";
+  const body=[
+    "이상하다. 옷은 괜찮은데 수건만 냄새가 난다.",
+    "[이미지 01]","젖은 수건이 겹친 장면.",
+    "[이미지 02]","건조 과정의 차이.",
+    "[이미지 기획 메모]",
+    "- 이미지 00: 수건을 들고 냄새를 확인하는 사람",
+    "- 이미지 01: 수건을 포개 둔 세탁바구니",
+    "- 이미지 02: 젖은 수건의 건조 과정 비교",
+    "[검수 메모]","자료를 더 확인한다."
+  ].join("\\n");
+  const raw="[NAVER_FINAL_ARTICLE_JSON]\\n"+JSON.stringify({title,body})+"\\n[/NAVER_FINAL_ARTICLE_JSON]";
+  const converted=normalizeParammaCompletedArticle(raw);
+  assert.ok(converted.startsWith(title+"\\n\\n"));
+  assert.match(converted,/\\[이미지 01\\]/);
+  assert.deepEqual(Object.keys(extractParammaImagePlans(converted)),["00","01","02"]);
+  assert.equal(normalizeParammaCompletedArticle(converted),converted);
+  assert.equal(normalizeParammaCompletedArticle("일반 본문\\n\\n다음 문단"),"일반 본문\\n\\n다음 문단");
+  assert.equal(normalizeParammaCompletedArticle("[RESEARCH_REPORT_JSON]{}[/RESEARCH_REPORT_JSON]"),"[RESEARCH_REPORT_JSON]{}[/RESEARCH_REPORT_JSON]");
+});
+
+test("JSON with optional explicit imagePlans is imported but no missing scenes are invented",async()=>{
+  const {normalizeParammaCompletedArticle}=await import("../lib/paramma-naver-import.mjs");
+  const {extractParammaImagePlans}=await imageParser();
+  const incoming=JSON.stringify({title:"실제 확인",body:"내용입니다.\\n\\n[이미지 01]\\n새 정보",imagePlans:{"00":"대표 장면","01":"본문 장면"}});
+  const normalized=normalizeParammaCompletedArticle(incoming);
+  const plans=extractParammaImagePlans(normalized);
+  assert.equal(plans["00"],"대표 장면");
+  assert.equal(plans["01"],"본문 장면");
+  assert.equal(plans["02"],undefined);
+  assert.doesNotMatch(normalized,/\\[이미지 02\\]/);
+});
