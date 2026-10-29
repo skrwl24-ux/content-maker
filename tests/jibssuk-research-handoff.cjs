@@ -50,9 +50,20 @@ test("Jibssuk queue keeps research and writing inline, and does not redirect",()
   assert.ok(panel.includes("buildDeepResearchPrompt"));
   assert.ok(panel.includes("buildFollowupResearchPrompt"));
   assert.ok(panel.includes("buildFinalArticlePrompt"));
-  assert.ok(panel.includes("parseResearchReport(reportPaste)"));
+  assert.ok(panel.includes("parseJibssukCopiedReport(input)"));
   assert.ok(panel.includes("parseNaverFinalArticle(finalPaste)"));
-  assert.ok(panel.includes("원문을 확인한 사실만 체크"));
+  assert.ok(panel.includes("사실마다 체크할 필요 없습니다"));
   assert.ok(panel.includes("최종 원고 요청서 복사"));
   assert.ok(panel.includes("본문 복사"));
+});
+
+test("Jibssuk inline workflow has no repetitive fact checkboxes and supports one-click clipboard import",()=>{
+  const panel=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  assert.doesNotMatch(panel,/type="checkbox"/);
+  assert.match(panel,/navigator.clipboard.readText/);
+  assert.match(panel,/클립보드에서 조사 결과 가져오기/);
+  assert.match(panel,/클립보드에서 완성 원고 가져오기/);
+  assert.match(panel,/직접 붙여넣기/);
+  assert.match(panel,/조사한 사실·기사 원문/);
+  assert.match(panel,/buildJibssukIssueArticlePrompt/);
 });
