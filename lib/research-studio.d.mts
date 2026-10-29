@@ -1,3 +1,5 @@
+export declare const DEFAULT_DEEP_RESEARCH_DIRECTIONS: string;
+export declare const DEFAULT_FINAL_ARTICLE_DIRECTIONS: string;
 export type ResearchFact = {
   id: string; claim: string; sourceUrl: string; sourceTitle: string; publishedAt: string;
 };
@@ -12,7 +14,7 @@ export type ResearchReport = {
   angles: ResearchAngle[]; gaps: string[]; trendLinks: ResearchTrendLink[];
 };
 export declare function buildDeepResearchPrompt(input?: {
-  channel?: string; topic?: string; notes?: string; today?: string;
+  channel?: string; topic?: string; notes?: string; today?: string; directions?: string;
 }): string;
 export declare function parseResearchReport(raw: string): ResearchReport | null;
 export type NaverFinalArticle = {title: string; body: string};
@@ -20,9 +22,9 @@ export declare function parseNaverFinalArticle(raw: string): NaverFinalArticle |
 export declare function factKey(fact: ResearchFact): string;
 export declare function buildFollowupResearchPrompt(input?: {
   channel?: string; topic?: string; notes?: string; report?: ResearchReport | null;
-  approvedKeys?: string[]; today?: string;
+  approvedKeys?: string[]; today?: string; directions?: string;
 }): string;
 export declare function buildFinalArticlePrompt(input?: {
   channel?: string; topic?: string; notes?: string; report?: ResearchReport | null;
-  selectedAngleId?: string; approvedKeys?: string[]; today?: string;
+  selectedAngleId?: string; approvedKeys?: string[]; today?: string; directions?: string;
 }): string;

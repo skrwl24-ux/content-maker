@@ -6,11 +6,14 @@ import styles from "./page.module.css";
 import {
   buildDeepResearchPrompt, buildFollowupResearchPrompt,
   buildFinalArticlePrompt, parseResearchReport, parseNaverFinalArticle, factKey,
+  DEFAULT_DEEP_RESEARCH_DIRECTIONS, DEFAULT_FINAL_ARTICLE_DIRECTIONS,
 } from "../../lib/research-studio.mjs";
 import type { ResearchReport } from "../../lib/research-studio.mjs";
 import { researchSlotKey } from "../../lib/research-batch.mjs";
 
 const LEGACY_STORAGE_KEY = "content-maker-research-studio-v1";
+const DEEP_DIRECTIONS_KEY = "content-maker-deep-research-directions-v2";
+const FINAL_DIRECTIONS_KEY = "content-maker-final-article-directions-v2";
 type SlotSnapshot = { topic: string; hasReport: boolean; approvedCount: number };
 type Channel = "집값쓱" | "Paramma" | "기타";
 const initialChannel: Channel = "집값쓱";
@@ -34,7 +37,30 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
   const [selectedAngleId, setSelectedAngleId] = useState("");
   const [approvedKeys, setApprovedKeys] = useState<string[]>([]);
   const [status, setStatus] = useState("");
+  const [deepDirections, setDeepDirections] = useState(DEFAULT_DEEP_RESEARCH_DIRECTIONS);
+  const [finalDirections, setFinalDirections] = useState(DEFAULT_FINAL_ARTICLE_DIRECTIONS);
+  const [directionsReady, setDirectionsReady] = useState(false);
   const [today, setToday] = useState("");
+
+    useEffect(() => {
+    try {
+      const deep = window.localStorage.getItem(DEEP_DIRECTIONS_KEY);
+      const final = window.localStorage.getItem(FINAL_DIRECTIONS_KEY);
+      if (deep !== null) setDeepDirections(deep.slice(0,12000));
+      if (final !== null) setFinalDirections(final.slice(0,12000));
+    } catch { /* Browser storage is optional. */ }
+    setDirectionsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!directionsReady) return;
+    try {
+      window.localStorage.setItem(DEEP_DIRECTIONS_KEY,deepDirections);
+      window.localStorage.setItem(FINAL_DIRECTIONS_KEY,finalDirections);
+    } catch {
+      setStatus("요청서 설정을 브라우저에 저장하지 못했습니다. 문구를 따로 백업해 주세요.");
+    }
+  },[directionsReady,deepDirections,finalDirections]);
 
   useEffect(() => {
     setToday(localDate());
@@ -77,11 +103,11 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
     }
   }, [hydrated,channel,topic,notes,raw,selectedAngleId,approvedKeys,finalRaw,finalTitle,finalBody,report,slotId,STORAGE_KEY,onSnapshot]);
 
-  const researchPrompt = useMemo(() => buildDeepResearchPrompt({channel,topic,notes,today}), [channel,topic,notes,today]);
-  const followupPrompt = useMemo(() => buildFollowupResearchPrompt({channel,topic,notes,report,approvedKeys,today}), [channel,topic,notes,report,approvedKeys,today]);
+  const researchPrompt = useMemo(() => buildDeepResearchPrompt({channel,topic,notes,today,directions:deepDirections}), [channel,topic,notes,today,deepDirections]);
+  const followupPrompt = useMemo(() => buildFollowupResearchPrompt({channel,topic,notes,report,approvedKeys,today,directions:deepDirections}), [channel,topic,notes,report,approvedKeys,today,deepDirections]);
   const articlePrompt = useMemo(() => buildFinalArticlePrompt({
-    channel,topic,notes,report,selectedAngleId,approvedKeys,today,
-  }), [channel,topic,notes,report,selectedAngleId,approvedKeys,today]);
+    channel,topic,notes,report,selectedAngleId,approvedKeys,today,directions:finalDirections,
+  }), [channel,topic,notes,report,selectedAngleId,approvedKeys,today,finalDirections]);
 
   const checkedCount = report?.facts.filter(f => f.sourceUrl && approvedKeys.includes(factKey(f))).length || 0;
   const unverifiedCount = (report?.facts.length || 0) - checkedCount;
@@ -234,13 +260,26 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
           <textarea id="research-notes" value={notes} onChange={e=>setNotes(e.target.value)}
             rows={5} placeholder={"원문 URL:\n발표일 / 실제 사건일:\n직접 확인한 사실:\n아직 불확실한 내용:"}/>
           <div className={styles.actionRow}>
-            <button type="button" className={styles.primary} disabled={!topic.trim()}
+            <button type="button" className={styles.primary} disabled={!topic.trim() || !deepDirections.trim() || !directionsReady}
               onClick={()=>void copy(researchPrompt,"1차 심층 조사 요청서")}>심층 조사 요청서 복사</button>
             <a className={styles.secondary} href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT 열기 ↗</a>
           </div>
-          <details className={styles.details}>
-            <summary>AI에게 보낼 조사 요청서 확인</summary>
-            <textarea className={styles.promptPreview} aria-label="심층 조사 요청서 미리보기" readOnly value={researchPrompt} rows={9}/>
+          <details className={styles.details} open>
+            <summary>AI 심층 조사 요청서 직접 수정하기</summary>
+            <p className={styles.smallText}>어떤 발견을 찾을지 자유롭게 수정하세요. 주제·날짜·자료·결과 JSON은 자동으로 붙습니다. 5개 주제에 공통으로 적용됩니다.</p>
+            <label htmlFor="deep-prompt-directions" className={styles.promptEditorLabel}>심층 조사 방향</label>
+            <textarea id="deep-prompt-directions" className={styles.promptEditor} rows={7}
+              value={deepDirections} maxLength={12000} onChange={e=>setDeepDirections(e.target.value)}
+              aria-label="심층 조사 지시문 직접 편집"/>
+            <div className={styles.promptEditorActions}>
+              <span>{directionsReady ? "수정 내용은 이 브라우저에 자동 저장됩니다." : "설정을 불러오는 중입니다."}</span>
+              <button type="button" className={styles.secondary} disabled={deepDirections===DEFAULT_DEEP_RESEARCH_DIRECTIONS}
+                onClick={()=>{if(window.confirm("심층 조사 지시문을 기본값으로 복원할까요?"))setDeepDirections(DEFAULT_DEEP_RESEARCH_DIRECTIONS);}}>기본 문구 복원</button>
+            </div>
+            <details className={styles.details}>
+              <summary>ChatGPT에 복사될 전체 심층 조사 요청서 보기</summary>
+              <textarea className={styles.promptPreview} aria-label="심층 조사 전체 요청서 미리보기" readOnly value={researchPrompt} rows={9}/>
+            </details>
           </details>
           <p className={styles.smallText}>이 화면은 직접 웹 검색하지 않습니다. ChatGPT에 요청서를 붙여넣어 조사한 다음 그 결과를 아래에 가져오는 방식입니다.</p>
         </section>
@@ -340,14 +379,27 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
             ))}
           </div> : <p className={styles.empty}>추천 관점이 없습니다. 자료를 더 확인하거나 다른 소재로 조사하세요.</p>}
           <div className={styles.actionRow}>
-            <button type="button" className={styles.primary} disabled={!articlePrompt} onClick={()=>void copy(articlePrompt,"최종 원고 요청서")}>검토 자료로 원고 요청서 복사</button>
+            <button type="button" className={styles.primary} disabled={!articlePrompt || !finalDirections.trim() || !directionsReady} onClick={()=>void copy(articlePrompt,"최종 원고 요청서")}>검토 자료로 원고 요청서 복사</button>
             <a className={styles.secondary} href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">ChatGPT 열기 ↗</a>
           </div>
           {!articlePrompt && <p className={styles.smallText}>원고 요청서는 선택한 글감에 실제 연결된 출처 사실을 최소 1개 직접 확인하면 활성화됩니다.</p>}
-          {articlePrompt && <details className={styles.details}>
-            <summary>최종 원고 요청서 내용 확인</summary>
-            <textarea className={styles.promptPreview} value={articlePrompt} readOnly rows={12} aria-label="최종 원고 요청서 미리보기"/>
-          </details>}
+          <details className={styles.details} open>
+            <summary>최종 원고 글쓰기 스타일 직접 수정하기</summary>
+            <p className={styles.smallText}>남들이 지나친 발견을 혼잣말하듯 풀어내는 기본 문구입니다. 원하는 말투로 바꿀 수 있고, 5개 주제에 공통으로 적용됩니다.</p>
+            <label htmlFor="final-prompt-directions" className={styles.promptEditorLabel}>네이버 원고 글쓰기 방향</label>
+            <textarea id="final-prompt-directions" className={styles.promptEditor} rows={8}
+              value={finalDirections} maxLength={12000} onChange={e=>setFinalDirections(e.target.value)}
+              aria-label="네이버 최종 원고 지시문 직접 편집"/>
+            <div className={styles.promptEditorActions}>
+              <span>{directionsReady ? "수정 내용은 이 브라우저에 자동 저장됩니다." : "설정을 불러오는 중입니다."}</span>
+              <button type="button" className={styles.secondary} disabled={finalDirections===DEFAULT_FINAL_ARTICLE_DIRECTIONS}
+                onClick={()=>{if(window.confirm("원고 글쓰기 지시문을 기본값으로 복원할까요?"))setFinalDirections(DEFAULT_FINAL_ARTICLE_DIRECTIONS);}}>기본 문구 복원</button>
+            </div>
+            {articlePrompt && <details className={styles.details}>
+              <summary>ChatGPT에 복사될 전체 최종 원고 요청서 보기</summary>
+              <textarea className={styles.promptPreview} value={articlePrompt} readOnly rows={12} aria-label="최종 원고 전체 요청서 미리보기"/>
+            </details>}
+          </details>
           <div className={styles.nextLinks}>
             <span>완성한 글은 기존 제작 화면에서 편집할 수 있습니다.</span>
             <Link href="/apartment-bulk">집값쓱 제작실 ↗</Link>

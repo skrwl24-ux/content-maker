@@ -25,10 +25,20 @@ test("deep research prompt requests a structured report and does not write a pre
   assert.match(p,/RESEARCH_REPORT_JSON/);
   assert.match(p,/2026-10-28/);
   assert.match(p,/드라마 나온 아파트/);
-  assert.match(p,/실질적 관련성이 없는/);
-  assert.match(p,/비공개 주거지/);
+  assert.match(p,/놓치기 쉬운 사건/);
+  assert.match(p,/공식 원문/);
   assert.match(p,/원고는 아직 쓰지 말고/);
   assert.match(p,/https:\/\/example.org\/press/);
+});
+
+test("custom research direction takes effect without changing metadata or report JSON",async()=>{
+  const {buildDeepResearchPrompt,DEFAULT_DEEP_RESEARCH_DIRECTIONS}=await studio();
+  assert.match(DEFAULT_DEEP_RESEARCH_DIRECTIONS,/예상 밖의 차이/);
+  const prompt=buildDeepResearchPrompt({channel:"집값쓱",topic:"위례선 트램",today:"2026-10-29",directions:"내가 정한 조사 방향: 교통안전심의 기록 추적"});
+  assert.match(prompt,/교통안전심의 기록 추적/);
+  assert.doesNotMatch(prompt,/독자가 가장 궁금해할 질문을 먼저 생각하고/);
+  assert.match(prompt,/RESEARCH_REPORT_JSON/);
+  assert.match(prompt,/위례선 트램/);
 });
 
 test("report parser accepts tagged JSON and rejects unsafe URLs and invalid JSON",async()=>{
@@ -110,4 +120,32 @@ test("final prompt includes importable naver article tags and panel supports ind
   assert.match(panel,/본문 복사/);
   assert.match(panel,/finalRaw,finalTitle,finalBody/);
   assert.match(queue,/slot.finalBody=/);
+});
+
+
+test("custom final writing tone remains grounded in approved evidence and the import schema",async()=>{
+  const {parseResearchReport,buildFinalArticlePrompt,buildFollowupResearchPrompt,factKey,DEFAULT_FINAL_ARTICLE_DIRECTIONS}=await studio();
+  assert.match(DEFAULT_FINAL_ARTICLE_DIRECTIONS,/혼잣말하듯/);
+  const report=parseResearchReport(reportText);
+  const opts={channel:"집값쓱",topic:"드라마 촬영지",report,selectedAngleId:"a1",approvedKeys:[factKey(report.facts[0])],directions:"혼자 중얼거리듯 핵심 발견 한 가지부터."};
+  const final=buildFinalArticlePrompt(opts);
+  assert.match(final,/혼자 중얼거리듯/);
+  assert.doesNotMatch(final,/자료를 읽으며 남들이 지나치기 쉬운 사실/);
+  assert.match(final,/NAVER_FINAL_ARTICLE_JSON/);
+  assert.match(final,/https:\/\/example\.org\/press/);
+  assert.doesNotMatch(final,/javascript:alert/);
+  const followup=buildFollowupResearchPrompt({...opts,directions:"추적 조사 설정"});
+  assert.match(followup,/추적 조사 설정/);
+});
+
+test("research studio edits and saves two independent directions across all five slots",()=>{
+  const panel=fs.readFileSync("app/research-studio/ResearchWorkPanel.tsx","utf8");
+  assert.match(panel,/setDeepDirections\(e.target.value\)/);
+  assert.match(panel,/setFinalDirections\(e.target.value\)/);
+  assert.match(panel,/localStorage.setItem\(DEEP_DIRECTIONS_KEY,deepDirections\)/);
+  assert.match(panel,/localStorage.setItem\(FINAL_DIRECTIONS_KEY,finalDirections\)/);
+  assert.match(panel,/심층 조사 요청서 직접 수정하기/);
+  assert.match(panel,/최종 원고 글쓰기 스타일 직접 수정하기/);
+  assert.match(panel,/기본 문구 복원/);
+  assert.match(panel,/전체 최종 원고 요청서 보기/);
 });
