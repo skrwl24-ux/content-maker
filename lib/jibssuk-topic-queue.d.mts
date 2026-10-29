@@ -1,0 +1,16 @@
+export type JibssukScope="전체"|"아파트 중심"|"지역 변화";
+export type JibssukCandidate={title:string;category:"아파트"|"지역 변화";interestType:string;interestEvidence:string;sourceUrl:string;sourceDate:string;checkedAt?:string};
+export type JibssukItem=JibssukCandidate&{status:"waiting"|"working"|"done";addedAt:string;completedAt:string};
+export type JibssukState={version:number;queue:(JibssukItem|null)[];candidates:JibssukCandidate[];history:JibssukItem[];previousSuggestions:string[];lastCheckedAt:string};
+export const QUEUE_SIZE:number;
+export const TAG:string;
+export const SCOPES:JibssukScope[];
+export function topicKey(title:string):string;
+export function buildPrompt(args?:{scope?:JibssukScope;today?:string;queue?:Array<{title:string}|string>;history?:Array<{title:string}|string>;previousSuggestions?:string[]}):string;
+export type JibssukReport={error:string;checkedAt?:string;candidates:JibssukCandidate[];skipped?:number};
+export function parseRecommendations(raw:string):JibssukReport;
+export function emptyState():JibssukState;
+export function restore(raw:unknown):JibssukState;
+export function addRecommendations(state:JibssukState,report:JibssukReport):{state:JibssukState;added:number;skipped:number};
+export function placeCandidate(state:JibssukState,title:string,target?:number|null):{state:JibssukState;slot?:number;error?:string};
+export function changeStatus(state:JibssukState,slot:number,status:"waiting"|"working"|"done"):JibssukState;
