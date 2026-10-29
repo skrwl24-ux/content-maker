@@ -151,7 +151,9 @@ test("reads V4 role labels with real photo plans on the following line", async (
   assert.match(found["07"], /사용 마감일 비교/);
   assert.doesNotMatch(found["07"], /세부 수치/);
 });
-\n\ntest("Paramma production editor normalizes pasted JSON before existing image and preview pipelines",async()=>{
+
+
+test("Paramma production editor normalizes pasted JSON before existing image and preview pipelines",async()=>{
   const fs=require("node:fs");
   const page=fs.readFileSync("app/paramma-bulk/page.tsx","utf8");
   assert.match(page,/normalizeParammaCompletedArticle\(pasted\)/);
