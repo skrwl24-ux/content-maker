@@ -266,7 +266,7 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
           </div>
           <details className={styles.details} open>
             <summary>AI 심층 조사 요청서 직접 수정하기</summary>
-            <p className={styles.smallText}>어떤 발견을 찾을지 자유롭게 수정하세요. 주제·날짜·자료·결과 JSON은 자동으로 붙습니다. 5개 주제에 공통으로 적용됩니다.</p>
+            <p className={styles.smallText}>{channel==="집값쓱" ? "최근 뉴스·사건·방송·수상·분양 등에서 왜 해당 아파트가 화제가 됐는지 확인하고, 그 이슈에 필요한 원문을 깊게 조사하도록 고정 기준이 자동 적용됩니다. 아래 개인 설정과 별개로 우선합니다." : "어떤 발견을 찾을지 자유롭게 수정하세요. 주제·날짜·자료·결과 JSON은 자동으로 붙습니다. 5개 주제에 공통으로 적용됩니다."}</p>
             <label htmlFor="deep-prompt-directions" className={styles.promptEditorLabel}>심층 조사 방향</label>
             <textarea id="deep-prompt-directions" className={styles.promptEditor} rows={7}
               value={deepDirections} maxLength={12000} onChange={e=>setDeepDirections(e.target.value)}
@@ -385,7 +385,7 @@ export default function ResearchWorkPanel({ slotId, onSnapshot }: { slotId: numb
           {!articlePrompt && <p className={styles.smallText}>원고 요청서는 선택한 글감에 실제 연결된 출처 사실을 최소 1개 직접 확인하면 활성화됩니다.</p>}
           <details className={styles.details} open>
             <summary>최종 원고 글쓰기 스타일 직접 수정하기</summary>
-            <p className={styles.smallText}>남들이 지나친 발견을 혼잣말하듯 풀어내는 기본 문구입니다. 원하는 말투로 바꿀 수 있고, 5개 주제에 공통으로 적용됩니다.</p>
+            <p className={styles.smallText}>{channel==="집값쓱" ? "집값쓱은 조사한 실제 이슈에 집중해 짧고 명확하게 씁니다. 억지 질문·혼잣말·분량 채우기를 금지하는 고정 기준이 이전에 저장한 문체 설정보다 우선합니다. 아래 개인 지시문은 그대로 보존됩니다." : "남들이 지나친 발견을 혼잣말하듯 풀어내는 기본 문구입니다. 원하는 말투로 바꿀 수 있고, 5개 주제에 공통으로 적용됩니다."}</p>
             <label htmlFor="final-prompt-directions" className={styles.promptEditorLabel}>네이버 원고 글쓰기 방향</label>
             <textarea id="final-prompt-directions" className={styles.promptEditor} rows={8}
               value={finalDirections} maxLength={12000} onChange={e=>setFinalDirections(e.target.value)}
