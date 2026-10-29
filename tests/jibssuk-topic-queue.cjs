@@ -12,7 +12,7 @@ test("prompt is one fixed JSON contract with user-approved full scope, 7-to-30-d
  assert.match(p,/최근 7일/);assert.match(p,/최근 30일/);assert.match(p,/최대 10개/);
  assert.match(p,/검색량 급증/);assert.match(p,/실제 커뮤니티/);assert.match(p,/발표일/);
  assert.match(p,/기존 아파트/);assert.match(p,/완료된 교통/);assert.match(p,/지난번 추천/);
- assert.match(p,/아파트와 지역 변화를 모두 조사/);
+ assert.match(p,/아파트 중심과 지역 변화를 모두 조사/);
  assert.match(p,new RegExp("\\["+TAG+"\\]"));
  const pp=buildPrompt({scope:"아파트 중심"});assert.match(pp,/아파트 실거래/);
  assert.match(buildPrompt({scope:"지역 변화"}),/GTX·지하철·트램/);
