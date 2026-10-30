@@ -131,7 +131,7 @@ test("apartment name-only lookup searches Naver places and offers an address sel
   assert.match(ui,/setPlaces\(items\)/);
   assert.match(ui,/이 위치로 지도 보기/);
   assert.match(ui,/onClick=\{\(\)=>selectPlace\(place\)\}/);
-  assert.match(ui,/void loadMap\(\{id:"",name:place.name,source:"naver"\},address\)/);
+  assert.match(ui,/void loadMap\(\{id:"",name:place.name,source:place.sourceUrl\?"verified":"naver"\},address\)/);
   assert.match(ui,/네이버 장소 검색에서 선택한 주소 기반/);
   assert.match(ui,/직접 입력한 주소 기반/);
   assert.match(ui,/setManualExpanded\(true\)/);
@@ -151,4 +151,22 @@ test("selected source type enters image request context and avoids claiming prov
   assert.match(workflow,/네이버 장소 검색 후보에서 선택한 주소 기반 지도\(위치 일치 확인 필요\)/);
   assert.match(workflow,/단지 DB 미등록 · 직접 입력 주소 기반 지도/);
   assert.match(workflow,/map\.mapAddress/);
+});
+
+
+test("official primary-source construction site is used for the exact Gwacheon apartment, not unrelated locations",()=>{
+  const api=fs.readFileSync("app/api/apartment/map-places/route.ts","utf8");
+  const ui=fs.readFileSync("app/jibssuk-queue/JibssukAutoNaverMap.tsx","utf8");
+  const flow=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  assert.match(api,/경기도 과천시 문원동 874-1/);
+  assert.match(api,/대방건설 공식 공사단지 안내/);
+  assert.match(api,/https:\/\/db-detre\.co\.kr\/web\/constcomp\/retrieve\.do\?compSeq=155/);
+  assert.match(api,/verifiedSiteFor\(query,region\)/);
+  assert.match(api,/!key\.includes\("과천"\)/);
+  assert.match(api,/주택\|아파트\|주상복합\|공동주택/);
+  assert.match(api,/knownCity && !selectedAddress\.includes\(knownCity\)/);
+  assert.match(ui,/공식 출처 확인/);
+  assert.match(ui,/place\.sourceUrl\?"verified":"naver"/);
+  assert.match(ui,/공식 사업지 안내 주소 기반/);
+  assert.match(flow,/대방건설 공식 공사단지 안내 주소 기반 지도/);
 });
