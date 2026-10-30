@@ -11,6 +11,7 @@ import {
 import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
 import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
 import {buildJibssukApartmentImagePrompts} from "../../lib/jibssuk-apartment-image-prompts.mjs";
+import JibssukAutoNaverMap from "./JibssukAutoNaverMap";
 import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
 
@@ -99,6 +100,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [articleTitle,setArticleTitle]=useState("");
   const [articleBody,setArticleBody]=useState("");
   const [imageMapEvidence,setImageMapEvidence]=useState("");
+  const [imageAutoMapEvidence,setImageAutoMapEvidence]=useState("");
   const [imagePriceEvidence,setImagePriceEvidence]=useState("");
   const [imageLifestyleEvidence,setImageLifestyleEvidence]=useState("");
   const [imageExtraEvidence,setImageExtraEvidence]=useState("");
@@ -108,10 +110,10 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const naverRich=useMemo(()=>buildJibssukNaverRichArticle(articleTitle,articleBody),[articleTitle,articleBody]);
   const imageBriefs=useMemo(()=>buildJibssukApartmentImagePrompts({
     title:articleTitle,body:articleBody,
-    mapEvidence:imageMapEvidence,priceEvidence:imagePriceEvidence,
+    mapEvidence:imageMapEvidence,autoMapEvidence:imageAutoMapEvidence,priceEvidence:imagePriceEvidence,
     lifestyleEvidence:imageLifestyleEvidence,extraEvidence:imageExtraEvidence,
     includeExtra:imageExtraEnabled
-  }),[articleTitle,articleBody,imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
+  }),[articleTitle,articleBody,imageMapEvidence,imageAutoMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
   const handoff=useMemo(()=>makeResearchHandoff(item),[item]);
   const notes=useMemo(()=>handoff?researchNotesFromHandoff(handoff):"",[handoff]);
   const today=koreanDay();
@@ -353,12 +355,25 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       <h3>4. 아파트 글 · 이미지 요청서</h3>
       <p><b>대표 썸네일 + 본문 3장</b>이 기본입니다. 필요한 경우에만 추가 04번을 사용합니다.
         모든 이미지 규격은 <b>1600×900 (16:9)</b>이고, 각 장면의 목적과 필요한 근거 자료가 다릅니다.</p>
-      <p className={styles.hint}>이 기능은 아파트 단지 중심 글 전용입니다. 일반 뉴스·생활정보 글에서는 이 슬롯을 강제로 적용하지 마세요.
-        지도 캡처·조감도·사진은 요청서 복사 후 ChatGPT에 별도 첨부해야 합니다.</p>
+      <p className={styles.hint}>이 기능은 아파트 단지 중심 글 전용입니다. 일반 뉴스·생활정보 글에는 강제로 적용하지 마세요.
+        입지 지도는 기존 네이버지도 API로 자동 준비할 수 있습니다. 지도·조감도·사진 파일은 ChatGPT에 별도로 첨부해야 합니다.</p>
+      <JibssukAutoNaverMap
+        onReady={map=>{
+          setImageAutoMapEvidence([
+            "지도 출처: NAVER Cloud Static Map API",
+            "선택 단지: "+map.complexName,
+            "선택 지역: "+map.regionName,
+            "단지 ID: "+map.complexId,
+            map.stationName?"지도에 표시된 검색 역: "+map.stationName:"",
+            map.straightDistanceMeters!=null?"단지-역 직선거리(도보거리 아님): "+map.straightDistanceMeters+"m":"",
+            "지도에는 실제 보행 경로·도보 시간 표시 없음. PNG 파일은 별도로 ChatGPT에 첨부할 것."
+          ].filter(Boolean).join("\n"));
+        }}
+        onClear={()=>setImageAutoMapEvidence("")}/>
       <details className={styles.details}>
-        <summary>지도·시세·조감도 원본 자료 메모 입력 (선택 · 글감별 저장)</summary>
+        <summary>수동 지도 메모·실거래·조감도 자료 입력 (선택 · 글감별 저장)</summary>
         <p className={styles.hint}>원자료를 직접 확인한 뒤 필요한 만큼만 입력하세요. 입력한 문구는 자동 검증되지 않으며, 첨부 사진 파일은 이 입력칸에서 전송되지 않습니다.</p>
-        <label htmlFor="image-evidence-map">01 · 네이버지도 캡처·경로 메모</label>
+        <label htmlFor="image-evidence-map">01 · 네이버지도 직접 캡처·경로 보충 메모 (자동 지도와 별도)</label>
         <textarea id="image-evidence-map" rows={3} maxLength={15000} value={imageMapEvidence}
           onChange={e=>setImageMapEvidence(e.target.value)}
           placeholder="단지 주소·지도 출처·캡처 날짜·지도에 실제 표시된 역/목적지/도보 경로 등. 지도 캡처는 ChatGPT에서 따로 첨부"/>
@@ -389,7 +404,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           </div>
           <p>{brief.purpose}</p>
           {brief.slot!=="00"&&<p className={styles.hint}>
-            {brief.evidenceEntered?"근거 메모 입력됨 · 원본/첨부 확인 필요":"원본 자료 미입력 · 요청서에서 자료를 먼저 요구함"}
+            {brief.evidenceEntered?"지도/API 또는 근거 메모 있음 · 원본 이미지 첨부 필요":"원본 자료 미입력 · 요청서에서 자료를 먼저 요구함"}
           </p>}
           <p className={styles.hint}>{brief.sourceHint}</p>
           <div className={styles.actions}>
