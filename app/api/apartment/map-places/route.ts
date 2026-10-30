@@ -7,6 +7,22 @@ type NaverItem={
   title?:string;category?:string;roadAddress?:string;address?:string;
   mapx?:string|number;mapy?:string|number;
 };
+// Verified primary-source fallback when a new project is absent from NAVER Local Search.
+// Address is a construction-site lot; users should still confirm map placement.
+const VERIFIED_SITE={
+  name:"과천 디에트르 퍼스티지",
+  address:"경기도 과천시 문원동 874-1",
+  roadAddress:"",
+  category:"주택>아파트",
+  source:"대방건설 공식 공사단지 안내",
+  sourceUrl:"https://db-detre.co.kr/web/constcomp/retrieve.do?compSeq=155"
+};
+function verifiedSiteFor(query:string,region:string){
+  const key=normalized(query);
+  if(!key.includes("과천")||!key.includes("디에트르")||!key.includes("퍼스티지"))return null;
+  if(region && !region.includes("과천"))return null;
+  return VERIFIED_SITE;
+}
 function plain(value:string){
   return String(value||"").replace(/<[^>]*>/g,"")
     .replace(/&amp;/gi,"&").replace(/&quot;/gi,'"')
@@ -41,6 +57,13 @@ export async function GET(req:NextRequest){
   const region=req.nextUrl.searchParams.get("region")?.trim()||"";
   if(query.length<2||query.length>100||region.length>100){
     return NextResponse.json({error:"검색할 단지명을 2~100자로 입력해 주세요."},{status:400});
+  }
+  const official=verifiedSiteFor(query,region);
+  if(official){
+    return NextResponse.json({
+      places:[official],searched:query,source:official.source,
+      message:"공식 사업지 주소를 찾았습니다. 지도 위치를 확인하고 사용하세요."
+    },{headers:{"Cache-Control":"no-store"}});
   }
   const clientId=process.env.NAVER_API_HUB_CLIENT_ID;
   const secret=process.env.NAVER_API_HUB_CLIENT_SECRET;
@@ -78,8 +101,12 @@ export async function GET(req:NextRequest){
           const address=plain(item.address||"");
           const roadAddress=plain(item.roadAddress||"");
           const selectedAddress=roadAddress||address;
-          // Street/lot number is needed for a reliable Naver Geocoding request.
+          // Restrict to actual housing sites, not shops, preschools or club facilities
+          // that merely contain the apartment name.
+          if(!/주택|아파트|주상복합|공동주택/.test(category))continue;
           if(!selectedAddress||!/[\d]/.test(selectedAddress))continue;
+          const knownCity=query.match(/^(과천|수원|광명|성남|송도|평택|하남|분당|동탄|김포|화성)\s+/)?.[1];
+          if(knownCity && !selectedAddress.includes(knownCity))continue;
           const score=scoredTitle(query,name,category);
           if(score<50)continue;
           if(region){
