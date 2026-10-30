@@ -8,8 +8,8 @@ type Complex={id:string;name:string;legalDong?:string;matchStatus?:string;source
 type Place={name:string;address:string;roadAddress:string;category:string;source:string;sourceUrl?:string};
 type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;sourceType:"db"|"naver"|"manual"|"verified";};
 
-export default function JibssukAutoNaverMap({onReady,onClear}:{
-  onReady:(data:MapReady)=>void;onClear:()=>void;
+export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
+  initialName?:string;onReady:(data:MapReady)=>void;onClear:()=>void;
 }){
   const [regions,setRegions]=useState<Region[]>([]);
   const [regionCode,setRegionCode]=useState("");
@@ -27,6 +27,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   const urlRef=useRef("");
   const searchSequence=useRef(0);
   const mapSequence=useRef(0);
+  const seededName=useRef("");
 
   function clearMap(){
     mapSequence.current+=1;setLoading(false);
@@ -50,6 +51,20 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
     };
   },[]);
 
+  // Start with the apartment name from the selected article. Manual edits remain possible.
+  useEffect(()=>{
+    const name=initialName.trim();
+    if(name.length<2||seededName.current||query.trim())return;
+    const timer=window.setTimeout(()=>{
+      seededName.current=name;
+      setQuery(name);
+      void search(name);
+    },350);
+    return ()=>window.clearTimeout(timer);
+    // Only initial article selection should seed the search; later typing stays under user control.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[initialName]);
+
   function switchRegion(value:string){
     searchSequence.current+=1;setSearching(false);setRegionCode(value);setCandidates([]);setPlaces([]);setQuery("");setManualAddress("");setManualExpanded(false);setMessage("");clearMap();
   }
@@ -57,8 +72,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
     searchSequence.current+=1;setSearching(false);setQuery(value);setCandidates([]);setPlaces([]);setMessage("");clearMap();
   }
 
-  async function search(){
-    const q=query.trim();
+  async function search(nameOverride?:string){
+    const q=(nameOverride??query).trim();
     if(q.length<2){setMessage("아파트 이름을 두 글자 이상 입력해 주세요.");return;}
     const sequence=++searchSequence.current;
     setSearching(true);setMessage("");setCandidates([]);setPlaces([]);clearMap();
@@ -79,6 +94,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       if(sequence!==searchSequence.current)return;
       setCandidates(dbList);
       if(dbList.length){
+        const exact=dbList.length===1&&dbList[0].name.replace(/\s+/g,"")===q.replace(/\s+/g,"");
+        if(exact){void loadMap(dbList[0]);return;}
         setMessage("등록된 단지를 찾았습니다. 원하는 단지를 선택하면 지도가 바로 표시됩니다.");
         return;
       }
@@ -93,7 +110,14 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       const items=(Array.isArray(json.places)?json.places:[]).filter((p:Place)=>
         p&&typeof p.name==="string"&&typeof p.address==="string"&&typeof p.roadAddress==="string");
       setPlaces(items);
+      if(items.length===1&&items[0].sourceUrl){
+        setManualExpanded(false);
+        const official=items[0];
+        void loadMap({id:"",name:official.name,source:"verified"},official.roadAddress||official.address);
+        return;
+      }
       if(!items.length)setManualExpanded(true);
+      else setManualExpanded(false);
       setMessage(items.length?(items.some((item:Place)=>Boolean(item.sourceUrl))?"공식 사업지 주소를 찾았습니다. 이 위치로 지도 보기를 누르세요.":"네이버 장소 검색에서 주소를 찾았습니다. 맞는 아파트를 선택해 주세요."):
         json.message||"장소를 찾지 못했습니다. 현장 주소를 직접 입력할 수 있습니다.");
     }catch(error){
@@ -172,7 +196,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       <strong>01 · 네이버지도 자동 불러오기</strong>
       <span>기존 아파트 대량발행 API 재사용</span>
     </div>
-    <p className={styles.hint}>아파트 이름만 입력하고 검색하세요. 등록된 단지는 기존 DB에서, 등록되지 않은 새 단지는 네이버 장소 검색으로 주소 후보를 찾아줍니다. 맞는 주소를 한 번 확인하면 지도가 바로 표시됩니다.</p>
+    <p className={styles.hint}>원고에 단지명이 있으면 자동으로 검색합니다. DB에 등록된 정확한 단지나 공식 주소가 확인된 한 곳은 지도까지 바로 표시합니다. 다른 결과는 위치를 확인한 뒤 선택하세요.</p>
     <div className={styles.autoNaverMapSearch}>
       <label>지역 (선택)
         <select aria-label="지도 검색 지역" value={regionCode} onChange={e=>switchRegion(e.target.value)}>
