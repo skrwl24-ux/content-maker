@@ -117,39 +117,55 @@ export async function GET(req: NextRequest) {
     }
 
     const complexId = req.nextUrl.searchParams.get("complexId")?.trim();
-    if (!complexId) return NextResponse.json({ error: "complexId가 필요합니다." }, { status: 400 });
-
-    const supabase = createApartmentReadClient();
-    const { data: complex, error: complexError } = await supabase
-      .from("apt_complexes")
-      .select("id,name,sido,sigungu,legal_dong,address,road_address")
-      .eq("id", complexId)
-      .single();
-    if (complexError || !complex) {
-      return NextResponse.json({ error: "단지 정보를 찾지 못했습니다." }, { status: 404 });
+    const manualAddress = req.nextUrl.searchParams.get("address")?.trim() || "";
+    if (!complexId && !manualAddress) return NextResponse.json({ error: "complexId 또는 정확한 address가 필요합니다." }, { status: 400 });
+    // Fallback for unregistered/new developments. Only specific user-confirmed
+    // addresses are accepted; a district name alone is never a building location.
+    if (manualAddress && (manualAddress.length > 160 || !/[가-힣]/.test(manualAddress) || !/\d/.test(manualAddress))) {
+      return NextResponse.json({ error: "정확한 지번 또는 도로명 주소를 입력해 주세요." }, { status: 400 });
     }
 
-    const { data: latestTrade } = await supabase
-      .from("apt_trades")
-      .select("jibun,legal_dong")
-      .eq("complex_id", complexId)
-      .eq("cancelled", false)
-      .order("contract_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    let queries: string[] = [];
+    let dong = "";
+    let sigungu = "";
+    if (manualAddress) {
+      queries = [manualAddress];
+      dong = manualAddress.match(/([가-힣]+동)(?:\s|$)/)?.[1] || "";
+      sigungu = manualAddress.match(/([가-힣]+시)(?:\s|$)/)?.[1] ||
+        manualAddress.match(/([가-힣]+군)(?:\s|$)/)?.[1] || "";
+    } else {
+      const supabase = createApartmentReadClient();
+      const { data: complex, error: complexError } = await supabase
+        .from("apt_complexes")
+        .select("id,name,sido,sigungu,legal_dong,address,road_address")
+        .eq("id", complexId)
+        .single();
+      if (complexError || !complex) {
+        return NextResponse.json({ error: "단지 정보를 찾지 못했습니다." }, { status: 404 });
+      }
 
-    const lotAddress = [
-      complex.sido,
-      complex.sigungu,
-      latestTrade?.legal_dong || complex.legal_dong,
-      latestTrade?.jibun,
-    ].filter(Boolean).join(" ");
-
-    const queries = [...new Set([
-      complex.road_address,
-      complex.address,
-      lotAddress,
-    ].filter((v): v is string => Boolean(v && String(v).trim())))];
+      const { data: latestTrade } = await supabase
+        .from("apt_trades")
+        .select("jibun,legal_dong")
+        .eq("complex_id", complexId)
+        .eq("cancelled", false)
+        .order("contract_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      dong = latestTrade?.legal_dong || complex.legal_dong || "";
+      sigungu = complex.sigungu || "";
+      const lotAddress = [
+        complex.sido,
+        complex.sigungu,
+        dong,
+        latestTrade?.jibun,
+      ].filter(Boolean).join(" ");
+      queries = [...new Set([
+        complex.road_address,
+        complex.address,
+        lotAddress,
+      ].filter((v): v is string => Boolean(v && String(v).trim())))];
+    }
 
     let point: Awaited<ReturnType<typeof geocode>> = null;
     let usedQuery = "";
@@ -173,11 +189,10 @@ export async function GET(req: NextRequest) {
     let station: { name: string; lng: number; lat: number; distance: number } | null = null;
 
     if (localHeaders) {
-      const dong = latestTrade?.legal_dong || complex.legal_dong || "";
       const stationQueries = [...new Set([
         dong ? `${dong} 지하철역` : "",
-        complex.sigungu && dong ? `${complex.sigungu} ${dong} 역` : "",
-        complex.sigungu ? `${complex.sigungu} 지하철역` : "",
+        sigungu && dong ? `${sigungu} ${dong} 역` : "",
+        sigungu ? `${sigungu} 지하철역` : "",
       ].filter(Boolean))];
 
       const candidates: Array<{ name: string; lng: number; lat: number; distance: number }> = [];
@@ -242,6 +257,8 @@ export async function GET(req: NextRequest) {
         "Content-Type": mapRes.headers.get("content-type") || "image/png",
         "Cache-Control": "private, max-age=3600",
         "X-Map-Source": "NAVER Cloud Static Map",
+        "X-Map-Location-Mode": manualAddress ? "address" : "complex",
+        "X-Map-Location-Accuracy": manualAddress ? "user-confirmed-address" : "db-address",
         "X-Map-Query": encodeURIComponent(usedQuery),
         "X-Map-Level": String(level),
         "X-Map-Station": encodeURIComponent(station?.name || ""),
