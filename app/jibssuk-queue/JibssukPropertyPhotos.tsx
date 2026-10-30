@@ -54,7 +54,15 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
   const seq=useRef(0);
   const fileRef=useRef<HTMLInputElement|null>(null);
 
-  useEffect(()=>{if(initialName){setName(initialName);seq.current+=1;setImages([]);setSelected(null);setMessage("");setFile(null);setFileLabel("");}},[initialName]);
+  // A confirmed map selection can fill and search the photo list without retyping.
+  useEffect(()=>{
+    const term=initialName.trim();
+    if(!term)return;
+    setName(term);
+    void search(term);
+    // Only changes to the selected article/map name should restart this search.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[initialName]);
   function clearSelection(){
     setSelected(null);setFile(null);setFileLabel("");
     if(fileRef.current)fileRef.current.value="";
@@ -66,8 +74,8 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
   function changeKind(next:Kind){
     seq.current+=1;setLoading(false);setKind(next);setImages([]);clearSelection();setMessage("");
   }
-  async function search(){
-    const term=name.trim();
+  async function search(nameOverride?:string){
+    const term=(nameOverride??name).trim();
     if(term.length<2){setMessage("아파트 이름을 두 글자 이상 입력해 주세요.");return;}
     const current=++seq.current;
     clearSelection();setLoading(true);setImages([]);setMessage("");
@@ -144,7 +152,7 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
       <strong>03 · 조감도·생활환경 사진 찾기</strong>
       <span>네이버 이미지 검색 · 원본 출처 확인</span>
     </div>
-    <p className={styles.hint}>단지명을 입력하면 관련 사진 후보를 찾아줍니다. 검색 결과가 공식 조감도나 실제 단지 사진이라는 뜻은 아닙니다.
+    <p className={styles.hint}>지도에서 선택한 단지명을 자동으로 가져와 조감도 후보를 검색합니다. 검색 결과가 공식 조감도나 실제 단지 사진이라는 뜻은 아닙니다.
       출처를 확인한 사진만 최종 이미지로 사용해 주세요.</p>
     <div className={styles.propertyPhotoModes} role="group" aria-label="사진 종류">
       <button type="button" className={kind==="render"?styles.selectedMode:styles.otherButton}
