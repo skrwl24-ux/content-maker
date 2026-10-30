@@ -4,8 +4,9 @@ import {useEffect,useRef,useState} from "react";
 import styles from "./workflow.module.css";
 
 type Region={region_code:string;sido_name:string;region_name:string};
-type Complex={id:string;name:string;legalDong?:string;matchStatus?:string};
-type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;};
+type Complex={id:string;name:string;legalDong?:string;matchStatus?:string;source?:"naver"|"manual"};
+type Place={name:string;address:string;roadAddress:string;category:string;source:string};
+type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;sourceType:"db"|"naver"|"manual";};
 
 export default function JibssukAutoNaverMap({onReady,onClear}:{
   onReady:(data:MapReady)=>void;onClear:()=>void;
@@ -16,6 +17,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   const [manualAddress,setManualAddress]=useState("");
   const [manualExpanded,setManualExpanded]=useState(false);
   const [candidates,setCandidates]=useState<Complex[]>([]);
+  const [places,setPlaces]=useState<Place[]>([]);
   const [selected,setSelected]=useState<Complex|null>(null);
   const [mapUrl,setMapUrl]=useState("");
   const [message,setMessage]=useState("");
@@ -49,32 +51,62 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   },[]);
 
   function switchRegion(value:string){
-    searchSequence.current+=1;setSearching(false);setRegionCode(value);setCandidates([]);setQuery("");setManualAddress("");setManualExpanded(false);setMessage("");clearMap();
+    searchSequence.current+=1;setSearching(false);setRegionCode(value);setCandidates([]);setPlaces([]);setQuery("");setManualAddress("");setManualExpanded(false);setMessage("");clearMap();
   }
   function switchQuery(value:string){
-    searchSequence.current+=1;setSearching(false);setQuery(value);setCandidates([]);setMessage("");clearMap();
+    searchSequence.current+=1;setSearching(false);setQuery(value);setCandidates([]);setPlaces([]);setMessage("");clearMap();
   }
 
   async function search(){
     const q=query.trim();
-    if(!regionCode||q.length<2){setMessage("지역을 고른 뒤 단지명을 두 글자 이상 입력해 주세요.");return;}
+    if(q.length<2){setMessage("아파트 이름을 두 글자 이상 입력해 주세요.");return;}
     const sequence=++searchSequence.current;
-    setSearching(true);setMessage("");setCandidates([]);clearMap();
+    setSearching(true);setMessage("");setCandidates([]);setPlaces([]);clearMap();
     try{
-      const url="/api/apartment/search?regionCode="+encodeURIComponent(regionCode)+"&q="+encodeURIComponent(q);
-      const response=await fetch(url,{cache:"no-store"});
-      const json=await response.json();
-      if(!response.ok)throw new Error(json.error||"단지 검색 실패");
+      let dbList:Complex[]=[];
+      if(regionCode){
+        try{
+          const dbUrl="/api/apartment/search?regionCode="+encodeURIComponent(regionCode)+"&q="+encodeURIComponent(q);
+          const dbResponse=await fetch(dbUrl,{cache:"no-store"});
+          const dbJson=await dbResponse.json();
+          if(dbResponse.ok){
+            dbList=(Array.isArray(dbJson.results)?dbJson.results:[])
+              .filter((row:Complex)=>typeof row.id==="string"&&typeof row.name==="string")
+              .map((row:Complex)=>({id:row.id,name:row.name,legalDong:row.legalDong,matchStatus:row.matchStatus}));
+          }
+        }catch{/* DB availability must not prevent searching NAVER places. */}
+      }
       if(sequence!==searchSequence.current)return;
-      const list=(Array.isArray(json.results)?json.results:[])
-        .filter((row:Complex)=>typeof row.id==="string"&&typeof row.name==="string")
-        .map((row:Complex)=>({id:row.id,name:row.name,legalDong:row.legalDong,matchStatus:row.matchStatus}));
-      setCandidates(list);
-      if(!list.length)setManualExpanded(true);
-      setMessage(list.length?"검색 결과에서 실제 단지를 선택해 주세요.":"등록된 단지가 없습니다. 아래 현장 주소로 지도 보기를 사용하거나 네이버지도 원본을 직접 복사할 수 있습니다.");
+      setCandidates(dbList);
+      if(dbList.length){
+        setMessage("등록된 단지를 찾았습니다. 원하는 단지를 선택하면 지도가 바로 표시됩니다.");
+        return;
+      }
+      const region=regions.find(x=>x.region_code===regionCode);
+      const regionHint=region?(region.sido_name+" "+region.region_name):"";
+      const placeUrl="/api/apartment/map-places?q="+encodeURIComponent(q)+
+        (regionHint?"&region="+encodeURIComponent(regionHint):"");
+      const response=await fetch(placeUrl,{cache:"no-store"});
+      const json=await response.json();
+      if(sequence!==searchSequence.current)return;
+      if(!response.ok)throw new Error(json.error||"네이버 장소 검색 실패");
+      const items=(Array.isArray(json.places)?json.places:[]).filter((p:Place)=>
+        p&&typeof p.name==="string"&&typeof p.address==="string"&&typeof p.roadAddress==="string");
+      setPlaces(items);
+      if(!items.length)setManualExpanded(true);
+      setMessage(items.length?"네이버 장소 검색에서 주소를 찾았습니다. 맞는 아파트를 선택해 주세요.":
+        json.message||"장소를 찾지 못했습니다. 현장 주소를 직접 입력할 수 있습니다.");
     }catch(error){
-      if(sequence===searchSequence.current)setMessage(error instanceof Error?error.message:"단지 검색에 실패했습니다.");
+      if(sequence===searchSequence.current){
+        setManualExpanded(true);
+        setMessage(error instanceof Error?error.message:"장소 검색에 실패했습니다. 주소 입력을 사용할 수 있습니다.");
+      }
     }finally{if(sequence===searchSequence.current)setSearching(false);}
+  }
+  function selectPlace(place:Place){
+    const address=place.roadAddress||place.address;
+    if(!address)return;
+    void loadMap({id:"",name:place.name,source:"naver"},address);
   }
   async function loadMap(complex:Complex,address=""){
     clearMap();setLoading(true);setMessage("기존 네이버지도 API로 단지 지도를 불러오는 중…");
@@ -96,11 +128,11 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       const station=decodeURIComponent(res.headers.get("X-Map-Station")||"");
       const distanceRaw=res.headers.get("X-Map-Station-Distance")||"";
       const distance=distanceRaw&&Number.isFinite(Number(distanceRaw))?Number(distanceRaw):null;
-      onReady({complexId:complex.id,complexName:complex.name,
+      onReady({complexId:complex.id,complexName:complex.name,sourceType:complex.id?"db":complex.source==="naver"?"naver":"manual",
         regionName:region?(region.sido_name+" "+region.region_name):"",
         stationName:station,straightDistanceMeters:distance,
         mapAddress:decodeURIComponent(res.headers.get("X-Map-Query")||"")});
-      setMessage(address?"입력한 주소로 네이버지도 준비 완료. 빨간 마커가 실제 해당 단지 위치인지 직접 확인하세요. 도보 경로는 포함되지 않습니다.":"네이버지도 자동 생성 완료 · 빨간 표식은 단지, 파란 표식은 검색된 역입니다. 실제 도보 경로는 제공하지 않습니다.");
+      setMessage(address?(complex.source==="naver"?"네이버 장소 검색 결과로 지도 준비 완료. 단지명과 마커 위치가 일치하는지 확인하세요.":"입력한 주소로 네이버지도 준비 완료. 빨간 마커가 실제 해당 단지 위치인지 직접 확인하세요.")+" 도보 경로는 포함되지 않습니다.":"네이버지도 자동 생성 완료 · 빨간 표식은 단지, 파란 표식은 검색된 역입니다. 실제 도보 경로는 제공하지 않습니다.");
     }catch(error){
       if(sequence===mapSequence.current)setMessage((error instanceof Error?error.message:"지도 생성 실패")+" 수동 네이버지도 캡처를 대신 사용하세요.");
     }finally{if(sequence===mapSequence.current)setLoading(false);}
@@ -115,7 +147,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
     // The candidate is explicitly identified as an address lookup, not a verified complex.
     const label=query.trim()||"주소 조회 지점";
     const displayName=region?label+" · "+region.region_name:label;
-    void loadMap({id:"",name:displayName},address);
+    void loadMap({id:"",name:displayName,source:"manual"},address);
   }
   async function copyMap(){
     if(!mapBlob.current)return;
@@ -140,10 +172,9 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       <strong>01 · 네이버지도 자동 불러오기</strong>
       <span>기존 아파트 대량발행 API 재사용</span>
     </div>
-    <p className={styles.hint}>아래에서 단지를 선택하면 기존 네이버 Static Map API가 실제 위치 지도를 준비합니다.
-      원고의 단지명만으로 자동 확정하지 않고 직접 검색 결과를 선택합니다.</p>
+    <p className={styles.hint}>아파트 이름만 입력하고 검색하세요. 등록된 단지는 기존 DB에서, 등록되지 않은 새 단지는 네이버 장소 검색으로 주소 후보를 찾아줍니다. 맞는 주소를 한 번 확인하면 지도가 바로 표시됩니다.</p>
     <div className={styles.autoNaverMapSearch}>
-      <label>지역
+      <label>지역 (선택)
         <select aria-label="지도 검색 지역" value={regionCode} onChange={e=>switchRegion(e.target.value)}>
           <option value="">지역 선택</option>
           {regions.map(region=><option key={region.region_code} value={region.region_code}>
@@ -157,7 +188,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
           onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void search();}}}/>
       </label>
       <button type="button" className={styles.otherButton} onClick={()=>void search()}
-        disabled={!regionCode||query.trim().length<2||searching}>{searching?"검색 중…":"단지 검색"}</button>
+        disabled={query.trim().length<2||searching}>{searching?"네이버에서 찾는 중…":"주소 자동 찾기"}</button>
     </div>
     {candidates.length>0&&<div className={styles.autoNaverMapResults} aria-label="지도 검색된 단지">
       {candidates.map(complex=><button type="button" className={styles.otherButton}
@@ -165,10 +196,19 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
         {complex.name}{complex.legalDong?" · "+complex.legalDong:""}
       </button>)}
     </div>}
+    {places.length>0&&<div className={styles.autoNaverMapPlaces} aria-label="네이버에서 찾은 주소 후보">
+      <p className={styles.hint}><b>네이버에서 찾은 주소 후보</b> · 주소를 확인한 다음 지도 보기를 누르세요.</p>
+      {places.map((place,i)=><div key={place.name+"-"+place.address+"-"+i} className={styles.autoNaverMapPlace}>
+        <div><strong>{place.name}</strong><span>{place.roadAddress||place.address}</span>
+          {place.category&&<small>{place.category}</small>}</div>
+        <button type="button" className={styles.mainButton} disabled={loading}
+          onClick={()=>selectPlace(place)}>이 위치로 지도 보기</button>
+      </div>)}
+    </div>}
     <div className={styles.autoMapFallback}>
       <button type="button" className={styles.otherButton} aria-expanded={manualExpanded}
         onClick={()=>setManualExpanded(value=>!value)}>
-        {manualExpanded?"현장 주소로 지도 찾기 접기":"단지가 검색되지 않나요? 현장 주소로 지도 찾기"}
+        {manualExpanded?"주소 직접 입력 접기":"주소를 직접 입력하기 (자동 검색이 안 될 때)"}
       </button>
       {manualExpanded&&<div className={styles.autoMapManualInput}>
         <label htmlFor="jibssuk-map-manual-address">공식 안내문에 적힌 정확한 도로명·지번 주소
@@ -178,7 +218,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
         </label>
         <button type="button" className={styles.mainButton} disabled={loading||manualAddress.trim().length<7}
           onClick={loadAddress}>{loading?"불러오는 중…":"해당 주소 지도 보기"}</button>
-        <p className={styles.hint}>아파트 단지 DB에 없는 분양 현장도 기존 네이버지도 API로 표시합니다. 지도 중심의 주소가 정확한 사업지인지 확인한 뒤 복사하세요.</p>
+        <p className={styles.hint}>자동 장소 검색에 없는 신규 분양 현장일 때만 사용합니다. 표시된 위치가 실제 사업지와 일치하는지 확인하세요.</p>
         <a href={"https://map.naver.com/p/search/"+encodeURIComponent(query.trim()||manualAddress.trim())}
           target="_blank" rel="noopener noreferrer" className={styles.sourceLink}>네이버지도 원본 검색 열기 ↗</a>
       </div>}
@@ -189,7 +229,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       <div className={styles.autoNaverMapPreview}>
         <img src={mapUrl} alt={selected.name+" 네이버지도 API 지도 · 아파트 및 검색된 지하철역 마커"} />
       </div>
-      <p className={styles.hint}>출처: NAVER Cloud Static Map · {selected.id?"단지 DB 주소 기반":"직접 입력한 주소 기반(해당 단지 여부 확인 필요)"} · 위치 마커/역 위치는 API 조회 결과.
+      <p className={styles.hint}>출처: NAVER Cloud Static Map · {selected.id?"단지 DB 주소 기반":selected.source==="naver"?"네이버 장소 검색에서 선택한 주소 기반(위치 확인 필요)":"직접 입력한 주소 기반(해당 단지 여부 확인 필요)"} · 위치 마커/역 위치는 API 조회 결과.
         파란 표식의 역은 지역 검색 후보이며 도보 거리·도보시간을 뜻하지 않습니다.</p>
       <div className={styles.actions}>
         <button type="button" className={styles.mainButton} onClick={()=>void copyMap()}>지도 PNG 클립보드 복사</button>
