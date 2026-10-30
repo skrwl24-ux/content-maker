@@ -5,7 +5,7 @@ import styles from "./workflow.module.css";
 
 type Region={region_code:string;sido_name:string;region_name:string};
 type Complex={id:string;name:string;legalDong?:string;matchStatus?:string};
-type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null};
+type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;};
 
 export default function JibssukAutoNaverMap({onReady,onClear}:{
   onReady:(data:MapReady)=>void;onClear:()=>void;
@@ -98,7 +98,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       const distance=distanceRaw&&Number.isFinite(Number(distanceRaw))?Number(distanceRaw):null;
       onReady({complexId:complex.id,complexName:complex.name,
         regionName:region?(region.sido_name+" "+region.region_name):"",
-        stationName:station,straightDistanceMeters:distance});
+        stationName:station,straightDistanceMeters:distance,
+        mapAddress:decodeURIComponent(res.headers.get("X-Map-Query")||"")});
       setMessage(address?"입력한 주소로 네이버지도 준비 완료. 빨간 마커가 실제 해당 단지 위치인지 직접 확인하세요. 도보 경로는 포함되지 않습니다.":"네이버지도 자동 생성 완료 · 빨간 표식은 단지, 파란 표식은 검색된 역입니다. 실제 도보 경로는 제공하지 않습니다.");
     }catch(error){
       if(sequence===mapSequence.current)setMessage((error instanceof Error?error.message:"지도 생성 실패")+" 수동 네이버지도 캡처를 대신 사용하세요.");
@@ -106,7 +107,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   }
   function loadAddress(){
     const address=manualAddress.trim();
-    if(address.length<7 || !/\\d/.test(address)){
+    if(address.length<7 || !/[0-9]/.test(address)){
       setMessage("도로명 번호 또는 지번이 포함된 정확한 현장 주소를 입력해 주세요.");
       return;
     }
