@@ -76,7 +76,7 @@ test("environment brief does not fake official renderings or location, optional 
 test("image prompts never mistake user notes for checked sources and do not auto attach image files",async()=>{
   const {buildJibssukApartmentImagePrompts}=await api();
   const result=buildJibssukApartmentImagePrompts({...SAMPLE,mapEvidence:"비확인 메모: 123분"});
-  assert.ok(result.every(x=>x.prompt.includes("자동 검증")));
+  assert.ok(result.every(x=>x.prompt.includes("출처와 숫자는 별도 확인 필요")));
   assert.ok(result.every(x=>x.prompt.includes("별도 첨부")||x.prompt.includes("따로 첨부")));
   assert.match(result[1].prompt,/123분/);
   assert.match(result[1].prompt,/없는 도보시간/);
