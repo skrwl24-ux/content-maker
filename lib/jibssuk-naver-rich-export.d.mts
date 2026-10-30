@@ -1,2 +1,12 @@
+export type JibssukNaverTableGroup = {
+  tableNumber:number;
+  partNumber:number;
+  partCount:number;
+  headers:string[];
+  rows:string[][];
+};
 export declare function buildJibssukNaverRichBody(body:string):{plain:string;html:string};
-export declare function buildJibssukNaverRichArticle(title:string,body:string):{plain:string;html:string;bodyPlain:string;bodyHtml:string;blockCount:number};
+export declare function buildJibssukNaverRichArticle(title:string,body:string):{
+  plain:string;html:string;bodyPlain:string;bodyHtml:string;
+  blockCount:number;tables:JibssukNaverTableGroup[];
+};
