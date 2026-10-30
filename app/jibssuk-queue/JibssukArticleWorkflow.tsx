@@ -4,17 +4,22 @@ import {useEffect,useMemo,useState} from "react";
 import type {JibssukItem} from "../../lib/jibssuk-topic-queue.mjs";
 import {makeResearchHandoff,researchNotesFromHandoff} from "../../lib/jibssuk-research-handoff.mjs";
 import {
-  buildDeepResearchPrompt,buildFollowupResearchPrompt,
-  parseResearchReport,parseNaverFinalArticle,factKey,
+  buildDeepResearchPrompt,
+  parseNaverFinalArticle,
   DEFAULT_DEEP_RESEARCH_DIRECTIONS
 } from "../../lib/research-studio.mjs";
-import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
+import {buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
 import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
 import {buildJibssukApartmentImagePrompts} from "../../lib/jibssuk-apartment-image-prompts.mjs";
 import JibssukAutoNaverMap from "./JibssukAutoNaverMap";
 import JibssukPropertyPhotos from "./JibssukPropertyPhotos";
 import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
+
+import {createResearchHistory,appendResearchRound,restoreResearchHistory,buildJibssukFollowupPrompt,MAX_RESEARCH_SIZE} from "../../lib/jibssuk-research-history.mjs";
+import type {ResearchHistory} from "../../lib/jibssuk-research-history.mjs";
+
+import {JIBSSUK_READER_RULES,JIBSSUK_EVIDENCE_RULES,JIBSSUK_RESEARCH_FIELDS,checkJibssukTitleConsistency} from "../../lib/jibssuk-editorial-policy.mjs";
 
 const STORAGE_PREFIX="content-maker-jibssuk-inline-workflow-v1:";
 function suggestApartmentName(topic:string,articleTitle:string){
@@ -108,6 +113,9 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const storageKey=STORAGE_PREFIX+item.addedAt;
   const [hydrated,setHydrated]=useState(false);
   const [acceptedRaw,setAcceptedRaw]=useState("");
+  const [history,setHistory]=useState<ResearchHistory|null>(null);
+  const [followupPaste,setFollowupPaste]=useState("");
+  const [storageBlocked,setStorageBlocked]=useState(false);
   const [reportPaste,setReportPaste]=useState("");
   const [approved,setApproved]=useState<string[]>([]);
   const [angleId,setAngleId]=useState("");
@@ -124,7 +132,8 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [imageExtraEvidence,setImageExtraEvidence]=useState("");
   const [imageExtraEnabled,setImageExtraEnabled]=useState(false);
   const [status,setStatus]=useState("");
-  const report=useMemo(()=>parseResearchReport(acceptedRaw),[acceptedRaw]);
+  const report=history?.mergedReport||null;
+  const articleWarnings=useMemo(()=>checkJibssukTitleConsistency(articleTitle,articleBody),[articleTitle,articleBody]);
   const naverRich=useMemo(()=>buildJibssukNaverRichArticle(articleTitle,articleBody),[articleTitle,articleBody]);
   const imageBriefs=useMemo(()=>buildJibssukApartmentImagePrompts({
     title:articleTitle,body:articleBody,
@@ -141,16 +150,23 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       const raw=localStorage.getItem(storageKey);
       if(raw){
         const data=JSON.parse(raw);
+        if(data?.version!==1)throw new Error("지원되지 않는 저장 형식");
         if(data?.version===1){
           const text=(v:unknown,n:number)=>typeof v==="string"?v.slice(0,n):"";
-          setAcceptedRaw(text(data.acceptedRaw,180000));
-          setReportPaste(text(data.reportPaste,180000));
+          setAcceptedRaw(typeof data.acceptedRaw==="string"?data.acceptedRaw:"");
+          if(data.researchHistory){
+            const restored=restoreResearchHistory(data.researchHistory,data.researchHistory.activeRounds);
+            setHistory(restored);
+          }else if(data.acceptedRaw){setHistory(createResearchHistory(data.acceptedRaw,data.angleId));}
+          setReportPaste(typeof data.reportPaste==="string"?data.reportPaste:"");
           setApproved(Array.isArray(data.approved)?data.approved.filter((v:unknown)=>typeof v==="string").slice(0,100):[]);
           setAngleId(text(data.angleId,60));
           setFinalPaste(text(data.finalPaste,180000));
           setArticleTitle(text(data.articleTitle,250));
           setArticleBody(text(data.articleBody,120000));
           setImageMapEvidence(text(data.imageMapEvidence,15000));
+          setImageAutoMapEvidence(text(data.imageAutoMapEvidence,15000));
+          setImageComplexName(text(data.imageComplexName,250));
           setImagePriceEvidence(text(data.imagePriceEvidence,15000));
           setImageLifestyleEvidence(text(data.imageLifestyleEvidence,15000));
           setImagePhotoEvidence(text(data.imagePhotoEvidence,4000));
@@ -158,29 +174,26 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           setImageExtraEnabled(data.imageExtraEnabled===true);
         }
       }
-    }catch{setStatus("저장된 작업을 불러오지 못했습니다. 기존 저장 데이터는 변경하지 않았습니다.");}
+    }catch{setStorageBlocked(true);setStatus("저장된 작업을 불러오지 못했습니다. 원본 보호를 위해 저장과 가져오기를 중단했습니다. 기존 저장 데이터를 내보내 보관한 뒤 확인해 주세요.");}
     setHydrated(true);
   },[storageKey]);
 
   useEffect(()=>{
-    if(!hydrated)return;
+    if(!hydrated||storageBlocked)return;
     try{
       localStorage.setItem(storageKey,JSON.stringify({
-        version:1,topic:item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
-        imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled
+        version:1,topic:item.title,acceptedRaw,researchHistory:history,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
+        imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled,imageAutoMapEvidence,imageComplexName
       }));
-    }catch{setStatus("이 브라우저에 작업을 저장하지 못했습니다. 저장 공간을 확인해 주세요.");}
-  },[hydrated,storageKey,item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
-    imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled]);
+    }catch{setStatus("현재 화면에서 변경한 내용이 브라우저에 저장되지 않았습니다. 이전 저장 자료는 유지됩니다. 화면을 닫기 전에 원고를 복사하거나 작업을 내려받아 보관해 주세요.");}
+  },[hydrated,storageBlocked,history,storageKey,item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
+    imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled,imageAutoMapEvidence,imageComplexName]);
 
   const researchPrompt=useMemo(()=>buildDeepResearchPrompt({
     channel:"집값쓱",topic:item.title,notes,today,
-    directions:DEFAULT_DEEP_RESEARCH_DIRECTIONS
+    directions:[DEFAULT_DEEP_RESEARCH_DIRECTIONS,JIBSSUK_READER_RULES,JIBSSUK_EVIDENCE_RULES,JIBSSUK_RESEARCH_FIELDS].join("\n")
   })+"\n\n[복사하기 쉬운 출력 형식 — 마지막 우선]\n최종 답변은 [RESEARCH_REPORT_JSON]과 [/RESEARCH_REPORT_JSON]을 포함해 하나의 텍스트 코드블록으로만 출력해라. ChatGPT의 '코드 복사' 버튼으로 전체 결과를 복사할 수 있어야 한다. 태그 안은 유효한 JSON만 사용하고 HTML 문자 엔터티·줄 끝 역슬래시는 출력하지 마라.",[item.title,notes,today]);
-  const followupPrompt=useMemo(()=>report?buildFollowupResearchPrompt({
-    channel:"집값쓱",topic:item.title,notes,report,approvedKeys:approved,today,
-    directions:DEFAULT_DEEP_RESEARCH_DIRECTIONS
-  }):"",[item.title,notes,report,approved,today]);
+  const followupPrompt=useMemo(()=>report?buildJibssukFollowupPrompt({report,selectedAngleId:angleId,topic:item.title,today}):"",[report,angleId,item.title,today]);
   const selectedAngle=report?.angles.find(a=>a.id===angleId);
   const finalPrompt=useMemo(()=>report?buildJibssukIssueArticlePrompt({
     topic:item.title,notes,report,selectedAngleId:angleId,today
@@ -218,17 +231,35 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       setStatus(error instanceof Error?error.message:"표 이미지 저장에 실패했습니다.");
     }
   }
+  function persistHistory(next:ResearchHistory){
+    if(storageBlocked)throw new Error("원본 보호를 위해 저장이 중단된 상태입니다.");
+    // Write the complete existing draft first. A quota failure leaves both UI and stored draft intact.
+    const current=localStorage.getItem(storageKey);
+    const draft=current?JSON.parse(current):{};
+    const value=JSON.stringify({...draft,version:1,researchHistory:next,acceptedRaw:next.originalReport,angleId});
+    if(value.length>MAX_RESEARCH_SIZE)throw new Error("저장 한도를 초과했습니다. 기존 이력을 내려받아 보관해 주세요.");
+    localStorage.setItem(storageKey,value);
+    setHistory(next);setAcceptedRaw(next.originalReport);
+  }
   function importResearchText(input:string){
-    const parsed=parseJibssukCopiedReport(input);
-    if(!parsed){setStatus("조사 결과를 인식하지 못했습니다. ChatGPT의 코드 복사 버튼으로 전체 결과를 복사하거나 아래 칸에 붙여넣어 주세요.");return;}
-    if((articleTitle||articleBody)&&!window.confirm("새 조사 보고서를 가져오면 기존 원고가 초기화됩니다. 계속할까요?"))return;
-    const keys=new Set(parsed.report.facts.filter(f=>f.sourceUrl).map(factKey));
-    setApproved(old=>old.filter(k=>keys.has(k)));
-    setAcceptedRaw(parsed.stored);
-    setReportPaste(input.slice(0,180000));
-    setAngleId(old=>parsed.report.angles.some(a=>a.id===old)?old:parsed.report.angles[0]?.id||"");
-    setFinalPaste("");setArticleTitle("");setArticleBody("");setImagePhotoEvidence("");
-    setStatus("조사 결과를 가져왔습니다. 개별 체크는 필요 없습니다. 글의 관점을 선택하세요.");
+    try{
+      const next=history?appendResearchRound(history,input):createResearchHistory(input);
+      persistHistory(next);
+      if(!history)setAngleId(next.selectedAngleId);
+      const st=next.stats;
+      setStatus(st?`새롭게 발견한 사실 ${st.added}건 · 중복 ${st.duplicates}건 · 새 출처 ${st.sources}건 · 확인 필요 차이 ${st.conflicts}건. 기존 조사와 편집 원고를 보존했습니다.`:"최초 조사 원본을 저장했습니다. 글의 관점을 선택하세요.");
+      setReportPaste("");setFollowupPaste("");
+    }catch(error){setStatus("이번에 가져온 조사 결과는 저장되지 않았습니다. 기존 조사·원고는 유지됩니다. "+(error instanceof Error&&error.name!=="QuotaExceededError"?error.message:"브라우저 저장 공간을 확인하고 이번 조사 원본을 별도로 보관해 주세요."));}
+  }
+  function restoreRound(count:number){
+    if(!history)return;
+    try{persistHistory(restoreResearchHistory(history,count));setStatus("조사 상태를 복원했습니다. 전체 회차 원본과 편집 원고는 유지됩니다.");}
+    catch(error){setStatus(error instanceof Error?error.message:"복원하지 못했습니다.");}
+  }
+  function downloadHistory(){
+    const raw=localStorage.getItem(storageKey)||JSON.stringify({researchHistory:history});
+    const url=URL.createObjectURL(new Blob([raw],{type:"application/json"}));
+    const a=document.createElement("a");a.href=url;a.download="jibssuk-research-"+item.addedAt+".json";a.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   function importFinalText(input:string){
     const result=parseNaverFinalArticle(input);
@@ -258,6 +289,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       <a className={styles.sourceLink} href={item.sourceUrl} target="_blank" rel="noopener noreferrer">추천 기사 원문 보기 ↗</a>
     </div>
     {status&&<p role="status" className={styles.notice}>{status}</p>}
+    {storageBlocked&&<button type="button" onClick={downloadHistory}>보존된 원본 작업 내려받기</button>}
     <div className={styles.progress}><span>1 · 결과 가져오기</span><span>2 · 관점 선택</span><span>3 · 원고 작성</span><span>4 · 이미지 요청서</span></div>
 
     <section className={styles.step}>
@@ -276,14 +308,26 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       </div>
       <details className={styles.details}><summary>직접 붙여넣기 (클립보드 버튼이 안 될 때)</summary>
         <label htmlFor="jibssuk-research-paste">ChatGPT 조사 결과</label>
-        <textarea id="jibssuk-research-paste" rows={5} maxLength={180000} value={reportPaste} onChange={e=>setReportPaste(e.target.value)}
+        <textarea id="jibssuk-research-paste" rows={5} maxLength={MAX_RESEARCH_SIZE} value={reportPaste} onChange={e=>setReportPaste(e.target.value)}
           placeholder={"[RESEARCH_REPORT_JSON]\\n{ ... }\\n[/RESEARCH_REPORT_JSON]"}/>
         <button type="button" className={styles.otherButton} disabled={!reportPaste.trim()} onClick={()=>importResearchText(reportPaste)}>붙여넣은 조사 결과 가져오기</button>
       </details>
     </section>
 
     {report&&<section className={styles.step}>
-      <h3>2. 글의 관점 선택</h3>
+      <h3>2. 글의 관점 선택 및 추가 조사</h3>
+      {history&&<details className={styles.details}><summary>조사 이력·통합 결과 · 추가 조사 {history.activeRounds}회</summary>
+        <p>최초 원본과 모든 회차 원본을 보관합니다. 복원해도 편집 원고는 유지됩니다.</p>
+        <button type="button" onClick={downloadHistory}>작업·조사 이력 JSON 내려받기</button>
+        <button type="button" onClick={()=>restoreRound(0)}>최초 조사로 복원</button>
+        {history.rounds.map((round,i)=><div key={i}><button type="button" onClick={()=>restoreRound(i+1)}>{i+1}회까지 복원</button><details><summary>{i+1}회 원본 · {round.createdAt}</summary><pre>{round.raw}</pre></details></div>)}
+        <details><summary>최초 조사 원본</summary><pre>{history.originalReport}</pre></details>
+        <details><summary>통합 보고서 전체</summary><pre>{JSON.stringify(report,null,2)}</pre></details>
+      </details>}
+      {!!report.conflicts?.length&&<details className={styles.details}><summary>확인 필요 차이 {report.conflicts.length}건</summary>{report.conflicts.map((c,i)=><p key={i}>{c.reason}: {c.factIds.map(id=>report.facts.find(f=>f.id===id)?.claim).join(" / ")}</p>)}</details>}
+      {!!report.discoveries?.length&&<details className={styles.details}><summary>발견 후보 {report.discoveries.length}개 · 미검증</summary>{report.discoveries.map((d,i)=><p key={i}>{d.title} · 근거 {d.factIds.join(", ")}</p>)}</details>}
+      {!!report.resolvedGaps?.length&&<details className={styles.details}><summary>해결 보고된 질문 · 원문 확인 필요</summary><pre>{JSON.stringify(report.resolvedGaps,null,2)}</pre></details>}
+
       <p><b>사실마다 체크할 필요 없습니다.</b> 아래에서 글의 관점 하나만 고르세요. 원문 내용은 AI가 원고를 작성할 때 다시 확인하도록 요청합니다.</p>
       {report.summary&&<details className={styles.details}><summary>조사 요약 펼쳐보기</summary><p className={styles.summary}>{report.summary}</p></details>}
       <details className={styles.details}><summary>조사한 사실·기사 원문 {report.facts.length}개 펼쳐보기 (선택)</summary>
@@ -293,9 +337,15 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
             <p>{f.claim}</p>
             {f.sourceUrl?<a href={f.sourceUrl} target="_blank" rel="noopener noreferrer">{f.sourceTitle||"기사 원문 보기"} ↗</a>:<small>원문 주소 없음 · 확인 불가</small>}
             {f.publishedAt&&<small>발표일 {f.publishedAt}</small>}
+            {f.eventDate&&<small>사건·계약일 {f.eventDate}</small>}
+            {f.checkedAt&&<small>자료 기준일 {f.checkedAt}</small>}
+            {f.verificationStatus&&<small>AI의 확인 주장: {f.verificationStatus} · 사이트 자동 검증 아님</small>}
+            {f.comparisonNote&&<small>자료 간 비교: {f.comparisonNote}</small>}
+            {f.sources?.filter(s=>s.sourceUrl&&s.sourceUrl!==f.sourceUrl).map((s,i)=><a key={i} href={s.sourceUrl} target="_blank" rel="noopener noreferrer">추가 출처: {s.sourceTitle||s.sourceUrl} · {s.publishedAt} ↗</a>)}
           </div>)}
         </div>
       </details>
+      {report.angles.slice(0,3).map(a=><details className={styles.details} key={a.id}><summary>{a.title}</summary><p>독자 질문: {a.readerQuestion}</p><p>발견: {a.uniqueValue}</p>{a.recommendationReason&&<p>추천 이유: {a.recommendationReason}</p>}{a.uncertainty&&<p>확인 필요: {a.uncertainty}</p>}<p>근거: {a.factIds.join(", ")}</p></details>)}
       <label htmlFor="jibssuk-angle">원고에 사용할 관점</label>
       <select id="jibssuk-angle" value={selectedAngle?.id||""} onChange={e=>setAngleId(e.target.value)}>
         {report.angles.length===0?<option value="">확인된 관점 없음</option>:
@@ -308,10 +358,20 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       <div className={styles.actions}>
         <button type="button" className={styles.otherButton} onClick={()=>void copy(followupPrompt,"추가 조사 요청서")}>부족한 정보 추가 조사 요청서 복사</button>
       </div>
+      <div className={styles.actions}>
+        <button type="button" className={styles.mainButton} onClick={()=>void importFromClipboard("research")}>추가 조사 결과 가져오기</button>
+      </div>
+      <details className={styles.details}><summary>추가 조사 결과 직접 붙여넣기</summary>
+        <textarea aria-label="추가 조사 결과" rows={5} maxLength={MAX_RESEARCH_SIZE} value={followupPaste} onChange={e=>setFollowupPaste(e.target.value)}/>
+        <button type="button" disabled={!followupPaste.trim()} onClick={()=>importResearchText(followupPaste)}>추가 조사 병합</button>
+      </details>
+
+      <details className={styles.details}><summary>추가 조사 요청서 전체 보기</summary><textarea readOnly rows={8} value={followupPrompt} aria-label="추가 조사 요청서 미리보기"/></details>
     </section>}
 
     {report&&<section className={styles.step}>
       <h3>3. 네이버 원고 작성</h3>
+      <p>선택한 관점: <b>{selectedAngle?.title||"이전 선택이 이 복원 상태에 없습니다. 최신 상태로 돌아가거나 관점을 선택하세요."}</b></p>
       <p>선택한 사건을 중심으로 <b>일기 같은 자연스러운 말투와 남들이 지나친 발견</b>을 살려 원고를 요청합니다. 조사 내용은 필요한 만큼만 쓰고 원문은 다시 확인합니다.</p>
       <div className={styles.actions}>
         <button type="button" className={styles.mainButton} disabled={!finalPrompt}
@@ -332,6 +392,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           placeholder={"[NAVER_FINAL_ARTICLE_JSON]\\n{ ... }\\n[/NAVER_FINAL_ARTICLE_JSON]"}/>
         <button type="button" className={styles.otherButton} disabled={!finalPaste.trim()} onClick={importFinal}>붙여넣은 완성 원고 가져오기</button>
       </details>
+      {articleWarnings.length>0&&<aside className={styles.notice} aria-label="제목·본문 확인 안내"><p>자동 사실 검증 결과가 아닌 표현 확인 안내입니다. 원고는 변경하지 않습니다.</p><ul>{articleWarnings.map(w=><li key={w}>{w}</li>)}</ul></aside>}
       {(articleTitle||articleBody)&&<div className={styles.editor}>
         <h3>네이버 발행용 편집</h3>
         <label htmlFor="jibssuk-article-title">제목</label>

@@ -29,10 +29,10 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
   const mapSequence=useRef(0);
   const seededName=useRef("");
 
-  function clearMap(){
+  function clearMap(notify=true){
     mapSequence.current+=1;setLoading(false);
     if(urlRef.current){URL.revokeObjectURL(urlRef.current);urlRef.current="";}
-    setMapUrl("");setSelected(null);mapBlob.current=null;onClear();
+    setMapUrl("");setSelected(null);mapBlob.current=null;if(notify)onClear();
   }
   useEffect(()=>{
     const controller=new AbortController();
@@ -58,7 +58,7 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
     const timer=window.setTimeout(()=>{
       seededName.current=name;
       setQuery(name);
-      void search(name);
+      void search(name,true);
     },350);
     return ()=>window.clearTimeout(timer);
     // Only initial article selection should seed the search; later typing stays under user control.
@@ -72,11 +72,11 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
     searchSequence.current+=1;setSearching(false);setQuery(value);setCandidates([]);setPlaces([]);setMessage("");clearMap();
   }
 
-  async function search(nameOverride?:string){
+  async function search(nameOverride?:string,preserveEvidence=false){
     const q=(nameOverride??query).trim();
     if(q.length<2){setMessage("아파트 이름을 두 글자 이상 입력해 주세요.");return;}
     const sequence=++searchSequence.current;
-    setSearching(true);setMessage("");setCandidates([]);setPlaces([]);clearMap();
+    setSearching(true);setMessage("");setCandidates([]);setPlaces([]);clearMap(!preserveEvidence);
     try{
       let dbList:Complex[]=[];
       if(regionCode){
@@ -95,7 +95,7 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
       setCandidates(dbList);
       if(dbList.length){
         const exact=dbList.length===1&&dbList[0].name.replace(/\s+/g,"")===q.replace(/\s+/g,"");
-        if(exact){void loadMap(dbList[0]);return;}
+        if(exact){void loadMap(dbList[0],"",preserveEvidence);return;}
         setMessage("등록된 단지를 찾았습니다. 원하는 단지를 선택하면 지도가 바로 표시됩니다.");
         return;
       }
@@ -113,7 +113,7 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
       if(items.length===1&&items[0].sourceUrl){
         setManualExpanded(false);
         const official=items[0];
-        void loadMap({id:"",name:official.name,source:"verified"},official.roadAddress||official.address);
+        void loadMap({id:"",name:official.name,source:"verified"},official.roadAddress||official.address,preserveEvidence);
         return;
       }
       if(!items.length)setManualExpanded(true);
@@ -132,8 +132,8 @@ export default function JibssukAutoNaverMap({initialName="",onReady,onClear}:{
     if(!address)return;
     void loadMap({id:"",name:place.name,source:place.sourceUrl?"verified":"naver"},address);
   }
-  async function loadMap(complex:Complex,address=""){
-    clearMap();setLoading(true);setMessage("기존 네이버지도 API로 단지 지도를 불러오는 중…");
+  async function loadMap(complex:Complex,address="",preserveEvidence=false){
+    clearMap(!preserveEvidence);setLoading(true);setMessage("기존 네이버지도 API로 단지 지도를 불러오는 중…");
     const sequence=++mapSequence.current;
     try{
       const endpoint=address?"/api/apartment/map?address="+encodeURIComponent(address):"/api/apartment/map?complexId="+encodeURIComponent(complex.id);

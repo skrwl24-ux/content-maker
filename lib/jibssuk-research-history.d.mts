@@ -1,0 +1,10 @@
+import type {ResearchReport} from './research-studio.mjs';
+export type CumulativeReport = ResearchReport & {discoveries?: {title:string;factIds:string[];[key:string]:unknown}[]; conflicts?: {factIds:string[];reason:string;status:string}[]; resolvedGaps?: unknown[]};
+export type ResearchHistory = {version:number;originalReport:string;rounds:{raw:string;createdAt:string}[];activeRounds:number;selectedAngleId:string;mergedReport:CumulativeReport;updatedAt:string;stats:{added:number;duplicates:number;sources:number;conflicts:number}|null};
+export declare const MAX_RESEARCH_SIZE:number;
+export declare function parseCumulativeReport(raw:string):CumulativeReport;
+export declare function createResearchHistory(raw:string,selectedAngleId?:string):ResearchHistory;
+export declare function appendResearchRound(history:ResearchHistory,raw:string):ResearchHistory;
+export declare function restoreResearchHistory(history:ResearchHistory,count:number):ResearchHistory;
+export declare function mergeResearchReports(base:CumulativeReport,incoming:CumulativeReport):{report:CumulativeReport;stats:NonNullable<ResearchHistory['stats']>};
+export declare function buildJibssukFollowupPrompt(input:{report:CumulativeReport;selectedAngleId?:string;topic?:string;today?:string}):string;

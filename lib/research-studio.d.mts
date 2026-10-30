@@ -1,9 +1,12 @@
 export declare const DEFAULT_DEEP_RESEARCH_DIRECTIONS: string;
 export declare const DEFAULT_FINAL_ARTICLE_DIRECTIONS: string;
 export type ResearchFact = {
+  eventDate?:string; checkedAt?:string; verificationStatus?:string; comparisonNote?:string;
+  sources?: {sourceUrl:string;sourceTitle:string;publishedAt:string}[];
   id: string; claim: string; sourceUrl: string; sourceTitle: string; publishedAt: string;
 };
 export type ResearchAngle = {
+  recommendationReason?:string; uncertainty?:string;
   id: string; title: string; readerQuestion: string; uniqueValue: string; factIds: string[];
 };
 export type ResearchTrendLink = {
