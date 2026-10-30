@@ -118,3 +118,37 @@ test("fallback does not replace the existing DB-linked map or invent walking dis
   assert.match(screen,/직접 입력한 주소 기반\(해당 단지 여부 확인 필요\)/);
   assert.match(screen,/실제 도보 경로/);
 });
+
+
+test("apartment name-only lookup searches Naver places and offers an address selection without requiring region",()=>{
+  const ui=fs.readFileSync("app/jibssuk-queue/JibssukAutoNaverMap.tsx","utf8");
+  const api=fs.readFileSync("app/api/apartment/map-places/route.ts","utf8");
+  assert.match(ui,/\/api\/apartment\/map-places\?q=/);
+  assert.match(ui,/if\(regionCode\)\{/);
+  assert.match(ui,/아파트 이름을 두 글자 이상/);
+  assert.match(ui,/지역 \(선택\)/);
+  assert.match(ui,/주소 자동 찾기/);
+  assert.match(ui,/setPlaces\(items\)/);
+  assert.match(ui,/이 위치로 지도 보기/);
+  assert.match(ui,/onClick=\{\(\)=>selectPlace\(place\)\}/);
+  assert.match(ui,/void loadMap\(\{id:"",name:place.name,source:"naver"\},address\)/);
+  assert.match(ui,/네이버 장소 검색에서 선택한 주소 기반/);
+  assert.match(ui,/직접 입력한 주소 기반/);
+  assert.match(ui,/setManualExpanded\(true\)/);
+  assert.match(api,/NAVER_API_HUB_CLIENT_ID/);
+  assert.match(api,/NAVER_API_HUB_CLIENT_SECRET/);
+  assert.match(api,/searchTerm\(query\)/);
+  assert.match(api,/withoutNeighborhood\(query\)/);
+  assert.match(api,/score<50/);
+  assert.match(api,/specificArea/);
+  assert.match(api,/source:"NAVER Local Search"/);
+  assert.match(api,/Cache-Control":"no-store/);
+});
+
+test("selected source type enters image request context and avoids claiming provider match is verified",()=>{
+  const workflow=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  assert.match(workflow,/map\.sourceType==="naver"/);
+  assert.match(workflow,/네이버 장소 검색 후보에서 선택한 주소 기반 지도\(위치 일치 확인 필요\)/);
+  assert.match(workflow,/단지 DB 미등록 · 직접 입력 주소 기반 지도/);
+  assert.match(workflow,/map\.mapAddress/);
+});
