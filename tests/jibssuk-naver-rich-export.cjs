@@ -1,7 +1,7 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
-const {parseParammaNaverBlog,parammaNaverRichHtml,parammaNaverPlainText}=require("../lib/paramma-naver-export.mjs");
+async function paramma(){return import("../lib/paramma-naver-export.mjs");}
 
 async function api(){return import("../lib/jibssuk-naver-rich-export.mjs");}
 
@@ -43,6 +43,7 @@ test("Jibssuk reuses Paramma's 32/30/19/15 Naver block styles and exact paragrap
 test("Paramma parser remains backward-compatible and Jibssuk body mode preserves first sentence as 15px body",async()=>{
   const {buildJibssukNaverRichBody}=await api();
   const raw="이것은 제목이 아니라 첫 본문 문장입니다.\n\n## 다음 내용\n\n더 자세한 설명.";
+  const {parseParammaNaverBlog,parammaNaverRichHtml,parammaNaverPlainText}=await paramma();
   const old=parseParammaNaverBlog(raw);
   assert.equal(old[0].type,"title");
   const parsed=parseParammaNaverBlog(raw,{includeTitle:false});
