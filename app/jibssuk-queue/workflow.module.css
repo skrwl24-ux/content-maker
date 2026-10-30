@@ -59,3 +59,13 @@
 .autoNaverMapPreview{width:100%;max-width:800px;border:1px solid #c9d9e8;border-radius:9px;overflow:hidden;background:white}
 .autoNaverMapPreview img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain}
 @media(max-width:700px){.autoNaverMap{padding:12px}.autoNaverMapSearch{grid-template-columns:1fr}.autoNaverMapSearch button{width:100%}}
+
+.autoMapFallback{margin:13px 0 8px}
+.autoMapFallback>.otherButton{font-size:12px}
+.autoMapManualInput{display:flex;align-items:end;gap:10px;flex-wrap:wrap;padding:13px 0 7px}
+.autoMapManualInput label{flex:1 1 270px;min-width:0;font-size:12px;font-weight:750;color:#31506c}
+.autoMapManualInput input{margin-top:6px!important}
+.autoMapManualInput>.mainButton{min-height:42px}
+.autoMapManualInput p{flex-basis:100%;margin:2px 0!important}
+.autoMapManualInput .sourceLink{font-size:12px;margin-top:2px}
+@media(max-width:700px){.autoMapManualInput{align-items:stretch}.autoMapManualInput label,.autoMapManualInput>.mainButton{flex:1 1 100%}}
