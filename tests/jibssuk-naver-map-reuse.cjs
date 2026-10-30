@@ -89,7 +89,7 @@ test("a newer unlisted development can show a Naver Static Map by an explicitly 
   const workflow=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
   assert.match(screen,/manualAddress/);
   assert.match(screen,/setManualExpanded\(true\)/);
-  assert.match(screen,/단지가 검색되지 않나요\? 현장 주소로 지도 찾기/);
+  assert.match(screen,/주소를 직접 입력하기 \(자동 검색이 안 될 때\)/);
   assert.match(screen,/\/api\/apartment\/map\?address=/);
   assert.match(screen,/해당 주소 지도 보기/);
   assert.match(screen,/네이버지도 원본 검색 열기/);
