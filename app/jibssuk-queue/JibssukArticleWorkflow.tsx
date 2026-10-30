@@ -38,8 +38,9 @@ async function saveNaverTablePng(table:JibssukNaverTableGroup,page:number){
   const cols=table.headers.length,colWidth=inner/cols;
   const canvas=document.createElement("canvas");
   canvas.width=width;
-  const ctx=canvas.getContext("2d");
-  if(!ctx)throw new Error("이미지 캔버스를 열 수 없습니다.");
+  const context=canvas.getContext("2d");
+  if(!context)throw new Error("이미지 캔버스를 열 수 없습니다.");
+  const ctx:CanvasRenderingContext2D=context;
   ctx.font="bold 32px Malgun Gothic, sans-serif";
   const headings=table.headers.map(s=>wrapCanvasCell(ctx,s,colWidth-36));
   ctx.font="30px Malgun Gothic, sans-serif";
