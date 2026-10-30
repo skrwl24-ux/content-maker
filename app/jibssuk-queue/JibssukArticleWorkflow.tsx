@@ -10,11 +10,78 @@ import {
 } from "../../lib/research-studio.mjs";
 import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
 import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
+import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
 
 const STORAGE_PREFIX="content-maker-jibssuk-inline-workflow-v1:";
 function koreanDay(){
   return new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+}
+
+const TABLE_IMAGE_ROWS=12;
+
+// Each download contains a complete column-group and a bounded set of rows.
+// No cell values are shortened or omitted: wrap and grow the canvas instead.
+function wrapCanvasCell(ctx:CanvasRenderingContext2D,value:string,width:number){
+  const lines:string[]=[];let line="";
+  for(const char of Array.from(value)){
+    if(line && ctx.measureText(line+char).width>width){lines.push(line);line="";}
+    line+=char;
+  }
+  lines.push(line);
+  return lines;
+}
+async function saveNaverTablePng(table:JibssukNaverTableGroup,page:number){
+  const rows=table.rows.slice(page*TABLE_IMAGE_ROWS,(page+1)*TABLE_IMAGE_ROWS);
+  if(!rows.length)throw new Error("표에 저장할 행이 없습니다.");
+  const width=1600,padding=72,inner=width-padding*2;
+  const cols=table.headers.length,colWidth=inner/cols;
+  const canvas=document.createElement("canvas");
+  canvas.width=width;
+  const ctx=canvas.getContext("2d");
+  if(!ctx)throw new Error("이미지 캔버스를 열 수 없습니다.");
+  ctx.font="bold 32px Malgun Gothic, sans-serif";
+  const headings=table.headers.map(s=>wrapCanvasCell(ctx,s,colWidth-36));
+  ctx.font="30px Malgun Gothic, sans-serif";
+  const wrapped=rows.map(row=>row.map(v=>wrapCanvasCell(ctx,v,colWidth-36)));
+  const headHeight=Math.max(76,...headings.map(w=>w.length*42+28));
+  const rowHeights=wrapped.map(row=>Math.max(66,...row.map(w=>w.length*42+24)));
+  const contentHeight=185+headHeight+rowHeights.reduce((a,b)=>a+b,0)+95;
+  canvas.height=Math.max(900,contentHeight);
+  ctx.fillStyle="#ffffff";ctx.fillRect(0,0,width,canvas.height);
+  ctx.fillStyle="#203b57";ctx.font="bold 46px Malgun Gothic, sans-serif";
+  const label="비교표 "+table.tableNumber+(table.partCount>1?" · "+table.partNumber+"/"+table.partCount:"")+
+    (table.rows.length>TABLE_IMAGE_ROWS?" · "+(page+1)+"/"+Math.ceil(table.rows.length/TABLE_IMAGE_ROWS)+"페이지":"");
+  ctx.fillText(label,padding,106);
+  let y=180;
+  function drawRow(values:string[][],height:number,header:boolean,rowNo:number){
+    const top=y;
+    ctx.fillStyle=header?"#edf3f9":rowNo%2?"#f9fbfd":"#ffffff";
+    ctx.fillRect(padding,top,inner,height);
+    ctx.strokeStyle="#cddbe8";ctx.lineWidth=2;
+    for(let i=0;i<=cols;i++){
+      const x=padding+i*colWidth;
+      ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+height);ctx.stroke();
+    }
+    ctx.beginPath();ctx.moveTo(padding,top);ctx.lineTo(padding+inner,top);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(padding,top+height);ctx.lineTo(padding+inner,top+height);ctx.stroke();
+    ctx.font=(header?"bold ":"")+"30px Malgun Gothic, sans-serif";
+    ctx.fillStyle="#203b57";
+    values.forEach((lines,i)=>lines.forEach((line,j)=>ctx.fillText(line,padding+i*colWidth+18,top+43+j*42)));
+    y+=height;
+  }
+  drawRow(headings,headHeight,true,0);
+  wrapped.forEach((row,i)=>drawRow(row,rowHeights[i],false,i));
+  const blob=await new Promise<Blob>((resolve,reject)=>{
+    canvas.toBlob(v=>v?resolve(v):reject(new Error("PNG 생성에 실패했습니다.")),"image/png");
+  });
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  const suffix=table.partCount>1?"-part"+table.partNumber:"";
+  a.href=url;
+  a.download="jibssuk-table-"+table.tableNumber+suffix+"-page"+(page+1)+".png";
+  document.body.appendChild(a);a.click();a.remove();
+  window.setTimeout(()=>URL.revokeObjectURL(url),5000);
 }
 
 export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
@@ -100,6 +167,14 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       }catch{
         setStatus("클립보드 복사가 차단됐습니다. 본문 편집 칸에서 직접 복사해 주세요.");
       }
+    }
+  }
+  async function downloadTableImage(table:JibssukNaverTableGroup,page:number){
+    try{
+      await saveNaverTablePng(table,page);
+      setStatus("표 PNG 이미지를 저장했습니다. 네이버에서는 사진으로 별도 등록하세요. 원고의 표 데이터는 그대로 유지됩니다.");
+    }catch(error){
+      setStatus(error instanceof Error?error.message:"표 이미지 저장에 실패했습니다.");
     }
   }
   function importResearchText(input:string){
@@ -228,6 +303,21 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           <p className={styles.hint}>기존 Paramma·아파트 대량발행과 동일하게 제목 32 · 소제목 30 · 강조 19 · 본문 15 · 문단 사이 한 줄 띄기를 적용합니다. {naverRich.blockCount}개 블록 자동 인식.</p>
           <div className={styles.naverPreview} role="region" aria-label="네이버 붙여넣기 미리보기"
             dangerouslySetInnerHTML={{__html:naverRich.html}}/>
+          {naverRich.tables.length>0&&<div className={styles.tableFallback}>
+            <p><b>비교표 {new Set(naverRich.tables.map(t=>t.tableNumber)).size}개 감지</b> · 3열 이하는 비교표로 유지하고 넓은 표는 열을 나눠 표시합니다. 모든 원본 행과 값은 유지합니다.</p>
+            <details>
+              <summary>네이버에서 표가 깨질 때 · 표 PNG 이미지 저장 (선택)</summary>
+              <p>이미지로 바꾸어도 표 데이터는 본문에 남습니다. PNG를 선택해 저장하고 네이버에 사진으로 등록하세요.</p>
+              <div className={styles.tableImageButtons}>
+                {naverRich.tables.flatMap((table,i)=>Array.from({length:Math.ceil(table.rows.length/TABLE_IMAGE_ROWS)},(_,page)=>(
+                  <button key={i+"-"+page} type="button" className={styles.otherButton}
+                    onClick={()=>void downloadTableImage(table,page)}>
+                    표 {table.tableNumber}{table.partCount>1?"-"+table.partNumber:""}{table.rows.length>TABLE_IMAGE_ROWS?" · "+(page+1)+"쪽":""} PNG 저장
+                  </button>
+                )))}
+              </div>
+            </details>
+          </div>}
         </div>}
         <div className={styles.actions}>
           <button type="button" className={styles.otherButton} disabled={!articleTitle.trim()} onClick={()=>void copy(articleTitle,"제목")}>제목 복사</button>
