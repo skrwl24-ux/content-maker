@@ -10,6 +10,7 @@ import {
 } from "../../lib/research-studio.mjs";
 import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
 import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
+import {buildJibssukApartmentImagePrompts} from "../../lib/jibssuk-apartment-image-prompts.mjs";
 import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
 
@@ -97,9 +98,20 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [finalPaste,setFinalPaste]=useState("");
   const [articleTitle,setArticleTitle]=useState("");
   const [articleBody,setArticleBody]=useState("");
+  const [imageMapEvidence,setImageMapEvidence]=useState("");
+  const [imagePriceEvidence,setImagePriceEvidence]=useState("");
+  const [imageLifestyleEvidence,setImageLifestyleEvidence]=useState("");
+  const [imageExtraEvidence,setImageExtraEvidence]=useState("");
+  const [imageExtraEnabled,setImageExtraEnabled]=useState(false);
   const [status,setStatus]=useState("");
   const report=useMemo(()=>parseResearchReport(acceptedRaw),[acceptedRaw]);
   const naverRich=useMemo(()=>buildJibssukNaverRichArticle(articleTitle,articleBody),[articleTitle,articleBody]);
+  const imageBriefs=useMemo(()=>buildJibssukApartmentImagePrompts({
+    title:articleTitle,body:articleBody,
+    mapEvidence:imageMapEvidence,priceEvidence:imagePriceEvidence,
+    lifestyleEvidence:imageLifestyleEvidence,extraEvidence:imageExtraEvidence,
+    includeExtra:imageExtraEnabled
+  }),[articleTitle,articleBody,imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
   const handoff=useMemo(()=>makeResearchHandoff(item),[item]);
   const notes=useMemo(()=>handoff?researchNotesFromHandoff(handoff):"",[handoff]);
   const today=koreanDay();
@@ -118,6 +130,11 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           setFinalPaste(text(data.finalPaste,180000));
           setArticleTitle(text(data.articleTitle,250));
           setArticleBody(text(data.articleBody,120000));
+          setImageMapEvidence(text(data.imageMapEvidence,15000));
+          setImagePriceEvidence(text(data.imagePriceEvidence,15000));
+          setImageLifestyleEvidence(text(data.imageLifestyleEvidence,15000));
+          setImageExtraEvidence(text(data.imageExtraEvidence,15000));
+          setImageExtraEnabled(data.imageExtraEnabled===true);
         }
       }
     }catch{setStatus("저장된 작업을 불러오지 못했습니다. 기존 저장 데이터는 변경하지 않았습니다.");}
@@ -128,10 +145,12 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
     if(!hydrated)return;
     try{
       localStorage.setItem(storageKey,JSON.stringify({
-        version:1,topic:item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody
+        version:1,topic:item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
+        imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled
       }));
     }catch{setStatus("이 브라우저에 작업을 저장하지 못했습니다. 저장 공간을 확인해 주세요.");}
-  },[hydrated,storageKey,item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody]);
+  },[hydrated,storageKey,item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
+    imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
 
   const researchPrompt=useMemo(()=>buildDeepResearchPrompt({
     channel:"집값쓱",topic:item.title,notes,today,
@@ -218,7 +237,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
       <a className={styles.sourceLink} href={item.sourceUrl} target="_blank" rel="noopener noreferrer">추천 기사 원문 보기 ↗</a>
     </div>
     {status&&<p role="status" className={styles.notice}>{status}</p>}
-    <div className={styles.progress}><span>1 · 결과 가져오기</span><span>2 · 관점 선택</span><span>3 · 원고 작성</span></div>
+    <div className={styles.progress}><span>1 · 결과 가져오기</span><span>2 · 관점 선택</span><span>3 · 원고 작성</span><span>4 · 이미지 요청서</span></div>
 
     <section className={styles.step}>
       <h3>1. AI 심층 조사</h3>
@@ -329,6 +348,60 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
         </div>
         <p className={styles.hint}>네이버 스마트에디터 ONE은 외부 HTML 서식을 일부 제거하거나 변경할 수 있습니다. 네이버에 붙여넣은 뒤 결과를 확인해 주세요.</p>
       </div>}
+    </section>}
+    {(articleTitle||articleBody)&&<section className={styles.step} aria-label="집값쓱 아파트 개별 이미지 요청서">
+      <h3>4. 아파트 글 · 이미지 요청서</h3>
+      <p><b>대표 썸네일 + 본문 3장</b>이 기본입니다. 필요한 경우에만 추가 04번을 사용합니다.
+        모든 이미지 규격은 <b>1600×900 (16:9)</b>이고, 각 장면의 목적과 필요한 근거 자료가 다릅니다.</p>
+      <p className={styles.hint}>이 기능은 아파트 단지 중심 글 전용입니다. 일반 뉴스·생활정보 글에서는 이 슬롯을 강제로 적용하지 마세요.
+        지도 캡처·조감도·사진은 요청서 복사 후 ChatGPT에 별도 첨부해야 합니다.</p>
+      <details className={styles.details}>
+        <summary>지도·시세·조감도 원본 자료 메모 입력 (선택 · 글감별 저장)</summary>
+        <p className={styles.hint}>원자료를 직접 확인한 뒤 필요한 만큼만 입력하세요. 입력한 문구는 자동 검증되지 않으며, 첨부 사진 파일은 이 입력칸에서 전송되지 않습니다.</p>
+        <label htmlFor="image-evidence-map">01 · 네이버지도 캡처·경로 메모</label>
+        <textarea id="image-evidence-map" rows={3} maxLength={15000} value={imageMapEvidence}
+          onChange={e=>setImageMapEvidence(e.target.value)}
+          placeholder="단지 주소·지도 출처·캡처 날짜·지도에 실제 표시된 역/목적지/도보 경로 등. 지도 캡처는 ChatGPT에서 따로 첨부"/>
+        <label htmlFor="image-evidence-price">02 · 실거래·월별 시세 원본</label>
+        <textarea id="image-evidence-price" rows={5} maxLength={15000} value={imagePriceEvidence}
+          onChange={e=>setImagePriceEvidence(e.target.value)}
+          placeholder={"계약일 | 전용면적 | 층 | 거래유형 | 금액 | 출처/기준일\n동일 면적 12개월 월별 자료가 있으면 월별 기준값·거래 건수도 첨부"}/>
+        <label htmlFor="image-evidence-life">03 · 공식 조감도·실제 생활환경 자료</label>
+        <textarea id="image-evidence-life" rows={3} maxLength={15000} value={imageLifestyleEvidence}
+          onChange={e=>setImageLifestyleEvidence(e.target.value)}
+          placeholder="공식 조감도/실제 사진의 출처·촬영 시점·확인된 주변 시설·사용권 메모. 이미지 파일은 별도 첨부"/>
+      </details>
+      <label className={styles.imageExtraToggle}>
+        <input type="checkbox" checked={imageExtraEnabled} onChange={e=>setImageExtraEnabled(e.target.checked)}/>
+        04 · 추가 발견 이미지도 만들기 (검증된 별도 내용이 있을 때)
+      </label>
+      {imageExtraEnabled&&<div>
+        <label htmlFor="image-evidence-extra">04 · 추가 발견의 확인된 사실·근거</label>
+        <textarea id="image-evidence-extra" rows={3} maxLength={15000} value={imageExtraEvidence}
+          onChange={e=>setImageExtraEvidence(e.target.value)}
+          placeholder="앞의 3장과 겹치지 않는 핵심 발견, 관련 사실·날짜·숫자·원문 출처"/>
+      </div>}
+      <div className={styles.imageBriefList}>
+        {imageBriefs.map(brief=><div className={styles.imageBriefCard} key={brief.slot}>
+          <div className={styles.imageBriefHead}>
+            <strong>{brief.slot} · {brief.label}</strong>
+            <span>1600×900</span>
+          </div>
+          <p>{brief.purpose}</p>
+          {brief.slot!=="00"&&<p className={styles.hint}>
+            {brief.evidenceEntered?"근거 메모 입력됨 · 원본/첨부 확인 필요":"원본 자료 미입력 · 요청서에서 자료를 먼저 요구함"}
+          </p>}
+          <p className={styles.hint}>{brief.sourceHint}</p>
+          <div className={styles.actions}>
+            <button type="button" className={styles.mainButton}
+              onClick={()=>void copy(brief.prompt,"이미지 "+brief.slot+" 요청서")}>이미지 {brief.slot} 요청서 복사</button>
+          </div>
+          <details className={styles.details}>
+            <summary>이미지 {brief.slot} 요청서 전체 보기</summary>
+            <textarea readOnly rows={11} value={brief.prompt} aria-label={"이미지 "+brief.slot+" 요청서 미리보기"}/>
+          </details>
+        </div>)}
+      </div>
     </section>}
     <p className={styles.disclaimer}>작업은 이 브라우저에 글감별로 따로 보관됩니다. 원문·실거래 검증 및 네이버 발행은 자동으로 실행되지 않습니다.</p>
   </section>;
