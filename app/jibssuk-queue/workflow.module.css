@@ -21,3 +21,12 @@
 .naverPreview p{font-size:16px;line-height:1.9}
 .naverPreview h3{font-size:19px;line-height:1.65}
 @media(max-width:700px){.naverPreview{padding:14px 12px;max-height:360px}}
+
+.naverPreview table{max-width:100%;font-variant-numeric:tabular-nums}
+.naverPreview th,.naverPreview td{vertical-align:middle}
+.tableFallback{margin:14px 0 4px;padding:12px;border:1px solid #cddbe8;border-radius:10px;background:#fff}
+.tableFallback p{font-size:12px;line-height:1.7;color:#486078;margin:0 0 8px}
+.tableFallback details{font-size:12px;color:#375673}
+.tableFallback summary{cursor:pointer;font-weight:800}
+.tableImageButtons{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+@media(max-width:700px){.naverPreview table{width:100%;table-layout:fixed}.naverPreview td,.naverPreview th{font-size:14px!important;padding:8px 6px!important}.tableImageButtons button{flex:1 1 auto}}
