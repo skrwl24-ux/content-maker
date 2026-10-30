@@ -14,3 +14,10 @@
 .factList{display:grid;gap:9px;margin:12px 0}.fact{border:1px solid #e4eaf2;border-radius:11px;padding:12px;display:grid;gap:7px}.fact .check{display:flex;align-items:flex-start;gap:8px;margin:0;line-height:1.55}.check input{margin-top:3px}.fact a,.fact small{margin-left:22px}.fact small{font-size:11px;color:#8391a3}
 .summary{background:#f4f7fb;padding:10px 12px;border-radius:10px}.editor{border-top:1px solid #e4eaf2;margin-top:20px;padding-top:17px}.editor h3{margin-bottom:14px}.disclaimer{border-top:1px solid #e4eaf2;margin:0;padding-top:15px}.loading{text-align:center;color:#63768e;padding:18px}
 @media(max-width:700px){.shell{padding:16px;margin-top:14px}.header{flex-direction:column;gap:10px}.header h2{font-size:20px}.sourceLink{white-space:normal}.mainButton,.otherButton{flex:1 1 auto}}
+
+.naverPreviewPanel{margin:19px 0 12px;padding:14px;border:1px solid #d3e0ee;border-radius:12px;background:#f6f9fd}
+.naverPreviewPanel h4{font-size:14px;color:#244766;margin:0 0 5px}
+.naverPreview{margin-top:11px;max-height:450px;overflow-y:auto;padding:20px 18px;border:1px solid #e2e8ef;border-radius:10px;background:#fff;overflow-wrap:anywhere}
+.naverPreview p{font-size:16px;line-height:1.9}
+.naverPreview h3{font-size:19px;line-height:1.65}
+@media(max-width:700px){.naverPreview{padding:14px 12px;max-height:360px}}
