@@ -69,3 +69,12 @@
 .autoMapManualInput p{flex-basis:100%;margin:2px 0!important}
 .autoMapManualInput .sourceLink{font-size:12px;margin-top:2px}
 @media(max-width:700px){.autoMapManualInput{align-items:stretch}.autoMapManualInput label,.autoMapManualInput>.mainButton{flex:1 1 100%}}
+
+.autoNaverMapPlaces{display:grid;gap:9px;margin:14px 0}
+.autoNaverMapPlace{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:#fff;border:1px solid #d6e3ef;border-radius:9px}
+.autoNaverMapPlace>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.autoNaverMapPlace strong{font-size:13px;color:#20405c;overflow-wrap:anywhere}
+.autoNaverMapPlace span{font-size:12px;line-height:1.65;color:#3e5569;overflow-wrap:anywhere}
+.autoNaverMapPlace small{font-size:11px;color:#607b93}
+.autoNaverMapPlace button{flex:none}
+@media(max-width:700px){.autoNaverMapPlace{flex-direction:column;align-items:stretch}.autoNaverMapPlace button{width:100%}}
