@@ -78,3 +78,30 @@
 .autoNaverMapPlace small{font-size:11px;color:#607b93}
 .autoNaverMapPlace button{flex:none}
 @media(max-width:700px){.autoNaverMapPlace{flex-direction:column;align-items:stretch}.autoNaverMapPlace button{width:100%}}
+
+.propertyPhotoFinder{margin:16px 0;padding:16px;background:#f8fafc;border:1px solid #cbdce9;border-radius:13px}
+.propertyPhotoModes{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}
+.propertyPhotoModes button{padding:8px 14px;border-radius:8px;font-size:12px;font-weight:750;border:1px solid #cfdae6;cursor:pointer}
+.selectedMode{color:#fff;background:#275986;border-color:#275986!important}
+.propertyPhotoSearch{display:flex;gap:10px;align-items:end}
+.propertyPhotoSearch label{flex:1;min-width:0;font-size:12px;font-weight:800;color:#31506c}
+.propertyPhotoSearch label input{margin-top:6px!important}
+.propertyPhotoSearch button{flex:none;min-height:42px}
+.photoSourceLinks{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 8px}
+.propertyPhotoGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px;margin:15px 0}
+.propertyPhotoCard,.propertyPhotoSelected{min-width:0;border:1px solid #d5e0ea;padding:10px;border-radius:10px;background:#fff;display:flex;flex-direction:column;gap:5px}
+.propertyPhotoSelected{border:2px solid #3975a9;padding:9px;background:#f2f7fc}
+.propertyPhotoThumb{aspect-ratio:16/10;overflow:hidden;background:#e9eef4;border-radius:6px}
+.propertyPhotoThumb img{width:100%;height:100%;object-fit:contain;display:block}
+.propertyPhotoCard strong,.propertyPhotoSelected strong{font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.propertyPhotoCard small,.propertyPhotoSelected small{font-size:10px;line-height:1.5;color:#58738d;overflow-wrap:anywhere}
+.propertyPhotoActions{display:flex;flex-direction:column;gap:7px;margin-top:auto;padding-top:5px}
+.propertyPhotoActions a{font-size:11px;color:#1964a1;text-decoration:underline;overflow-wrap:anywhere}
+.propertyPhotoActions button{font-size:11px;padding:8px!important;min-height:35px}
+.propertyPhotoExport{background:#fff;border:1px solid #d9e5ef;border-radius:10px;padding:14px;margin-top:15px}
+.propertyPhotoExport>strong{font-size:13px;color:#204563}
+.propertyPhotoFile{display:block;font-size:12px;font-weight:800;margin-top:11px;color:#31506c}
+.propertyPhotoFile input{display:block;margin:8px 0;width:100%;font-size:12px}
+.propertyPhotoExportReady{margin-top:12px}
+.propertyPhotoExportReady small{font-size:11px;color:#526d84}
+@media(max-width:700px){.propertyPhotoFinder{padding:12px}.propertyPhotoSearch{flex-direction:column;align-items:stretch}.propertyPhotoSearch button{width:100%}.propertyPhotoGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.propertyPhotoCard,.propertyPhotoSelected{padding:8px}.propertyPhotoExport{padding:12px}}
