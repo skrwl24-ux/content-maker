@@ -17,6 +17,20 @@ import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.m
 import styles from "./workflow.module.css";
 
 const STORAGE_PREFIX="content-maker-jibssuk-inline-workflow-v1:";
+function suggestApartmentName(topic:string,articleTitle:string){
+  const sources=[topic,articleTitle].filter(Boolean);
+  const known=sources.join(" ").match(/과천\s*디에트르\s*퍼스티지/);
+  if(known)return known[0].replace(/\s+/g," ").trim();
+  for(const raw of sources){
+    const cleaned=raw.replace(/^[“"][^”"]+[”"]\s*/,"").trim()
+      .split(/[?!！,，·｜|:]/)[0]
+      .replace(/\s+(?:무순위|재공급|청약|실거래|매매|거래량|분양가|집값|전세|월세|가격|논란|이유|왜)\b.*$/,"").trim();
+    if(cleaned.length>=5&&cleaned.length<=45&&
+      /(?:\d+단지|주공|푸르지오|디에트르|퍼스티지|롯데캐슬|힐스테이트|래미안|아이파크|더샵|브리시엘|자이|e편한세상)/.test(cleaned))return cleaned;
+  }
+  return "";
+}
+
 function koreanDay(){
   return new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 }
@@ -106,6 +120,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [imageLifestyleEvidence,setImageLifestyleEvidence]=useState("");
   const [imagePhotoEvidence,setImagePhotoEvidence]=useState("");
   const [imageComplexName,setImageComplexName]=useState("");
+  const suggestedName=useMemo(()=>suggestApartmentName(item.title,articleTitle),[item.title,articleTitle]);
   const [imageExtraEvidence,setImageExtraEvidence]=useState("");
   const [imageExtraEnabled,setImageExtraEnabled]=useState(false);
   const [status,setStatus]=useState("");
@@ -361,7 +376,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
         모든 이미지 규격은 <b>1600×900 (16:9)</b>이고, 각 장면의 목적과 필요한 근거 자료가 다릅니다.</p>
       <p className={styles.hint}>이 기능은 아파트 단지 중심 글 전용입니다. 일반 뉴스·생활정보 글에는 강제로 적용하지 마세요.
         입지 지도는 기존 네이버지도 API로 자동 준비할 수 있습니다. 지도·조감도·사진 파일은 ChatGPT에 별도로 첨부해야 합니다.</p>
-      <JibssukAutoNaverMap
+      <JibssukAutoNaverMap initialName={suggestedName}
         onReady={map=>{
           setImageComplexName(map.complexName);
           setImageAutoMapEvidence([
@@ -376,7 +391,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           ].filter(Boolean).join("\n"));
         }}
         onClear={()=>setImageAutoMapEvidence("")}/>
-      <JibssukPropertyPhotos initialName={imageComplexName} onSourceChange={setImagePhotoEvidence}/>
+      <JibssukPropertyPhotos initialName={imageComplexName||suggestedName} onSourceChange={setImagePhotoEvidence}/>
       <details className={styles.details}>
         <summary>수동 지도 메모·실거래·사진 출처 보충 메모 (선택 · 글감별 저장)</summary>
         <p className={styles.hint}>원자료를 직접 확인한 뒤 필요한 만큼만 입력하세요. 입력한 문구는 자동 검증되지 않으며, 첨부 사진 파일은 이 입력칸에서 전송되지 않습니다.</p>
