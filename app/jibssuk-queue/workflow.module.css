@@ -38,8 +38,8 @@
 .imageBriefHead{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .imageBriefHead strong{font-size:14px;line-height:1.5;color:#1d405f}
 .imageBriefHead span{font-size:11px;white-space:nowrap;color:#68829b}
-.step .imageExtraToggle{display:flex;gap:9px;align-items:center;font-size:12px;font-weight:800;color:#315778;margin:15px 0 10px;line-height:1.5}
-.imageExtraToggle input{width:17px;height:17px;flex:none}
+.step .imageExtraToggle{display:inline-flex;gap:9px;align-items:center;font-size:12px;font-weight:800;color:#315778;margin:15px 0 10px;line-height:1.5;background:#f6f9fd;border:1px solid #cbdbe8;border-radius:9px;padding:9px 12px;cursor:pointer}
+.imageExtraToggle[aria-pressed="true"]{background:#e8f1fa;border-color:#8fb6db}
 .imageBriefCard .actions button{width:100%}
 .imageBriefCard .details{margin:10px 0 0}
 @media(max-width:700px){.imageBriefList{grid-template-columns:1fr}.imageBriefCard{padding:12px}}
