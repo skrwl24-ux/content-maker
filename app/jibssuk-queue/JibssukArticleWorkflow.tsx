@@ -9,7 +9,7 @@ import {
   DEFAULT_DEEP_RESEARCH_DIRECTIONS
 } from "../../lib/research-studio.mjs";
 import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib/jibssuk-simple-workflow.mjs";
-import {buildJibssukNaverRichBody} from "../../lib/jibssuk-naver-rich-export.mjs";
+import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
 
 const STORAGE_PREFIX="content-maker-jibssuk-inline-workflow-v1:";
@@ -31,7 +31,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [articleBody,setArticleBody]=useState("");
   const [status,setStatus]=useState("");
   const report=useMemo(()=>parseResearchReport(acceptedRaw),[acceptedRaw]);
-  const naverRich=useMemo(()=>buildJibssukNaverRichBody(articleBody),[articleBody]);
+  const naverRich=useMemo(()=>buildJibssukNaverRichArticle(articleTitle,articleBody),[articleTitle,articleBody]);
   const handoff=useMemo(()=>makeResearchHandoff(item),[item]);
   const notes=useMemo(()=>handoff?researchNotesFromHandoff(handoff):"",[handoff]);
   const today=koreanDay();
@@ -82,23 +82,23 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
     try{await navigator.clipboard.writeText(value);setStatus(label+" 복사했습니다. ChatGPT에서 붙여넣어 사용하세요.");}
     catch{setStatus("복사하지 못했습니다. 아래 미리보기에서 직접 복사해 주세요.");}
   }
-  async function copyNaverFormatted(){
-    if(!naverRich.plain)return;
+  async function copyNaverFormatted(includeTitle:boolean){
+    const plain=includeTitle?naverRich.plain:naverRich.bodyPlain;
+    const html=includeTitle?naverRich.html:naverRich.bodyHtml;
+    if(!plain)return;
     try{
       if(typeof ClipboardItem==="undefined" || !navigator.clipboard?.write)throw new Error("HTML clipboard unavailable");
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/html":new Blob([naverRich.html],{type:"text/html"}),
-          "text/plain":new Blob([naverRich.plain],{type:"text/plain"}),
-        })
-      ]);
-      setStatus("네이버 본문에 Ctrl+V로 붙여넣으세요. 소제목·굵기·문단 서식을 포함해 복사했습니다. 네이버 편집기에서 일부 서식이 달라질 수 있으니 발행 전 확인해 주세요.");
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html":new Blob([html],{type:"text/html"}),
+        "text/plain":new Blob([plain],{type:"text/plain"})
+      })]);
+      setStatus((includeTitle?"제목과 본문":"본문")+" 서식 복사 완료 · 네이버에서 Ctrl+V 해주세요. 실제 붙여넣기 서식은 네이버 편집기에서 확인해 주세요.");
     }catch{
       try{
-        await navigator.clipboard.writeText(naverRich.plain);
-        setStatus("브라우저에서 서식 복사가 지원되지 않아 일반 텍스트로 복사했습니다. 네이버 본문에 붙여넣은 뒤 서식을 적용해 주세요.");
+        await navigator.clipboard.writeText(plain);
+        setStatus("서식 복사가 제한되어 네이버용 문단 간격 텍스트로 복사했습니다.");
       }catch{
-        setStatus("복사가 차단됐습니다. 아래 본문 편집 칸에서 직접 복사해 주세요.");
+        setStatus("클립보드 복사가 차단됐습니다. 본문 편집 칸에서 직접 복사해 주세요.");
       }
     }
   }
@@ -224,14 +224,15 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
         <textarea id="jibssuk-article-body" value={articleBody} rows={13} maxLength={120000}
           onChange={e=>setArticleBody(e.target.value)}/>
         {naverRich.html&&<div className={styles.naverPreviewPanel}>
-          <h4>네이버 본문 서식 미리보기</h4>
-          <p className={styles.hint}>소제목·강조·문단 간격을 반영했습니다. 아래 버튼으로 서식을 포함해 복사하세요.</p>
-          <div className={styles.naverPreview} role="region" aria-label="네이버 본문 서식 미리보기"
+          <h4>네이버 붙여넣기 미리보기</h4>
+          <p className={styles.hint}>기존 Paramma·아파트 대량발행과 동일하게 제목 32 · 소제목 30 · 강조 19 · 본문 15 · 문단 사이 한 줄 띄기를 적용합니다. {naverRich.blockCount}개 블록 자동 인식.</p>
+          <div className={styles.naverPreview} role="region" aria-label="네이버 붙여넣기 미리보기"
             dangerouslySetInnerHTML={{__html:naverRich.html}}/>
         </div>}
         <div className={styles.actions}>
           <button type="button" className={styles.otherButton} disabled={!articleTitle.trim()} onClick={()=>void copy(articleTitle,"제목")}>제목 복사</button>
-          <button type="button" className={styles.mainButton} disabled={!articleBody.trim()} onClick={()=>void copyNaverFormatted()}>네이버 서식 복사</button>
+          <button type="button" className={styles.mainButton} disabled={!naverRich.bodyPlain} onClick={()=>void copyNaverFormatted(true)}>네이버 전체 서식 복사 (제목 포함)</button>
+          <button type="button" className={styles.otherButton} disabled={!naverRich.bodyPlain} onClick={()=>void copyNaverFormatted(false)}>본문만 서식 복사</button>
           <button type="button" className={styles.otherButton} disabled={!articleBody.trim()} onClick={()=>void copy(articleBody,"본문")}>본문 복사 (일반 텍스트)</button>
           <button type="button" className={styles.otherButton} disabled={!articleBody.trim()} onClick={()=>void copy([articleTitle,articleBody].filter(Boolean).join("\n\n"),"제목+본문")}>전체 복사</button>
         </div>
