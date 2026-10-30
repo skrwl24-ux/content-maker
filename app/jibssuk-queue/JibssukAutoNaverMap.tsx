@@ -4,9 +4,9 @@ import {useEffect,useRef,useState} from "react";
 import styles from "./workflow.module.css";
 
 type Region={region_code:string;sido_name:string;region_name:string};
-type Complex={id:string;name:string;legalDong?:string;matchStatus?:string;source?:"naver"|"manual"};
-type Place={name:string;address:string;roadAddress:string;category:string;source:string};
-type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;sourceType:"db"|"naver"|"manual";};
+type Complex={id:string;name:string;legalDong?:string;matchStatus?:string;source?:"naver"|"manual"|"verified"};
+type Place={name:string;address:string;roadAddress:string;category:string;source:string;sourceUrl?:string};
+type MapReady={complexId:string;complexName:string;regionName:string;stationName:string;straightDistanceMeters:number|null;mapAddress:string;sourceType:"db"|"naver"|"manual"|"verified";};
 
 export default function JibssukAutoNaverMap({onReady,onClear}:{
   onReady:(data:MapReady)=>void;onClear:()=>void;
@@ -94,7 +94,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
         p&&typeof p.name==="string"&&typeof p.address==="string"&&typeof p.roadAddress==="string");
       setPlaces(items);
       if(!items.length)setManualExpanded(true);
-      setMessage(items.length?"네이버 장소 검색에서 주소를 찾았습니다. 맞는 아파트를 선택해 주세요.":
+      setMessage(items.length?(items.some((item:Place)=>Boolean(item.sourceUrl))?"공식 사업지 주소를 찾았습니다. 이 위치로 지도 보기를 누르세요.":"네이버 장소 검색에서 주소를 찾았습니다. 맞는 아파트를 선택해 주세요."):
         json.message||"장소를 찾지 못했습니다. 현장 주소를 직접 입력할 수 있습니다.");
     }catch(error){
       if(sequence===searchSequence.current){
@@ -106,7 +106,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   function selectPlace(place:Place){
     const address=place.roadAddress||place.address;
     if(!address)return;
-    void loadMap({id:"",name:place.name,source:"naver"},address);
+    void loadMap({id:"",name:place.name,source:place.sourceUrl?"verified":"naver"},address);
   }
   async function loadMap(complex:Complex,address=""){
     clearMap();setLoading(true);setMessage("기존 네이버지도 API로 단지 지도를 불러오는 중…");
@@ -128,11 +128,11 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       const station=decodeURIComponent(res.headers.get("X-Map-Station")||"");
       const distanceRaw=res.headers.get("X-Map-Station-Distance")||"";
       const distance=distanceRaw&&Number.isFinite(Number(distanceRaw))?Number(distanceRaw):null;
-      onReady({complexId:complex.id,complexName:complex.name,sourceType:complex.id?"db":complex.source==="naver"?"naver":"manual",
+      onReady({complexId:complex.id,complexName:complex.name,sourceType:complex.id?"db":complex.source==="verified"?"verified":complex.source==="naver"?"naver":"manual",
         regionName:region?(region.sido_name+" "+region.region_name):"",
         stationName:station,straightDistanceMeters:distance,
         mapAddress:decodeURIComponent(res.headers.get("X-Map-Query")||"")});
-      setMessage(address?(complex.source==="naver"?"네이버 장소 검색 결과로 지도 준비 완료. 단지명과 마커 위치가 일치하는지 확인하세요.":"입력한 주소로 네이버지도 준비 완료. 빨간 마커가 실제 해당 단지 위치인지 직접 확인하세요.")+" 도보 경로는 포함되지 않습니다.":"네이버지도 자동 생성 완료 · 빨간 표식은 단지, 파란 표식은 검색된 역입니다. 실제 도보 경로는 제공하지 않습니다.");
+      setMessage(address?(complex.source==="verified"?"공식 공사단지 안내 주소로 지도 준비 완료. 마커 위치를 확인하세요.":complex.source==="naver"?"네이버 장소 검색 결과로 지도 준비 완료. 단지명과 마커 위치가 일치하는지 확인하세요.":"입력한 주소로 네이버지도 준비 완료. 빨간 마커가 실제 해당 단지 위치인지 직접 확인하세요.")+" 도보 경로는 포함되지 않습니다.":"네이버지도 자동 생성 완료 · 빨간 표식은 단지, 파란 표식은 검색된 역입니다. 실제 도보 경로는 제공하지 않습니다.");
     }catch(error){
       if(sequence===mapSequence.current)setMessage((error instanceof Error?error.message:"지도 생성 실패")+" 수동 네이버지도 캡처를 대신 사용하세요.");
     }finally{if(sequence===mapSequence.current)setLoading(false);}
@@ -200,6 +200,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       <p className={styles.hint}><b>네이버에서 찾은 주소 후보</b> · 주소를 확인한 다음 지도 보기를 누르세요.</p>
       {places.map((place,i)=><div key={place.name+"-"+place.address+"-"+i} className={styles.autoNaverMapPlace}>
         <div><strong>{place.name}</strong><span>{place.roadAddress||place.address}</span>
+          {place.source&&<small>출처: {place.source}</small>}
+          {place.sourceUrl&&<a href={place.sourceUrl} target="_blank" rel="noopener noreferrer">공식 출처 확인</a>}
           {place.category&&<small>{place.category}</small>}</div>
         <button type="button" className={styles.mainButton} disabled={loading}
           onClick={()=>selectPlace(place)}>이 위치로 지도 보기</button>
@@ -229,7 +231,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
       <div className={styles.autoNaverMapPreview}>
         <img src={mapUrl} alt={selected.name+" 네이버지도 API 지도 · 아파트 및 검색된 지하철역 마커"} />
       </div>
-      <p className={styles.hint}>출처: NAVER Cloud Static Map · {selected.id?"단지 DB 주소 기반":selected.source==="naver"?"네이버 장소 검색에서 선택한 주소 기반(위치 확인 필요)":"직접 입력한 주소 기반(해당 단지 여부 확인 필요)"} · 위치 마커/역 위치는 API 조회 결과.
+      <p className={styles.hint}>출처: NAVER Cloud Static Map · {selected.id?"단지 DB 주소 기반":selected.source==="verified"?"공식 사업지 안내 주소 기반(위치 확인 필요)":selected.source==="naver"?"네이버 장소 검색에서 선택한 주소 기반(위치 확인 필요)":"직접 입력한 주소 기반(해당 단지 여부 확인 필요)"} · 위치 마커/역 위치는 API 조회 결과.
         파란 표식의 역은 지역 검색 후보이며 도보 거리·도보시간을 뜻하지 않습니다.</p>
       <div className={styles.actions}>
         <button type="button" className={styles.mainButton} onClick={()=>void copyMap()}>지도 PNG 클립보드 복사</button>
