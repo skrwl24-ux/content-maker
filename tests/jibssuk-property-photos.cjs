@@ -90,10 +90,10 @@ test("map and photo tools automatically reuse a recognizable article apartment, 
   assert.match(workflow,/suggestApartmentName\(item\.title,articleTitle\)/);
   assert.match(workflow,/JibssukAutoNaverMap initialName=\{suggestedName\}/);
   assert.match(workflow,/JibssukPropertyPhotos initialName=\{imageComplexName\|\|suggestedName\}/);
-  assert.match(map,/void search\(name\)/);
+  assert.match(map,/void search\(name,true\)/);
   assert.match(map,/items\.length===1&&items\[0\]\.sourceUrl/);
   assert.match(map,/void loadMap\(\{id:"",name:official\.name,source:"verified"\}/);
   assert.match(map,/setManualExpanded\(true\)/);
-  assert.match(photo,/void search\(term\)/);
+  assert.match(photo,/void search\(term,preserveEvidence\)/);
   assert.match(photo,/공식 조감도나 실제 단지 사진이라는 뜻은 아닙니다/);
 });

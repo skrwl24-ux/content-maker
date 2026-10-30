@@ -52,6 +52,7 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
   const [crop,setCrop]=useState<"contain"|"cover">("contain");
   const [ready,setReady]=useState(false);
   const seq=useRef(0);
+  const initialSearchStarted=useRef(false);
   const fileRef=useRef<HTMLInputElement|null>(null);
 
   // A confirmed map selection can fill and search the photo list without retyping.
@@ -59,14 +60,16 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
     const term=initialName.trim();
     if(!term)return;
     setName(term);
-    void search(term);
+    const preserveEvidence=!initialSearchStarted.current;
+    initialSearchStarted.current=true;
+    void search(term,preserveEvidence);
     // Only changes to the selected article/map name should restart this search.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[initialName]);
-  function clearSelection(){
+  function clearSelection(notify=true){
     setSelected(null);setFile(null);setFileLabel("");
     if(fileRef.current)fileRef.current.value="";
-    onSourceChange("");
+    if(notify)onSourceChange("");
   }
   function changeName(value:string){
     seq.current+=1;setLoading(false);setName(value);setImages([]);clearSelection();setMessage("");
@@ -74,11 +77,11 @@ export default function JibssukPropertyPhotos({initialName,onSourceChange}:{
   function changeKind(next:Kind){
     seq.current+=1;setLoading(false);setKind(next);setImages([]);clearSelection();setMessage("");
   }
-  async function search(nameOverride?:string){
+  async function search(nameOverride?:string,preserveEvidence=false){
     const term=(nameOverride??name).trim();
     if(term.length<2){setMessage("아파트 이름을 두 글자 이상 입력해 주세요.");return;}
     const current=++seq.current;
-    clearSelection();setLoading(true);setImages([]);setMessage("");
+    clearSelection(!preserveEvidence);setLoading(true);setImages([]);setMessage("");
     try{
       const res=await fetch("/api/apartment/visual-photos?q="+encodeURIComponent(term)+
         "&kind="+encodeURIComponent(kind),{cache:"no-store"});
