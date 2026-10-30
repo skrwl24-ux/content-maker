@@ -47,7 +47,7 @@ test("selected candidate is unverified evidence and files are never auto-attache
   assert.match(ui,/원본 이미지가 ChatGPT에 자동 첨부되지는 않음/);
   assert.match(ui,/onSourceChange\(/);
   assert.match(workflow,/import JibssukPropertyPhotos/);
-  assert.match(workflow,/initialName=\{imageComplexName\}/);
+  assert.match(workflow,/initialName=\{imageComplexName\|\|suggestedName\}/);
   assert.match(workflow,/onSourceChange=\{setImagePhotoEvidence\}/);
   assert.match(workflow,/lifestyleEvidence:\[imagePhotoEvidence,imageLifestyleEvidence\]/);
   assert.match(workflow,/setImagePhotoEvidence\(text\(data\.imagePhotoEvidence,4000\)\)/);
@@ -80,4 +80,20 @@ test("photo search stays scoped to 03 image, preserving map, charts, thumbnail a
   assert.match(workflow,/네이버 전체 서식 복사 \(제목 포함\)/);
   assert.match(workflow,/1600×900 \(16:9\)/);
   assert.doesNotMatch(workflow,/1254×1254/);
+});
+
+
+test("map and photo tools automatically reuse a recognizable article apartment, but preserve verification",()=>{
+  const map=source("app/jibssuk-queue/JibssukAutoNaverMap.tsx");
+  const photo=source("app/jibssuk-queue/JibssukPropertyPhotos.tsx");
+  const workflow=source("app/jibssuk-queue/JibssukArticleWorkflow.tsx");
+  assert.match(workflow,/suggestApartmentName\(item\.title,articleTitle\)/);
+  assert.match(workflow,/JibssukAutoNaverMap initialName=\{suggestedName\}/);
+  assert.match(workflow,/JibssukPropertyPhotos initialName=\{imageComplexName\|\|suggestedName\}/);
+  assert.match(map,/void search\(name\)/);
+  assert.match(map,/items\.length===1&&items\[0\]\.sourceUrl/);
+  assert.match(map,/void loadMap\(\{id:"",name:official\.name,source:"verified"\}/);
+  assert.match(map,/setManualExpanded\(true\)/);
+  assert.match(photo,/void search\(term\)/);
+  assert.match(photo,/공식 조감도나 실제 단지 사진이라는 뜻은 아닙니다/);
 });
