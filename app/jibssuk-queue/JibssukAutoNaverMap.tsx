@@ -103,8 +103,9 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   async function copyMap(){
     if(!mapBlob.current)return;
     try{
-      if(mapBlob.current.type!=="image/png")throw new Error("PNG 지도 파일이 아닙니다.");
-      const blob=mapBlob.current;
+      if(!mapBlob.current.type.startsWith("image/png"))throw new Error("PNG 지도 파일이 아닙니다.");
+      // Some providers include a charset in Content-Type. The clipboard needs clean image/png.
+      const blob=new Blob([await mapBlob.current.arrayBuffer()],{type:"image/png"});
       if(typeof ClipboardItem==="undefined"||!navigator.clipboard?.write)throw new Error("클립보드 이미지 복사가 지원되지 않습니다.");
       await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
       setMessage("네이버지도 PNG 복사 완료. ChatGPT에 이미지 01 요청서를 붙여넣은 뒤 Ctrl+V로 지도도 첨부하세요.");
