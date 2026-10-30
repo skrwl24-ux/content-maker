@@ -75,9 +75,9 @@ export async function GET(req:NextRequest){
           const score=scoredTitle(query,name,category);
           if(score<50)continue;
           if(region){
-            const regionParts=region.split(/\s+/).filter(Boolean);
-            const regionMatch=regionParts.some(part=>part.length>=2&&selectedAddress.includes(part));
-            if(!regionMatch)continue;
+            // A shared province such as "경기도" alone is insufficient.
+            const specificArea=region.split(/\s+/).filter(Boolean).at(-1)||"";
+            if(specificArea.length>=2&&!selectedAddress.includes(specificArea))continue;
           }
           candidates.push({name,address,roadAddress,category,score,source:"NAVER Local Search"});
         }
