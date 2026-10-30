@@ -1,5 +1,5 @@
 export type JibssukApartmentImagePromptInput={
-  title?:string;body?:string;mapEvidence?:string;priceEvidence?:string;
+  title?:string;body?:string;mapEvidence?:string;autoMapEvidence?:string;priceEvidence?:string;
   lifestyleEvidence?:string;extraEvidence?:string;includeExtra?:boolean;
 };
 export type JibssukApartmentImagePrompt={
