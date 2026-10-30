@@ -80,8 +80,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
     clearMap();setLoading(true);setMessage("기존 네이버지도 API로 단지 지도를 불러오는 중…");
     const sequence=++mapSequence.current;
     try{
-      const url=address?"/api/apartment/map?address="+encodeURIComponent(address):"/api/apartment/map?complexId="+encodeURIComponent(complex.id);
-      const res=await fetch(url,{cache:"no-store"});
+      const endpoint=address?"/api/apartment/map?address="+encodeURIComponent(address):"/api/apartment/map?complexId="+encodeURIComponent(complex.id);
+      const res=await fetch(endpoint,{cache:"no-store"});
       if(!res.ok){
         const data=await res.json().catch(()=>({}));
         throw new Error(data.error||"지도 생성에 실패했습니다.");
