@@ -93,3 +93,86 @@ test("Final manuscript offers complete styled Naver copy, body-only, and unchang
   assert.match(prompt,/## 소제목/);
   assert.match(prompt,/\*\*강조 문장 전체\*\*/);
 });
+
+
+test("three-column real estate Markdown table remains a compact comparable HTML table",async()=>{
+  const {buildJibssukNaverRichArticle}=await api();
+  const body="화서주공4단지 · 전용 59.98㎡\n\n"+
+    "| 계약일 | 층 | 매매가격 |\n|---|---|---|\n"+
+    "| 2026.10.07 | 2층 | 8억 1,000만원 |\n"+
+    "| 2026.10.14 | 2층 | 8억 6,200만원 |\n"+
+    "| 2026.10.20 | 10층 | 9억 9,000만원 |\n\n"+
+    "**최저·최고 거래가격 차이 1억 8,000만원**";
+  const article=buildJibssukNaverRichArticle("화서주공4단지 매매 비교",body);
+  assert.equal(article.tables.length,1);
+  assert.deepEqual(article.tables[0].headers,["계약일","층","매매가격"]);
+  assert.deepEqual(article.tables[0].rows,[
+    ["2026.10.07","2층","8억 1,000만원"],
+    ["2026.10.14","2층","8억 6,200만원"],
+    ["2026.10.20","10층","9억 9,000만원"]
+  ]);
+  assert.equal((article.html.match(/<table\b/g)||[]).length,1);
+  assert.equal((article.html.match(/<tr>/g)||[]).length,4);
+  assert.match(article.html,/font-size:15px/);
+  assert.match(article.html,/8억 1,000만원/);
+  assert.match(article.html,/9억 9,000만원/);
+  assert.match(article.html,/1억 8,000만원/);
+  assert.doesNotMatch(article.bodyHtml,/font-size:32px/);
+  assert.match(article.bodyPlain,/2026\.10\.20  \|  10층  \|  9억 9,000만원/);
+});
+
+test("wide five-column table is divided into compact tables with first column repeated and zero data loss",async()=>{
+  const {buildJibssukNaverRichArticle}=await api();
+  const data=[
+    ["단지","계약일","면적","층","가격"],
+    ["화서주공4단지","2026.10.07","59.98㎡","2층","8억 1,000만원"],
+    ["화서주공3단지","2026.10.19","84.79㎡","10층","11억 2,000만원"]
+  ];
+  const raw="비교 자료\n\n"+data[0].join(" | ")+"\n---|---|---|---|---\n"+
+    data.slice(1).map(row=>row.join(" | ")).join("\n")+"\n\n원문 기준일: 2026.10.30";
+  const r=buildJibssukNaverRichArticle("집값쓱",raw);
+  assert.equal(r.tables.length,2);
+  assert.deepEqual(r.tables[0].headers,["단지","계약일","면적"]);
+  assert.deepEqual(r.tables[1].headers,["단지","층","가격"]);
+  assert.equal((r.html.match(/<table\b/g)||[]).length,2);
+  const reconstructed=r.tables[0].rows.map((row,i)=>[...row,...r.tables[1].rows[i].slice(1)]);
+  assert.deepEqual(reconstructed,data.slice(1));
+  for(const row of data.slice(1))for(const cell of row)assert.ok(r.bodyHtml.includes(cell));
+  assert.match(r.html,/비교표 1 · 2\/2/);
+  assert.match(r.bodyPlain,/8억 1,000만원/);
+  assert.match(r.bodyPlain,/11억 2,000만원/);
+});
+
+test("malformed comparison table is never silently converted with dropped cells",async()=>{
+  const {buildJibssukNaverRichArticle}=await api();
+  const original="| 계약일 | 층 | 매매가격 |\n|---|---|---|\n| 10.07 | 2층 | 8억 1,000만원 |\n| 10.20 | 10층 | 9억 9,000만원 | 추가열";
+  const r=buildJibssukNaverRichArticle("검증",original);
+  assert.equal(r.tables.length,0);
+  assert.match(r.bodyPlain,/10\.07 \| 2층 \| 8억 1,000만원/);
+  assert.match(r.bodyPlain,/추가열/);
+});
+
+test("escaped pipes in comparison data remain within the original table cell",async()=>{
+  const {buildJibssukNaverRichArticle}=await api();
+  const original="| 단지 | 가격 |\n|---|---|\n| A\\|B단지 | 11억 2,000만원 |";
+  const r=buildJibssukNaverRichArticle("검증",original);
+  assert.equal(r.tables.length,1);
+  assert.deepEqual(r.tables[0].rows,[["A|B단지","11억 2,000만원"]]);
+  assert.match(r.bodyHtml,/A\|B단지/);
+});
+
+test("table-image fallback is explicit, page-bounded, and does not replace the real comparison table",()=>{
+  const panel=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  const prompt=fs.readFileSync("lib/jibssuk-simple-workflow.mjs","utf8");
+  assert.match(panel,/TABLE_IMAGE_ROWS=12/);
+  assert.match(panel,/saveNaverTablePng/);
+  assert.match(panel,/canvas\.toBlob/);
+  assert.match(panel,/PNG 저장/);
+  assert.match(panel,/별도 등록/);
+  assert.match(panel,/네이버에서 표가 깨질 때/);
+  assert.match(panel,/naverRich\.tables/);
+  assert.match(panel,/네이버 전체 서식 복사 \(제목 포함\)/);
+  assert.match(prompt,/2~3개 열로 비교/);
+  assert.match(prompt,/4열 이상의 비교표/);
+  assert.match(prompt,/모든 수치를 임의 삭제/);
+});
