@@ -363,7 +363,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
             "지도 출처: NAVER Cloud Static Map API",
             "선택 단지: "+map.complexName,
             "선택 지역: "+map.regionName,
-            map.complexId?"단지 DB ID: "+map.complexId:"단지 DB 미등록 · 직접 입력 주소 기반 지도(단지 위치 일치 확인 필요)",
+            map.complexId?"단지 DB ID: "+map.complexId:map.sourceType==="naver"?"단지 DB 미등록 · 네이버 장소 검색 후보에서 선택한 주소 기반 지도(위치 일치 확인 필요)":"단지 DB 미등록 · 직접 입력 주소 기반 지도(단지 위치 일치 확인 필요)",
             map.mapAddress?"지도 조회에 사용된 주소: "+map.mapAddress:"",
             map.stationName?"지도에 표시된 검색 역: "+map.stationName:"",
             map.straightDistanceMeters!=null?"단지-역 직선거리(도보거리 아님): "+map.straightDistanceMeters+"m":"",
