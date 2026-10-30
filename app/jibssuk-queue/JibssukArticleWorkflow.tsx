@@ -371,10 +371,10 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           onChange={e=>setImageLifestyleEvidence(e.target.value)}
           placeholder="공식 조감도/실제 사진의 출처·촬영 시점·확인된 주변 시설·사용권 메모. 이미지 파일은 별도 첨부"/>
       </details>
-      <label className={styles.imageExtraToggle}>
-        <input type="checkbox" checked={imageExtraEnabled} onChange={e=>setImageExtraEnabled(e.target.checked)}/>
-        04 · 추가 발견 이미지도 만들기 (검증된 별도 내용이 있을 때)
-      </label>
+      <button type="button" className={styles.imageExtraToggle} aria-pressed={imageExtraEnabled}
+        onClick={()=>setImageExtraEnabled(value=>!value)}>
+        {imageExtraEnabled?"04 · 추가 발견 이미지 사용 중 (누르면 제외)":"04 · 추가 발견 이미지 사용하기 (선택)"}
+      </button>
       {imageExtraEnabled&&<div>
         <label htmlFor="image-evidence-extra">04 · 추가 발견의 확인된 사실·근거</label>
         <textarea id="image-evidence-extra" rows={3} maxLength={15000} value={imageExtraEvidence}
