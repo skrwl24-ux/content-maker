@@ -12,6 +12,7 @@ import {parseJibssukCopiedReport,buildJibssukIssueArticlePrompt} from "../../lib
 import {buildJibssukNaverRichArticle} from "../../lib/jibssuk-naver-rich-export.mjs";
 import {buildJibssukApartmentImagePrompts} from "../../lib/jibssuk-apartment-image-prompts.mjs";
 import JibssukAutoNaverMap from "./JibssukAutoNaverMap";
+import JibssukPropertyPhotos from "./JibssukPropertyPhotos";
 import type {JibssukNaverTableGroup} from "../../lib/jibssuk-naver-rich-export.mjs";
 import styles from "./workflow.module.css";
 
@@ -103,6 +104,8 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const [imageAutoMapEvidence,setImageAutoMapEvidence]=useState("");
   const [imagePriceEvidence,setImagePriceEvidence]=useState("");
   const [imageLifestyleEvidence,setImageLifestyleEvidence]=useState("");
+  const [imagePhotoEvidence,setImagePhotoEvidence]=useState("");
+  const [imageComplexName,setImageComplexName]=useState("");
   const [imageExtraEvidence,setImageExtraEvidence]=useState("");
   const [imageExtraEnabled,setImageExtraEnabled]=useState(false);
   const [status,setStatus]=useState("");
@@ -111,9 +114,9 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
   const imageBriefs=useMemo(()=>buildJibssukApartmentImagePrompts({
     title:articleTitle,body:articleBody,
     mapEvidence:imageMapEvidence,autoMapEvidence:imageAutoMapEvidence,priceEvidence:imagePriceEvidence,
-    lifestyleEvidence:imageLifestyleEvidence,extraEvidence:imageExtraEvidence,
+    lifestyleEvidence:[imagePhotoEvidence,imageLifestyleEvidence].filter(Boolean).join("\n\n"),extraEvidence:imageExtraEvidence,
     includeExtra:imageExtraEnabled
-  }),[articleTitle,articleBody,imageMapEvidence,imageAutoMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
+  }),[articleTitle,articleBody,imageMapEvidence,imageAutoMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled]);
   const handoff=useMemo(()=>makeResearchHandoff(item),[item]);
   const notes=useMemo(()=>handoff?researchNotesFromHandoff(handoff):"",[handoff]);
   const today=koreanDay();
@@ -135,6 +138,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           setImageMapEvidence(text(data.imageMapEvidence,15000));
           setImagePriceEvidence(text(data.imagePriceEvidence,15000));
           setImageLifestyleEvidence(text(data.imageLifestyleEvidence,15000));
+          setImagePhotoEvidence(text(data.imagePhotoEvidence,4000));
           setImageExtraEvidence(text(data.imageExtraEvidence,15000));
           setImageExtraEnabled(data.imageExtraEnabled===true);
         }
@@ -148,11 +152,11 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
     try{
       localStorage.setItem(storageKey,JSON.stringify({
         version:1,topic:item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
-        imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled
+        imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled
       }));
     }catch{setStatus("이 브라우저에 작업을 저장하지 못했습니다. 저장 공간을 확인해 주세요.");}
   },[hydrated,storageKey,item.title,acceptedRaw,reportPaste,approved,angleId,finalPaste,articleTitle,articleBody,
-    imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imageExtraEvidence,imageExtraEnabled]);
+    imageMapEvidence,imagePriceEvidence,imageLifestyleEvidence,imagePhotoEvidence,imageExtraEvidence,imageExtraEnabled]);
 
   const researchPrompt=useMemo(()=>buildDeepResearchPrompt({
     channel:"집값쓱",topic:item.title,notes,today,
@@ -208,7 +212,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
     setAcceptedRaw(parsed.stored);
     setReportPaste(input.slice(0,180000));
     setAngleId(old=>parsed.report.angles.some(a=>a.id===old)?old:parsed.report.angles[0]?.id||"");
-    setFinalPaste("");setArticleTitle("");setArticleBody("");
+    setFinalPaste("");setArticleTitle("");setArticleBody("");setImagePhotoEvidence("");
     setStatus("조사 결과를 가져왔습니다. 개별 체크는 필요 없습니다. 글의 관점을 선택하세요.");
   }
   function importFinalText(input:string){
@@ -216,7 +220,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
     if(!result){setStatus("원고 형식을 인식하지 못했습니다. 원고 전체를 코드 복사해 주세요.");return;}
     if((articleTitle||articleBody)&&!window.confirm("현재 편집 중인 원고를 새 원고로 교체할까요?"))return;
     setFinalPaste(input.slice(0,180000));
-    setArticleTitle(result.title);setArticleBody(result.body);
+    setArticleTitle(result.title);setArticleBody(result.body);setImagePhotoEvidence("");
     setStatus("최종 원고를 가져왔습니다. 제목·본문을 편집하거나 복사하세요.");
   }
   async function importFromClipboard(which:"research"|"final"){
@@ -359,6 +363,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
         입지 지도는 기존 네이버지도 API로 자동 준비할 수 있습니다. 지도·조감도·사진 파일은 ChatGPT에 별도로 첨부해야 합니다.</p>
       <JibssukAutoNaverMap
         onReady={map=>{
+          setImageComplexName(map.complexName);
           setImageAutoMapEvidence([
             "지도 출처: NAVER Cloud Static Map API",
             "선택 단지: "+map.complexName,
@@ -371,8 +376,9 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           ].filter(Boolean).join("\n"));
         }}
         onClear={()=>setImageAutoMapEvidence("")}/>
+      <JibssukPropertyPhotos initialName={imageComplexName} onSourceChange={setImagePhotoEvidence}/>
       <details className={styles.details}>
-        <summary>수동 지도 메모·실거래·조감도 자료 입력 (선택 · 글감별 저장)</summary>
+        <summary>수동 지도 메모·실거래·사진 출처 보충 메모 (선택 · 글감별 저장)</summary>
         <p className={styles.hint}>원자료를 직접 확인한 뒤 필요한 만큼만 입력하세요. 입력한 문구는 자동 검증되지 않으며, 첨부 사진 파일은 이 입력칸에서 전송되지 않습니다.</p>
         <label htmlFor="image-evidence-map">01 · 네이버지도 직접 캡처·경로 보충 메모 (자동 지도와 별도)</label>
         <textarea id="image-evidence-map" rows={3} maxLength={15000} value={imageMapEvidence}
@@ -382,7 +388,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
         <textarea id="image-evidence-price" rows={5} maxLength={15000} value={imagePriceEvidence}
           onChange={e=>setImagePriceEvidence(e.target.value)}
           placeholder={"계약일 | 전용면적 | 층 | 거래유형 | 금액 | 출처/기준일\n동일 면적 12개월 월별 자료가 있으면 월별 기준값·거래 건수도 첨부"}/>
-        <label htmlFor="image-evidence-life">03 · 공식 조감도·실제 생활환경 자료</label>
+        <label htmlFor="image-evidence-life">03 · 공식 조감도·실제 생활환경 보충 출처 메모 (선택)</label>
         <textarea id="image-evidence-life" rows={3} maxLength={15000} value={imageLifestyleEvidence}
           onChange={e=>setImageLifestyleEvidence(e.target.value)}
           placeholder="공식 조감도/실제 사진의 출처·촬영 시점·확인된 주변 시설·사용권 메모. 이미지 파일은 별도 첨부"/>
@@ -405,7 +411,7 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
           </div>
           <p>{brief.purpose}</p>
           {brief.slot!=="00"&&<p className={styles.hint}>
-            {brief.evidenceEntered?"지도/API 또는 근거 메모 있음 · 원본 이미지 첨부 필요":"원본 자료 미입력 · 요청서에서 자료를 먼저 요구함"}
+            {brief.evidenceEntered?"검색 후보 또는 근거 메모 있음 · 원본 파일 확인/첨부 필요":"원본 자료 미입력 · 요청서에서 자료를 먼저 요구함"}
           </p>}
           <p className={styles.hint}>{brief.sourceHint}</p>
           <div className={styles.actions}>
