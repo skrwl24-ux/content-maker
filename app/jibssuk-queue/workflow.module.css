@@ -30,3 +30,16 @@
 .tableFallback summary{cursor:pointer;font-weight:800}
 .tableImageButtons{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 @media(max-width:700px){.naverPreview table{width:100%;table-layout:fixed}.naverPreview td,.naverPreview th{font-size:14px!important;padding:8px 6px!important}.tableImageButtons button{flex:1 1 auto}}
+
+.imageBriefList{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:16px 0}
+.imageBriefCard{background:#fff;border:1px solid #d8e4ee;border-radius:13px;padding:15px;min-width:0}
+.imageBriefCard .hint{margin:8px 0;font-size:11px;line-height:1.65}
+.imageBriefCard p{margin:8px 0!important}
+.imageBriefHead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.imageBriefHead strong{font-size:14px;line-height:1.5;color:#1d405f}
+.imageBriefHead span{font-size:11px;white-space:nowrap;color:#68829b}
+.step .imageExtraToggle{display:flex;gap:9px;align-items:center;font-size:12px;font-weight:800;color:#315778;margin:15px 0 10px;line-height:1.5}
+.imageExtraToggle input{width:17px;height:17px;flex:none}
+.imageBriefCard .actions button{width:100%}
+.imageBriefCard .details{margin:10px 0 0}
+@media(max-width:700px){.imageBriefList{grid-template-columns:1fr}.imageBriefCard{padding:12px}}
