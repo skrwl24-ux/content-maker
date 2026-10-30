@@ -43,3 +43,19 @@
 .imageBriefCard .actions button{width:100%}
 .imageBriefCard .details{margin:10px 0 0}
 @media(max-width:700px){.imageBriefList{grid-template-columns:1fr}.imageBriefCard{padding:12px}}
+
+.autoNaverMap{margin:16px 0;padding:16px;background:#f4f8fc;border:1px solid #cadced;border-radius:13px}
+.autoNaverMapHeading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px}
+.autoNaverMapHeading strong{font-size:14px;color:#224765}
+.autoNaverMapHeading span{font-size:11px;color:#56718c}
+.autoNaverMapSearch{display:grid;grid-template-columns:minmax(150px,1.15fr) minmax(170px,1.5fr) auto;gap:10px;align-items:end;margin:13px 0}
+.autoNaverMapSearch label{font-size:12px;font-weight:800;color:#31506c;margin:0}
+.autoNaverMapSearch input,.autoNaverMapSearch select{margin-top:6px!important;min-width:0}
+.autoNaverMapSearch button{min-height:41px}
+.autoNaverMapResults{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.autoNaverMapResults button{font-size:12px;justify-content:flex-start;text-align:left}
+.autoMapMessage{margin:12px 0!important;padding:9px 11px;border:1px solid #d6e4f0;border-radius:8px;background:#fff;color:#345570!important;font-size:12px!important}
+.autoNaverMapResult{margin-top:15px}
+.autoNaverMapPreview{width:100%;max-width:800px;border:1px solid #c9d9e8;border-radius:9px;overflow:hidden;background:white}
+.autoNaverMapPreview img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:contain}
+@media(max-width:700px){.autoNaverMap{padding:12px}.autoNaverMapSearch{grid-template-columns:1fr}.autoNaverMapSearch button{width:100%}}
