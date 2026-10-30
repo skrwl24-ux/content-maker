@@ -1,0 +1,107 @@
+import {NextRequest,NextResponse} from "next/server";
+
+export const dynamic="force-dynamic";
+const NAVER_LOCAL="https://naverapihub.apigw.ntruss.com/search/v1/local";
+
+type NaverItem={
+  title?:string;category?:string;roadAddress?:string;address?:string;
+  mapx?:string|number;mapy?:string|number;
+};
+function plain(value:string){
+  return String(value||"").replace(/<[^>]*>/g,"")
+    .replace(/&amp;/gi,"&").replace(/&quot;/gi,'"')
+    .replace(/&#39;/g,"'").replace(/\s+/g," ").trim();
+}
+function normalized(value:string){
+  return plain(value).replace(/[^\p{L}\p{N}]/gu,"").toLowerCase();
+}
+function searchTerm(value:string){
+  return value.replace(/^(?:서울|경기|경기도|인천|부산|대전|대구|광주|울산|세종)?\s*[가-힣]+(?:시|군|구)\s*/,"").trim();
+}
+function scoredTitle(query:string,title:string,category:string){
+  const name=normalized(title),original=normalized(query),core=normalized(searchTerm(query));
+  if(!name)return 0;
+  const key=core.length>=4?core:original;
+  if(!key)return 0;
+  let score=name===original||name===key?100:0;
+  if(name.includes(key))score=Math.max(score,75);
+  if(key.includes(name)&&name.length>=4)score=Math.max(score,55);
+  if(/아파트|공동주택|주상복합|분양|건설|주거/.test(category))score+=12;
+  return score;
+}
+export async function GET(req:NextRequest){
+  const query=req.nextUrl.searchParams.get("q")?.trim()||"";
+  const region=req.nextUrl.searchParams.get("region")?.trim()||"";
+  if(query.length<2||query.length>100||region.length>100){
+    return NextResponse.json({error:"검색할 단지명을 2~100자로 입력해 주세요."},{status:400});
+  }
+  const clientId=process.env.NAVER_API_HUB_CLIENT_ID;
+  const secret=process.env.NAVER_API_HUB_CLIENT_SECRET;
+  if(!clientId||!secret){
+    return NextResponse.json({error:"네이버 장소 검색 API 설정이 필요합니다."},{status:503});
+  }
+  const terms=[...new Set([
+    query,
+    region&&!normalized(query).includes(normalized(region))?region+" "+query:"",
+    searchTerm(query)
+  ].map(x=>x.trim()).filter(x=>x.length>=2))].slice(0,3);
+  const headers={
+    "X-NCP-APIGW-API-KEY-ID":clientId,
+    "X-NCP-APIGW-API-KEY":secret,
+    Accept:"application/json"
+  };
+  try{
+    const candidates: Array<{name:string;address:string;roadAddress:string;category:string;score:number;source:string}>=[];
+    const failures:string[]=[];
+    for(const term of terms){
+      const url=new URL(NAVER_LOCAL);
+      url.searchParams.set("query",term);
+      url.searchParams.set("display","5");
+      url.searchParams.set("start","1");
+      url.searchParams.set("sort","random");
+      url.searchParams.set("format","json");
+      try{
+        const response=await fetch(url,{headers,cache:"no-store",signal:AbortSignal.timeout(8000)});
+        if(!response.ok){failures.push("네이버 장소 검색 HTTP "+response.status);continue;}
+        const data=await response.json() as {items?:NaverItem[]};
+        for(const item of data.items||[]){
+          const name=plain(item.title||"");
+          const category=plain(item.category||"");
+          const address=plain(item.address||"");
+          const roadAddress=plain(item.roadAddress||"");
+          const selectedAddress=roadAddress||address;
+          // Street/lot number is needed for a reliable Naver Geocoding request.
+          if(!selectedAddress||!/[\d]/.test(selectedAddress))continue;
+          const score=scoredTitle(query,name,category);
+          if(score<50)continue;
+          if(region){
+            const regionParts=region.split(/\s+/).filter(Boolean);
+            const regionMatch=regionParts.some(part=>part.length>=2&&selectedAddress.includes(part));
+            if(!regionMatch)continue;
+          }
+          candidates.push({name,address,roadAddress,category,score,source:"NAVER Local Search"});
+        }
+      }catch{failures.push("네이버 장소 검색 요청 실패");}
+      // If exact matches exist, do not use more unrelated, broader queries.
+      if(candidates.some(c=>c.score>=100))break;
+    }
+    const unique=new Map<string,typeof candidates[number]>();
+    for(const item of candidates.sort((a,b)=>b.score-a.score)){
+      const key=normalized(item.name)+"|"+normalized(item.roadAddress||item.address);
+      if(!unique.has(key))unique.set(key,item);
+    }
+    const places=[...unique.values()].slice(0,6).map(({name,address,roadAddress,category,source})=>({
+      name,address,roadAddress,category,source
+    }));
+    return NextResponse.json({
+      places,
+      searched:query,
+      source:"NAVER Local Search",
+      message:places.length?"지도에 표시할 실제 장소를 선택해 주세요.":
+        failures.length===terms.length?"네이버 장소 검색에 연결하지 못했습니다. 주소 입력을 사용할 수 있습니다.":
+        "네이버 장소 검색에서 확인된 단지가 없습니다. 이름을 간단히 바꾸거나 정확한 현장 주소를 입력해 주세요."
+    },{headers:{"Cache-Control":"no-store"}});
+  }catch{
+    return NextResponse.json({error:"장소 검색에 실패했습니다."},{status:502});
+  }
+}
