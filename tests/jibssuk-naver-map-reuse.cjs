@@ -81,3 +81,40 @@ test("the updated workflow preserves the existing article and all four default i
   assert.match(source,/version:1,topic:item.title/);
   assert.match(source,/onClear=\{\(\)=>setImageAutoMapEvidence\(""\)\}/);
 });
+
+
+test("a newer unlisted development can show a Naver Static Map by an explicitly supplied exact address",()=>{
+  const screen=fs.readFileSync("app/jibssuk-queue/JibssukAutoNaverMap.tsx","utf8");
+  const endpoint=fs.readFileSync("app/api/apartment/map/route.ts","utf8");
+  const workflow=fs.readFileSync("app/jibssuk-queue/JibssukArticleWorkflow.tsx","utf8");
+  assert.match(screen,/manualAddress/);
+  assert.match(screen,/setManualExpanded\(true\)/);
+  assert.match(screen,/단지가 검색되지 않나요\? 현장 주소로 지도 찾기/);
+  assert.match(screen,/\/api\/apartment\/map\?address=/);
+  assert.match(screen,/해당 주소 지도 보기/);
+  assert.match(screen,/네이버지도 원본 검색 열기/);
+  assert.match(screen,/선택한 주소로 네이버지도 준비 완료|입력한 주소로 네이버지도 준비 완료/);
+  assert.match(screen,/!\/\[0-9\]\/\.test\(address\)/);
+  assert.match(endpoint,/const manualAddress = req\.nextUrl\.searchParams\.get\("address"\)/);
+  assert.match(endpoint,/if \(!complexId && !manualAddress\)/);
+  assert.match(endpoint,/queries = \[manualAddress\]/);
+  assert.match(endpoint,/X-Map-Location-Mode/);
+  assert.match(endpoint,/manualAddress \? "address" : "complex"/);
+  assert.match(endpoint,/mapUrl\.searchParams\.set\("format", "png"\)/);
+  assert.match(screen,/navigator\.clipboard\.write/);
+  assert.match(screen,/지도 PNG 저장/);
+  assert.match(workflow,/단지 DB 미등록 · 직접 입력 주소 기반 지도/);
+  assert.match(workflow,/map\.mapAddress/);
+});
+
+test("fallback does not replace the existing DB-linked map or invent walking distances",()=>{
+  const endpoint=fs.readFileSync("app/api/apartment/map/route.ts","utf8");
+  const screen=fs.readFileSync("app/jibssuk-queue/JibssukAutoNaverMap.tsx","utf8");
+  assert.match(endpoint,/\.from\("apt_complexes"\)/);
+  assert.match(endpoint,/\.from\("apt_trades"\)/);
+  assert.match(endpoint,/\.eq\("cancelled", false\)/);
+  assert.match(screen,/\/api\/apartment\/map\?complexId=/);
+  assert.match(screen,/도보 경로는 포함되지 않습니다/);
+  assert.match(screen,/직접 입력한 주소 기반\(해당 단지 여부 확인 필요\)/);
+  assert.match(screen,/실제 도보 경로/);
+});
