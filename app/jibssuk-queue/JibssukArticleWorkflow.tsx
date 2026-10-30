@@ -24,7 +24,7 @@ function suggestApartmentName(topic:string,articleTitle:string){
   for(const raw of sources){
     const cleaned=raw.replace(/^[“"][^”"]+[”"]\s*/,"").trim()
       .split(/[?!！,，·｜|:]/)[0]
-      .replace(/\s+(?:무순위|재공급|청약|실거래|매매|거래량|분양가|집값|전세|월세|가격|논란|이유|왜)\b.*$/,"").trim();
+      .replace(/\s+(?:무순위|재공급|청약|실거래|매매|거래량|분양가|집값|전세|월세|가격|논란|이유|왜)(?=\s|$).*$/,"").trim();
     if(cleaned.length>=5&&cleaned.length<=45&&
       /(?:\d+단지|주공|푸르지오|디에트르|퍼스티지|롯데캐슬|힐스테이트|래미안|아이파크|더샵|브리시엘|자이|e편한세상)/.test(cleaned))return cleaned;
   }
