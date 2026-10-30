@@ -25,7 +25,7 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   const mapSequence=useRef(0);
 
   function clearMap(){
-    mapSequence.current+=1;
+    mapSequence.current+=1;setLoading(false);
     if(urlRef.current){URL.revokeObjectURL(urlRef.current);urlRef.current="";}
     setMapUrl("");setSelected(null);mapBlob.current=null;onClear();
   }
@@ -47,10 +47,10 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   },[]);
 
   function switchRegion(value:string){
-    searchSequence.current+=1;setRegionCode(value);setCandidates([]);setQuery("");setMessage("");clearMap();
+    searchSequence.current+=1;setSearching(false);setRegionCode(value);setCandidates([]);setQuery("");setMessage("");clearMap();
   }
   function switchQuery(value:string){
-    searchSequence.current+=1;setQuery(value);setCandidates([]);setMessage("");clearMap();
+    searchSequence.current+=1;setSearching(false);setQuery(value);setCandidates([]);setMessage("");clearMap();
   }
 
   async function search(){
@@ -103,8 +103,8 @@ export default function JibssukAutoNaverMap({onReady,onClear}:{
   async function copyMap(){
     if(!mapBlob.current)return;
     try{
-      const blob=mapBlob.current.type==="image/png"?mapBlob.current
-        :new Blob([await mapBlob.current.arrayBuffer()],{type:"image/png"});
+      if(mapBlob.current.type!=="image/png")throw new Error("PNG 지도 파일이 아닙니다.");
+      const blob=mapBlob.current;
       if(typeof ClipboardItem==="undefined"||!navigator.clipboard?.write)throw new Error("클립보드 이미지 복사가 지원되지 않습니다.");
       await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
       setMessage("네이버지도 PNG 복사 완료. ChatGPT에 이미지 01 요청서를 붙여넣은 뒤 Ctrl+V로 지도도 첨부하세요.");
