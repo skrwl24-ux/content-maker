@@ -363,7 +363,8 @@ export default function JibssukArticleWorkflow({item}:{item:JibssukItem}){
             "지도 출처: NAVER Cloud Static Map API",
             "선택 단지: "+map.complexName,
             "선택 지역: "+map.regionName,
-            "단지 ID: "+map.complexId,
+            map.complexId?"단지 DB ID: "+map.complexId:"단지 DB 미등록 · 직접 입력 주소 기반 지도(단지 위치 일치 확인 필요)",
+            map.mapAddress?"지도 조회에 사용된 주소: "+map.mapAddress:"",
             map.stationName?"지도에 표시된 검색 역: "+map.stationName:"",
             map.straightDistanceMeters!=null?"단지-역 직선거리(도보거리 아님): "+map.straightDistanceMeters+"m":"",
             "지도에는 실제 보행 경로·도보 시간 표시 없음. PNG 파일은 별도로 ChatGPT에 첨부할 것."
