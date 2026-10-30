@@ -18,14 +18,21 @@ function normalized(value:string){
 function searchTerm(value:string){
   return value.replace(/^(?:서울|경기|경기도|인천|부산|대전|대구|광주|울산|세종)?\s*[가-힣]+(?:시|군|구)\s*/,"").trim();
 }
+function withoutNeighborhood(value:string){
+  // Development articles often add a city name before the official apartment name.
+  return value.replace(/^(?:과천|판교|분당|수원|광교|송도|위례|동탄|마곡|평택|고덕|하남|광명|일산|강남)\s+(?=\S{3,})/,"").trim();
+}
 function scoredTitle(query:string,title:string,category:string){
   const name=normalized(title),original=normalized(query),core=normalized(searchTerm(query));
   if(!name)return 0;
-  const key=core.length>=4?core:original;
-  if(!key)return 0;
-  let score=name===original||name===key?100:0;
-  if(name.includes(key))score=Math.max(score,75);
-  if(key.includes(name)&&name.length>=4)score=Math.max(score,55);
+  const stripped=normalized(withoutNeighborhood(query));
+  const keys=[original,core,stripped].filter(k=>k.length>=4);
+  let score=0;
+  for(const key of keys){
+    if(name===key)score=Math.max(score,100);
+    else if(name.includes(key))score=Math.max(score,75);
+    else if(key.includes(name)&&name.length>=4)score=Math.max(score,55);
+  }
   if(/아파트|공동주택|주상복합|분양|건설|주거/.test(category))score+=12;
   return score;
 }
@@ -43,8 +50,9 @@ export async function GET(req:NextRequest){
   const terms=[...new Set([
     query,
     region&&!normalized(query).includes(normalized(region))?region+" "+query:"",
-    searchTerm(query)
-  ].map(x=>x.trim()).filter(x=>x.length>=2))].slice(0,3);
+    searchTerm(query),
+    withoutNeighborhood(query)
+  ].map(x=>x.trim()).filter(x=>x.length>=2))].slice(0,4);
   const headers={
     "X-NCP-APIGW-API-KEY-ID":clientId,
     "X-NCP-APIGW-API-KEY":secret,
