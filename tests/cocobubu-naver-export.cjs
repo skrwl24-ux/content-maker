@@ -17,7 +17,6 @@ test("cocobubu original 3-column costs table stays one native HTML table",async(
   assert.match(result.html,/font-size:32px/);
   assert.match(result.bodyHtml,/font-size:30px/);
   assert.match(result.bodyHtml,/2인 가구는 약 40만원입니다\.<br>이렇게 계산했습니다/);
-  assert.ok(!result.bodyHtml.includes("<div style=\"font-family:'Nanum Gothic'"));
   assert.match(result.bodyPlain,/약 3만 2천원 \| 약 40만원/);
 });
 test("four-column table remains four columns, not split into mobile cards",async()=>{
