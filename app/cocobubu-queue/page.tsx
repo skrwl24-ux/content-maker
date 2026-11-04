@@ -2,6 +2,7 @@
 
 import {useEffect, useMemo, useState} from "react";
 import type {ChangeEvent} from "react";
+import {buildCocobubuNaverRichArticle} from "../../lib/cocobubu-naver-export.mjs";
 import styles from "./page.module.css";
 
 type Stage = "idea" | "writing" | "draft" | "published";
@@ -160,6 +161,7 @@ export default function CocobubuQueuePage() {
   }, [topics, selectedId, hydrated]);
 
   const selected = topics.find(item => item.id === selectedId) || topics[0] || null;
+  const naverRich = useMemo(() => buildCocobubuNaverRichArticle(selected?.title || "", selected?.article || ""), [selected?.title, selected?.article]);
   const filtered = useMemo(() => topics.filter(item =>
     (includePublished || item.status !== "published") &&
     (categoryFilter === "전체" || item.category === categoryFilter) &&
@@ -194,6 +196,44 @@ export default function CocobubuQueuePage() {
   async function copyText(content: string, message: string) {
     try {await navigator.clipboard.writeText(content); setNotice(message);}
     catch {setNotice("자동 복사에 실패했습니다. 아래 요청서를 직접 선택해서 복사해 주세요.");}
+  }
+  async function copyNaverRich(html: string, plain: string, label: string) {
+    if (!plain.trim()) return setNotice("먼저 완성 원고를 저장해 주세요.");
+    try {
+      if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("HTML clipboard unavailable");
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], {type: "text/html"}),
+        "text/plain": new Blob([plain], {type: "text/plain"})
+      })]);
+      setNotice(label + "을(를) 복사했습니다. 네이버 블로그 편집기에 Ctrl+V로 붙여넣으세요.");
+      return;
+    } catch {
+      // 브라우저별 클립보드 권한 차이를 위한 서식 보존 재시도.
+      const element = document.createElement("div");
+      element.innerHTML = html;
+      element.contentEditable = "true";
+      element.style.cssText = "position:fixed;left:-99999px;top:0;width:850px;";
+      document.body.appendChild(element);
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      let succeeded = false;
+      try {succeeded = document.execCommand("copy");} catch {}
+      selection?.removeAllRanges();
+      element.remove();
+      if (succeeded) {
+        setNotice(label + "을(를) 서식 포함으로 복사했습니다. 네이버에서 표 모양을 확인하세요.");
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(plain);
+      setNotice("일반 텍스트로만 복사됐습니다. 표 모양은 유지되지 않을 수 있습니다. 크롬 브라우저의 클립보드 권한을 확인해 주세요.");
+    } catch {
+      setNotice("복사에 실패했습니다. 브라우저 클립보드 권한을 확인해 주세요.");
+    }
   }
   function startWriting() {
     if (!selected) return;
@@ -321,9 +361,23 @@ export default function CocobubuQueuePage() {
           <p className={styles.hint}>ChatGPT에서 작성·검토한 최종 원고를 붙여넣으세요. 입력 내용은 자동 저장됩니다.</p>
           <textarea className={styles.article} value={selected.article} onChange={e => edit(selected.id, {article: e.target.value, status: selected.status === "published" ? "published" : "draft"})} placeholder="완성 원고를 여기에 붙여넣으세요." rows={16} />
           <div className={styles.actions}>
-            <button className={styles.minor} onClick={() => void copyText(selected.article, "원고를 복사했습니다.")} disabled={!selected.article.trim()}>원고 복사</button>
+            <button className={styles.primary} onClick={() => void copyNaverRich(naverRich.html, naverRich.plain, "네이버 전체 원고")} disabled={!selected.article.trim()}>네이버 전체 서식 복사 (제목 포함)</button>
+            <button className={styles.minor} onClick={() => void copyNaverRich(naverRich.bodyHtml, naverRich.bodyPlain, "본문")} disabled={!selected.article.trim()}>본문만 서식 복사</button>
+            <button className={styles.minor} onClick={() => void copyText(selected.article, "일반 텍스트 원고를 복사했습니다.")} disabled={!selected.article.trim()}>원고 복사 (일반 텍스트)</button>
             <button className={styles.primary} onClick={markPublished}>네이버 발행 완료 표시</button>
           </div>
+          {selected.article.trim() && <>
+            <details className={styles.details} open>
+              <summary>네이버 붙여넣기 미리보기 · 표 {naverRich.tables.length}개</summary>
+              <p className={styles.hint}>본문을 수정하면 미리보기도 갱신됩니다. 표는 행·열을 나누거나 카드로 바꾸지 않습니다. 네이버 편집기에서 Ctrl+V 후 실제 표 모양을 확인하세요.</p>
+              <div className={styles.naverPreview} dangerouslySetInnerHTML={{__html: naverRich.bodyHtml}} />
+              {naverRich.tables.length > 0 && <div className={styles.tableCopyButtons}>
+                {naverRich.tables.map((table, index) =>
+                  <button key={index} className={styles.minor} onClick={() => void copyNaverRich(table.html, table.plain, "비교표 " + (index + 1))}>표 {index + 1}만 서식 복사 ({table.headers.length}열)</button>
+                )}
+              </div>}
+            </details>
+          </>}
           <p className={styles.hint}>최근 저장 날짜: {selected.updatedAt} · 발행 완료로 바꿔도 제목·메모·원고를 지우지 않습니다.</p>
         </> : <p>글감을 하나 선택하세요.</p>}
       </section>
